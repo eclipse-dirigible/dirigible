@@ -265,6 +265,57 @@ class TransitionsIntentTest {
                 "got: " + ex.getIssues());
     }
 
+    /** A protocol issued by a button, numbered at the issue (#8493). */
+    private static final String STAMP = """
+            name: protocols
+            entities:
+              - name: ProtocolStatus
+                function: Setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Protocol
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string, number: { series: Protocol, stampOn: issue } }
+                relations:
+                  - { name: Status, kind: manyToOne, to: ProtocolStatus, function: EntityStatus, init: 1 }
+            transitions:
+              - { name: IssueProtocol, forEntity: Protocol, from: [1], setStatus: 2, stamp: number }
+            """;
+
+    /** {@code stamp: number} (#8493): kept on the model for the generators. */
+    @Test
+    void aStampingTransitionParses() {
+        assertTrue(IntentParser.parse(STAMP)
+                               .getTransitions()
+                               .get(0)
+                               .stampsNumber());
+    }
+
+    /** A move stamps a number and nothing else. */
+    @Test
+    void aStampOtherThanNumberIsRefused() {
+        IntentValidationException ex =
+                assertThrows(IntentValidationException.class, () -> IntentParser.parse(STAMP.replace("stamp: number", "stamp: date")));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("transition [IssueProtocol] stamp [date] must be `number`")),
+                "got: " + ex.getIssues());
+    }
+
+    /** A number drawn at create has nothing left to issue - nor has an entity without a number. */
+    @Test
+    void aStampWithoutAnIssueNumberIsRefused() {
+        IntentValidationException ex =
+                assertThrows(IntentValidationException.class, () -> IntentParser.parse(STAMP.replace("stampOn: issue", "stampOn: create")));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("transition [IssueProtocol] declares stamp: number but [Protocol] has no"
+                             + " `number: { stampOn: issue }` field")),
+                "got: " + ex.getIssues());
+    }
+
     @Test
     void rejectsDuplicateNames() {
         String yaml = VALID + """

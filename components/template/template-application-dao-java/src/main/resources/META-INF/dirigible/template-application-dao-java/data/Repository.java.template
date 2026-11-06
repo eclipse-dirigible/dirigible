@@ -604,7 +604,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         // insert and then counts it, or has deleted the row the check waits for and refuses this create
         // - checked and inserted apart, both won and the row pointed at nothing. The check comes before
         // the number is drawn, so a refused create spends none. A unit the database rolled back to
-        // break a deadlock is run once more (#8341): on H2 the share lock is exclusive, so a write and
+        // break a deadlock is run again (#8341, #8507): on H2 the share lock is exclusive, so a write and
         // a derived write naming the same rows in another order deadlock although neither changed
         // anything the other read.
         ${name}Entity saved = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
@@ -682,6 +682,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
         }
 #end
+#end
+#if($hasLabel && $numbersOnCreate)
+        // The display name was computed in save() before the number existed; a label that reads the
+        // number (label: "{number}") would be stored empty on every new record, and every picker and
+        // lookup over it would list a blank option until the record's next write (#7822).
+        computeName(entity);
 #end
         // The create event is handed to the write itself, which records it in the tenant's event outbox
         // INSIDE the insert's transaction: row and event commit together, so a broker outage can
@@ -1757,7 +1763,22 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             // of the same row, or a literal (#7338) - gated on the status at which it must finally hold:
             // "days > 0 before SUBMITTED" refuses the transition, not the draft still being filled in.
             // An absent left operand is not a violation here either; requiredness is its own declaration.
-#if($check.literalJavaExpression)
+#if($check.thanJavaExpression)
+            // ...or a figure read off the record this one points at (#8494), loaded now - so the move is
+            // judged against the source as it stands at the move, not as it stood when the draft was
+            // written. A row pointing at none has no right-hand side, which is not a violation either.
+#foreach($load in $check.pathLoads)
+            Object ${load.local}Fk = ${load.sourceExpression};
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null
+                    : (${load.entityClass}) loadedHops.computeIfAbsent("${load.repositoryClass}:" + ${load.local}Fk,
+                            hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
+#end
+            java.math.BigDecimal than = ${check.thanJavaExpression};
+            if (entity.${check.field} != null && than != null
+                    && !(new java.math.BigDecimal(entity.${check.field}.toString()).compareTo(than) ${check.op} 0)) {
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
+            }
+#elseif($check.literalJavaExpression)
             if (entity.${check.field} != null
 #if($check.numeric == "true")
                     && !(new java.math.BigDecimal(entity.${check.field}.toString()).compareTo(${check.literalJavaExpression}) ${check.op} 0)) {
@@ -1925,15 +1946,16 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 
     /**
      * Brings the string fields that declare {@code normalize:} (#7726) to their stored form: trimmed,
-     * stripped of the declared characters, case-folded - as declared. Idempotent, and public so the
-     * generated controllers apply it before their checks read the record.
+     * stripped of the declared characters, case-folded, a blank result stored as null (emptyToNull,
+     * #8492) - as declared. Idempotent, and public so the generated controllers apply it before their
+     * checks read the record.
      *
      * @param entity the record about to be written, normalized in place
      */
     public static void normalize(${name}Entity entity) {
 #foreach($property in $properties)
-#if($property.normalizeTrim || $property.normalizeStrip || $property.normalizeCase)
-        entity.${property.name} = org.eclipse.dirigible.sdk.db.Normalize.apply(entity.${property.name}, #if($property.normalizeTrim == "true")true#{else}false#end, #if($property.normalizeStrip)"${property.normalizeStripJava}"#{else}null#end, #if($property.normalizeCase)"${property.normalizeCase}"#{else}null#end);
+#if($property.normalizeTrim || $property.normalizeStrip || $property.normalizeCase || $property.normalizeEmptyToNull)
+        entity.${property.name} = org.eclipse.dirigible.sdk.db.Normalize.apply(entity.${property.name}, #if($property.normalizeTrim == "true")true#{else}false#end, #if($property.normalizeStrip)"${property.normalizeStripJava}"#{else}null#end, #if($property.normalizeCase)"${property.normalizeCase}"#{else}null#end#if($property.normalizeEmptyToNull == "true"), true#end);
 #end
 #end
     }

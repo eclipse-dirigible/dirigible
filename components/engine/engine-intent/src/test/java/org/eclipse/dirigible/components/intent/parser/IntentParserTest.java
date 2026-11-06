@@ -1348,6 +1348,66 @@ class IntentParserTest {
         assertCompareIssue(yaml, "cannot carry `severity: warn`");
     }
 
+    /**
+     * A {@code compare} whose {@code than} reads ANOTHER record (#8494): a formula over the fields of
+     * one to-one relation, checked at the move into its gate status - the protocol's stored base
+     * against what its purchase invoice says when it is issued.
+     */
+    @Test
+    void compareChecksAgainstARelatedRecordParseAndValidate() {
+        String yaml = """
+                name: vat
+                seeds:
+                  - name: protocol-statuses
+                    entity: ProtocolStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: ISSUED }
+                entities:
+                  - name: ProtocolStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: PurchaseInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: net, type: decimal }
+                      - { name: credited, type: decimal }
+                      - { name: note, type: string }
+                  - name: VatProtocol
+                    checks:
+                      - { kind: compare, field: base, op: eq, than: "PurchaseInvoice.net - PurchaseInvoice.credited", status: ISSUED,
+                          message: "The purchase invoice changed since this protocol was drafted" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: base, type: decimal }
+                      - { name: issuedOn, type: date }
+                    relations:
+                      - { name: PurchaseInvoice, kind: manyToOne, to: PurchaseInvoice }
+                      - { name: Status, kind: manyToOne, to: ProtocolStatus, function: EntityStatus }
+                """;
+        CheckIntent check = IntentParser.parse(yaml)
+                                        .getEntities()
+                                        .get(2)
+                                        .getChecks()
+                                        .get(0);
+        assertEquals("PurchaseInvoice.net - PurchaseInvoice.credited", check.getThan());
+        assertEquals(2, check.getStatus());
+        IntentParser.parse(yaml.replace("PurchaseInvoice.net - PurchaseInvoice.credited", "round(PurchaseInvoice.net * 0.2, 2)"));
+
+        assertCompareIssue(yaml.replace(" status: ISSUED,", ""), "reads another record - declare the `status` it is checked at");
+        assertCompareIssue(yaml.replace("field: base", "field: issuedOn"), "a formula over another record compares with a number");
+        assertCompareIssue(yaml.replace("PurchaseInvoice.credited", "PurchaseInvoice.note"),
+                "[PurchaseInvoice.Note] is a [string] - a formula reads numbers");
+        assertCompareIssue(yaml.replace("PurchaseInvoice.credited", "PurchaseInvoice.missing"),
+                "[PurchaseInvoice] has no field or to-one relation [missing]");
+        assertCompareIssue(yaml.replace("PurchaseInvoice.credited", "Status.id"), "every term reads the same to-one relation");
+        assertCompareIssue(yaml.replace("PurchaseInvoice.credited", "base"), "every term is a <relation>.<field>");
+        assertCompareIssue(yaml.replace("PurchaseInvoice.net - ", "sqrt(PurchaseInvoice.net) - "), "calls [sqrt]");
+        assertCompareIssue(yaml.replace(" - PurchaseInvoice.credited", " % 2"), "has [%]");
+    }
+
     private static void assertCompareIssue(String yaml, String expected) {
         IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
         assertTrue(ex.getIssues()
@@ -3131,6 +3191,7 @@ class IntentParserTest {
                   - { name: iban, type: string, length: 34, normalize: [upper, strip: " ", trim] }
                   - { name: code, type: string, length: 10, normalize: lower }
                   - { name: age, type: integer }
+                  - { name: vat, type: string, length: 20, unique: true, normalize: [emptyToNull, trim] }
             """;
 
     /** A field's {@code normalize:} (#7726): a list of transforms, or one bare transform. */
@@ -3153,6 +3214,12 @@ class IntentParserTest {
                                     .normalizeCase());
         assertNull(fields.get(4)
                          .getNormalize());
+        // emptyToNull (#8492) may be listed anywhere - it always runs last.
+        assertTrue(fields.get(5)
+                         .normalizeEmptyToNull());
+        assertTrue(fields.get(5)
+                         .normalizeTrim());
+        assertFalse(iban.normalizeEmptyToNull());
     }
 
     @Test
@@ -3167,6 +3234,9 @@ class IntentParserTest {
         assertNormalizeIssue(FIELD_NORMALIZE.replace("normalize: lower", "normalize: [capitalize]"),
                 "unknown `normalize` transform [capitalize]");
         assertNormalizeIssue(FIELD_NORMALIZE.replace("normalize: lower", "normalize: []"), "declares an empty `normalize`");
+        assertNormalizeIssue(FIELD_NORMALIZE.replace("unique: true, normalize: [emptyToNull", "required: true, normalize: [emptyToNull"),
+                "lists `emptyToNull` on a required field");
+        assertNormalizeIssue(FIELD_NORMALIZE.replace("normalize: lower", "normalize: [emptyToNull: yes]"), "takes no argument");
     }
 
     private static void assertNormalizeIssue(String yaml, String expected) {

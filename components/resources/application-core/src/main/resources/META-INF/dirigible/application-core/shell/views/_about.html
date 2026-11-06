@@ -1,0 +1,66 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!-- About (#8502) - ONE fragment, rendered from the shared `about` store and mounted with x-html by
+     every shell. Which application and which platform the user runs: the application row only when the
+     deployment declares its version (DIRIGIBLE_APPLICATION_VERSION), the platform always. -->
+<div x-h-dialog-overlay :data-open="$store.about.dialogOpen" @click.self="$store.about.close()"
+     @keydown.escape.window="$store.about.dialogOpen && $store.about.close()">
+  <div x-h-dialog id="about-dialog">
+    <div x-h-dialog-header>
+      <h2 x-h-dialog-title x-text="$store.about.t('shell.about.title', 'About')"></h2>
+      <p x-h-dialog-description
+         x-text="$store.about.t('shell.about.description', 'The versions you are running. Quote them when you report an issue.')"></p>
+      <button x-h-dialog-close :aria-label="$store.about.t('shell.about.close', 'Close')" @click="$store.about.close()">
+        <svg x-h-icon data-icon="close" role="presentation"></svg>
+      </button>
+    </div>
+    <div x-h-dialog-content class="vbox gap-4">
+      <div x-show="$store.about.failed" x-cloak x-h-alert data-variant="warning" role="alert">
+        <div x-h-alert-description x-text="$store.about.t('shell.about.unavailable', 'The version could not be read.')"></div>
+      </div>
+      <div x-show="$store.about.version" x-cloak class="grid gap-x-4 gap-y-2 items-baseline" style="grid-template-columns: auto 1fr">
+        <template x-if="$store.about.hasApplication">
+          <span x-h-text.muted class="text-sm" x-text="$store.about.t('shell.about.application', 'Application')"></span>
+        </template>
+        <template x-if="$store.about.hasApplication">
+          <span class="text-sm font-medium wrap-anywhere" id="about-application"
+                x-text="[$store.about.applicationName, $store.about.applicationVersion].filter(Boolean).join(' ')"></span>
+        </template>
+        <span x-h-text.muted class="text-sm" x-text="$store.about.t('shell.about.platform', 'Platform')"></span>
+        <span class="text-sm wrap-anywhere" id="about-platform"
+              x-text="[$store.about.platformName, $store.about.platformVersion].filter(Boolean).join(' ')"></span>
+        <template x-if="$store.about.commit">
+          <span x-h-text.muted class="text-sm" x-text="$store.about.t('shell.about.commit', 'Commit')"></span>
+        </template>
+        <template x-if="$store.about.commit">
+          <span class="text-sm font-mono wrap-anywhere" id="about-commit" :title="$store.about.commit" x-text="$store.about.shortCommit"></span>
+        </template>
+        <template x-if="$store.about.tenant">
+          <span x-h-text.muted class="text-sm" x-text="$store.about.t('shell.about.tenant', 'Tenant')"></span>
+        </template>
+        <template x-if="$store.about.tenant">
+          <span class="text-sm wrap-anywhere" id="about-tenant" x-text="$store.about.tenant"></span>
+        </template>
+      </div>
+    </div>
+    <div x-h-dialog-footer>
+      <button x-h-button data-variant="outline" type="button" id="about-copy" :disabled="!$store.about.version" @click="$store.about.copy()">
+        <svg x-h-lucide role="presentation" :data-lucide="$store.about.copied ? 'check' : 'copy'"></svg>
+        <span x-text="$store.about.copied ? $store.about.t('shell.about.copied', 'Copied') : $store.about.t('shell.about.copy', 'Copy')"></span>
+      </button>
+      <button x-h-button data-variant="primary" type="button" id="about-close" @click="$store.about.close()"
+              x-text="$store.about.t('shell.about.close', 'Close')"></button>
+    </div>
+  </div>
+</div>

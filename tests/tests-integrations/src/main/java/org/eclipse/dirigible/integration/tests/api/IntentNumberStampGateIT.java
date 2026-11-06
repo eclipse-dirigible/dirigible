@@ -45,6 +45,11 @@ import org.springframework.test.annotation.DirtiesContext;
  * refused one issued out of order - a gap and a reordering in a series the law requires to be
  * chronological and gap-free. The stamp now asks the repository whether the move will be accepted
  * before it allocates.
+ *
+ * <p>
+ * A document whose Issue is a {@code transitions:} button rather than a process step is numbered by
+ * that move (#8493): {@code stamp: number} draws the number in the same targeted write as the
+ * status, under the same rule - a draft carries no number, a refused Issue spends none.
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentNumberStampGateIT extends IntegrationTest {
@@ -55,6 +60,9 @@ class IntentNumberStampGateIT extends IntegrationTest {
     private static final String API = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api";
     private static final String INVOICES = API + "/invoice/InvoiceController";
     private static final String COMPANIES = API + "/company/CompanyController";
+    private static final String PROTOCOLS = API + "/protocol/ProtocolController";
+    private static final String TRANSITIONS = "/services/java/" + PROJECT + "/gen/events/" + PROJECT + "/";
+    private static final String PROTOCOL_REFUSAL = "A protocol with no base cannot be issued";
     private static final String TASKS = "/services/inbox/tasks";
     private static final String REFUSAL = "The issuing company's registration number is required before this invoice can be issued";
     private static final String UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
@@ -64,7 +72,8 @@ class IntentNumberStampGateIT extends IntegrationTest {
 
     private static final String NUMBERS_JSON = """
             {"series": [
-              {"name": "Gate Invoice", "prefix": "GI", "size": 8}
+              {"name": "Gate Invoice", "prefix": "GI", "size": 8},
+              {"name": "Gate Protocol", "prefix": "GP", "size": 8}
             ]}
             """;
 
@@ -97,6 +106,27 @@ class IntentNumberStampGateIT extends IntegrationTest {
                   - { name: Status,  kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
                   - { name: Company, kind: manyToOne, to: Company }
 
+              - name: ProtocolStatus
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
+
+              # Issued by a button, no process (#8493): the move itself draws the number.
+              - name: Protocol
+                checks:
+                  - { kind: compare, field: base, op: gt, value: 0, status: 2, message: "A protocol with no base cannot be issued" }
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: base,   type: decimal, precision: 18, scale: 2 }
+                  - { name: number, type: string, length: 100, number: { series: Gate Protocol, stampOn: issue } }
+                relations:
+                  - { name: Status, kind: manyToOne, to: ProtocolStatus, function: EntityStatus, init: 1 }
+
+            transitions:
+              - { name: IssueProtocol,  forEntity: Protocol, from: [1], setStatus: 2, stamp: number }
+              - { name: CancelProtocol, forEntity: Protocol, from: [1], setStatus: 3 }
+
             processes:
               # The stamp BEFORE the status write, as in the field: the posting must see the real number.
               - name: InvoiceIssue
@@ -119,6 +149,12 @@ class IntentNumberStampGateIT extends IntegrationTest {
                 rows:
                   - { id: 1, name: Draft }
                   - { id: 3, name: Issued }
+              - name: protocol-statuses
+                entity: ProtocolStatus
+                rows:
+                  - { id: 1, name: Draft }
+                  - { id: 2, name: Issued }
+                  - { id: 3, name: Cancelled }
             """;
 
     @Autowired
@@ -179,6 +215,73 @@ class IntentNumberStampGateIT extends IntegrationTest {
                                                  .body("Status", equalTo(3))
                                                  .body("Number", matchesPattern("GI0*1")),
                 PROCESS_TIMEOUT_SECONDS);
+    }
+
+    @Test
+    void a_transition_numbers_the_document_it_issues_and_a_refused_one_spends_nothing() {
+        writeProjectFile(PROJECT + ".numbers", NUMBERS_JSON);
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        // A draft carries the placeholder, not a value of the series.
+        int first = create(PROTOCOLS, "{\"Base\":0}");
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(PROTOCOLS + "/" + first)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Number", matchesPattern(UUID)));
+
+        // The Issue its gated check refuses is the check's 400, and spends nothing: still a draft, still
+        // unnumbered.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + first + "}")
+                                                 .when()
+                                                 .post(TRANSITIONS + "IssueProtocolTransition/run")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString(PROTOCOL_REFUSAL)));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(PROTOCOLS + "/" + first)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Status", equalTo(1))
+                                                 .body("Number", matchesPattern(UUID)));
+
+        // Corrected, the same Issue takes the FIRST value - in the same write as the status.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + first + ",\"Base\":100,\"Status\":1}")
+                                                 .when()
+                                                 .put(PROTOCOLS + "/" + first)
+                                                 .then()
+                                                 .statusCode(200));
+        issueProtocol(first, "GP0*1");
+
+        // The next one issued takes the next value: consecutive, no gap.
+        int second = create(PROTOCOLS, "{\"Base\":50}");
+        issueProtocol(second, "GP0*2");
+
+        // Only the move that declares the stamp numbers: a cancelled draft keeps its placeholder.
+        int cancelled = create(PROTOCOLS, "{\"Base\":10}");
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + cancelled + "}")
+                                                 .when()
+                                                 .post(TRANSITIONS + "CancelProtocolTransition/run")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Status", equalTo(3))
+                                                 .body("Number", matchesPattern(UUID)));
+    }
+
+    private void issueProtocol(int protocol, String number) {
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + protocol + "}")
+                                                 .when()
+                                                 .post(TRANSITIONS + "IssueProtocolTransition/run")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Status", equalTo(2))
+                                                 .body("Number", matchesPattern(number)));
     }
 
     /** The issue task of one invoice's instance, found by the business key the trigger stamped. */

@@ -803,6 +803,59 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * {@code systemWritten: true} (dirigible #8503) rides the entity as the attribute the controllers
+     * and pages read; it is not immutability (no {@code immutableAlways}, so a master delete still
+     * cascades to it), a picker targeting it offers no inline create, and a system-written child of a
+     * document is never its line items - not as the sole child, not by the {@code *Item} naming.
+     */
+    @Test
+    void systemWrittenEmitsTheAttributeAndKeepsItOutOfEveryCreateAffordance() {
+        String yaml = """
+                name: bank
+                entities:
+                  - name: Statement
+                    function: Document
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                  - name: StatementLinkItem
+                    systemWritten: true
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Statement, kind: manyToOne, to: Statement, composition: true, required: true }
+                  - name: Note
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Link, kind: manyToOne, to: StatementLinkItem }
+                      - { name: Statement, kind: manyToOne, to: Statement }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "bank");
+        List<Map<String, Object>> entities = entities(model);
+        Map<String, Object> link = entityByName(entities, "StatementLinkItem");
+        assertEquals("true", link.get("systemWritten"));
+        assertNull(link.get("immutableAlways"), "system-written is not immutability - the master's cascade must still reach it");
+
+        Map<String, Object> statement = entityByName(entities, "Statement");
+        assertNull(statement.get("documentItemsEntity"), "a system-written child is never a document's line items");
+
+        Map<String, Object> note = entityByName(entities, "Note");
+        assertEquals("false", propertyByName(note, "Link").get("widgetInlineCreate"), "no inline create toward a system-written entity");
+        assertNull(propertyByName(note, "Statement").get("widgetInlineCreate"), "an ordinary target keeps its inline create");
+
+        IntentValidationException asItems = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(yaml.replace("systemWritten: true", "systemWritten: true\n    function: DocumentItem")));
+        assertTrue(asItems.getIssues()
+                          .stream()
+                          .anyMatch(issue -> issue.startsWith(
+                                  "entity [StatementLinkItem] declares systemWritten: true and function: DocumentItem")),
+                asItems.getIssues()
+                       .toString());
+    }
+
+    /**
      * A process {@code whenDeleted: refuse} lands on its TRIGGER entity as the guard the controller
      * reads (dirigible #7074); the default ({@code abort}) is a listener and puts nothing on the
      * entity.
@@ -2478,6 +2531,63 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * A {@code compare} whose {@code than} reads another record (#8494) reaches the template layer as
+     * neutral data: the hop that loads the related record, the Calc formula over its properties and the
+     * left field's scale - the Java is rendered downstream, as for a literal.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void compareChecksAgainstARelatedRecordEmitTheFormulaAndItsHop() {
+        String yaml = """
+                name: vat
+                seeds:
+                  - name: protocol-statuses
+                    entity: ProtocolStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: ISSUED }
+                entities:
+                  - name: ProtocolStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: PurchaseInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: net, type: decimal }
+                      - { name: credited, type: decimal }
+                  - name: VatProtocol
+                    checks:
+                      - { kind: compare, field: base, op: eq, than: "PurchaseInvoice.net - PurchaseInvoice.credited", status: ISSUED,
+                          message: "The purchase invoice changed since this protocol was drafted" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: base, type: decimal, scale: 3 }
+                    relations:
+                      - { name: PurchaseInvoice, kind: manyToOne, to: PurchaseInvoice }
+                      - { name: Status, kind: manyToOne, to: ProtocolStatus, function: EntityStatus }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "vat");
+        Map<String, Object> check = ((List<Map<String, Object>>) entityByName(entities(model), "VatProtocol").get("checks")).get(0);
+        assertEquals("Base", check.get("field"));
+        assertEquals("==", check.get("op"));
+        assertEquals("true", check.get("numeric"));
+        assertEquals("Net - Credited", check.get("thanFormula"));
+        assertEquals("hop0", check.get("thanOwner"));
+        assertEquals("3", check.get("thanScale"));
+        assertNull(check.get("than"), "no own field on the right-hand side");
+        List<Map<String, Object>> loads = (List<Map<String, Object>>) check.get("pathLoads");
+        assertEquals(1, loads.size(), "both terms read the one record the relation loads");
+        assertEquals("PurchaseInvoice", loads.get(0)
+                                             .get("entity"));
+        assertEquals("entity.PurchaseInvoice", loads.get(0)
+                                                    .get("sourceExpression"));
+        assertEquals("2", check.get("status"));
+        assertEquals("Status", check.get("statusProperty"));
+    }
+
+    /**
      * A document check counts the document's LINES, even when the document owns several composition
      * children - a printed {@code function: Snapshot} copy, a payment allocation, a promotion. The
      * items child used to be whichever one a {@code HashMap} iteration yielded first, so an invoice's
@@ -3876,8 +3986,8 @@ class EdmIntentGeneratorTest {
     }
 
     /**
-     * A field's {@code normalize:} (#7726) becomes three scalar properties, so it survives the
-     * scalar-only .edm; a field without it carries none of them.
+     * A field's {@code normalize:} (#7726) (and #8492 emptyToNull) becomes scalar properties, so it
+     * survives the scalar-only .edm; a field without it carries none of them.
      */
     @org.junit.jupiter.api.Test
     void fieldNormalizeEmitsScalarProperties() {
@@ -3889,6 +3999,7 @@ class EdmIntentGeneratorTest {
                       - { name: id, type: integer, primaryKey: true, generated: true }
                       - { name: iban, type: string, length: 34, normalize: [upper, strip: " ", trim] }
                       - { name: phone, type: string, length: 20, normalize: [strip: " -()"] }
+                      - { name: vat, type: string, length: 20, normalize: [trim, emptyToNull] }
                       - { name: label, type: string }
                     """;
         java.util.Map<String, Object> account = entityByName(entities(EdmIntentGenerator.buildModelJsonForTest(
@@ -3901,9 +4012,11 @@ class EdmIntentGeneratorTest {
         assertNull(phone.get("normalizeTrim"));
         assertEquals(" -()", phone.get("normalizeStrip"));
         assertNull(phone.get("normalizeCase"));
+        assertNull(phone.get("normalizeEmptyToNull"));
+        assertEquals("true", propertyByName(account, "Vat").get("normalizeEmptyToNull"));
         java.util.Map<String, Object> label = propertyByName(account, "Label");
-        assertFalse(label.containsKey("normalizeTrim") || label.containsKey("normalizeStrip") || label.containsKey("normalizeCase"),
-                "a field without normalize must generate exactly as before");
+        assertFalse(label.containsKey("normalizeTrim") || label.containsKey("normalizeStrip") || label.containsKey("normalizeCase")
+                || label.containsKey("normalizeEmptyToNull"), "a field without normalize must generate exactly as before");
     }
 
     /**

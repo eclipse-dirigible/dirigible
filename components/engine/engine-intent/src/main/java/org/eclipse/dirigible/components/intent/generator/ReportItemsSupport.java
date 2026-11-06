@@ -1,0 +1,445 @@
+/*
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
+ */
+package org.eclipse.dirigible.components.intent.generator;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+
+import org.eclipse.dirigible.components.intent.generator.report.ReportIntentGenerator;
+import org.eclipse.dirigible.components.intent.model.EntityIntent;
+import org.eclipse.dirigible.components.intent.model.FieldIntent;
+import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
+import org.eclipse.dirigible.components.intent.model.GeneratesItemsIntent;
+import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.RelationIntent;
+import org.eclipse.dirigible.components.intent.model.ReportIntent;
+import org.eclipse.dirigible.components.intent.model.ReportParameterIntent;
+import org.eclipse.dirigible.components.intent.model.ScheduleConditionIntent;
+
+/**
+ * A create-from whose lines are a report's RESULT ROWS ({@code items: fromReport:}, issue #8329):
+ * the header is mapped from the source record as for any create-from, the {@code kind: balance}
+ * report is run with parameters read off that record, and each row passing {@code where:} becomes a
+ * line - plus one {@code counter:} line per group. A year close books the result accounts' balances
+ * this way.
+ *
+ * <p>
+ * This class owns the construct on the intent side - the rules the parser enforces
+ * ({@link #validate}) and the keys the create-from's glue entry carries ({@link #put}) - so both
+ * read one resolution of every reference: a column the parser accepts is exactly one the generator
+ * names.
+ *
+ * <p>
+ * The source key copied by the header {@code map} is mandatory: it is the back-reference through
+ * which a second run finds the live document the first one made (and is refused), and through which
+ * {@code undo: reverse} finds the document to reverse.
+ */
+public final class ReportItemsSupport {
+
+    /** The one undo a generated document takes: its target's declared reversal. */
+    public static final String UNDO_REVERSE = "reverse";
+
+    /** The operators a row condition compares with. */
+    private static final Set<String> OPERATORS = Set.of("eq", "ne", "gt", "ge", "lt", "le");
+
+    /**
+     * The report parameters a balance window is read with - a run that leaves one out reads all time.
+     */
+    private static final List<String> WINDOW = List.of("fromDate", "toDate");
+
+    private ReportItemsSupport() {}
+
+    /**
+     * The parse rules of a report-sourced items block and of {@code undo:}.
+     *
+     * @param g the create-from
+     * @param source the local source entity, or null when it is unresolved or cross-model
+     * @param byName the local entities by name
+     * @param model the model
+     * @param crossModel whether the target is owned by another model
+     * @param issues the collected issues
+     */
+    public static void validate(GeneratesIntent g, EntityIntent source, Map<String, EntityIntent> byName, IntentModel model,
+            boolean crossModel, List<String> issues) {
+        String subject = "generates [" + g.getName() + "]";
+        if (g.hasUndo() && !g.hasReportItems()) {
+            issues.add(subject + " declares undo, which undoes the lines of a report (items.fromReport) - this create-from reads none");
+            return;
+        }
+        if (!g.hasReportItems()) {
+            return;
+        }
+        GeneratesItemsIntent items = g.getItems();
+        String at = subject + " items";
+        if (items.getFrom() != null && !items.getFrom()
+                                             .isBlank()) {
+            issues.add(at + " declares both from and fromReport - its lines are either the source's rows or the report's");
+        }
+        if (crossModel || g.isCrossModelSource() || g.isEventDriven()) {
+            issues.add(at + ".fromReport needs a local source and target and a button - it is run by a click on the source record");
+            return;
+        }
+        if (items.hasRefuse()) {
+            issues.add(at + " declares refuse - a report row the where leaves out is simply not a line");
+        }
+        ReportIntent report = report(model, items.getFromReport());
+        if (report == null) {
+            issues.add(at + ".fromReport [" + items.getFromReport() + "] is not a declared report");
+            return;
+        }
+        if (!report.isBalance() || report.hasCorrespondence()) {
+            issues.add(at + ".fromReport [" + report.getName() + "] is not a kind: balance report without correspondence - its rows are"
+                    + " the balances a generated document books");
+            return;
+        }
+        if (source == null || g.getTo() == null) {
+            return; // the parser reported the source or the target
+        }
+        if (backReference(g, source) == null) {
+            issues.add(subject + " reads report lines but its map copies no source key onto the target: add the target's to-one back to ["
+                    + source.getName() + "] to the map (the source's [" + IntentEntities.keyFieldName(source)
+                    + "] as its value) - it is how a second run finds the document the first one made");
+        }
+        Set<String> parameters = new java.util.HashSet<>(WINDOW);
+        for (ReportParameterIntent parameter : report.getParameters()) {
+            parameters.add(parameter.getName());
+        }
+        for (Map.Entry<String, String> parameter : items.getParameters()
+                                                        .entrySet()) {
+            if (!parameters.contains(parameter.getKey())) {
+                issues.add(at + " parameter [" + parameter.getKey() + "] is not a parameter of report [" + report.getName() + "] "
+                        + new java.util.TreeSet<>(parameters));
+            }
+            if (property(source, parameter.getValue()) == null) {
+                issues.add(at + " parameter [" + parameter.getKey() + "] reads [" + parameter.getValue()
+                        + "], which is not a field or to-one relation of [" + source.getName() + "]");
+            }
+        }
+        for (String bound : WINDOW) {
+            if (!items.getParameters()
+                      .containsKey(bound)) {
+                issues.add(at + " binds no [" + bound + "] - the report would be read over all time; bind it to a property of ["
+                        + source.getName() + "]");
+            }
+        }
+        EntityIntent line = items.getTo() == null ? null : byName.get(items.getTo());
+        if (line == null) {
+            issues.add(at + ".to [" + items.getTo() + "] is not an entity of this model");
+            return;
+        }
+        if (IntentEntities.itemsBackReference(line, g.getTo()) == null) {
+            issues.add(at + ".to [" + line.getName() + "] is not a composition child of [" + g.getTo() + "]");
+        }
+        if (items.getMap()
+                 .isEmpty()) {
+            issues.add(at + " maps no report column onto [" + line.getName() + "]");
+        }
+        Map<String, String> columns = ReportIntentGenerator.balanceAliases(report);
+        cells(items.getMap(), line, byName, columns, at + " map", issues);
+        cells(items.getCounter(), line, byName, columns, at + " counter", issues);
+        if (items.hasWhere()) {
+            for (ScheduleConditionIntent condition : items.getWhere()) {
+                if (condition.getField() == null || !columns.containsKey(ReportIntentGenerator.columnKey(condition.getField()))) {
+                    issues.add(at + " where-condition reads [" + condition.getField() + "], which is not a column of report ["
+                            + report.getName() + "] " + columns.keySet());
+                }
+                if (!OPERATORS.contains(condition.getOp())) {
+                    issues.add(
+                            at + " where-condition uses unsupported operator [" + condition.getOp() + "] (supported: eq/ne/gt/ge/lt/le)");
+                } else if (!"eq".equals(condition.getOp()) && !"ne".equals(condition.getOp()) && !isNumber(condition.getValue())) {
+                    issues.add(at + " where-condition [" + condition.getField() + " " + condition.getOp() + "] compares with ["
+                            + condition.getValue() + "] - an ordering compares a number");
+                }
+            }
+        }
+        if (g.hasUndo()) {
+            validateUndo(g, model, subject, issues);
+        }
+    }
+
+    private static void validateUndo(GeneratesIntent g, IntentModel model, String subject, List<String> issues) {
+        if (!UNDO_REVERSE.equals(g.getUndo())) {
+            issues.add(subject + " undo [" + g.getUndo() + "] is not supported (supported: reverse)");
+            return;
+        }
+        GeneratesIntent reversal = reversalOf(model, g.getTo());
+        if (reversal == null || reversal.getReversal()
+                                        .getBackLink() == null
+                || reversal.getReversal()
+                           .getBackLink()
+                           .isBlank()) {
+            issues.add(subject + " undo: reverse needs a reversals: entry on [" + g.getTo() + "] declaring backLink - it books that"
+                    + " reversal, and the back-link is what retires the reversed document");
+        }
+    }
+
+    /**
+     * The cells of one line shape: every key a property of the line entity a report cell can be written
+     * into, every value a column of the report - a decimal property only from one of the six amounts,
+     * which is what lets the run convert it exactly.
+     */
+    private static void cells(Map<String, String> cells, EntityIntent line, Map<String, EntityIntent> byName, Map<String, String> columns,
+            String at, List<String> issues) {
+        for (Map.Entry<String, String> cell : cells.entrySet()) {
+            String kind = kind(line, byName, cell.getKey());
+            String column = cell.getValue() == null ? "" : ReportIntentGenerator.columnKey(cell.getValue());
+            if (kind == null) {
+                issues.add(at + " [" + cell.getKey() + "] is not a decimal, integer, long or text field, nor a to-one relation, of ["
+                        + line.getName() + "]");
+            } else if (!columns.containsKey(column)) {
+                issues.add(at + " [" + cell.getKey() + "] reads [" + cell.getValue() + "], which is not a column of the report "
+                        + columns.keySet());
+            } else if ("decimal".equals(kind) != isAmount(column)) {
+                issues.add(at + " [" + cell.getKey() + "] reads [" + cell.getValue() + "] - an amount column ("
+                        + ReportIntentGenerator.BALANCE_AMOUNT_ALIASES.keySet() + ") is written into a decimal field, and only there");
+            }
+        }
+    }
+
+    /**
+     * Puts the report half of a create-from onto its glue entry: the report, its parameters, the line
+     * and counter cells, the row rule, the liveness test of a document already made and the undo.
+     *
+     * @param g the create-from (with {@code items.fromReport})
+     * @param e the glue entry
+     * @param source the source entity
+     * @param byName the local entities by name
+     * @param model the model
+     */
+    static void put(GeneratesIntent g, Map<String, Object> e, EntityIntent source, Map<String, EntityIntent> byName, IntentModel model) {
+        GeneratesItemsIntent items = g.getItems();
+        ReportIntent report = report(model, items.getFromReport());
+        EntityIntent line = byName.get(items.getTo());
+        EntityIntent target = byName.get(g.getTo());
+        Map<String, String> columns = ReportIntentGenerator.balanceAliases(report);
+        e.put("hasReportItems", true);
+        e.put("reportName", report.getName());
+        List<Map<String, Object>> parameters = new ArrayList<>();
+        items.getParameters()
+             .forEach((name, property) -> parameters.add(Map.of("name", name, "property", IntentNaming.pascalCase(property))));
+        e.put("reportParameters", parameters);
+        int amountScale = amountScale(report, byName.get(report.getSource()));
+        e.put("reportCells", cells(items.getMap(), line, byName, columns, amountScale));
+        e.put("counterCells", cells(items.getCounter(), line, byName, columns, amountScale));
+        List<Map<String, Object>> where = new ArrayList<>();
+        if (items.hasWhere()) {
+            for (ScheduleConditionIntent condition : items.getWhere()) {
+                Map<String, Object> term = new LinkedHashMap<>();
+                term.put("alias", columns.get(ReportIntentGenerator.columnKey(condition.getField())));
+                term.put("op", condition.getOp());
+                // A missing value is the empty cell: eq / ne then ask whether the row holds one at all.
+                term.put("value", condition.getValue() == null ? "" : String.valueOf(condition.getValue()));
+                term.put("isNull", condition.getValue() == null);
+                where.add(term);
+            }
+        }
+        e.put("reportWhere", where);
+        e.put("toItemEntity", items.getTo());
+        e.put("toFkProperty", IntentEntities.itemsBackReference(line, g.getTo()));
+        e.put("backRefProperty", backReference(g, source));
+        String dead = GlueIntentGenerator.deadEntryCondition(target, model);
+        e.put("liveCondition", dead.isEmpty() ? "true" : "!(" + dead + ")");
+        GeneratesIntent reversal = g.hasUndo() ? reversalOf(model, g.getTo()) : null;
+        e.put("hasUndo", reversal != null);
+        if (reversal != null) {
+            e.put("undoReversalClass", IntentNaming.pascalIdentifier(reversal.getName()));
+            e.put("undoReversalRefuses", !reversal.getReversal()
+                                                  .getRefuse()
+                                                  .isEmpty());
+            e.put("undoBackLinkProperty", IntentNaming.pascalCase(reversal.getReversal()
+                                                                          .getBackLink()));
+            RelationIntent status = IntentEntities.entityStatusRelation(target);
+            boolean guarded = status != null && reversal.hasFromStatus();
+            e.put("undoStatusProperty", guarded ? IntentNaming.pascalCase(status.getName()) : "");
+            e.put("undoStatusExpr", guarded ? String.join(" || ", reversal.getFromStatus()
+                                                                          .stream()
+                                                                          .map(id -> "undoStatus == " + id)
+                                                                          .toList())
+                    : "");
+            e.put("undoStatuses", guarded ? String.valueOf(reversal.getFromStatus()) : "");
+        }
+    }
+
+    /**
+     * The undo action's name - its descriptor id, translation key and settings entry.
+     *
+     * @param g the create-from
+     * @return the name
+     */
+    public static String undoName(GeneratesIntent g) {
+        return g.getName() + "-undo";
+    }
+
+    /**
+     * The undo action's label: "Undo " and the create-from's own.
+     *
+     * @param g the create-from
+     * @return the label
+     */
+    public static String undoLabel(GeneratesIntent g) {
+        return "Undo " + IntentNaming.customActionLabel(g.getName(), g.getLabel());
+    }
+
+    /** One line shape's cells, each with the conversion its target property takes. */
+    private static List<Map<String, Object>> cells(Map<String, String> cells, EntityIntent line, Map<String, EntityIntent> byName,
+            Map<String, String> columns, int amountScale) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map.Entry<String, String> cell : cells.entrySet()) {
+            String kind = kind(line, byName, cell.getKey());
+            FieldIntent field = field(line, cell.getKey());
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("targetProp", IntentNaming.pascalCase(cell.getKey()));
+            entry.put("alias", columns.get(ReportIntentGenerator.columnKey(cell.getValue())));
+            entry.put("kind", kind);
+            entry.put("scale", "decimal".equals(kind) && field.getScale() != null ? field.getScale() : 2);
+            entry.put("sourceScale", amountScale);
+            out.add(entry);
+        }
+        return out;
+    }
+
+    /**
+     * The conversion a report cell takes into a property of the line entity: {@code decimal},
+     * {@code integer}, {@code long} or {@code text} - a to-one relation by its target's key - or null
+     * for a property no report cell can be written into.
+     */
+    private static String kind(EntityIntent line, Map<String, EntityIntent> byName, String property) {
+        FieldIntent field = field(line, property);
+        String type;
+        if (field != null) {
+            type = field.getType();
+        } else {
+            RelationIntent relation = toOne(line, property);
+            EntityIntent target = relation == null ? null : byName.get(relation.getTo());
+            FieldIntent key = target == null ? null : IntentEntities.primaryKeyOf(target);
+            if (relation == null || target == null) {
+                return null;
+            }
+            type = key == null ? "integer" : key.getType();
+        }
+        return switch (IntentEntities.sqlType(type)) {
+            case "DECIMAL" -> "decimal";
+            case "INTEGER" -> "integer";
+            case "BIGINT" -> "long";
+            case "VARCHAR" -> type == null || Set.of("string", "text", "uuid")
+                                                 .contains(type.trim()
+                                                               .toLowerCase(Locale.ROOT)) ? "text" : null;
+            default -> null;
+        };
+    }
+
+    /**
+     * The scale of the report's amounts: the larger of its debit and credit fields' (a decimal without
+     * one is stored at 2, a whole-number amount at 0). A row read before report decimals are exact
+     * (#8487) is trusted only below the magnitude this scale leaves 15 significant digits for.
+     */
+    private static int amountScale(ReportIntent report, EntityIntent ledger) {
+        int scale = 0;
+        for (String amount : List.of(report.getDebit(), report.getCredit())) {
+            FieldIntent field = ledger == null || amount == null ? null : field(ledger, amount.trim());
+            if (field != null && "DECIMAL".equals(IntentEntities.sqlType(field.getType()))) {
+                scale = Math.max(scale, field.getScale() == null ? 2 : field.getScale());
+            }
+        }
+        return scale;
+    }
+
+    /** The target property the header map copies the source's key onto, or null. */
+    private static String backReference(GeneratesIntent g, EntityIntent source) {
+        String key = IntentEntities.keyFieldName(source);
+        for (Map.Entry<String, String> mapping : g.getMap()
+                                                  .entrySet()) {
+            if (mapping.getValue() != null && key.equals(IntentNaming.pascalCase(mapping.getValue()))) {
+                return IntentNaming.pascalCase(mapping.getKey());
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The declared reversal of the entity (the create-from a {@code reversals:} entry expands into).
+     */
+    private static GeneratesIntent reversalOf(IntentModel model, String entity) {
+        for (GeneratesIntent candidate : model.getGenerates()) {
+            if (candidate.isReversal() && entity != null && entity.equals(candidate.getTo())) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private static ReportIntent report(IntentModel model, String name) {
+        for (ReportIntent report : model.getReports()) {
+            if (report.getName() != null && report.getName()
+                                                  .equals(name)) {
+                return report;
+            }
+        }
+        return null;
+    }
+
+    private static boolean isAmount(String columnKey) {
+        for (String amount : ReportIntentGenerator.BALANCE_AMOUNT_ALIASES.keySet()) {
+            if (ReportIntentGenerator.columnKey(amount)
+                                     .equals(columnKey)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isNumber(Object value) {
+        if (value instanceof Number) {
+            return true;
+        }
+        try {
+            new java.math.BigDecimal(String.valueOf(value));
+            return true;
+        } catch (NumberFormatException notANumber) {
+            return false;
+        }
+    }
+
+    private static Object property(EntityIntent entity, String name) {
+        FieldIntent field = field(entity, name);
+        return field != null ? field : toOne(entity, name);
+    }
+
+    private static FieldIntent field(EntityIntent entity, String name) {
+        if (entity == null || name == null) {
+            return null;
+        }
+        for (FieldIntent field : entity.getFields()) {
+            if (field.getName() != null && field.getName()
+                                                .equalsIgnoreCase(name)) {
+                return field;
+            }
+        }
+        return null;
+    }
+
+    private static RelationIntent toOne(EntityIntent entity, String name) {
+        if (entity == null || name == null || entity.getRelations() == null) {
+            return null;
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (relation.getName() != null && relation.getName()
+                                                      .equalsIgnoreCase(name)
+                    && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+                return relation;
+            }
+        }
+        return null;
+    }
+}

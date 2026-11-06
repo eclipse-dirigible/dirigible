@@ -39,6 +39,19 @@ class NormalizeTest {
         assertNull(Normalize.apply(null, true, " ", "upper"));
     }
 
+    /**
+     * A blank result is stored as null under {@code emptyToNull}, after the other transforms (#8492).
+     */
+    @Test
+    void empty_to_null_stores_a_blank_result_as_null() {
+        assertNull(Normalize.apply("", false, null, null, true));
+        assertNull(Normalize.apply("   ", true, null, null, true));
+        assertNull(Normalize.apply("\u00a0\u200b", false, null, null, true));
+        assertNull(Normalize.apply(" - ", false, "-", "upper", true));
+        assertEquals("AB", Normalize.apply(" ab ", true, null, "upper", true));
+        assertEquals("", Normalize.apply("", false, null, null, false));
+    }
+
     @Test
     void stripping_works_on_code_points_outside_the_basic_plane() {
         assertEquals("ab", Normalize.apply("a😀b", false, "😀", null));
