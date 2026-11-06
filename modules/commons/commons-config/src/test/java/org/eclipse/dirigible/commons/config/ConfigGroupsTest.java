@@ -55,6 +55,8 @@ public class ConfigGroupsTest {
         assertEquals(ConfigGroup.JOBS, ConfigGroups.resolve("DIRIGIBLE_SCHEDULER_DATABASE_URL"));
         assertEquals(ConfigGroup.TENANCY, ConfigGroups.resolve("DIRIGIBLE_APP_ID"));
         assertEquals(ConfigGroup.INSTANCE, ConfigGroups.resolve("DIRIGIBLE_APP_BASE_URL"));
+        assertEquals(ConfigGroup.INSTANCE, ConfigGroups.resolve("DIRIGIBLE_APPLICATION_VERSION"));
+        assertEquals(ConfigGroup.LOCALE, ConfigGroups.resolve("DIRIGIBLE_APPLICATION_LANGUAGES"));
     }
 
     @Test

@@ -106,7 +106,10 @@ document.addEventListener('alpine:init', () => {
         this.exportColumns = this.exportColumns.filter(c => this.canSee(c.name));
       });
 #end
-#if($roleWrite)
+#if($systemWritten)
+      // ${name} is written by the application only (#8503): no caller gets New, Edit or Delete.
+      this.access = { read: true, write: false };
+#elseif($roleWrite)
       // Whether this caller may write ${name} at all (#8089): New, Edit and Delete stay hidden until
       // the controller answers, and stay hidden for a caller it would refuse. Not awaited - the rows
       // render at once.
@@ -450,6 +453,18 @@ document.addEventListener('alpine:init', () => {
     get menuHasRecordActions() { return this.menuHasPreview || this.menuHasEdit; },
 #end
     get menuHasAnythingAbove() { return this.menuTasks.length > 0 || this.menuActions.length > 0 || this.menuHasRecordActions; },
+    // Whether the sheet's "..." would open on anything at all (#8436). On a record its status makes
+    // read-only Preview is the primary button and Edit and Delete are withheld, so a record with no
+    // pending task and no applicable action left the overflow with nothing in it - the trigger opened
+    // an empty menu. The trigger renders only when this is true, as on the record page.
+    get menuHasAnything() {
+#if($scopedCalendars)
+      // A scoped calendar entry is offered for every record.
+      return true;
+#else
+      return this.menuHasAnythingAbove || this.menuDestructiveActions.length > 0 || this.menuHasDelete;
+#end
+    },
 
     // Right-pane selection (the table shows only the major columns; the pane shows every property).
     get selectedId() { return this.selected ? this.selected.${primaryKeysString} : null; },

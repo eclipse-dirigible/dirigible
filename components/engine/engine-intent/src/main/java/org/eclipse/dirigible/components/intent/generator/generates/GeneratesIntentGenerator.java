@@ -20,6 +20,7 @@ import org.eclipse.dirigible.components.intent.generator.GeneratesBootstrap;
 import org.eclipse.dirigible.components.intent.generator.GeneratesGuardSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
+import org.eclipse.dirigible.components.intent.generator.ReportItemsSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
@@ -104,7 +105,28 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
                             IntentNaming.customActionTranslationKey(project, context, name),
                             GeneratesGuardSupport.of(g, GeneratesGuardSupport.statusProperty(g, model, context)),
                             PromptColumns.of(g, model, context)));
+            if (g.hasUndo() && g.hasReportItems()) {
+                // The undo of what a run generated (#8329): a second button on the same record, served by
+                // the same controller.
+                String undoBase = ReportItemsSupport.undoName(g) + "-generate-action";
+                String undoPath = project + "/" + undoBase + ".json";
+                context.writeModelFile(undoBase + ".extension", buildExtensionJson(project, actionPoint, undoPath, g));
+                context.writeModelFile(undoBase + ".json", buildUndoDescriptor(project, IntentNaming.javaModule(context), g,
+                        IntentNaming.customActionTranslationKey(project, context, ReportItemsSupport.undoName(g))));
+            }
         }
+    }
+
+    private static String buildUndoDescriptor(String project, String javaModule, GeneratesIntent g, String translationKey) {
+        Map<String, Object> view = new LinkedHashMap<>();
+        view.put("id", project + "-" + g.getForEntity() + "-" + ReportItemsSupport.undoName(g));
+        view.put("label", ReportItemsSupport.undoLabel(g));
+        view.put("translation", Map.of("key", translationKey));
+        view.put("endpoint", "/services/java/" + project + "/gen/events/" + javaModule + "/" + IntentNaming.pascalIdentifier(g.getName())
+                + "Generate/undo");
+        view.put("view", g.getForEntity());
+        view.put("type", g.getScope());
+        return JsonHelper.toJson(view);
     }
 
     /** The project owning a {@code uses:} alias (its {@code project:}, defaulting to the alias). */

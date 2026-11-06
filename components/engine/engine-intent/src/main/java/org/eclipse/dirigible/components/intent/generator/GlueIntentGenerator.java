@@ -1333,6 +1333,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("itemWhere", "");
                 e.put("itemRefuse", "");
             }
+            if (g.hasReportItems()) {
+                // The lines are a report's result rows (#8329), each cell read off the row; the items
+                // `defaults` ride the same key as a mirror block's assignments, owner-less literals.
+                ReportItemsSupport.put(g, e, source, byName, model);
+                EntityIntent line = byName.get(items.getTo());
+                e.put("itemFieldAssignments",
+                        childAssignments(Map.of(), items.getDefaults(), "row", temporalKinds(line, null), relationProperties(line, null)));
+            }
             e.put("hasPrompt", g.hasPrompt());
             e.put("promptFields", promptFields(g, crossModel ? null : byName.get(g.getTo()), target, source));
             putLink(g, e, byName, compositionParents, model, target);
@@ -1927,6 +1935,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // process step authors. Fail-soft in the generated controller: the flip is the contract.
             e.putAll(notifyFields(t.getNotify(), entity, model, byName, compositionParents, context,
                     "Transition [" + t.getName() + "] notify"));
+            if (t.stampsNumber()) {
+                // The move issues the document (#8493): its stampOn: issue number is drawn and written
+                // with the status, as the NumberStamp delegate draws it at a process's issue step.
+                e.put("stampNumbers", NumberingSupport.issueNumbers(entity));
+            }
             if (t.isPersonal()) {
                 // The owner's run from the personal surface (#8406): scoped to the caller's identity
                 // record through the entity's personal relation, as its personal controller is.
@@ -3284,7 +3297,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * @param model the model, for the status seeds and the reversals of the target
      * @return the condition, or the empty string when nothing can retire a posted document
      */
-    private static String deadEntryCondition(EntityIntent creates, IntentModel model) {
+    static String deadEntryCondition(EntityIntent creates, IntentModel model) {
         List<String> terms = new ArrayList<>();
         RelationIntent status = LifecycleStages.statusRelation(creates);
         String statusProperty = status == null ? null : IntentNaming.pascalCase(status.getName());

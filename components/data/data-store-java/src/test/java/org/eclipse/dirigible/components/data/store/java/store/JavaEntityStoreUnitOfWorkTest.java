@@ -22,6 +22,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.eclipse.dirigible.components.data.store.java.manager.JavaEntityManager;
@@ -68,7 +70,12 @@ class JavaEntityStoreUnitOfWorkTest {
         when(entityManager.getSessionFactory()).thenReturn(sessionFactory);
 
         store = new JavaEntityStore(entityManager, mock(EventOutbox.class));
+        pauses = new ArrayList<>();
+        store.setPauser(pauses::add);
     }
+
+    /** The pauses taken between deadlock repeats, recorded instead of slept. */
+    private List<Long> pauses;
 
     @Test
     void commitsWhenTheBlockReturns() {
@@ -253,6 +260,7 @@ class JavaEntityStoreUnitOfWorkTest {
         verify(transaction).rollback();
         verify(transaction).commit();
         verify(session, times(2)).close();
+        assertEquals(1, pauses.size());
     }
 
     /** PostgreSQL reports a deadlock as 40P01. */
@@ -269,9 +277,36 @@ class JavaEntityStoreUnitOfWorkTest {
         assertEquals(2, attempts.get());
     }
 
-    /** Once: a second deadlock is the caller's conflict. */
+    /**
+     * A repeat that is chosen as the victim again is repeated again (#8507): the survivor of the first
+     * deadlock is still taking locks, so the repeat can collide with it once more. Each repeat waits
+     * first, a little longer than the one before.
+     */
     @Test
-    void aSecondDeadlockIsTheCallersConflict() {
+    void aRepeatedDeadlockVictimIsRunAgainAfterAPause() {
+        AtomicInteger attempts = new AtomicInteger();
+
+        assertEquals("saved", store.inUnitOfWorkRetryingDeadlock(() -> {
+            if (attempts.incrementAndGet() < 4) {
+                throw deadlock("40001");
+            }
+            return "saved";
+        }));
+
+        assertEquals(4, attempts.get());
+        verify(transaction, times(3)).rollback();
+        verify(transaction).commit();
+        assertEquals(3, pauses.size());
+        for (int i = 0; i < pauses.size(); i++) {
+            long ceiling = JavaEntityStore.DEADLOCK_PAUSE_MILLIS << i;
+            long pause = pauses.get(i);
+            assertTrue(pause >= ceiling / 2 && pause <= ceiling, "pause " + (i + 1) + " was " + pause + " ms");
+        }
+    }
+
+    /** A write that loses every attempt is the caller's conflict - the attempts are bounded. */
+    @Test
+    void aDeadlockOnEveryAttemptIsTheCallersConflict() {
         AtomicInteger attempts = new AtomicInteger();
 
         assertThrows(ConcurrentWriteException.class, () -> store.inUnitOfWorkRetryingDeadlock(() -> {
@@ -279,9 +314,48 @@ class JavaEntityStoreUnitOfWorkTest {
             throw deadlock("40001");
         }));
 
-        assertEquals(2, attempts.get());
-        verify(transaction, times(2)).rollback();
+        assertEquals(JavaEntityStore.DEADLOCK_ATTEMPTS, attempts.get());
+        assertEquals(JavaEntityStore.DEADLOCK_ATTEMPTS - 1, pauses.size());
+        verify(transaction, times(JavaEntityStore.DEADLOCK_ATTEMPTS)).rollback();
         verify(transaction, never()).commit();
+    }
+
+    /**
+     * An interrupt during the pause ends the repeats: the conflict reaches the caller, interrupt kept.
+     */
+    @Test
+    void anInterruptedPauseIsTheCallersConflict() {
+        AtomicInteger attempts = new AtomicInteger();
+        store.setPauser(millis -> {
+            throw new InterruptedException("shutting down");
+        });
+
+        try {
+            assertThrows(ConcurrentWriteException.class, () -> store.inUnitOfWorkRetryingDeadlock(() -> {
+                attempts.incrementAndGet();
+                throw deadlock("40001");
+            }));
+            assertEquals(1, attempts.get());
+            assertTrue(Thread.currentThread()
+                             .isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    /** The pauses stay within their doubling bounds, so the repeats cost well under a second. */
+    @Test
+    void thePausesDoubleAndStayBounded() {
+        long total = 0;
+        for (int attempt = 1; attempt < JavaEntityStore.DEADLOCK_ATTEMPTS; attempt++) {
+            long ceiling = JavaEntityStore.DEADLOCK_PAUSE_MILLIS << (attempt - 1);
+            for (int sample = 0; sample < 200; sample++) {
+                long pause = JavaEntityStore.deadlockPause(attempt);
+                assertTrue(pause >= ceiling / 2 && pause <= ceiling, "attempt " + attempt + " paused " + pause + " ms");
+            }
+            total += ceiling;
+        }
+        assertTrue(total < 1000, "worst case " + total + " ms");
     }
 
     /**
