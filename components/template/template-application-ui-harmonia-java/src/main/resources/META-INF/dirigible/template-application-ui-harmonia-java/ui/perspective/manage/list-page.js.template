@@ -450,6 +450,18 @@ document.addEventListener('alpine:init', () => {
     get menuHasRecordActions() { return this.menuHasPreview || this.menuHasEdit; },
 #end
     get menuHasAnythingAbove() { return this.menuTasks.length > 0 || this.menuActions.length > 0 || this.menuHasRecordActions; },
+    // Whether the sheet's "..." would open on anything at all (#8436). On a record its status makes
+    // read-only Preview is the primary button and Edit and Delete are withheld, so a record with no
+    // pending task and no applicable action left the overflow with nothing in it - the trigger opened
+    // an empty menu. The trigger renders only when this is true, as on the record page.
+    get menuHasAnything() {
+#if($scopedCalendars)
+      // A scoped calendar entry is offered for every record.
+      return true;
+#else
+      return this.menuHasAnythingAbove || this.menuDestructiveActions.length > 0 || this.menuHasDelete;
+#end
+    },
 
     // Right-pane selection (the table shows only the major columns; the pane shows every property).
     get selectedId() { return this.selected ? this.selected.${primaryKeysString} : null; },
