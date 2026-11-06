@@ -289,7 +289,16 @@ document.addEventListener('alpine:init', () => {
 #else
       const optionsLoaded = null;
 #end
-#if($roleWrite)
+#if($systemWritten)
+      // ${name} is written by the application only (#8503): every caller gets the preview on /edit and
+      // the notice on /create, as a caller without the write role does.
+      this.access = { read: true, write: false };
+      if (!this.isEdit && !this.isPreview) {
+        this.state = 'cannot-create';
+        return;
+      }
+      if (this.isEdit) this.mode = 'preview';
+#elseif($roleWrite)
       // Whether this caller may write ${name} at all (#8089), settled before the form shows: a caller
       // who may only read gets the preview on /edit and a notice on /create - never a form whose save
       // the controller was always going to refuse. The 403 of each write stays the guard.

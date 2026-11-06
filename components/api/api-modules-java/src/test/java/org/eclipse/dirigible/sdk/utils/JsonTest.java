@@ -12,10 +12,13 @@ package org.eclipse.dirigible.sdk.utils;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
@@ -60,6 +63,25 @@ class JsonTest {
         assertEquals(Instant.parse("2026-08-10T12:30:00Z"), back.instant);
         assertEquals(LocalDate.of(2026, 8, 10), back.date);
         assertEquals(LocalDateTime.of(2026, 8, 10, 12, 30), back.dateTime);
+    }
+
+    /**
+     * A query's rows are untyped maps: {@code parse} reads their numbers as doubles, which cut a
+     * {@code DECIMAL(18, 2)} amount to about 15 significant digits (#8487); {@code parseExact} keeps
+     * every digit the JSON carries.
+     */
+    @Test
+    void parse_exact_reads_an_untyped_number_as_the_decimal_it_is_written_as() {
+        String rows = "[{\"Amount\":1234567890123456.78,\"Count\":2}]";
+
+        Map<?, ?> exact = (Map<?, ?>) Json.parseExact(rows, List.class)
+                                          .get(0);
+        assertEquals(new BigDecimal("1234567890123456.78"), exact.get("Amount"));
+        assertEquals(new BigDecimal("2"), exact.get("Count"));
+
+        Map<?, ?> approximate = (Map<?, ?>) Json.parse(rows, List.class)
+                                                .get(0);
+        assertEquals(1.2345678901234568E15, approximate.get("Amount"));
     }
 
     static class Holder {

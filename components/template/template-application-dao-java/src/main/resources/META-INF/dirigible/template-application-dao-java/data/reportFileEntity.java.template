@@ -75,7 +75,6 @@ public class ${name}Repository {
     /** A timestamp as the named-parameter binder reads it. */
     private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS");
 
-    @SuppressWarnings("unchecked")
     public List<Map<String, Object>> findAll(Integer limit, Integer offset, Map<String, Object> filter) {
         List<Map<String, Object>> parameters = baseParameters(filter);
         StringBuilder sql = new StringBuilder(filteredQuery(filter, parameters));
@@ -88,20 +87,17 @@ public class ${name}Repository {
             sql.append(" OFFSET ").append(offset.intValue());
         }
         try {
-            String result = Database.queryNamed(sql.toString(), Json.stringify(parameters));
-            return (List<Map<String, Object>>) Json.parse(result, List.class);
+            return rows(sql.toString(), parameters);
         } catch (Throwable t) {
             throw new RuntimeException("Failed to execute report ${name}", t);
         }
     }
 
-    @SuppressWarnings("unchecked")
     public long count(Map<String, Object> filter) {
         List<Map<String, Object>> parameters = baseParameters(filter);
         String sql = "SELECT COUNT(*) AS \"REPORT_COUNT\" FROM (" + filteredQuery(filter, parameters) + ") AS \"REPORT_TOTAL\"";
         try {
-            String result = Database.queryNamed(sql, Json.stringify(parameters));
-            List<Map<String, Object>> rows = (List<Map<String, Object>>) Json.parse(result, List.class);
+            List<Map<String, Object>> rows = rows(sql, parameters);
             if (rows.isEmpty()) {
                 return 0L;
             }
@@ -126,7 +122,6 @@ public class ${name}Repository {
      * and must be numeric; anything else is an {@link IllegalArgumentException}, i.e. a client error.
      * Never {@code null}: a report yielding no rows sums to zero.
      */
-    @SuppressWarnings("unchecked")
     public Number sum(String column, Map<String, Object> filter) {
         String type = column == null ? null : FILTER_COLUMNS.get(column);
         if (type == null) {
@@ -139,8 +134,7 @@ public class ${name}Repository {
         String sql = "SELECT SUM(\"" + column + "\") AS \"REPORT_SUM\" FROM (" + filteredQuery(filter, parameters)
                 + ") AS \"REPORT_TOTAL\"";
         try {
-            String result = Database.queryNamed(sql, Json.stringify(parameters));
-            List<Map<String, Object>> rows = (List<Map<String, Object>>) Json.parse(result, List.class);
+            List<Map<String, Object>> rows = rows(sql, parameters);
             if (rows.isEmpty()) {
                 return 0L;
             }
@@ -153,6 +147,16 @@ public class ${name}Repository {
         } catch (Throwable t) {
             throw new RuntimeException("Failed to sum column " + column + " of report ${name}", t);
         }
+    }
+
+    /**
+     * The rows of a statement over the report's named parameters, every number read as the exact
+     * BigDecimal the database answered: read as a double, a DECIMAL amount past about 15 significant
+     * digits lost its cents - on a row, a sum and everything that reads them (#8487).
+     */
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> rows(String sql, List<Map<String, Object>> parameters) throws Throwable {
+        return (List<Map<String, Object>>) Json.parseExact(Database.queryNamed(sql, Json.stringify(parameters)), List.class);
     }
 
     public List<Map<String, Object>> exportCsv(Map<String, Object> filter) {

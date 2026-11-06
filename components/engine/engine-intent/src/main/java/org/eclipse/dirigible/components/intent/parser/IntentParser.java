@@ -47,6 +47,7 @@ import org.eclipse.dirigible.components.intent.generator.ProcessResilienceSuppor
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport;
 import org.eclipse.dirigible.components.intent.generator.CheckSupport;
 import org.eclipse.dirigible.components.intent.generator.CronSupport;
+import org.eclipse.dirigible.components.intent.generator.ReportItemsSupport;
 import org.eclipse.dirigible.components.intent.generator.ResolvePathSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
@@ -1899,6 +1900,9 @@ public final class IntentParser {
                                                                    .isEmpty())) {
             issues.add("schedule [" + name + "] generate declares items - item cloning is not supported for a scheduled generation;"
                     + " use an on-demand generates action for document-to-document cloning");
+        }
+        if (g.hasUndo()) {
+            issues.add("schedule [" + name + "] generate declares undo - an undo is a click on the record an on-demand generates ran from");
         }
         // The escalation writes its chosen level onto the target too (issue #7276), so the natural key
         // may - and must - name it, although no map / defaults entry does.
@@ -5343,6 +5347,11 @@ public final class IntentParser {
                                                                    .isBlank()) {
                 validateImmutableWhen(entity, issues);
             }
+            if (entity.isSystemWritten() && entity.isDocumentItem()) {
+                issues.add("entity [" + entity.getName() + "] declares systemWritten: true and function: DocumentItem - a document's"
+                        + " line items are what its users add and edit, and nobody may write a system-written entity over REST;"
+                        + " drop one (a system-written child renders as a read-only detail panel)");
+            }
             if (entity.getPeriod() != null) {
                 validatePeriod(entity, issues);
             }
@@ -7000,7 +7009,7 @@ public final class IntentParser {
             return;
         }
         if ("compare".equals(kind)) {
-            validateCompareCheck(entity, check, subject, issues);
+            validateCompareCheck(entity, check, byName, subject, issues);
             return;
         }
         if ("agree".equals(kind)) {
@@ -7183,7 +7192,7 @@ public final class IntentParser {
         comparison.setField(check.getField());
         comparison.setOp(check.getOp());
         comparison.setValue(check.getValue());
-        validateCompareCheck(items, comparison, subject + " on items [" + items.getName() + "]", issues);
+        validateCompareCheck(items, comparison, java.util.Map.of(), subject + " on items [" + items.getName() + "]", issues);
     }
 
     /**
@@ -7329,7 +7338,8 @@ public final class IntentParser {
      * &gt; 0 before SUBMITTED" is declarable without forbidding the draft that is still being filled
      * in.
      */
-    private static void validateCompareCheck(EntityIntent entity, CheckIntent check, String subject, List<String> issues) {
+    private static void validateCompareCheck(EntityIntent entity, CheckIntent check, java.util.Map<String, EntityIntent> byName,
+            String subject, List<String> issues) {
         String field = check.getField();
         String than = check.getThan();
         boolean hasThan = than != null && !than.isBlank();
@@ -7368,6 +7378,10 @@ public final class IntentParser {
             }
             return;
         }
+        if (ResolvePathSupport.isPath(than)) {
+            validateHopCompare(entity, check, left, byName, subject, issues);
+            return;
+        }
         if (field.equalsIgnoreCase(than)) {
             issues.add(subject + " compares [" + field + "] with itself - the outcome cannot depend on the record");
         }
@@ -7387,6 +7401,42 @@ public final class IntentParser {
         if (leftFamily != null && rightFamily != null && !leftFamily.equals(rightFamily)) {
             issues.add(subject + " compares a [" + left.getType() + "] with a [" + right.getType()
                     + "] - both fields must be dates, both timestamps or both numbers");
+        }
+    }
+
+    /**
+     * A {@code compare} whose {@code than} reads ANOTHER record (#8494): a formula over the fields of
+     * one to-one relation - {@code than: "PurchaseInvoice.net - PurchaseInvoice.credited"} - so "the
+     * figure this document stored is still what its source says" is declarable at the move that relies
+     * on it. The {@code status} gate is required: the related record changes on its own, so the rule is
+     * about the moment the document is written carrying that status (the transition into it), never
+     * every edit of the draft before. Numbers only, since the formula is arithmetic; a term on a
+     * cross-model record is trusted here, as every cross-model terminal is, and checked by the
+     * generator against the owner's properties.
+     */
+    private static void validateHopCompare(EntityIntent entity, CheckIntent check, FieldIntent left,
+            java.util.Map<String, EntityIntent> byName, String subject, List<String> issues) {
+        String than = check.getThan();
+        if (check.getStatus() == null) {
+            issues.add(subject + " than [" + than + "] reads another record - declare the `status` it is checked at");
+        }
+        if (!"number".equals(compareFamily(left))) {
+            issues.add(subject + " field [" + check.getField() + "] is a [" + left.getType() + "] - a formula over another record"
+                    + " compares with a number");
+        }
+        CheckSupport.HopFormula formula = CheckSupport.hopFormula(than);
+        if (formula.failure() != null) {
+            issues.add(subject + " than " + formula.failure());
+            return;
+        }
+        ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, java.util.Map.of(), null);
+        for (String term : formula.fields()) {
+            ResolvePathSupport.Path path = walker.resolve(formula.relation() + "." + term);
+            if (!path.resolved()) {
+                issues.add(subject + " than " + path.failure());
+            } else if (path.terminalType() != null && !"number".equals(CheckSupport.compareFamily(path.terminalType()))) {
+                issues.add(subject + " than [" + path.label() + "] is a [" + path.terminalType() + "] - a formula reads numbers");
+            }
         }
     }
 
@@ -8314,14 +8364,17 @@ public final class IntentParser {
     /**
      * The transforms a field's {@code normalize:} may list (#7726); {@code strip} takes its characters.
      */
-    private static final Set<String> NORMALIZE_TRANSFORMS = Set.of("trim", "strip", "upper", "lower");
+    private static final Set<String> NORMALIZE_TRANSFORMS = Set.of("trim", "strip", "upper", "lower", "emptyToNull");
 
     /**
      * A field's {@code normalize:} (#7726). String/text fields only - it rewrites the text the user
      * typed, and nothing else has text to rewrite. Each entry is a bare transform ({@code trim},
-     * {@code upper}, {@code lower}) or {@code strip:} with the characters it removes; a transform
-     * listed twice, both case folds, or a {@code strip} without characters is refused rather than
-     * resolved, since which one wins would be invisible to the author.
+     * {@code upper}, {@code lower}, {@code emptyToNull}) or {@code strip:} with the characters it
+     * removes; a transform listed twice, both case folds, or a {@code strip} without characters is
+     * refused rather than resolved, since which one wins would be invisible to the author.
+     * {@code emptyToNull} (#8492) always runs last, wherever it is listed; on a required field it is
+     * refused - a required field refuses a blank already (#7719), so the transform could never store
+     * the NULL it promises.
      */
     private static void validateNormalize(String subject, FieldIntent field, List<String> issues) {
         String type = field.getType() == null ? ""
@@ -8373,6 +8426,10 @@ public final class IntentParser {
         }
         if (seen.contains("upper") && seen.contains("lower")) {
             issues.add(subject + " `normalize` lists both `upper` and `lower` - declare one case fold");
+        }
+        if (seen.contains("emptyToNull") && field.isRequired()) {
+            issues.add(subject + " `normalize` lists `emptyToNull` on a required field - a blank is refused there, never stored as NULL;"
+                    + " drop `emptyToNull` or `required`");
         }
     }
 
@@ -11387,7 +11444,9 @@ public final class IntentParser {
             validateMapSource(source, byName, g.getMap(), "generates [" + name + "]", "map", true, issues);
             validateMapTarget(crossModel || g.getTo() == null ? null : byName.get(g.getTo()), g.getMap(), "generates [" + name + "]", "map",
                     issues);
-            if (g.getItems() != null) {
+            // Lines read from a report (#8329) are checked by ReportItemsSupport, below.
+            if (g.getItems() != null && !g.getItems()
+                                          .isFromReport()) {
                 GeneratesItemsIntent items = g.getItems();
                 EntityIntent itemSource = null;
                 if (items.getFrom() == null || items.getFrom()
@@ -11426,6 +11485,7 @@ public final class IntentParser {
             validateGeneratesPrompt(g, name, byName, crossModel, crossModelSource, issues);
             validateGeneratesLink(g, name, byName, crossModel, crossModelSource, issues);
             validateGeneratesReopen(g, name, source, crossModelSource, byName, crossModel, model, issues);
+            ReportItemsSupport.validate(g, source, byName, model, crossModel, issues);
         }
     }
 
@@ -12597,6 +12657,9 @@ public final class IntentParser {
                 if (t.isPersonal()) {
                     validatePersonalTransition(subject, entity, issues);
                 }
+                if (t.getStamp() != null) {
+                    validateTransitionStamp(subject, t, entity, issues);
+                }
             }
             if (t.getFrom() == null || t.getFrom()
                                         .isEmpty()) {
@@ -12631,6 +12694,25 @@ public final class IntentParser {
             // transitioned record itself.
             validateNotifyBlock(t.getNotify(), subject + " notify", entity == null ? null : entity.getName(), model, true, issues);
         }
+    }
+
+    /**
+     * {@code stamp: number} on a transition (#8493) issues the entity's {@code stampOn: issue} number
+     * with the move, so the entity must declare one - and a number is the only thing a move stamps.
+     */
+    private static void validateTransitionStamp(String subject, TransitionIntent t, EntityIntent entity, List<String> issues) {
+        if (!t.stampsNumber()) {
+            issues.add(subject + " stamp [" + t.getStamp() + "] must be `number` - the entity's stampOn: issue document number");
+            return;
+        }
+        for (FieldIntent field : entity.getFields()) {
+            if (field.getNumber() != null && "issue".equals(field.getNumber()
+                                                                 .getStampOn())) {
+                return;
+            }
+        }
+        issues.add(subject + " declares stamp: number but [" + entity.getName()
+                + "] has no `number: { stampOn: issue }` field - there is no number for the move to issue");
     }
 
     /**

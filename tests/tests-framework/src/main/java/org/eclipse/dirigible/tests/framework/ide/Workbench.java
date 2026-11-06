@@ -184,8 +184,12 @@ public class Workbench {
         openFile(fileName);
     }
 
+    /**
+     * Opens the tree node whose text IS {@code fileName}: a substring match also hit the generation
+     * descriptor ({@code x.form} and {@code x.form.gen}) once a model had been generated (#8470).
+     */
     public void openFile(String fileName) {
-        browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, fileName);
+        browser.doubleClickOnElementWithText(HtmlElementType.ANCHOR, fileName);
     }
 
     public Terminal openTerminal() {

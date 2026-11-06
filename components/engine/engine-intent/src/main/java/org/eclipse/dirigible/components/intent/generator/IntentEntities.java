@@ -227,7 +227,8 @@ public final class IntentEntities {
      * items - explicit {@code function: DocumentItem}, or the legacy {@code *Item} naming - makes its
      * composition parent a master; then {@code function: Document} on a master whose SINGLE composition
      * child is neither flagged nor {@code *Item}-named makes that sole child the items (the author
-     * declared the document intent).
+     * declared the document intent). A {@code systemWritten: true} child is never the line items
+     * (dirigible #8503): nobody may add or edit its rows, so it renders as an ordinary detail panel.
      *
      * @param entities every entity of the model, in declaration order
      * @param compositionParents the composition-parent map ({@link #compositionParents(IntentModel)})
@@ -241,7 +242,7 @@ public final class IntentEntities {
                 continue;
             }
             String parent = compositionParents.get(child);
-            if (parent == null) {
+            if (parent == null || entity.isSystemWritten()) {
                 continue;
             }
             if ((entity.isDocumentItem() || child.endsWith("Item")) && !masters.containsKey(parent)) {
@@ -253,23 +254,24 @@ public final class IntentEntities {
             if (name == null || !entity.isDocument() || masters.containsKey(name)) {
                 continue;
             }
-            String sole = soleCompositionChild(entities, compositionParents, name);
-            if (sole != null) {
-                masters.put(name, sole);
+            EntityIntent sole = soleCompositionChild(entities, compositionParents, name);
+            if (sole != null && !sole.isSystemWritten()) {
+                masters.put(name, sole.getName());
             }
         }
         return masters;
     }
 
     /** The single composition child of {@code master}, or {@code null} when it has zero or several. */
-    private static String soleCompositionChild(Collection<EntityIntent> entities, Map<String, String> compositionParents, String master) {
-        String only = null;
+    private static EntityIntent soleCompositionChild(Collection<EntityIntent> entities, Map<String, String> compositionParents,
+            String master) {
+        EntityIntent only = null;
         for (EntityIntent entity : entities) {
             if (entity.getName() != null && master.equals(compositionParents.get(entity.getName()))) {
                 if (only != null) {
                     return null; // ambiguous - more than one composition child
                 }
-                only = entity.getName();
+                only = entity;
             }
         }
         return only;

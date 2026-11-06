@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.security.oauth2.tenant;
 
+import org.eclipse.dirigible.components.base.tenant.groups.UserTenantAssignments;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -107,6 +108,7 @@ class TenantSelectionManagerTest {
         SecurityContextHolder.clearContext();
         Configuration.remove(DirigibleConfig.TENANT_GROUPS_CLAIM.getKey());
         Configuration.remove(DirigibleConfig.APP_ID.getKey());
+        Configuration.remove(DirigibleConfig.TENANT_GLOBAL_ROLES_SCOPE.getKey());
     }
 
     @Test
@@ -589,5 +591,29 @@ class TenantSelectionManagerTest {
         Tenant tenant = new Tenant("-", name, "The " + name + " tenant", id, status);
         tenant.setId(id);
         return tenant;
+    }
+
+    @Test
+    void underTheApplicationScopeOnlyTheGlobalRolesNamingThisApplicationCount() {
+        DirigibleConfig.TENANT_GLOBAL_ROLES_SCOPE.setStringValue("APPLICATION");
+        authenticate("ADMINISTRATOR", "suite.DEVELOPER", "library.OPERATOR", "acme.library.Owner");
+
+        UserTenantAssignments assignments = manager.assignmentsOf(SecurityContextHolder.getContext()
+                                                                                       .getAuthentication());
+
+        assertThat(assignments.globalRoles()).containsExactly("OPERATOR");
+        assertThat(assignments.rolesFor(ACME)).containsExactly("Owner");
+    }
+
+    @Test
+    void underTheApplicationScopeSelectingATenantGrantsItsRolesOnTopOfTheScopedGlobalOnes() {
+        DirigibleConfig.TENANT_GLOBAL_ROLES_SCOPE.setStringValue("APPLICATION");
+        authenticate("acme.library.Owner", "ADMINISTRATOR", "library.DEVELOPER");
+        when(tenantService.findById(ACME)).thenReturn(Optional.of(tenant(ACME, "Acme Ltd", TenantStatus.PROVISIONED)));
+
+        Set<String> roles = manager.selectTenant(request, response, ACME);
+
+        assertThat(roles).containsExactlyInAnyOrder("DEVELOPER", "Owner");
+        assertThat(currentRoleNames()).containsExactlyInAnyOrder("DEVELOPER", "Owner");
     }
 }

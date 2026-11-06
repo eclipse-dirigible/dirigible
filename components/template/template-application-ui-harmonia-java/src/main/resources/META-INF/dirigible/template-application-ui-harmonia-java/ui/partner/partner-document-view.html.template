@@ -61,6 +61,7 @@
     <div x-h-toolbar-spacer></div>
     <!-- Unsaved-changes marker (issue #7359): a dirty form used to look exactly like a saved one. -->
     <span x-h-badge class="shrink-0" data-variant="warning" x-show="isDirty()" x-text="T('$projectName:${tprefix}.messages.unsavedChanges', 'Unsaved changes')"></span>
+#if(!$systemWritten)
     <!-- Delete (edit only), then Cancel/Discard + Save, then Back. -->
     <button x-h-button data-variant="negative" class="shrink-0" x-show="mode === 'edit'#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="deleteOpen = true" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></button>
     <!-- The button says what it will do: leaving a dirty form discards the edit (issue #7359). -->
@@ -69,6 +70,7 @@
       <span x-show="saving" x-h-spinner></span>
       <span x-text="T('$projectName:${tprefix}.defaults.save', 'Save')"></span>
     </button>
+#end
     <!-- Back: navigation away, to the right of the form actions. -->
     <button x-h-button data-variant="transparent" class="shrink-0" @click="goBack()" x-text="T('$projectName:${tprefix}.defaults.back', 'Back')"></button>
   </div>

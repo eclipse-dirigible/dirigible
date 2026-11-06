@@ -211,6 +211,14 @@ public class EntityIntent {
      */
     private Boolean immutable;
     /**
+     * Optional system-written marker (issue #8503): {@code systemWritten: true} declares that only the
+     * application itself writes this entity - a create-from's {@code link:} row, a settlement's
+     * allocation, a reaction or a delegate. The generated controllers refuse POST, PUT and DELETE with
+     * 405 for every caller, ADMINISTRATOR included, and the generated pages offer no New, Edit or
+     * Delete. Repository writes are unaffected, and so is the composition cascade of a master delete.
+     */
+    private Boolean systemWritten;
+    /**
      * Optional date-based immutability: while the period covering the named date of this record is
      * closed, user writes are refused (409), exactly as for {@code immutableWhen}. Composes with the
      * status-scoped guard rather than replacing it - a record can be frozen by what it IS and by WHEN
@@ -630,6 +638,23 @@ public class EntityIntent {
 
     public void setImmutable(Boolean immutable) {
         this.immutable = immutable;
+    }
+
+    public Boolean getSystemWritten() {
+        return systemWritten;
+    }
+
+    public void setSystemWritten(Boolean systemWritten) {
+        this.systemWritten = systemWritten;
+    }
+
+    /**
+     * Whether only the application writes this entity ({@code systemWritten: true}).
+     *
+     * @return true only for an explicit {@code systemWritten: true}
+     */
+    public boolean isSystemWritten() {
+        return Boolean.TRUE.equals(systemWritten);
     }
 
     public PeriodLockIntent getImmutableInPeriod() {

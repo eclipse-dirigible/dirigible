@@ -65,6 +65,8 @@ import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.logging.LogsAsserter;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.graalvm.polyglot.Context;
+import org.hamcrest.CustomMatcher;
+import org.hamcrest.Matcher;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -662,6 +664,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Claim, kind: manyToOne, to: Claim, composition: true }
 
+              # systemWritten (#8503): a child only the application writes. It inherits Claim's personal
+              # scope, so the power AND the my controller both compile their refusal and answer 405.
+              - name: ClaimReceipt
+                systemWritten: true
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: amount, type: decimal }
+                relations:
+                  - { name: Claim, kind: manyToOne, to: Claim, composition: true, required: true }
+
               # personalReadOnly: a see-only personal surface - the owner reads their own Balance
               # rows but the my controller's writes 403 (a record the back office grants, the
               # person must never author - the self-grant guard).
@@ -911,6 +923,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: Person, kind: manyToOne, to: Person, required: true, partner: true }
                   # #7496: the partner form builds its options apart from the others, so it carries a rule too.
                   - { name: Unit, kind: manyToOne, to: Unit, pickable: { when: [unitPrice != null] } }
+
+              # systemWritten (#8503) on the partner surface: the partner controller refuses with 405 too.
+              - name: PartnerTicketStamp
+                systemWritten: true
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string, length: 100 }
+                relations:
+                  - { name: PartnerTicket, kind: manyToOne, to: PartnerTicket, composition: true, required: true }
 
               # BPM events wave 1 (wait + boundary timers): an RFQ whose flow escalates a stale
               # review (timeout), expires past its validity date (expire), and after review parks
@@ -2424,6 +2445,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: email,    type: string, length: 200, format: email, unique: { ignoreCase: true } }
             """;
 
+    // Still the entities list. normalize: emptyToNull (#8492): an optional unique VAT number stores a
+    // blank as NULL, so any number of records without one never collide on ''.
+    private static final String INTENT_YAML_EMPTY_TO_NULL =
+            """
+                      - name: Registrant
+                        fields:
+                          - { name: id,        type: integer, primaryKey: true, generated: true }
+                          - { name: vatNumber, type: string, length: 20, unique: true, normalize: [trim, emptyToNull], pattern: '^[A-Z]{2}[0-9]{8,10}$' }
+                    """;
+
     // Still the entities list. A list column may show a record's child rows (#8295): a team member's
     // list shows the skills it was granted - a to-one's display text and a field's value - as the
     // texts of its TeamMemberSkill rows.
@@ -2515,6 +2546,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                                   .concat(INTENT_YAML_STATUS_STAMPS)
                                                                   .concat(INTENT_YAML_SINGLE_FLAGS)
                                                                   .concat(INTENT_YAML_UNIQUE_IGNORE_CASE)
+                                                                  .concat(INTENT_YAML_EMPTY_TO_NULL)
                                                                   .concat(INTENT_YAML_COLLECTION_COLUMNS)
                                                                   .concat(INTENT_YAML_GLUE);
 
@@ -2723,9 +2755,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertNowDefaultRuntime();
         assertAgreeGuardsTheParentsRuntime();
         assertRelationDimensionGroupsByKeyRuntime();
+        assertSystemWrittenRefusedOnEverySurface();
         assertStatusStampsRuntime();
         assertSingleFlagsRuntime();
         assertUniqueIgnoringCaseRuntime();
+        assertEmptyToNullRuntime();
         assertTimedWaitRuntime();
         assertEarlyWaitEventRuntime();
         assertCollectionColumnsRuntime();
@@ -2993,6 +3027,31 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("size()", equalTo(2)));
+    }
+
+    /**
+     * {@code normalize: [trim, emptyToNull]} (#8492), generated, published and running: an optional
+     * {@code unique} field posted empty or as spaces is stored as NULL, so every such record saves (the
+     * second {@code ''} used to collide with 409); an update to a blank stores NULL too; two equal real
+     * values still collide, and the {@code pattern:} still refuses a real value that does not match.
+     */
+    private void assertEmptyToNullRuntime() {
+        String registrants = "/registrant/RegistrantController";
+        for (String blank : new String[] {"", "", "   ", "   "}) {
+            int id = createRecord(registrants, "{\"VatNumber\":\"" + blank + "\"}");
+            assertNull(readRecord(registrants, id).get("VatNumber"), "a blank must be stored as NULL, posted as [" + blank + "]");
+        }
+        int real = createRecord(registrants, "{\"VatNumber\":\" BG123456789 \"}");
+        assertEquals("BG123456789", readRecord(registrants, real).get("VatNumber"));
+        assertConflict(registrants, null, "{\"VatNumber\":\"BG123456789\"}", "A Registrant with this 'VatNumber' already exists");
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"VatNumber\":\"not a vat\"}")
+                                                 .when()
+                                                 .post(API + registrants)
+                                                 .then()
+                                                 .statusCode(400));
+        updateRecord(registrants, real, "{\"Id\":" + real + ",\"VatNumber\":\" \"}", 200);
+        assertNull(readRecord(registrants, real).get("VatNumber"), "an update to a blank must store NULL");
     }
 
     /** POSTs a record (no id) or PUTs it (an id) and expects a 409 carrying the given message. */
@@ -3372,7 +3431,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body("$", hasSize(2))
                                                  .body("Party", everyItem(equalTo(twin)))
-                                                 .body("Count", everyItem(equalTo(1.0F)))
+                                                 .body("Count", everyItem(equalTo(1)))
                                                  .body("[0].size()", equalTo(2)),
                 30);
         restAssuredExecutor.execute(() -> given().contentType("application/json")
@@ -3388,7 +3447,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(report + "/sum")
                                                  .then()
                                                  .statusCode(200)
-                                                 .body("sum", equalTo(2.0F)));
+                                                 .body("sum", equalTo(2)));
         // The key is no column of the rows, so it is no filter either.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"conditions\":[{\"column\":\"Party Id\",\"operator\":\"EQ\",\"value\":1}]}")
@@ -3396,6 +3455,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(report + "/search")
                                                  .then()
                                                  .statusCode(400));
+    }
+
+    /**
+     * A JSON number of the value at any scale. A report serves a number as its database answers it
+     * (#8487), and a sum of nothing but {@code ELSE 0} is 0.00 on H2 but 0 on PostgreSQL.
+     */
+    private static Matcher<Object> numberOf(String value) {
+        return new CustomMatcher<>("a number equal to " + value) {
+            @Override
+            public boolean matches(Object actual) {
+                return actual instanceof Number number && new BigDecimal(number.toString()).compareTo(new BigDecimal(value)) == 0;
+            }
+        };
     }
 
     /** POSTs a record to a generated controller and answers its generated id. */
@@ -3497,6 +3569,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String entryListPage = contentOf("gen/emission/js/components/pages/Entry/EntryManageListPage.js");
         assertTrue(entryListPage.contains("isRowImmutable"),
                 "the browse page must gate row Edit/Delete on the baked per-row immutability check");
+        // ...and the sheet's "..." is not offered when it would open empty (#8436): on a POSTED entry
+        // Preview is the primary button and Edit/Delete are withheld, so with no task and no action
+        // that applies there is nothing left for the overflow. The generated page decides it; the
+        // trigger renders only on its answer.
+        assertEquals("draft true | posted false | posted+action true | posted+destructive true | read-only false",
+                pageSheetMenu(entryListPage, "EntryManageListPage"),
+                "the sheet's overflow must be offered exactly when it carries something");
+        String entryListView = contentOf("gen/emission/views/Entry/Entry-manage-list.html");
+        assertTrue(entryListView.contains("x-h-menu-trigger.dropdown x-show=\"menuHasAnything\""),
+                "the sheet's \"...\" trigger must render only when its menu carries something: " + entryListView);
         // Date-based immutability: the guard queries the register the intent named, and the same
         // pre-check endpoint the status lock exposes now answers for it too.
         // ...and the REPOSITORY carries the same lock (#7590): a posting, a create-from or a schedule
@@ -6297,10 +6379,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("[0].Unit", equalTo("Брой"))
-                                                 // The report backend answers generic JSON, so every
-                                                 // number comes back as a float - the group is both
-                                                 // claim rows, so the join did not multiply them.
-                                                 .body("[0].Count", equalTo(2.0F)),
+                                                 // The group is both claim rows, so the join did not
+                                                 // multiply them.
+                                                 .body("[0].Count", equalTo(2)),
                 30);
         // The fallback half: no translation for the caller's language leaves the base value - which
         // is what makes the join LEFT and the column a COALESCE rather than a plain translated read.
@@ -6321,7 +6402,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .get(REPORT_API + "/ClaimsByUnitController?note=mine")
                                                  .then()
                                                  .statusCode(200)
-                                                 .body("[0].Count", equalTo(1.0F)));
+                                                 .body("[0].Count", equalTo(1)));
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(REPORT_API + "/ClaimsByUnitController?minTotal=1000")
                                                  .then()
@@ -6339,9 +6420,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(REPORT_API + "/ClaimsByUnitController/sum")
                                                  .then()
                                                  .statusCode(200)
-                                                 // Generic report JSON, so the number is a float here -
-                                                 // the tile formats it through the column's pattern.
-                                                 .body("sum", equalTo(2.0F)));
+                                                 .body("sum", equalTo(2)));
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(REPORT_API + "/ClaimsByUnitController/count")
                                                  .then()
@@ -6400,7 +6479,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("[0].Code", equalTo("CASH"))
                                                  .body("[0].Amount", equalTo(60.0F))
                                                  .body("[1].Code", equalTo("MISS"))
-                                                 .body("[1].Amount", equalTo(0.0F))
+                                                 .body("[1].Amount", numberOf("0"))
                                                  .body("[2].Code", equalTo("TOTAL"))
                                                  .body("[2].Amount", equalTo(60.0F)));
 
@@ -6430,7 +6509,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("find { it.'Account Name' == 'Vault' }.'Overdue 90+'", equalTo(60.0F))
-                                                 .body("find { it.'Account Name' == 'Vault' }.'Not Yet Due'", equalTo(0.0F))
+                                                 .body("find { it.'Account Name' == 'Vault' }.'Not Yet Due'", numberOf("0"))
                                                  .body("find { it.'Account Name' == 'Vault' }.'Open Amount'", equalTo(60.0F)));
         restAssuredExecutor.execute(() -> given().queryParam("asOf", "2026-01-10")
                                                  .when()
@@ -6439,7 +6518,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body("find { it.'Account Name' == 'Vault' }.'Overdue 0-30'", equalTo(100.0F))
                                                  .body("find { it.'Account Name' == 'Vault' }.'Not Yet Due'", equalTo(-40.0F))
-                                                 .body("find { it.'Account Name' == 'Vault' }.'Overdue 90+'", equalTo(0.0F))
+                                                 .body("find { it.'Account Name' == 'Vault' }.'Overdue 90+'", numberOf("0"))
                                                  .body("find { it.'Account Name' == 'Vault' }.'Open Amount'", equalTo(60.0F)));
 
         // orderBy + relative moments, end to end (#8435). The debit turnover per account is 1050 (5030),
@@ -9489,6 +9568,36 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     }
 
     /**
+     * Run a generated list page's sheet overflow decision (#8436): {@code menuHasAnything} for the
+     * selected record, over the shipped {@code basePage.js} with stubbed {@code customActions} and
+     * {@code processTasks} stores - no task pending, and the contributed actions each case names. The
+     * cases: a DRAFT entry (status 1), a POSTED one (status 2, read-only) with no action, with one
+     * applicable action, with one applicable destructive action, and a DRAFT entry for a caller who may
+     * only read.
+     */
+    private static String pageSheetMenu(String pageScript, String componentName) {
+        try (Context context = Context.newBuilder("js")
+                                      .option("engine.WarnInterpreterOnly", "false")
+                                      .build()) {
+            context.eval("js",
+                    "var pages = {}; var window = this; var localStorage = { getItem: () => null };"
+                            + " var document = { addEventListener: (event, callback) => callback() }; var __actions = [];"
+                            + " var __stores = { customActions: { getActions: () => __actions, isDestructive: (a) => !!a.destructive },"
+                            + "   processTasks: { getTasks: () => [] } };"
+                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; }, store: (name) => __stores[name] };");
+            context.eval("js", classpathResource("/META-INF/dirigible/application-core/shell/js/components/pages/basePage.js"));
+            context.eval("js", pageScript);
+            return context.eval("js", "(() => { const page = pages['" + componentName + "'](); page.access = { read: true, write: true };"
+                    + " const answer = (label, status, actions) => { __actions = actions; page.selected = { Id: 7, Status: status };"
+                    + "   return label + ' ' + page.menuHasAnything; };" + " const out = [answer('draft', 1, []), answer('posted', 2, []),"
+                    + "   answer('posted+action', 2, [{ id: 'reverse' }]), answer('posted+destructive', 2, [{ id: 'purge', destructive: true }])];"
+                    + " page.access = { read: true, write: false }; out.push(answer('read-only', 1, []));"
+                    + " return out.join(' | '); })()")
+                          .asString();
+        }
+    }
+
+    /**
      * Run a generated list page's column sort: the primary keys of {@code rows}, comma-joined, in the
      * order {@code sortedItems} returns them when sorted by {@code column} in {@code direction}, with
      * {@code lookups} as the loaded relation labels. The page is evaluated over the shipped
@@ -9894,4 +10003,32 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
 
 
+    /**
+     * {@code systemWritten: true} (#8503): every generated controller of the entity - the power one,
+     * the personal one, the partner one - answers 405 to a create, an update and a delete, for the
+     * ADMINISTRATOR this IT runs as; the refusal comes before any lookup, so no row is needed.
+     */
+    private void assertSystemWrittenRefusedOnEverySurface() {
+        for (String controller : List.of("/claim/ClaimReceiptController", "/claim/ClaimReceiptMyController",
+                "/partnerticket/PartnerTicketStampPartnerController")) {
+            String entity = controller.contains("ClaimReceipt") ? "ClaimReceipt" : "PartnerTicketStamp";
+            for (String[] call : List.of(new String[] {"POST", "", "created"}, new String[] {"PUT", "/1", "updated"},
+                    new String[] {"DELETE", "/1", "deleted"})) {
+                restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                         .body("{}")
+                                                         .when()
+                                                         .request(call[0], API + controller + call[1])
+                                                         .then()
+                                                         .statusCode(405)
+                                                         .body(containsString(
+                                                                 entity + " records are written by the system only - they cannot be "
+                                                                         + call[2] + " over REST")));
+            }
+        }
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/claim/ClaimReceiptController/access")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("write", equalTo(false)));
+    }
 }
