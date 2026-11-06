@@ -14,8 +14,10 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
@@ -38,8 +40,10 @@ import org.springframework.stereotype.Component;
  * <li>recorded with the same checksum - already applied, nothing runs;</li>
  * <li>recorded with another checksum - the file was edited after it applied: a failure, unless the
  * migration declares itself idempotent, in which case it runs again and the row is updated;</li>
- * <li>not recorded, but an earlier version of the same project is not recorded either - it waits,
- * so a project's migrations apply in version order;</li>
+ * <li>not recorded, and earlier versions of the same project are not recorded either - those run
+ * first, lowest version first, so a project's migrations apply in version order whatever order a
+ * pass offers them in (#8496); an earlier version that fails fails this one too, and one whose file
+ * cannot be read right now makes it wait;</li>
  * <li>otherwise - it runs.</li>
  * </ul>
  */
@@ -54,7 +58,7 @@ class MigrationExecutor {
         APPLIED,
         /** The ledger already records it with the same content. */
         ALREADY_APPLIED,
-        /** An earlier version of the project has not applied yet, but still may in this pass. */
+        /** An earlier version of the project has not applied yet, and its file cannot be read now. */
         WAITING,
         /** It did not apply and will not by itself: a failed statement, an edit, a failed predecessor. */
         FAILED
@@ -75,6 +79,16 @@ class MigrationExecutor {
         }
     }
 
+    /**
+     * An earlier version of the project.
+     *
+     * @param migration its artefact
+     * @param script its file as it is in the registry now, or null when it cannot be applied from here
+     *        - its file is missing (a publish in flight) or the artefact is FATAL
+     */
+    record Predecessor(Migration migration, MigrationScript script) {
+    }
+
     private final MigrationLedger ledger;
 
     MigrationExecutor(MigrationLedger ledger) {
@@ -92,15 +106,15 @@ class MigrationExecutor {
      * @param predecessors the project's other migrations of the same scope with a lower version
      * @return the outcome
      */
-    Outcome apply(MigrationScript script, String location, String tenant, DataSource dataSource, List<Migration> predecessors) {
+    Outcome apply(MigrationScript script, String location, String tenant, DataSource dataSource, List<Predecessor> predecessors) {
         try {
             ledger.prepare(dataSource);
             try (Connection connection = dataSource.getConnection()) {
                 Map<String, Entry> applied = ledger.findByProject(connection, script.project());
                 Entry recorded = applied.get(script.version());
                 if (recorded == null) {
-                    Outcome waiting = waitForPredecessors(applied, script, tenant, predecessors);
-                    return waiting != null ? waiting : run(connection, script, location, tenant, false);
+                    Outcome blocked = applyPredecessors(connection, applied.keySet(), script, tenant, predecessors);
+                    return blocked != null ? blocked : run(connection, script, location, tenant, false);
                 }
                 if (recorded.checksum()
                             .equals(script.checksum())) {
@@ -123,21 +137,44 @@ class MigrationExecutor {
         }
     }
 
-    private static Outcome waitForPredecessors(Map<String, Entry> applied, MigrationScript script, String tenant,
-            List<Migration> predecessors) {
-        return predecessors.stream()
-                           .filter(predecessor -> !applied.containsKey(predecessor.getVersion()))
-                           .min(Comparator.comparing(Migration::getVersion, MigrationScript::compareVersions))
-                           .map(pending -> isFailed(pending)
-                                   ? new Outcome(tenant, Status.FAILED,
-                                           "Migration version [" + script.version() + "] of project [" + script.project()
-                                                   + "] waits for version [" + pending.getVersion() + "] (" + pending.getLocation()
-                                                   + "), which failed for tenant [" + tenant + "]")
-                                   : new Outcome(tenant, Status.WAITING,
-                                           "Migration version [" + script.version() + "] of project [" + script.project()
-                                                   + "] waits for version [" + pending.getVersion() + "] (" + pending.getLocation()
-                                                   + ") to apply to tenant [" + tenant + "] first"))
-                           .orElse(null);
+    /**
+     * Runs the earlier versions this database has not recorded, lowest first. A pass offers a project's
+     * migrations in no particular order - the order differs from boot to boot - and waiting for a
+     * predecessor offered later only resolved when both sat in the same phase of the same round,
+     * leaving an ERROR for a wait that resolved itself a retry later (#8496).
+     *
+     * @return null when every earlier version is recorded now, otherwise why this one cannot run
+     */
+    private Outcome applyPredecessors(Connection connection, Set<String> applied, MigrationScript script, String tenant,
+            List<Predecessor> predecessors) {
+        Set<String> recorded = new HashSet<>(applied);
+        List<Predecessor> lowestFirst = predecessors.stream()
+                                                    .sorted(Comparator.comparing((Predecessor predecessor) -> predecessor.migration()
+                                                                                                                         .getVersion(),
+                                                            MigrationScript::compareVersions)
+                                                                      // a renamed file of the same version: the one in the registry first
+                                                                      .thenComparing(predecessor -> predecessor.script() == null))
+                                                    .toList();
+        for (Predecessor predecessor : lowestFirst) {
+            Migration earlier = predecessor.migration();
+            if (recorded.contains(earlier.getVersion())) {
+                continue;
+            }
+            String waitsFor = "Migration version [" + script.version() + "] of project [" + script.project() + "] waits for version ["
+                    + earlier.getVersion() + "] (" + earlier.getLocation() + ")";
+            if (predecessor.script() == null) {
+                return isFailed(earlier) ? new Outcome(tenant, Status.FAILED, waitsFor + ", which failed for tenant [" + tenant + "]")
+                        : new Outcome(tenant, Status.WAITING, waitsFor + " to apply to tenant [" + tenant + "] first");
+            }
+            try {
+                run(connection, predecessor.script(), earlier.getLocation(), tenant, false);
+            } catch (SQLException | RuntimeException ex) {
+                LOGGER.debug("Failed to apply migration [{}] to tenant [{}]", earlier.getLocation(), tenant, ex);
+                return new Outcome(tenant, Status.FAILED, waitsFor + ", which failed for tenant [" + tenant + "]: " + describe(ex), ex);
+            }
+            recorded.add(earlier.getVersion());
+        }
+        return null;
     }
 
     private static boolean isFailed(Migration migration) {

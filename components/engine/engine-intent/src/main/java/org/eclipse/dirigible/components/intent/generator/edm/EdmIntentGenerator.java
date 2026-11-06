@@ -35,6 +35,7 @@ import org.eclipse.dirigible.components.intent.generator.ExportSupport;
 import org.eclipse.dirigible.components.intent.generator.ImportSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
+import org.eclipse.dirigible.components.intent.generator.ReportItemsSupport;
 import org.eclipse.dirigible.components.intent.generator.CheckSupport;
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
@@ -698,7 +699,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                             context);
                     putOptionsFilter(fkProperty, relation, info.propertyNames());
                     putPickable(fkProperty, name, relation, info.propertyNames());
-                    putInlineCreate(fkProperty, relation);
+                    putInlineCreate(fkProperty, relation, null);
                     putLeafOnly(fkProperty, relation, info.hierarchyProperty(), info.resolved());
                     putPersonal(fkProperty, relation, info.identityProperty(), info.labelField(), info.resolved());
                     putPartner(fkProperty, relation, info.identityProperty(), info.labelField(), info.resolved());
@@ -720,7 +721,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                         usesByAlias, context);
                 putOptionsFilter(fkProperty, relation, null);
                 putPickable(fkProperty, name, relation, null);
-                putInlineCreate(fkProperty, relation);
+                putInlineCreate(fkProperty, relation, target);
                 putStatusSteps(fkProperty, model, entity, relation);
                 putStatusVariants(fkProperty, model, relation);
                 putStatusStages(fkProperty, model, relation);
@@ -757,6 +758,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // Default row order (intent `orderBy:`, #7727): the sequence rides the entity as a single
             // scalar the generation pipeline turns into the list endpoint's ORDER BY.
             applyOrderBy(entityMap, entity.getOrderBy());
+            if (entity.isSystemWritten()) {
+                // Written by the application only (intent `systemWritten: true`, #8503): the controllers
+                // refuse every REST write and the pages offer none; the repository is untouched.
+                entityMap.put("systemWritten", "true");
+            }
             if (Boolean.TRUE.equals(entity.getImmutable())) {
                 // Append-only (intent `immutable: true`): every record is read-only for user writes from
                 // the moment it is created - e.g. the snapshot stored when a document is sent.
@@ -996,6 +1002,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                                          .isBlank()
                     && generates.hasButton()) {
                 labels.put(generates.getName(), IntentNaming.customActionLabel(generates.getName(), generates.getLabel()));
+            }
+            if (generates.hasUndo() && generates.hasReportItems()) {
+                labels.put(ReportItemsSupport.undoName(generates), ReportItemsSupport.undoLabel(generates));
             }
         }
         return labels;
@@ -1984,7 +1993,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             p.put("widgetPattern", EMAIL_PATTERN);
         }
         // Input normalization (#7726): applied by the generated repository and controllers before the
-        // pattern and the checks, and by the form on blur. Three scalars rather than the authored list,
+        // pattern and the checks, and by the form on blur. Scalars rather than the authored list,
         // so they survive the scalar-only .edm, and emitted only when authored, so a model that
         // normalizes nothing generates byte-identically.
         if (field.normalizeTrim()) {
@@ -1995,6 +2004,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         }
         if (field.normalizeCase() != null) {
             p.put("normalizeCase", field.normalizeCase());
+        }
+        if (field.normalizeEmptyToNull()) {
+            p.put("normalizeEmptyToNull", "true");
         }
         return p;
     }
@@ -2707,11 +2719,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     /**
      * Emit {@code inlineCreate: false} (issue #7748) as {@code widgetInlineCreate="false"}: the
      * Harmonia templates then render the picker without its "New &lt;Entity&gt;" button in the form,
-     * the document header and the document item dialog. Nothing is emitted otherwise, so a model
-     * authored without the key is byte-identical.
+     * the document header and the document item dialog. A same-model target that is
+     * {@code systemWritten: true} (#8503) gets the same: its controller refuses every create. Nothing
+     * is emitted otherwise, so a model authored without either key is byte-identical.
      */
-    private static void putInlineCreate(Map<String, Object> p, RelationIntent relation) {
-        if (relation.isInlineCreateDisabled()) {
+    private static void putInlineCreate(Map<String, Object> p, RelationIntent relation, EntityIntent target) {
+        if (relation.isInlineCreateDisabled() || (target != null && target.isSystemWritten())) {
             p.put("widgetInlineCreate", "false");
         }
     }
@@ -3324,6 +3337,34 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     }
                     checkMap.put("value", literal.reading());
                     checkMap.put("numeric", isNumericType(left.getType()) ? "true" : "false");
+                } else if (ResolvePathSupport.isPath(check.getThan())) {
+                    // A right-hand side read off ANOTHER record (#8494): a Calc formula over the one to-one
+                    // relation its terms walk, local or cross-model, evaluated against that record once
+                    // the repository has loaded it - so the comparison sees the source as it stands at
+                    // the move. Neutral here: the hop local, the formula and the left field's scale (the
+                    // value the column could hold); the template layer renders the Java.
+                    CheckSupport.HopFormula formula = CheckSupport.hopFormula(check.getThan());
+                    ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, compositionParents, crossModel);
+                    String owner = null;
+                    for (String term : formula.fields()) {
+                        ResolvePathSupport.Path path = walker.resolve(formula.relation() + "." + term);
+                        owner = path.resolved() ? path.owner() : null;
+                        if (owner == null) {
+                            break;
+                        }
+                    }
+                    if (owner == null || check.getStatus() == null) {
+                        continue; // the parser already reported it
+                    }
+                    checkMap.put("thanFormula", formula.formula());
+                    checkMap.put("thanOwner", owner);
+                    checkMap.put("thanScale",
+                            left.getScale() != null ? String.valueOf(left.getScale())
+                                    : CheckSupport.DECIMAL_TYPES.contains(left.getType()
+                                                                              .trim()
+                                                                              .toLowerCase(java.util.Locale.ROOT)) ? "2" : "0");
+                    checkMap.put("pathLoads", pathLoadsOf(walker));
+                    checkMap.put("numeric", "true");
                 } else {
                     Boolean numeric = isNumericCompare(entity, check);
                     if (check.getThan() == null || numeric == null) {
@@ -4723,10 +4764,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The dropdown label: the target's {@code name} field (case-insensitive), else its first
-     * string-typed field, else its PK.
-     */
-    /**
      * The synthesized {@code Name} property for an entity with a {@code label:} expression: a stored
      * VARCHAR the generated repository recomputes on every write. Read-only and shown on lists so the
      * display name is first-class everywhere.
@@ -4813,6 +4850,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         return names;
     }
 
+    /**
+     * The dropdown label: the stored {@code Name} of a {@code label:} expression, else the target's
+     * {@code name} field (case-insensitive), else its {@code documentTitle} field, else its first
+     * string-typed field, else its PK.
+     */
     private static String labelFieldName(EntityIntent target) {
         if (target == null) {
             return "Name";
@@ -4824,6 +4866,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         }
         for (FieldIntent field : target.getFields()) {
             if (field.getName() != null && "name".equalsIgnoreCase(field.getName())) {
+                return IntentNaming.pascalCase(field.getName());
+            }
+        }
+        for (FieldIntent field : target.getFields()) {
+            // No name: the field the document is titled by (its number) - what the document page's
+            // title bar shows - before whichever string field happens to come first (#7822).
+            if (field.getName() != null && field.isDocumentTitle()) {
                 return IntentNaming.pascalCase(field.getName());
             }
         }

@@ -18,8 +18,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
+import io.restassured.response.Response;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
@@ -41,6 +43,10 @@ import org.springframework.beans.factory.annotation.Autowired;
  * longer than the column, and the insert failed with a 500 ("Value too long for column"), while the
  * same POST without the expression was accepted. The body is read as text: a JSON number this long
  * parsed into a double would hide exactly the digits under test.
+ *
+ * <p>
+ * A report serves them exactly too (#8487): its repository read the query's rows into doubles, so a
+ * stored 1234567890123456.78 was answered as 1.2345678901234568E15 - on a row and on a total.
  */
 class IntentCalcPrecisionIT extends IntegrationTest {
 
@@ -49,6 +55,8 @@ class IntentCalcPrecisionIT extends IntegrationTest {
     private static final String PROJECT_PATH = IRepositoryStructure.PATH_USERS + "/admin/" + WORKSPACE + "/" + PROJECT;
     private static final String PAYMENTS =
             "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api/customerpayment/CustomerPaymentController";
+    private static final String OPPORTUNITIES = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api/opportunity/OpportunityController";
+    private static final String REPORT = "/services/java/" + PROJECT + "/gen/opportunityvalues/api/reports/OpportunityValuesController";
 
     private static final String INTENT_YAML = """
             name: calcprecision
@@ -62,6 +70,16 @@ class IntentCalcPrecisionIT extends IntegrationTest {
                   - { name: allocated, type: decimal, precision: 18, scale: 2, defaultValue: 0 }
                   - { name: unapplied, type: decimal, precision: 18, scale: 2,
                       calculatedOnCreate: "Amount - Allocated", calculatedOnUpdate: "Amount - Allocated" }
+              - name: Opportunity
+                fields:
+                  - { name: id,            type: integer, primaryKey: true, generated: true }
+                  - { name: expectedValue, type: decimal, precision: 18, scale: 2 }
+
+            reports:
+              - name: OpportunityValues
+                source: Opportunity
+                dimensions: [expectedValue]
+                measures: [sum(expectedValue)]
             """;
 
     @Autowired
@@ -80,30 +98,55 @@ class IntentCalcPrecisionIT extends IntegrationTest {
         synchronizationProcessor.forceProcessSynchronizers();
 
         // The issue's probe: the largest value a decimal(18, 2) column holds, minus the default 0.
-        assertUnapplied(post("{\"Amount\":9999999999999999.99}"), "9999999999999999.99");
+        assertNumber(post(PAYMENTS, "{\"Amount\":9999999999999999.99}"), "Unapplied", "9999999999999999.99");
         // ...and below the ceiling the low cents are exact, not the double's nearest neighbour.
-        assertUnapplied(post("{\"Amount\":1234567890123456.78,\"Allocated\":0.01}"), "1234567890123456.77");
+        assertNumber(post(PAYMENTS, "{\"Amount\":1234567890123456.78,\"Allocated\":0.01}"), "Unapplied", "1234567890123456.77");
     }
 
-    private String post(String body) {
-        AtomicReference<String> created = new AtomicReference<>();
-        restAssuredExecutor.execute(() -> created.set(given().contentType("application/json")
-                                                             .body(body)
-                                                             .when()
-                                                             .post(PAYMENTS)
-                                                             .then()
-                                                             .statusCode(200)
-                                                             .extract()
-                                                             .asString()),
+    @Test
+    void a_report_serves_a_decimal_and_its_total_with_every_digit_its_column_holds() {
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+        post(OPPORTUNITIES, "{\"ExpectedValue\":1234567890123456.78}");
+        post(OPPORTUNITIES, "{\"ExpectedValue\":123999999999998.76}");
+
+        // A decimal dimension and a measure over it, on the report's GET and on its /search ...
+        String rows = answer(() -> given().get(REPORT));
+        assertNumber(rows, "Expected Value", "1234567890123456.78");
+        assertNumber(rows, "Sum Expected Value", "1234567890123456.78");
+        assertNumber(rows, "Sum Expected Value", "123999999999998.76");
+        String found = post(REPORT + "/search", "{\"conditions\":[{\"column\":\"Expected Value\",\"operator\":\"GT\",\"value\":0}]}");
+        assertNumber(found, "Expected Value", "1234567890123456.78");
+        assertNumber(found, "Expected Value", "123999999999998.76");
+        // ... and the total a dashboard tile reads: the exact sum, not the sum of two doubles.
+        assertNumber(post(REPORT + "/sum", "{\"column\":\"Sum Expected Value\"}"), "sum", "1358567890123455.54");
+    }
+
+    private String post(String url, String body) {
+        return answer(() -> given().contentType("application/json")
+                                   .body(body)
+                                   .when()
+                                   .post(url));
+    }
+
+    /** The body of the request's 200 answer, as text. */
+    private String answer(Supplier<Response> request) {
+        AtomicReference<String> body = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> body.set(request.get()
+                                                          .then()
+                                                          .statusCode(200)
+                                                          .extract()
+                                                          .asString()),
                 90);
-        return created.get();
+        return body.get();
     }
 
-    private static void assertUnapplied(String json, String expected) {
-        assertTrue(Pattern.compile("\"Unapplied\"\\s*:\\s*" + Pattern.quote(expected) + "(?![0-9])")
+    private static void assertNumber(String json, String key, String expected) {
+        assertTrue(Pattern.compile("\"" + Pattern.quote(key) + "\"\\s*:\\s*" + Pattern.quote(expected) + "(?![0-9])")
                           .matcher(json)
                           .find(),
-                "Unapplied must be exactly " + expected + ", got: " + json);
+                key + " must be exactly " + expected + ", got: " + json);
     }
 
     private void generateProject() {

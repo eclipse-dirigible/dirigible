@@ -233,12 +233,13 @@ public class FieldIntent {
 
     /**
      * Optional normalization of a {@code string} / {@code text} value before it is validated and stored
-     * (#7726): {@code trim}, {@code strip: <chars>}, {@code upper}, {@code lower}. A pasted phone
-     * {@code +359 898 123 456} under {@code normalize: [strip: " -()"]} is stored as
+     * (#7726): {@code trim}, {@code strip: <chars>}, {@code upper}, {@code lower}, {@code emptyToNull}
+     * (#8492, a blank result is stored as NULL, so an optional unique key holds any number). A pasted
+     * phone {@code +359 898 123 456} under {@code normalize: [strip: " -()"]} is stored as
      * {@code +359898123456}, so a {@code pattern:} can demand the canonical form without refusing the
      * way people actually type it. The generated repository applies it on every create and update, the
      * controllers before their checks, and the generated form on blur. The transforms run in one fixed
-     * order (trim, strip, case) whatever order they are listed in.
+     * order (trim, strip, case, emptyToNull) whatever order they are listed in.
      *
      * <p>
      * Each entry is a transform name or a single-key mapping ({@code strip: " -"}); a scalar
@@ -525,6 +526,13 @@ public class FieldIntent {
     /** {@code upper} or {@code lower} when {@code normalize:} folds the case, otherwise null. */
     public String normalizeCase() {
         return normalizeEntry("upper") != null ? "upper" : normalizeEntry("lower") != null ? "lower" : null;
+    }
+
+    /**
+     * Whether {@code normalize:} lists {@code emptyToNull}: a blank result is stored as NULL (#8492).
+     */
+    public boolean normalizeEmptyToNull() {
+        return normalizeEntry("emptyToNull") != null;
     }
 
     /**

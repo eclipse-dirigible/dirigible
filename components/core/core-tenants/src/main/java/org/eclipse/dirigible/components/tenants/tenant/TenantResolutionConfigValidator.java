@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.tenants.tenant;
 
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.commons.config.InvalidConfigException;
+import org.eclipse.dirigible.components.base.tenant.GlobalRolesScope;
 import org.eclipse.dirigible.components.base.tenant.TenantResolutionStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,13 +42,19 @@ public class TenantResolutionConfigValidator {
      */
     public TenantResolutionConfigValidator() {
         TenantResolutionStrategy strategy = TenantResolutionStrategy.fromConfiguration();
+        GlobalRolesScope globalRolesScope = GlobalRolesScope.fromConfiguration();
         if (strategy != TenantResolutionStrategy.TOKEN_GROUPS) {
+            if (globalRolesScope != GlobalRolesScope.INSTANCE) {
+                LOGGER.warn("[{}] is [{}], but it applies only while [{}] is [{}] - it has no effect under [{}].",
+                        DirigibleConfig.TENANT_GLOBAL_ROLES_SCOPE.getKey(), globalRolesScope,
+                        DirigibleConfig.TENANT_RESOLUTION_STRATEGY.getKey(), TenantResolutionStrategy.TOKEN_GROUPS, strategy);
+            }
             LOGGER.debug("Tenant resolution strategy is [{}].", strategy);
             return;
         }
         validateTokenGroupsStrategy();
-        LOGGER.info("Tenant resolution strategy is [{}] for application [{}], groups claim [{}].", strategy,
-                DirigibleConfig.APP_ID.getStringValue(), DirigibleConfig.TENANT_GROUPS_CLAIM.getStringValue());
+        LOGGER.info("Tenant resolution strategy is [{}] for application [{}], groups claim [{}], global roles scope [{}].", strategy,
+                DirigibleConfig.APP_ID.getStringValue(), DirigibleConfig.TENANT_GROUPS_CLAIM.getStringValue(), globalRolesScope);
     }
 
     private void validateTokenGroupsStrategy() {

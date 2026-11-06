@@ -53,8 +53,8 @@ public final class UnitOfWork {
     }
 
     /**
-     * Runs the given work as one transaction and returns its result, running it once more when the
-     * database rolled it back to break a deadlock - see
+     * Runs the given work as one transaction and returns its result, running it again (a few times,
+     * after a short pause) when the database rolled it back to break a deadlock - see
      * {@link JavaEntityStore#inUnitOfWorkRetryingDeadlock(Supplier)}. Only for work that is safe to run
      * again: it builds what it writes from its arguments and from what it reads inside the block.
      *

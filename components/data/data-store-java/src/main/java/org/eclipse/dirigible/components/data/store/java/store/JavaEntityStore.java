@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
@@ -220,20 +221,29 @@ public class JavaEntityStore implements WriteTransaction {
     }
 
     /**
-     * Runs the block as {@link #inUnitOfWork(Supplier)} does, and runs it ONCE MORE when the database
-     * rolled the unit back to break a deadlock (dirigible #8341).
+     * Runs the block as {@link #inUnitOfWork(Supplier)} does, and runs it again when the database
+     * rolled the unit back to break a deadlock (dirigible #8341, #8507) - up to
+     * {@value #DEADLOCK_ATTEMPTS} attempts in all, pausing a little longer before each one.
      *
      * <p>
      * A deadlock is not a conflict over data: two transactions each wait for a row the other holds, and
      * the database rolls one of them back so that the other can go on. Nothing the victim wrote
      * survives and nothing it read was wrong, so the remedy every database prescribes is to run the
-     * transaction again - by then the other one has committed. The reference check share-locks the rows
-     * a write names (dirigible #8252), and H2 has no shared row lock: its share lock is the exclusive
-     * {@code FOR UPDATE}, so two writes naming the same records in a different order - a payment naming
-     * its invoice and then its customer, and the posting of the previous payment naming the customer
-     * and then the invoice - deadlock, and the caller was told its record had been changed by another
-     * write when nothing had changed it. A second deadlock, and every other conflict, still reaches the
-     * caller as the {@link ConcurrentWriteException}.
+     * transaction again. The reference check share-locks the rows a write names (dirigible #8252), and
+     * H2 has no shared row lock: its share lock is the exclusive {@code FOR UPDATE}, so two writes
+     * naming the same records in a different order - a payment naming its invoice and then its
+     * customer, and the posting of the previous payment naming the customer and then the invoice -
+     * deadlock, and the caller was told its record had been changed by another write when nothing had
+     * changed it.
+     *
+     * <p>
+     * One immediate repeat was not enough (#8507): the transaction that survived the deadlock is still
+     * running and still taking locks - a posting locks its lines one after another - so a repeat that
+     * starts at once can lock a row the survivor reaches only later and be chosen as the victim again.
+     * Each repeat therefore first waits for the survivor to get further (a randomised pause that
+     * doubles: about 25-50, 50-100, 100-200 and 200-400 ms, under a second in all). Only a write that
+     * keeps losing every one of them, and every other conflict - a lock-wait timeout, a stale row -
+     * reaches the caller as the {@link ConcurrentWriteException}.
      *
      * <p>
      * The block must be safe to run again: whatever it writes it builds from its own arguments and what
@@ -251,15 +261,54 @@ public class JavaEntityStore implements WriteTransaction {
         if (isInUnitOfWork()) {
             return work.get();
         }
-        try {
-            return inUnitOfWork(work);
-        } catch (ConcurrentWriteException conflict) {
-            if (!isDeadlockVictim(conflict)) {
-                throw conflict;
+        for (int attempt = 1;; attempt++) {
+            try {
+                return inUnitOfWork(work);
+            } catch (ConcurrentWriteException conflict) {
+                if (attempt >= DEADLOCK_ATTEMPTS || !isDeadlockVictim(conflict)) {
+                    throw conflict;
+                }
+                long pause = deadlockPause(attempt);
+                LOGGER.debug("A unit of work was rolled back to break a deadlock (attempt {} of {}) - running it again in {} ms", attempt,
+                        DEADLOCK_ATTEMPTS, pause, conflict);
+                try {
+                    pauser.pause(pause);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread()
+                          .interrupt();
+                    conflict.addSuppressed(interrupted);
+                    throw conflict;
+                }
             }
-            LOGGER.debug("A unit of work was rolled back to break a deadlock - running it once more", conflict);
-            return inUnitOfWork(work);
         }
+    }
+
+    /** How many times a deadlock victim is run in all, the first run included (#8507). */
+    static final int DEADLOCK_ATTEMPTS = 5;
+
+    /** The longest pause before the first repeat; it doubles before each further one. */
+    static final long DEADLOCK_PAUSE_MILLIS = 50;
+
+    /**
+     * The pause before the repeat that follows the given failed attempt: a random value in the upper
+     * half of {@code 50 ms * 2^(attempt - 1)}, so that two victims of the same deadlock do not come
+     * back in step.
+     */
+    static long deadlockPause(int attempt) {
+        long ceiling = DEADLOCK_PAUSE_MILLIS << (attempt - 1);
+        return ceiling / 2 + ThreadLocalRandom.current()
+                                              .nextLong(ceiling / 2 + 1);
+    }
+
+    /** Waits between deadlock repeats; replaced by tests that should not sleep. */
+    interface Pauser {
+        void pause(long millis) throws InterruptedException;
+    }
+
+    private Pauser pauser = Thread::sleep;
+
+    void setPauser(Pauser pauser) {
+        this.pauser = pauser;
     }
 
     /**

@@ -10,9 +10,14 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.repository.api.IRepository;
@@ -21,8 +26,15 @@ import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
+
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.UnsynchronizedAppenderBase;
+import io.restassured.response.Response;
 
 /**
  * End-to-end test for the engine-java module: drops {@code .java} sources directly under
@@ -172,6 +184,149 @@ class JavaEngineIT extends IntegrationTest {
 
         repository.removeResource(duplicatePath);
         synchronizationProcessor.forceProcessSynchronizers();
+    }
+
+    /**
+     * A clean "Compiled batch" line means the batch is serving, its ORM model included (#8497). The
+     * line used to print straight after javac, before the new generation was installed and the entity
+     * {@code SessionFactory} rebuilt, so a client that started on it queried a field the batch had just
+     * added and got Hibernate's "Could not interpret path expression". The synchronization thread is
+     * held at the line while the controller is called once, so what that call sees is exactly what a
+     * client reacting to the line sees.
+     */
+    @Test
+    void a_changed_entity_is_queryable_as_soon_as_its_batch_reports_compiled() throws Exception {
+        String base = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PROJECT + "/gadgets/";
+        String entityPath = base + "Gadget.java";
+        List<String> paths = List.of(entityPath, base + "GadgetRepository.java", base + "GadgetController.java");
+        String byColour = "/services/java/" + PROJECT + "/gadgets/GadgetController/byColour/red";
+        BatchLine batchLine = new BatchLine();
+        Logger engineLogger = (Logger) LoggerFactory.getLogger("org.eclipse.dirigible.engine.java");
+        Level level = engineLogger.getLevel();
+        try {
+            write(entityPath, gadgetSource(""));
+            write(base + "GadgetRepository.java", """
+                    package gadgets;
+                    import org.eclipse.dirigible.components.data.store.java.repository.JavaRepository;
+                    import org.eclipse.dirigible.sdk.component.Repository;
+                    @Repository
+                    public class GadgetRepository extends JavaRepository<Gadget> {
+                        public GadgetRepository() {
+                            super(Gadget.class);
+                        }
+                    }
+                    """);
+            // Queries the field only the second version of the entity maps.
+            write(base + "GadgetController.java", """
+                    package gadgets;
+                    import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+                    import org.eclipse.dirigible.sdk.http.Controller;
+                    import org.eclipse.dirigible.sdk.http.Get;
+                    import org.eclipse.dirigible.sdk.http.PathParam;
+                    @Controller
+                    public class GadgetController {
+                        private final GadgetRepository gadgets;
+                        public GadgetController(GadgetRepository gadgets) {
+                            this.gadgets = gadgets;
+                        }
+                        @Get("/count")
+                        public String count() {
+                            return String.valueOf(gadgets.count());
+                        }
+                        @Get("/byColour/{colour}")
+                        public String byColour(@PathParam("colour") String colour) {
+                            return String.valueOf(gadgets.count(Criteria.create().eq("colour", colour)));
+                        }
+                    }
+                    """);
+            synchronizationProcessor.forceProcessSynchronizers();
+            restAssuredExecutor.execute(() -> given().when()
+                                                     .get("/services/java/" + PROJECT + "/gadgets/GadgetController/count")
+                                                     .then()
+                                                     .statusCode(200),
+                    ASSERTION_TIMEOUT_SECONDS);
+
+            engineLogger.setLevel(Level.INFO);
+            engineLogger.addAppender(batchLine);
+            batchLine.start();
+            // One file, so no pass can see half of the change.
+            write(entityPath, gadgetSource("@Column(name = \"GADGET_COLOUR\") public String colour;"));
+            CompletableFuture<Void> pass = CompletableFuture.runAsync(synchronizationProcessor::forceProcessSynchronizers);
+
+            assertThat(batchLine.logged.await(120, TimeUnit.SECONDS)).as("the batch with the changed entity was compiled")
+                                                                     .isTrue();
+            Response response = restAssuredExecutor.executeWithResult(() -> given().when()
+                                                                                   .get(byColour)
+                                                                                   .then()
+                                                                                   .extract()
+                                                                                   .response());
+            batchLine.released.countDown();
+            pass.get(120, TimeUnit.SECONDS);
+
+            assertThat(response.statusCode()).as("the controller as the batch line printed: %s", response.asString())
+                                             .isEqualTo(200);
+            assertThat(response.asString()
+                               .trim()).isEqualTo("0");
+        } finally {
+            batchLine.released.countDown();
+            engineLogger.detachAppender(batchLine);
+            engineLogger.setLevel(level);
+            paths.forEach(path -> {
+                if (repository.hasResource(path)) {
+                    repository.removeResource(path);
+                }
+            });
+            synchronizationProcessor.forceProcessSynchronizers();
+        }
+    }
+
+    private void write(String path, String source) {
+        repository.createResource(path, source.getBytes(StandardCharsets.UTF_8), false, "text/x-java", true);
+    }
+
+    private static String gadgetSource(String extraField) {
+        return """
+                package gadgets;
+                import org.eclipse.dirigible.sdk.db.Column;
+                import org.eclipse.dirigible.sdk.db.Entity;
+                import org.eclipse.dirigible.sdk.db.GeneratedValue;
+                import org.eclipse.dirigible.sdk.db.GenerationType;
+                import org.eclipse.dirigible.sdk.db.Id;
+                import org.eclipse.dirigible.sdk.db.Table;
+                @Entity
+                @Table(name = "BATCH_LINE_GADGET")
+                public class Gadget {
+                    @Id
+                    @GeneratedValue(strategy = GenerationType.IDENTITY)
+                    @Column(name = "GADGET_ID")
+                    public Integer id;
+                    @Column(name = "GADGET_NAME")
+                    public String name;
+                    %s
+                }
+                """.formatted(extraField);
+    }
+
+    /** Holds the thread that logs the first "Compiled batch" line until {@link #released}. */
+    private static final class BatchLine extends UnsynchronizedAppenderBase<ILoggingEvent> {
+
+        final CountDownLatch logged = new CountDownLatch(1);
+        final CountDownLatch released = new CountDownLatch(1);
+
+        @Override
+        protected void append(ILoggingEvent event) {
+            if (logged.getCount() == 0 || !event.getFormattedMessage()
+                                                .startsWith("Compiled batch")) {
+                return;
+            }
+            logged.countDown();
+            try {
+                released.await(120, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread()
+                      .interrupt();
+            }
+        }
     }
 
     @AfterEach

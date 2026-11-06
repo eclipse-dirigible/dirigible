@@ -657,13 +657,19 @@ public final class CrossModelSupport {
     }
 
     /**
-     * The label property: the target's {@code Name} field, else its first non-PK string field, else the
-     * key.
+     * The label property, in the order the owner's own pickers use: the target's {@code Name} field
+     * (authored, or the stored name of a {@code label:} expression), else its {@code documentTitle}
+     * field (the {@code DOCUMENT_NUMBER} widget), else its first non-PK string field, else the key.
      */
-    private static String labelField(List<Map<String, Object>> properties, String keyField) {
+    static String labelField(List<Map<String, Object>> properties, String keyField) {
         for (Map<String, Object> p : properties) {
             if ("Name".equalsIgnoreCase(String.valueOf(p.get("name")))) {
                 return str(p.get("name"), "Name");
+            }
+        }
+        for (Map<String, Object> p : properties) {
+            if ("DOCUMENT_NUMBER".equals(String.valueOf(p.get("widgetType"))) && p.get("name") != null) {
+                return str(p.get("name"), keyField);
             }
         }
         for (Map<String, Object> p : properties) {

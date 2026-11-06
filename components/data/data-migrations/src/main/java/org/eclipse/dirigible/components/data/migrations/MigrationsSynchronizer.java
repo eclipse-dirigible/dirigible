@@ -25,6 +25,7 @@ import org.eclipse.dirigible.components.base.tenant.TenantArtefactLedger;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.base.tenant.TenantResult;
 import org.eclipse.dirigible.components.data.migrations.MigrationExecutor.Outcome;
+import org.eclipse.dirigible.components.data.migrations.MigrationExecutor.Predecessor;
 import org.eclipse.dirigible.components.data.migrations.MigrationExecutor.Status;
 import org.eclipse.dirigible.components.data.migrations.MigrationScript.Scope;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
@@ -170,8 +171,8 @@ class MigrationsSynchronizer extends BaseSynchronizer<Migration, Long> {
      * Applies the migration to every database its scope names and registers the one state that sums
      * them up.
      *
-     * @return false only while the migration waits for an earlier version still being applied in this
-     *         pass - the depleter then offers it again once that one has completed
+     * @return false only while the migration waits for an earlier version whose file cannot be read
+     *         right now (a publish in flight) - the depleter then offers it again
      */
     private boolean apply(TopologyWrapper<Migration> wrapper, ArtefactLifecycle success) {
         Migration migration = wrapper.getArtefact();
@@ -184,7 +185,7 @@ class MigrationsSynchronizer extends BaseSynchronizer<Migration, Long> {
             return true;
         }
 
-        List<Migration> predecessors = predecessors(script, location);
+        List<Predecessor> predecessors = predecessors(script, location);
         List<Outcome> outcomes =
                 script.scope() == Scope.SYSTEM
                         ? List.of(executor.apply(script, location, SYSTEM_TENANT, dataSourcesManager.getSystemDataSource(), predecessors))
@@ -253,7 +254,7 @@ class MigrationsSynchronizer extends BaseSynchronizer<Migration, Long> {
         return MigrationScript.parse(location, resource.getContent());
     }
 
-    private List<Migration> predecessors(MigrationScript script, String location) {
+    private List<Predecessor> predecessors(MigrationScript script, String location) {
         return migrationService.findAllByProject(script.project())
                                .stream()
                                .filter(other -> !other.getLocation()
@@ -261,7 +262,23 @@ class MigrationsSynchronizer extends BaseSynchronizer<Migration, Long> {
                                .filter(other -> Objects.equals(other.getScope(), script.scope()
                                                                                        .name()))
                                .filter(other -> MigrationScript.compareVersions(other.getVersion(), script.version()) < 0)
+                               .map(other -> new Predecessor(other, readIfApplicable(other)))
                                .toList();
+    }
+
+    /**
+     * An earlier version the executor may run first: any but a FATAL one (stripped from every pass
+     * until its file changes) or one whose file is not in the registry right now.
+     */
+    private MigrationScript readIfApplicable(Migration migration) {
+        if (ArtefactLifecycle.FATAL.equals(migration.getLifecycle())) {
+            return null;
+        }
+        try {
+            return read(migration.getLocation());
+        } catch (ParseException ex) {
+            return null;
+        }
     }
 
     private static String messages(List<Outcome> outcomes, Status status) {

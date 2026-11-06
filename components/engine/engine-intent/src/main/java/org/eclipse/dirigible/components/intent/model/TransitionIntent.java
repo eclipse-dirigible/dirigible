@@ -83,6 +83,13 @@ public class TransitionIntent {
      */
     private Boolean personal;
     /**
+     * {@code number} when this move ISSUES the document (#8493): the entity's {@code number: { stampOn:
+     * issue }} number is drawn and written in the same targeted write as the status, after the move's
+     * gated checks have accepted it - so a document whose Issue is a button, not a process step, is
+     * numbered at the issue rather than at create. A document already numbered keeps its number.
+     */
+    private String stamp;
+    /**
      * Optional outbound mail sent AFTER the status flip commits - "on Void, mail the counterparty". The
      * reusable notify block ({@code to} / {@code subject} / {@code body} / {@code attach: print}),
      * resolved against the transitioned record. Fail-soft: a send failure is logged and the transition
@@ -194,6 +201,19 @@ public class TransitionIntent {
      */
     public boolean isPersonal() {
         return Boolean.TRUE.equals(personal);
+    }
+
+    public String getStamp() {
+        return stamp;
+    }
+
+    public void setStamp(String stamp) {
+        this.stamp = stamp;
+    }
+
+    /** Whether this move stamps the entity's issue number (see {@link #stamp}). */
+    public boolean stampsNumber() {
+        return "number".equals(stamp);
     }
 
     public NotificationIntent getNotify() {

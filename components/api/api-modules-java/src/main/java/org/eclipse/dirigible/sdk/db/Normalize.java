@@ -21,7 +21,7 @@ import java.util.Locale;
  * The generated repository applies it on every create and update, and the generated controllers
  * before their checks, so the value a {@code pattern:} or a {@code checks:} rule reads is the value
  * that is stored. The transforms run in one fixed order whatever order the intent lists them in:
- * trim, then strip, then the case fold.
+ * trim, then strip, then the case fold, then {@code emptyToNull} (issue #8492).
  */
 public final class Normalize {
 
@@ -37,6 +37,22 @@ public final class Normalize {
      * @return the normalized value, or null for a null value
      */
     public static String apply(String value, boolean trim, String strip, String caseFold) {
+        return apply(value, trim, strip, caseFold, false);
+    }
+
+    /**
+     * Normalizes one value, and with {@code emptyToNull} stores a blank result as null (issue #8492): a
+     * unique key ignores nulls, so records without a value no longer collide on an empty string.
+     *
+     * @param value the submitted value, may be null
+     * @param trim whether leading and trailing whitespace is removed
+     * @param strip the characters removed wherever they occur, null or empty for none
+     * @param caseFold {@code upper}, {@code lower}, or null for none
+     * @param emptyToNull whether a result that {@link #isBlank} becomes null, applied last
+     * @return the normalized value, or null for a null value or a blank result under
+     *         {@code emptyToNull}
+     */
+    public static String apply(String value, boolean trim, String strip, String caseFold, boolean emptyToNull) {
         if (value == null) {
             return null;
         }
@@ -53,7 +69,7 @@ public final class Normalize {
         } else if ("lower".equals(caseFold)) {
             result = result.toLowerCase(Locale.ROOT);
         }
-        return result;
+        return emptyToNull && isBlank(result) ? null : result;
     }
 
     /**
