@@ -604,7 +604,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         // insert and then counts it, or has deleted the row the check waits for and refuses this create
         // - checked and inserted apart, both won and the row pointed at nothing. The check comes before
         // the number is drawn, so a refused create spends none. A unit the database rolled back to
-        // break a deadlock is run once more (#8341): on H2 the share lock is exclusive, so a write and
+        // break a deadlock is run again (#8341, #8507): on H2 the share lock is exclusive, so a write and
         // a derived write naming the same rows in another order deadlock although neither changed
         // anything the other read.
         ${name}Entity saved = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
