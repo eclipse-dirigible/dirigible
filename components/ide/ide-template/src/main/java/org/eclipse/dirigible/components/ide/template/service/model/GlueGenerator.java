@@ -1090,6 +1090,46 @@ class GlueGenerator {
         // create-from it always had.
         copy(context, item, "hasRefusals", "hasBackLink", "backLinkProperty");
         context.put("refusals", refusals(item.get("refusals")));
+        // Lines read from a report's result rows (issue #8329): the report run with the source's values,
+        // the line and counter cells, the row rule, the test of a live document a second run is refused
+        // over, and the undo booking the target's reversal. A .glue written before the keys existed
+        // carries no hasReportItems and renders the create-from it always had.
+        copy(context, item, "hasReportItems", "reportName", "liveCondition", "hasUndo", "undoReversalClass", "undoReversalRefuses",
+                "undoBackLinkProperty", "undoStatusProperty", "undoStatusExpr", "undoStatuses");
+        context.put("reportGenFolder", sanitize(item, "reportName"));
+        context.put("reportPerspective", NamingHelper.sanitizeJavaIdentifier(REPORT_PERSPECTIVE));
+        context.put("reportParameters", asMaps(item.get("reportParameters")));
+        context.put("reportCells", reportCells(item.get("reportCells")));
+        context.put("counterCells", reportCells(item.get("counterCells")));
+        List<Map<String, Object>> where = new ArrayList<>();
+        for (Map<String, Object> declared : asMaps(item.get("reportWhere"))) {
+            Map<String, Object> term = ModelValues.copy(declared);
+            term.put("aliasJavaLiteral", JavaLiterals.escape(str(declared, "alias")));
+            term.put("valueJavaLiteral", JavaLiterals.escape(strOr(declared, "value", "")));
+            where.add(term);
+        }
+        context.put("reportWhere", where);
+    }
+
+    /**
+     * The cells of a report-sourced line (issue #8329), each with its column alias as a Java string
+     * literal's content and its scales as whole numbers - the glue's JSON reads them back as doubles.
+     *
+     * @param raw the declared cells, may be absent
+     * @return the cells the template renders
+     */
+    private static List<Map<String, Object>> reportCells(Object raw) {
+        List<Map<String, Object>> cells = new ArrayList<>();
+        for (Map<String, Object> declared : asMaps(raw)) {
+            Map<String, Object> cell = ModelValues.copy(declared);
+            cell.put("aliasJavaLiteral", JavaLiterals.escape(str(declared, "alias")));
+            for (String scale : List.of("scale", "sourceScale")) {
+                Object value = declared.get(scale);
+                cell.put(scale, value instanceof Number number ? String.valueOf(number.intValue()) : strOr(declared, scale, "0"));
+            }
+            cells.add(cell);
+        }
+        return cells;
     }
 
     /**

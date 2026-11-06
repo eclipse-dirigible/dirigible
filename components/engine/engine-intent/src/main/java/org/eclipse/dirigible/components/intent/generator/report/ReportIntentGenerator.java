@@ -2590,6 +2590,62 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         if (report.isLedgerKind()) {
             return aliases;
         }
+        putDimensionAliases(report, aliases);
+        for (String measure : report.getMeasures()) {
+            if (measure == null || measure.isBlank()) {
+                continue;
+            }
+            Matcher matcher = AGGREGATE_EXPRESSION.matcher(measure.trim());
+            if (!matcher.matches()) {
+                continue;
+            }
+            String aggregate = matcher.group(1)
+                                      .toUpperCase(Locale.ROOT);
+            String field = matcher.group(2)
+                                  .trim();
+            if (!KNOWN_AGGREGATES.contains(aggregate)) {
+                continue;
+            }
+            String alias = field.isEmpty() || "*".equals(field) ? aggregate.charAt(0) + aggregate.substring(1)
+                                                                                                 .toLowerCase(Locale.ROOT)
+                    : humanize(aggregate.toLowerCase(Locale.ROOT) + " " + leaf(field));
+            aliases.put(expressionKey(measure), alias);
+        }
+        return aliases;
+    }
+
+    /**
+     * The output columns of a {@code kind: balance} report (issue #8329), keyed as
+     * {@link #outputAliases(ReportIntent)} keys them: its dimensions, then the six windowed totals by
+     * their camel-case names ({@code openingDebit} ... {@code closingCredit}, see
+     * {@link #BALANCE_AMOUNT_ALIASES}). What a generation reading the report's rows names its cells by.
+     *
+     * @param report a {@code kind: balance} report
+     * @return authored expression key to column alias, in output order
+     */
+    public static Map<String, String> balanceAliases(ReportIntent report) {
+        Map<String, String> aliases = new LinkedHashMap<>();
+        putDimensionAliases(report, aliases);
+        BALANCE_AMOUNT_ALIASES.forEach((name, alias) -> aliases.put(expressionKey(name), alias));
+        return aliases;
+    }
+
+    /** The six windowed totals of a {@code kind: balance} report: camel-case name -> column alias. */
+    public static final Map<String, String> BALANCE_AMOUNT_ALIASES = balanceAmountAliases();
+
+    private static Map<String, String> balanceAmountAliases() {
+        Map<String, String> aliases = new LinkedHashMap<>();
+        aliases.put("openingDebit", "Opening Debit");
+        aliases.put("openingCredit", "Opening Credit");
+        aliases.put("debit", "Debit");
+        aliases.put("credit", "Credit");
+        aliases.put("closingDebit", "Closing Debit");
+        aliases.put("closingCredit", "Closing Credit");
+        return java.util.Collections.unmodifiableMap(aliases);
+    }
+
+    /** The authored dimensions' column aliases, keyed by {@link #expressionKey(String)}. */
+    private static void putDimensionAliases(ReportIntent report, Map<String, String> aliases) {
         for (String dimension : report.getDimensions()) {
             if (dimension == null || dimension.isBlank()) {
                 continue;
@@ -2612,27 +2668,6 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             }
             aliases.put(expressionKey(dimension), alias);
         }
-        for (String measure : report.getMeasures()) {
-            if (measure == null || measure.isBlank()) {
-                continue;
-            }
-            Matcher matcher = AGGREGATE_EXPRESSION.matcher(measure.trim());
-            if (!matcher.matches()) {
-                continue;
-            }
-            String aggregate = matcher.group(1)
-                                      .toUpperCase(Locale.ROOT);
-            String field = matcher.group(2)
-                                  .trim();
-            if (!KNOWN_AGGREGATES.contains(aggregate)) {
-                continue;
-            }
-            String alias = field.isEmpty() || "*".equals(field) ? aggregate.charAt(0) + aggregate.substring(1)
-                                                                                                 .toLowerCase(Locale.ROOT)
-                    : humanize(aggregate.toLowerCase(Locale.ROOT) + " " + leaf(field));
-            aliases.put(expressionKey(measure), alias);
-        }
-        return aliases;
     }
 
     /**

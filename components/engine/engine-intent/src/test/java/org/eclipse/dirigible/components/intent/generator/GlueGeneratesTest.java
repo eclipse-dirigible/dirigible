@@ -80,6 +80,156 @@ class GlueGeneratesTest {
                     Amount: amount
             """;
 
+    /** A year close (issue #8329): a journal whose lines are the rows of a balance report. */
+    private static final String YEAR_CLOSE = """
+            name: ledger
+            entities:
+              - name: JournalStatus
+                function: Setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Account
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: code, type: string }
+                relations:
+                  - { name: ClosingAccount, kind: manyToOne, to: Account }
+              - name: FiscalYear
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: startDate, type: date }
+                  - { name: endDate, type: date }
+              - name: Journal
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: date, type: date }
+                relations:
+                  - { name: Status, kind: manyToOne, to: JournalStatus, function: EntityStatus, init: 1 }
+                  - { name: Year, kind: manyToOne, to: FiscalYear }
+                  - { name: Storno, kind: manyToOne, to: Journal }
+                  - { name: ReversedBy, kind: manyToOne, to: Journal }
+              - name: JournalLine
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: debit, type: decimal }
+                  - { name: credit, type: decimal }
+                  - { name: memo, type: string }
+                relations:
+                  - { name: Journal, kind: manyToOne, to: Journal, composition: true, required: true }
+                  - { name: Account, kind: manyToOne, to: Account }
+            seeds:
+              - name: journal-statuses
+                entity: JournalStatus
+                rows:
+                  - { id: 1, name: DRAFT }
+                  - { id: 2, name: POSTED }
+            reports:
+              - name: YearBalance
+                kind: balance
+                source: JournalLine
+                date: Journal.date
+                debit: debit
+                credit: credit
+                dimensions: [Account.id, Account.ClosingAccount]
+            reversals:
+              - name: reverseJournal
+                forEntity: Journal
+                when: "Status == POSTED"
+                link: Storno
+                backLink: ReversedBy
+                negate: [debit, credit]
+            generates:
+              - name: closeYear
+                from: FiscalYear
+                to: Journal
+                map: { Year: id, date: endDate }
+                items:
+                  fromReport: YearBalance
+                  parameters: { fromDate: startDate, toDate: endDate }
+                  to: JournalLine
+                  where:
+                    - { field: Account.ClosingAccount, op: ne, value: null }
+                  map: { Account: Account.id, debit: closingCredit, credit: closingDebit }
+                  counter: { Account: Account.ClosingAccount, debit: closingDebit, credit: closingCredit }
+                undo: reverse
+            """;
+
+    @Test
+    void parsesAYearCloseFromABalanceReport() {
+        org.eclipse.dirigible.components.intent.model.GeneratesIntent close = IntentParser.parse(YEAR_CLOSE)
+                                                                                          .getGenerates()
+                                                                                          .stream()
+                                                                                          .filter(g -> "closeYear".equals(g.getName()))
+                                                                                          .findFirst()
+                                                                                          .orElseThrow();
+        assertTrue(close.hasReportItems());
+        assertTrue(close.hasUndo());
+        assertEquals("YearBalance", close.getItems()
+                                         .getFromReport());
+        assertEquals("endDate", close.getItems()
+                                     .getParameters()
+                                     .get("toDate"));
+        assertEquals("Account.ClosingAccount", close.getItems()
+                                                    .getCounter()
+                                                    .get("Account"));
+    }
+
+    @Test
+    void refusesAReportLineShapeItCannotBookExactlyOrUndo() {
+        assertRefused(YEAR_CLOSE.replace("map: { Year: id, date: endDate }", "map: { date: endDate }"),
+                "its map copies no source key onto the target");
+        assertRefused(YEAR_CLOSE.replace("parameters: { fromDate: startDate, toDate: endDate }", "parameters: { fromDate: startDate }"),
+                "binds no [toDate]");
+        assertRefused(YEAR_CLOSE.replace("debit: closingCredit, credit: closingDebit", "debit: Account.id, credit: closingDebit"),
+                "an amount column");
+        assertRefused(YEAR_CLOSE.replace("debit: closingCredit, credit: closingDebit", "memo: closingCredit, credit: closingDebit"),
+                "an amount column");
+        assertRefused(YEAR_CLOSE.replace("credit: closingDebit }", "credit: closingBalance }"), "is not a column of the report");
+        assertRefused(YEAR_CLOSE.replace("op: ne, value: null", "op: gt, value: null"), "an ordering compares a number");
+        assertRefused(YEAR_CLOSE.replace("    backLink: ReversedBy\n", ""),
+                "undo: reverse needs a reversals: entry on [Journal] declaring backLink");
+        assertRefused(YEAR_CLOSE.replace("kind: balance", "kind: ledger"), "is not a kind: balance report");
+    }
+
+    private static void assertRefused(String yaml, String message) {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getMessage()
+                     .contains(message),
+                "expected [" + message + "] in: " + ex.getMessage());
+    }
+
+    @Test
+    void aYearCloseCarriesItsReportCellsGuardAndUndo() {
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(YEAR_CLOSE))
+                                                   .stream()
+                                                   .filter(entry -> "closeYear".equals(entry.get("name")))
+                                                   .findFirst()
+                                                   .orElseThrow();
+        assertEquals(true, g.get("hasReportItems"));
+        assertEquals("YearBalance", g.get("reportName"));
+        assertEquals(List.of(Map.of("name", "fromDate", "property", "StartDate"), Map.of("name", "toDate", "property", "EndDate")),
+                g.get("reportParameters"));
+        // Each cell reads the row's column alias, an amount converted at the line field's scale and the
+        // ledger's own.
+        List<?> cells = (List<?>) g.get("reportCells");
+        assertEquals(Map.of("targetProp", "Account", "alias", "Account Id", "kind", "integer", "scale", 2, "sourceScale", 2), cells.get(0));
+        assertEquals(Map.of("targetProp", "Debit", "alias", "Closing Credit", "kind", "decimal", "scale", 2, "sourceScale", 2),
+                cells.get(1));
+        assertEquals("Account Closing Account", ((Map<?, ?>) ((List<?>) g.get("counterCells")).get(0)).get("alias"));
+        assertEquals(List.of(Map.of("alias", "Account Closing Account", "op", "ne", "value", "", "isNull", true)), g.get("reportWhere"));
+        // The back-reference a second run is refused over, and the reversal the undo books.
+        assertEquals("Year", g.get("backRefProperty"));
+        assertEquals("JournalLine", g.get("toItemEntity"));
+        assertEquals("Journal", g.get("toFkProperty"));
+        assertTrue(String.valueOf(g.get("liveCondition"))
+                         .contains("candidate.Storno != null"));
+        assertEquals(true, g.get("hasUndo"));
+        assertEquals("ReverseJournal", g.get("undoReversalClass"));
+        assertEquals("ReversedBy", g.get("undoBackLinkProperty"));
+        assertEquals("undoStatus == 2", g.get("undoStatusExpr"));
+    }
+
     /**
      * The motivating shape of issue #6711: a fine arrives by webhook, the responsible person is
      * identified (a status transition), and the declaration document is minted from it with nobody

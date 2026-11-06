@@ -2755,6 +2755,51 @@ billing - so the run answers 400 rather than committing the header. Either refus
 the header is saved, so a refused run spends no document number and leaves no history entry. An
 items block with no `where:` keeps exactly the behaviour it had.
 
+**Lines from a REPORT's result rows (`items: fromReport:` + `undo:`).** A year close books the
+ledger's own balances: one closing journal with a line per result account, taking its year balance
+off it, and the opposite on the account it closes into. Those numbers are the rows of a
+`kind: balance` report, so the items block reads that report instead of the source's child rows:
+
+```yaml
+generates:
+  - name: closeYear
+    from: FiscalYear               # the record the button is on - it supplies the report's parameters
+    to: Journal
+    map: { Year: id, date: endDate }    # REQUIRED: the source key onto the target (the back-reference)
+    items:
+      fromReport: YearBalance      # a kind: balance report (no correspondence)
+      parameters: { fromDate: startDate, toDate: endDate }   # report parameter <- source property
+      to: JournalLine              # the target's composition line entity
+      where:                       # which rows become lines - over the report's columns
+        - { field: Account.ClosingAccount, op: ne, value: null }
+      map: { Account: Account.id, debit: closingCredit, credit: closingDebit }
+      counter: { Account: Account.ClosingAccount, debit: closingDebit, credit: closingCredit }
+    undo: reverse                  # a second button: books the target's reversals: entry
+```
+
+- A column is named by its report **dimension** (`Account.id`) or by one of the six balance amounts:
+  `openingDebit`, `openingCredit`, `debit`, `credit`, `closingDebit`, `closingCredit`. An amount goes
+  into a decimal field and only there; a dimension goes into an integer, long or text field or a
+  to-one relation. Group by `Account.id`, not the bare `Account` (that column is the account's label).
+- An amount is written as the **exact decimal** its field holds; a value that would need rounding
+  refuses the run (400) instead of being rounded.
+- `parameters:` must bind `fromDate` and `toDate` (else the report reads all time); a source record
+  holding no value for a bound property refuses the run.
+- `counter:` is the counter line: rows whose counter cells other than the amounts are equal share ONE
+  counter line carrying the sum of their amounts (one line on the profit-and-loss account for all
+  the result accounts closing into it).
+- `where:` compares a column: `eq`/`ne` with a value, or with `null` for "the row holds none";
+  `gt`/`ge`/`lt`/`le` with a number. A run where no row qualifies refuses rather than booking an empty
+  document.
+- **A second run is refused (409)** while a live target back-references the source - one not
+  cancelled and not reversed by a posted reversal. That is why the `map:` must copy the source key.
+- `undo: reverse` adds an **Undo** button on the source. It books the target's declared `reversals:`
+  entry (which must declare `backLink:`) against the live document, and refuses one already reversed
+  or not in the reversal's `when:` status. Once that reversal is posted the original is retired and
+  the source can be run again. Give that reversal no `date:` default if it must book into the closed
+  year.
+- Not available with `fromUses:`, a cross-model target, or `event:` - it is a click on a local record.
+
 **A `map:` source may hop one relation - and that is how you SNAPSHOT a value.** A value is `map`ped
 rather than reached through a relation when the target must keep what was true at the moment it was
 created: an invoice keeps the customer's VAT number as it stood at invoicing, an audit log keeps the

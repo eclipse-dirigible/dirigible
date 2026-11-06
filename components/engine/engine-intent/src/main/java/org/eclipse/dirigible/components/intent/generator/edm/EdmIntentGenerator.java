@@ -35,6 +35,7 @@ import org.eclipse.dirigible.components.intent.generator.ExportSupport;
 import org.eclipse.dirigible.components.intent.generator.ImportSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
+import org.eclipse.dirigible.components.intent.generator.ReportItemsSupport;
 import org.eclipse.dirigible.components.intent.generator.CheckSupport;
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
@@ -1001,6 +1002,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                                          .isBlank()
                     && generates.hasButton()) {
                 labels.put(generates.getName(), IntentNaming.customActionLabel(generates.getName(), generates.getLabel()));
+            }
+            if (generates.hasUndo() && generates.hasReportItems()) {
+                labels.put(ReportItemsSupport.undoName(generates), ReportItemsSupport.undoLabel(generates));
             }
         }
         return labels;
