@@ -75,7 +75,6 @@ public class ${name}Repository {
     /** A timestamp as the named-parameter binder reads it. */
     private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS");
 
-    @SuppressWarnings("unchecked")
     public List<Map<String, Object>> findAll(Integer limit, Integer offset, Map<String, Object> filter) {
         List<Map<String, Object>> parameters = baseParameters(filter);
         StringBuilder sql = new StringBuilder(filteredQuery(filter, parameters));
@@ -88,20 +87,17 @@ public class ${name}Repository {
             sql.append(" OFFSET ").append(offset.intValue());
         }
         try {
-            String result = Database.queryNamed(sql.toString(), Json.stringify(parameters));
-            return (List<Map<String, Object>>) Json.parse(result, List.class);
+            return rows(sql.toString(), parameters);
         } catch (Throwable t) {
             throw new RuntimeException("Failed to execute report ${name}", t);
         }
     }
 
-    @SuppressWarnings("unchecked")
     public long count(Map<String, Object> filter) {
         List<Map<String, Object>> parameters = baseParameters(filter);
         String sql = "SELECT COUNT(*) AS \"REPORT_COUNT\" FROM (" + filteredQuery(filter, parameters) + ") AS \"REPORT_TOTAL\"";
         try {
-            String result = Database.queryNamed(sql, Json.stringify(parameters));
-            List<Map<String, Object>> rows = (List<Map<String, Object>>) Json.parse(result, List.class);
+            List<Map<String, Object>> rows = rows(sql, parameters);
             if (rows.isEmpty()) {
                 return 0L;
             }
@@ -126,7 +122,6 @@ public class ${name}Repository {
      * and must be numeric; anything else is an {@link IllegalArgumentException}, i.e. a client error.
      * Never {@code null}: a report yielding no rows sums to zero.
      */
-    @SuppressWarnings("unchecked")
     public Number sum(String column, Map<String, Object> filter) {
         String type = column == null ? null : FILTER_COLUMNS.get(column);
         if (type == null) {
@@ -139,8 +134,7 @@ public class ${name}Repository {
         String sql = "SELECT SUM(\"" + column + "\") AS \"REPORT_SUM\" FROM (" + filteredQuery(filter, parameters)
                 + ") AS \"REPORT_TOTAL\"";
         try {
-            String result = Database.queryNamed(sql, Json.stringify(parameters));
-            List<Map<String, Object>> rows = (List<Map<String, Object>>) Json.parse(result, List.class);
+            List<Map<String, Object>> rows = rows(sql, parameters);
             if (rows.isEmpty()) {
                 return 0L;
             }
@@ -153,6 +147,16 @@ public class ${name}Repository {
         } catch (Throwable t) {
             throw new RuntimeException("Failed to sum column " + column + " of report ${name}", t);
         }
+    }
+
+    /**
+     * The rows of a statement over the report's named parameters, every number read as the exact
+     * BigDecimal the database answered: read as a double, a DECIMAL amount past about 15 significant
+     * digits lost its cents - on a row, a sum and everything that reads them (#8487).
+     */
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> rows(String sql, List<Map<String, Object>> parameters) throws Throwable {
+        return (List<Map<String, Object>>) Json.parseExact(Database.queryNamed(sql, Json.stringify(parameters)), List.class);
     }
 
     public List<Map<String, Object>> exportCsv(Map<String, Object> filter) {
@@ -308,6 +312,9 @@ public class ${name}Repository {
 #if($parameter.type == "DATE" && $parameter.initial == "CURRENT_DATE")
         // initial: CURRENT_DATE - the day the report is run, resolved per request.
         parameters.add(parameter("${parameter.name}", "${parameter.type}", value(filter, "${parameter.name}", "${parameter.type}", java.time.LocalDate.now().toString())));
+#elseif($parameter.initialMoment)
+        // initial: ${parameter.initialMoment} - a relative moment, resolved per request (#8506).
+        parameters.add(parameter("${parameter.name}", "${parameter.type}", value(filter, "${parameter.name}", "${parameter.type}", moment("${parameter.initialMoment}"))));
 #else
         parameters.add(parameter("${parameter.name}", "${parameter.type}", value(filter, "${parameter.name}", "${parameter.type}", "${parameter.initialJavaLiteral}")));
 #end
@@ -315,6 +322,34 @@ public class ${name}Repository {
         return parameters;
     }
 
+#if($hasMomentParameters)
+    /**
+     * A relative moment (#8506) - CURRENT_DATE or START_OF_YEAR / START_OF_QUARTER / START_OF_MONTH,
+     * then signed ISO-8601 date periods applied left to right (START_OF_MONTH+P1M-P1D is the last day of
+     * this month) - as the ISO date it names on the day the report runs. Each period applies its years,
+     * then its months, then its days, as the report filter's INTERVAL arithmetic does in SQL.
+     */
+    private static String moment(String moment) {
+        LocalDate today = LocalDate.now();
+        String token = moment.replaceAll("[+-].*", "");
+        LocalDate day = switch (token) {
+            case "START_OF_YEAR" -> today.withDayOfYear(1);
+            case "START_OF_QUARTER" -> today.withDayOfMonth(1).withMonth((today.getMonthValue() - 1) / 3 * 3 + 1);
+            case "START_OF_MONTH" -> today.withDayOfMonth(1);
+            default -> today;
+        };
+        java.util.regex.Matcher offset = java.util.regex.Pattern.compile("([+-])(P[0-9A-Z]+)").matcher(moment.substring(token.length()));
+        while (offset.find()) {
+            java.time.Period period = java.time.Period.parse(offset.group(2));
+            int sign = "-".equals(offset.group(1)) ? -1 : 1;
+            day = day.plusYears(sign * (long) period.getYears())
+                     .plusMonths(sign * (long) period.getMonths())
+                     .plusDays(sign * (long) period.getDays());
+        }
+        return day.toString();
+    }
+
+#end
 #if($query && $query.contains(":language"))
     /**
      * The caller's language for the translation overlay: the primary subtag of the Accept-Language

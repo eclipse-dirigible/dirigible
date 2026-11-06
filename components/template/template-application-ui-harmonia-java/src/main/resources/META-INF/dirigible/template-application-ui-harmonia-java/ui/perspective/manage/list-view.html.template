@@ -547,7 +547,9 @@
             </button>
           </template>
 
-          <button x-h-button data-variant="outline" data-size="icon" x-h-menu-trigger.dropdown
+          <!-- Rendered only when the menu would carry something (#8436): a read-only record with no
+               task and no applicable action has nothing the primary button did not already take. -->
+          <button x-h-button data-variant="outline" data-size="icon" x-h-menu-trigger.dropdown x-show="menuHasAnything"
                   :aria-label="T('$projectName:${tprefix}.defaults.moreActions', 'More actions')">
             <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
           </button>

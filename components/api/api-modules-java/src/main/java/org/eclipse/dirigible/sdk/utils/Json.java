@@ -14,6 +14,7 @@ import java.lang.reflect.Method;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.ToNumberPolicy;
 import com.google.gson.TypeAdapter;
 import com.google.gson.TypeAdapterFactory;
 import com.google.gson.reflect.TypeToken;
@@ -104,6 +105,14 @@ public final class Json {
     private static final Gson GSON = new GsonBuilder().registerTypeAdapterFactory(JAVA_TIME)
                                                       .create();
 
+    /**
+     * {@link #GSON}, reading a number of an untyped value as the {@link java.math.BigDecimal} it is
+     * written as.
+     */
+    private static final Gson EXACT_GSON = GSON.newBuilder()
+                                               .setObjectToNumberStrategy(ToNumberPolicy.BIG_DECIMAL)
+                                               .create();
+
     private Json() {}
 
     /**
@@ -126,5 +135,21 @@ public final class Json {
      */
     public static <T> T parse(String json, Class<T> type) {
         return GSON.fromJson(json, type);
+    }
+
+    /**
+     * Deserialize JSON into an instance of the given type, reading a number where the type does not fix
+     * one - a map's value, a list's element - as the exact {@link java.math.BigDecimal} it is written
+     * as. {@link #parse(String, Class)} reads such a number as a {@code Double}, which holds about 15
+     * significant digits: a {@code DECIMAL(18, 2)} amount of 1234567890123456.78 comes back as
+     * 1234567890123456.8.
+     *
+     * @param json the JSON string
+     * @param type the target type
+     * @param <T> the target type
+     * @return the deserialized instance
+     */
+    public static <T> T parseExact(String json, Class<T> type) {
+        return EXACT_GSON.fromJson(json, type);
     }
 }

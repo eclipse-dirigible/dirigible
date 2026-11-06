@@ -258,4 +258,115 @@ class ReportOrderAndMomentsTest {
         assertEquals(List.of("references unknown moment [START_OF_FISCAL_YEAR] - expected CURRENT_DATE or one of "
                 + "[START_OF_YEAR, START_OF_QUARTER, START_OF_MONTH]"), ReportMoments.problems("d >= START_OF_FISCAL_YEAR"));
     }
+    // --- #8506: a relative moment as a date parameter's initial ---
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> parameter(Map<String, Object> document, String name) {
+        return ((List<Map<String, Object>>) document.get("parameters")).stream()
+                                                                       .filter(p -> name.equals(p.get("name")))
+                                                                       .findFirst()
+                                                                       .orElseThrow();
+    }
+
+    private static Map<String, Object> windowReport(String fromInitial, String toInitial) {
+        return document("""
+                  - name: SalesInWindow
+                    source: OrderLine
+                    dimensions: [product.name]
+                    measures: ["sum(amount)"]
+                    parameters:
+                      - { name: fromDay, target: orderedOn, op: ge, initial: "%s" }
+                      - { name: toDay, target: orderedOn, op: le, initial: "%s" }
+                """.formatted(fromInitial, toInitial));
+    }
+
+    @Test
+    void everyMomentFormIsAParameterInitialCarriedForTheRepositoryToResolve() {
+        for (String moment : List.of("CURRENT_DATE", "CURRENT_DATE-P30D", "START_OF_YEAR", "START_OF_QUARTER", "START_OF_MONTH",
+                "START_OF_YEAR-P1Y", "CURRENT_DATE+P1M2W", "START_OF_MONTH+P1M-P1D", "START_OF_QUARTER-P1D")) {
+            Map<String, Object> document = windowReport(moment, "CURRENT_DATE");
+            assertEquals(moment, parameter(document, "fromDay").get("initial"), "the moment stays a moment, never a frozen date");
+            assertEquals("DATE", parameter(document, "fromDay").get("type"));
+            // The query binds the marker - the moment is resolved per request, not spelt into the SQL.
+            assertTrue(query(document).contains(">= :fromDay"), query(document));
+            assertFalse(query(document).contains("INTERVAL"), "the moment is not rewritten into the query: " + query(document));
+        }
+    }
+
+    @Test
+    void aMomentInitialIsCarriedInItsCanonicalSpelling() {
+        Map<String, Object> document = windowReport("start_of_month - p1m", "start_of_month - P1D");
+        assertEquals("START_OF_MONTH-P1M", parameter(document, "fromDay").get("initial"));
+        assertEquals("START_OF_MONTH-P1D", parameter(document, "toDay").get("initial"));
+    }
+
+    @Test
+    void aFixedDateInitialStaysAsWritten() {
+        assertEquals("2026-01-01", parameter(windowReport("2026-01-01", "2026-12-31"), "fromDay").get("initial"));
+    }
+
+    @Test
+    void anUnknownMomentAsAnInitialIsRejected() {
+        IntentValidationException failure =
+                assertThrows(IntentValidationException.class, () -> windowReport("START_OF_WEEK", "CURRENT_DATE"));
+        assertTrue(failure.getMessage()
+                          .contains("parameter [fromDay] initial references unknown moment [START_OF_WEEK]"),
+                failure.getMessage());
+    }
+
+    @Test
+    void aTimeOffsetAsAnInitialIsRejected() {
+        IntentValidationException failure =
+                assertThrows(IntentValidationException.class, () -> windowReport("CURRENT_DATE-PT1H", "CURRENT_DATE"));
+        assertTrue(failure.getMessage()
+                          .contains("parameter [fromDay] initial moment [CURRENT_DATE-PT1H] has an offset that is not a date period"),
+                failure.getMessage());
+    }
+
+    @Test
+    void anInitialThatIsMoreThanOneMomentIsRejected() {
+        IntentValidationException failure =
+                assertThrows(IntentValidationException.class, () -> windowReport("CURRENT_DATE-P30D or START_OF_YEAR", "CURRENT_DATE"));
+        assertTrue(failure.getMessage()
+                          .contains("parameter [fromDay] initial [CURRENT_DATE-P30D or START_OF_YEAR] must be one moment"),
+                failure.getMessage());
+    }
+
+    @Test
+    void aDateInitialThatIsNeitherADateNorAMomentIsRejected() {
+        IntentValidationException failure = assertThrows(IntentValidationException.class, () -> windowReport("yesterday", "CURRENT_DATE"));
+        assertTrue(failure.getMessage()
+                          .contains(
+                                  "parameter [fromDay] has initial [yesterday], which is neither a date (yyyy-MM-dd) nor a relative moment"),
+                failure.getMessage());
+    }
+
+    @Test
+    void aMomentOnANumericParameterIsRejected() {
+        IntentValidationException failure = assertThrows(IntentValidationException.class, () -> document("""
+                  - name: BigSales
+                    source: OrderLine
+                    dimensions: [product.name]
+                    measures: ["sum(amount)"]
+                    parameters:
+                      - { name: minAmount, target: amount, op: ge, initial: CURRENT_DATE-P1D }
+                """));
+        assertTrue(failure.getMessage()
+                          .contains("parameter [minAmount] has the moment initial [CURRENT_DATE-P1D] but filters a [number] field"),
+                failure.getMessage());
+    }
+
+    @Test
+    void chainedOffsetsRewriteLeftToRight() {
+        assertEquals("d <= CAST(DATE_TRUNC('MONTH', CURRENT_DATE) + INTERVAL '1' MONTH - INTERVAL '1' DAY AS DATE)",
+                ReportMoments.rewrite("d <= START_OF_MONTH+P1M-P1D"));
+        assertEquals("d < CAST(DATE_TRUNC('QUARTER', CURRENT_DATE) - INTERVAL '3' MONTH AS DATE) AND e = 1",
+                ReportMoments.rewrite("d < START_OF_QUARTER - P3M AND e = 1"));
+        assertTrue(ReportMoments.isMoment(" START_OF_MONTH + P1M - P1D "));
+        assertFalse(ReportMoments.isMoment("CURRENT_DATE-1"));
+        assertFalse(ReportMoments.isMoment("2026-01-01"));
+        assertEquals(1, ReportMoments.problems("d <= START_OF_MONTH+P1M-PT1H")
+                                     .size());
+        assertEquals("START_OF_MONTH+P1M-P1D", ReportMoments.canonical("start_of_month + p1m - p1d"));
+    }
 }

@@ -121,6 +121,7 @@ class IntentNumberingPartitionIT extends IntegrationTest {
               # its column. The voucher has no to-one, so no reference check wraps its insert in a unit
               # of work - the claim has, and the owner relations that give it a my and a partner surface.
               - name: Voucher
+                label: "{number}"
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: number, type: string, length: 100, number: { series: Refused Voucher, stampOn: create } }
@@ -134,6 +135,7 @@ class IntentNumberingPartitionIT extends IntegrationTest {
                   - { name: email, type: string, required: true, length: 100 }
 
               - name: Claim
+                label: "{number} {ref}"
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: number, type: string, length: 100, number: { series: Refused Claim, per: Company, stampOn: create } }
@@ -256,6 +258,44 @@ class IntentNumberingPartitionIT extends IntegrationTest {
         refuse(CLAIM_FROM_TRIP, "{\"id\":2}", 500);
         refuse(CLAIM_FROM_TRIP, "{\"id\":1,\"values\":{\"Amount\":" + OVERFLOW + "}}", 500);
         assertEquals(first + 4, sequenceOf(create(CLAIMS, "{\"Ref\":\"E\"}", 1)), "a create-from the database refused spent a number");
+    }
+
+    /**
+     * A {@code label:} that reads a {@code stampOn: create} number is stored with that number on the
+     * create itself (#7822). The name used to be computed before the number was drawn, so every new
+     * record kept an empty {@code Name} - the option text of every picker over it - until its next
+     * write. Both insert shapes are driven: the voucher's plain insert and the claim's insert inside
+     * the reference check's unit of work, on the power, my and partner surfaces and a create-from.
+     */
+    @Test
+    void a_label_that_reads_the_number_is_stored_on_create() {
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        assertNameOnCreate(VOUCHERS, "{\"Ref\":\"N\"}", "");
+        assertNameOnCreate(CLAIMS, "{\"Ref\":\"P\"}", " P");
+        assertNameOnCreate(MY_CLAIMS, "{\"Ref\":\"M\"}", " M");
+        assertNameOnCreate(PARTNER_CLAIMS, "{\"Ref\":\"Q\"}", " Q");
+        // The create-from answers the saved claim: Trip 1 maps its name T-1 onto the claim's ref.
+        assertNameOnCreate(CLAIM_FROM_TRIP, "{\"id\":1,\"values\":{\"Amount\":1}}", " T-1");
+    }
+
+    /** Creates a record and asserts its stored Name is its allocated number plus the given suffix. */
+    private void assertNameOnCreate(String controller, String body, String suffix) {
+        restAssuredExecutor.execute(() -> {
+            Map<String, Object> created = given().contentType("application/json")
+                                                 .body(body)
+                                                 .when()
+                                                 .post(controller)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .extract()
+                                                 .jsonPath()
+                                                 .getMap("$");
+            String number = (String) created.get("Number");
+            assertEquals(number + suffix, created.get("Name"), controller + " stored the label without the number it was given");
+        }, TIMEOUT_SECONDS);
     }
 
     /** Posts a create the database must refuse with the given status. */

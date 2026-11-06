@@ -64,8 +64,8 @@ public final class ConfigGroups {
             new Rule(ConfigGroup.REPOSITORY, "REPOSITORY_", "MASTER_", "REGISTRY_", "GIT_", "INDEXING_"), //
             new Rule(ConfigGroup.SYNC, "SYNCHRONIZER_", "PUBLISH_", "CSV_", "READINESS_"), //
             new Rule(ConfigGroup.INTEGRATIONS, "DESTINATION", "CONNECTIVITY_", "FTP_", "SFTP_", "SPARK_", "ETCD_"), //
-            new Rule(ConfigGroup.INSTANCE, "PRODUCT_", "INSTANCE_", "HOME_URL", "APP_BASE_URL", "SERVER_", "HOST", "TRIAL_", "OPERATIONS_",
-                    "ISSUES_", "SPRING_ADMIN"));
+            new Rule(ConfigGroup.INSTANCE, "PRODUCT_", "APPLICATION_NAME", "APPLICATION_VERSION", "INSTANCE_", "HOME_URL", "APP_BASE_URL",
+                    "SERVER_", "HOST", "TRIAL_", "OPERATIONS_", "ISSUES_", "SPRING_ADMIN"));
 
     private ConfigGroups() {}
 

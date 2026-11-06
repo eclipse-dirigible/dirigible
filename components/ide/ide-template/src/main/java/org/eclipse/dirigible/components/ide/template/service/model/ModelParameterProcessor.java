@@ -528,6 +528,14 @@ final class ModelParameterProcessor {
                 check.put("literalJavaExpression", expression);
             }
         }
+        // A compare's right-hand side read off another record (#8494): the Calc formula over the record
+        // the hop loaded, and null while the row points at none - an absent operand, as for a field.
+        String thanFormula = str(check, "thanFormula");
+        if (thanFormula != null) {
+            String owner = str(check, "thanOwner");
+            check.put("thanJavaExpression", "(" + owner + " == null ? null : org.eclipse.dirigible.sdk.utils.Calc.eval(\""
+                    + JavaLiterals.escape(thanFormula) + "\", " + owner + ", " + str(check, "thanScale") + "))");
+        }
         List<Map<String, Object>> when = asMaps(check.get("when"));
         if (!when.isEmpty()) {
             String expression = JavaLiterals.conditionExpression(when);
@@ -1889,9 +1897,9 @@ final class ModelParameterProcessor {
             // Whether this child has role-scoped columns at all: only then does the panel ask the
             // child's own scoped controller which of them the caller in front of it may not see.
             panel.put("restrictedFields", truthy(child, "hasRestrictedFields"));
-            // A see-only child (intent personalReadOnly) refuses the panel's Add with 403, so the panel
-            // must not offer it.
-            panel.put("readOnly", readOnlyKey != null && truthy(child, readOnlyKey));
+            // A see-only child (intent personalReadOnly) refuses the panel's Add with 403, and a
+            // system-written one (#8503) with 405 on every surface, so the panel must not offer it.
+            panel.put("readOnly", (readOnlyKey != null && truthy(child, readOnlyKey)) || truthy(child, "systemWritten"));
             // A status-gated panel (intent `visibleWhen:`, #7502): the terms the scoped page reads
             // against the record it holds before showing the panel. Absent = always shown.
             if (child.get("visibleWhenTermsJs") != null) {
@@ -2493,7 +2501,7 @@ final class ModelParameterProcessor {
 
     /**
      * Whether a property declares a {@code normalize:} (#7726) the generated repository applies: a
-     * trim, characters to strip, or an upper/lower case fold.
+     * trim, characters to strip, an upper/lower case fold, or {@code emptyToNull} (#8492).
      *
      * @param property the property
      * @return true when the repository's {@code normalize} rewrites the property's value
@@ -2503,7 +2511,7 @@ final class ModelParameterProcessor {
         String caseFold = str(property, "normalizeCase");
         return "true".equals(str(property, "normalizeTrim")) || (strip != null && !strip.toString()
                                                                                         .isEmpty())
-                || "upper".equals(caseFold) || "lower".equals(caseFold);
+                || "upper".equals(caseFold) || "lower".equals(caseFold) || "true".equals(str(property, "normalizeEmptyToNull"));
     }
 
     /**
@@ -2513,7 +2521,8 @@ final class ModelParameterProcessor {
      * transforms, in the same order, as {@code org.eclipse.dirigible.sdk.db.Normalize} on the server.
      * The function is written so it can sit verbatim inside a double-quoted HTML attribute and inside a
      * JavaScript file: every character of the strip set outside a plain safe set is a {@code \\uXXXX}
-     * escape.
+     * escape. {@code emptyToNull} alone renders no function: the forms already send an emptied field as
+     * null, so only the server has a blank to turn into NULL.
      *
      * @param property the property
      * @return whether the property normalizes anything
@@ -2528,6 +2537,9 @@ final class ModelParameterProcessor {
         String caseFold = str(property, "normalizeCase");
         boolean hasStrip = strip != null && !strip.isEmpty();
         boolean hasCase = "upper".equals(caseFold) || "lower".equals(caseFold);
+        if (!trim && !hasStrip && !hasCase) {
+            return true;
+        }
         StringBuilder js = new StringBuilder("((v) => typeof v === 'string' ? v");
         if (trim) {
             js.append(".trim()");

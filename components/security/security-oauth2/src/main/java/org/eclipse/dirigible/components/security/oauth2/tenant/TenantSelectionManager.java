@@ -18,6 +18,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.components.base.tenant.GlobalRolesScope;
 import org.eclipse.dirigible.components.base.tenant.groups.TenantGroupsParser;
 import org.eclipse.dirigible.components.base.tenant.groups.UserTenantAssignments;
 import org.eclipse.dirigible.components.base.tenant.clients.IntegrationClient;
@@ -126,7 +127,7 @@ public class TenantSelectionManager {
         if (groups.isEmpty()) {
             return UserTenantAssignments.empty();
         }
-        return TenantGroupsParser.parse(groups, DirigibleConfig.APP_ID.getStringValue());
+        return TenantGroupsParser.parse(groups, DirigibleConfig.APP_ID.getStringValue(), GlobalRolesScope.fromConfiguration());
     }
 
     /**

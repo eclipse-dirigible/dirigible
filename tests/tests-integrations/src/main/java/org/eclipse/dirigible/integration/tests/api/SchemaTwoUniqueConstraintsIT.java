@@ -21,13 +21,20 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.data.structures.synchronizer.table.TableAlterProcessor;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 
 /**
  * A table may declare more than one unique constraint, and every one of them reaches the database.
@@ -152,6 +159,54 @@ class SchemaTwoUniqueConstraintsIT extends IntegrationTest {
         assertThat(uniqueIndexNames()).as("the second key is added once the duplicates are gone")
                                       .anyMatch(name -> name.startsWith(SECOND_KEY));
         assertThat(refusalOf("P3", "E3", "C1", "N1")).as("the second key refuses a duplicate (company, number)")
+                                                     .contains(SECOND_KEY);
+    }
+
+    /**
+     * #8498: the keys a table was born with are UNIQUE INDEXes, which the constraint catalog does not
+     * list. A later publish that alters the table - here an added column - must take them as present:
+     * on PostgreSQL an ADD CONSTRAINT of the same name is refused ("relation already exists"), one
+     * ERROR per key on every upgrade, and #8317's retry would repeat it on every pass.
+     */
+    @Test
+    void anAlterKeepsTheKeysTheTableWasBornWithAsUniqueIndexes() throws Exception {
+        publish(SCHEMA_PATH, SCHEMA_SOURCE);
+        insertRow("P1", "E1", "C1", "N1");
+        String withAddedColumn = SCHEMA_SOURCE.replace("""
+                { "name": "NUMBER", "type": "VARCHAR", "length": "50", "nullable": true }
+                """.strip(), """
+                { "name": "NUMBER", "type": "VARCHAR", "length": "50", "nullable": true },
+                { "name": "NOTE", "type": "VARCHAR", "length": "50", "nullable": true }
+                """.strip());
+        assertThat(withAddedColumn).as("the republished schema adds a column")
+                                   .contains("\"NOTE\"");
+
+        ListAppender<ILoggingEvent> alterLog = new ListAppender<>();
+        alterLog.start();
+        Logger alterLogger = (Logger) LoggerFactory.getLogger(TableAlterProcessor.class);
+        alterLogger.addAppender(alterLog);
+        try {
+            publish(SCHEMA_PATH, withAddedColumn);
+        } finally {
+            alterLogger.detachAppender(alterLog);
+        }
+
+        assertThat(alterLog.list).as("the alter added the column")
+                                 .anyMatch(event -> event.getFormattedMessage()
+                                                         .contains("\"NOTE\""));
+        assertThat(alterLog.list).as("no declared key is added again over the index it was born as")
+                                 .noneMatch(event -> event.getLevel()
+                                                          .isGreaterOrEqual(Level.WARN)
+                                         && event.getFormattedMessage()
+                                                 .startsWith("Unique constraint"))
+                                 .noneMatch(event -> event.getFormattedMessage()
+                                                          .startsWith("Adding unique constraint"));
+        // an added constraint's index would carry a vendor suffix on H2, and on PostgreSQL the ADD is
+        // refused
+        assertThat(uniqueIndexNames()).as("the declared keys are still the indexes the table was born with, and only those")
+                                      .filteredOn(name -> name.startsWith("TwoKeysTimesheet_"))
+                                      .containsExactlyInAnyOrder(FIRST_KEY, SECOND_KEY);
+        assertThat(refusalOf("P2", "E2", "C1", "N1")).as("the second key still refuses a duplicate (company, number)")
                                                      .contains(SECOND_KEY);
     }
 

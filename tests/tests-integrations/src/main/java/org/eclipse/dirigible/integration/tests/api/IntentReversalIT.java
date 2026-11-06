@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.comparesEqualTo;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
@@ -20,6 +21,7 @@ import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -46,6 +48,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
 
 import ch.qos.logback.classic.Level;
+import io.restassured.config.JsonConfig;
+import io.restassured.config.RestAssuredConfig;
+import io.restassured.path.json.JsonPath;
+import io.restassured.path.json.config.JsonPathConfig.NumberReturnType;
 
 /**
  * A {@code reversals:} action (issue #7886) reverses a posted journal entry at runtime, through the
@@ -72,6 +78,17 @@ class IntentReversalIT extends IntegrationTest {
     private static final String LINES = API + "/entry/EntryItemController";
     private static final String PAYMENTS = API + "/payment/PaymentController";
     private static final long TIMEOUT_SECONDS = 90;
+    private static final String ACCOUNTS = API + "/account/AccountController";
+    private static final String JOURNALS = API + "/journal/JournalController";
+    private static final String JOURNAL_LINES = API + "/journal/JournalLineController";
+    private static final String CLOSE_YEAR = EVENTS + "/CloseYearGenerate";
+    private static final String YEAR_BALANCE = "/services/java/" + PROJECT + "/gen/yearbalance/api/reports/YearBalanceController";
+    /**
+     * Numbers read as the decimals they are written as - an amount compared exactly, never as a float.
+     */
+    private static final RestAssuredConfig EXACT = RestAssuredConfig.config()
+                                                                    .jsonConfig(JsonConfig.jsonConfig()
+                                                                                          .numberReturnType(NumberReturnType.BIG_DECIMAL));
 
     private static final String INTENT_YAML = """
             name: reversal
@@ -119,6 +136,42 @@ class IntentReversalIT extends IntegrationTest {
                   - { name: ReversedBy, kind: manyToOne, to: Entry }
                   - { name: Payment,    kind: manyToOne, to: Payment }
 
+              - name: Account
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: code, type: string, required: true, length: 20 }
+                relations:
+                  - { name: ClosingAccount, kind: manyToOne, to: Account }
+
+              - name: FiscalYear
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: name,      type: string, length: 20 }
+                  - { name: startDate, type: date, required: true }
+                  - { name: endDate,   type: date, required: true }
+
+              # The ledger a year close books into (#8329): its reversal keeps the original's date, so
+              # reversing a closing entry reopens the year it closed.
+              - name: Journal
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: date, type: date, required: true }
+                  - { name: note, type: string, length: 200 }
+                relations:
+                  - { name: Status,     kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                  - { name: Year,       kind: manyToOne, to: FiscalYear }
+                  - { name: Storno,     kind: manyToOne, to: Journal }
+                  - { name: ReversedBy, kind: manyToOne, to: Journal }
+
+              - name: JournalLine
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: debit,  type: decimal, precision: 18, scale: 2 }
+                  - { name: credit, type: decimal, precision: 18, scale: 2 }
+                relations:
+                  - { name: Journal, kind: manyToOne, to: Journal, composition: true, required: true }
+                  - { name: Account, kind: manyToOne, to: Account, required: true }
+
               - name: EntryItem
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
@@ -152,6 +205,38 @@ class IntentReversalIT extends IntegrationTest {
                 forEntity: Entry
                 from: [DRAFT]
                 setStatus: CANCELLED
+              - name: PostJournal
+                forEntity: Journal
+                from: [DRAFT]
+                setStatus: POSTED
+
+            reports:
+              - name: YearBalance
+                kind: balance
+                source: JournalLine
+                date: Journal.date
+                debit: debit
+                credit: credit
+                dimensions: [Account.id, Account.ClosingAccount]
+
+            # The year close (#8329): one journal whose lines take every result account's balance off it,
+            # and one counter line per closing account receiving the opposite.
+            generates:
+              - name: closeYear
+                from: FiscalYear
+                to: Journal
+                label: Close year
+                map: { Year: id, date: endDate }
+                defaults: { note: Year close }
+                items:
+                  fromReport: YearBalance
+                  parameters: { fromDate: startDate, toDate: endDate }
+                  to: JournalLine
+                  where:
+                    - { field: Account.ClosingAccount, op: ne, value: null }
+                  map: { Account: Account.id, debit: closingCredit, credit: closingDebit }
+                  counter: { Account: Account.ClosingAccount, debit: closingDebit, credit: closingCredit }
+                undo: reverse
 
             postings:
               - name: paymentPosting
@@ -175,6 +260,14 @@ class IntentReversalIT extends IntegrationTest {
                 refuse:
                   - { when: "ReversedBy != null", message: "This entry is already reversed" }
                   - { when: "Storno != null", message: "A reversal cannot be reversed - reverse the original entry" }
+              - name: reverseJournal
+                forEntity: Journal
+                when: "Status == POSTED"
+                link: Storno
+                backLink: ReversedBy
+                negate: [debit, credit]
+                refuse:
+                  - { when: "ReversedBy != null", message: "This journal is already reversed" }
             """;
 
     @Autowired
@@ -344,6 +437,157 @@ class IntentReversalIT extends IntegrationTest {
                   .until(() -> postingLogs.containsMessage("Payment [" + posted + "] changed after Entry [" + entry + "]", Level.ERROR));
         assertEquals(List.of(entry), entriesOf(posted));
         awaitLines(entry, 30.0f);
+    }
+
+    /**
+     * A year close generated from a balance report's rows (#8329): the closing journal takes every
+     * result account's year balance off it - so the result accounts' trial balance is zero once it is
+     * posted - and books the opposite on their closing account, one counter line for both. A second run
+     * is refused while that journal stands; undo books its reversal, and once the reversal is posted
+     * the year's balances are what they were and the year can be closed again.
+     */
+    @Test
+    void a_year_is_closed_from_its_balance_report_and_the_undo_reopens_it() {
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        int profitAndLoss = create(ACCOUNTS, "{\"Code\":\"899\"}");
+        int expense = create(ACCOUNTS, "{\"Code\":\"600\",\"ClosingAccount\":" + profitAndLoss + "}");
+        int revenue = create(ACCOUNTS, "{\"Code\":\"700\",\"ClosingAccount\":" + profitAndLoss + "}");
+        int cash = create(ACCOUNTS, "{\"Code\":\"501\"}");
+        int year = create(API + "/fiscalyear/FiscalYearController",
+                "{\"Name\":\"2020\",\"StartDate\":\"2020-01-01\",\"EndDate\":\"2020-12-31\"}");
+        postedJournal("2020-03-01", expense, "100.25", cash);
+        postedJournal("2020-06-01", cash, "300.10", revenue);
+        postedJournal("2020-09-01", expense, "50.00", cash);
+        // After the year: not closed with it.
+        postedJournal("2021-01-15", expense, "7.00", cash);
+
+        int closing = closeYear(year, 200);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(JOURNALS + "/" + closing)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Year", equalTo(year))
+                                                 .body("Date", equalTo("2020-12-31"))
+                                                 .body("Note", equalTo("Year close"))
+                                                 .body("Status", equalTo(1)),
+                TIMEOUT_SECONDS);
+        // One line per result account, its year balance taken off; one counter line on the closing account.
+        assertLine(closing, expense, "0", "150.25");
+        assertLine(closing, revenue, "300.10", "0");
+        assertLine(closing, profitAndLoss, "150.25", "300.10");
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(JOURNAL_LINES + "?Journal=" + closing)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("", hasSize(3)),
+                TIMEOUT_SECONDS);
+
+        transition("PostJournal", closing);
+        // The result accounts' trial balance over the year is zero; the closing account holds the profit.
+        assertBalance(expense, "2020-12-31", "150.25", "150.25");
+        assertBalance(revenue, "2020-12-31", "300.10", "300.10");
+        assertBalance(profitAndLoss, "2020-12-31", "150.25", "300.10");
+
+        // A second run is refused while the closing journal stands.
+        closeYear(year, 409);
+
+        // Undo books the journal's reversal: a negated twin linked both ways.
+        AtomicReference<String> undone = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> undone.set(given().contentType("application/json")
+                                                            .body("{\"id\":" + year + "}")
+                                                            .when()
+                                                            .post(CLOSE_YEAR + "/undo")
+                                                            .then()
+                                                            .statusCode(200)
+                                                            .extract()
+                                                            .asString()),
+                TIMEOUT_SECONDS);
+        JsonPath reversals = JsonPath.from(undone.get());
+        assertEquals(1, reversals.getList("")
+                                 .size(),
+                "the undo should answer the one reversal it booked, got: " + undone.get());
+        assertEquals(closing, reversals.getInt("[0].Storno"));
+        int twin = reversals.getInt("[0].Id");
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + year + "}")
+                                                 .when()
+                                                 .post(CLOSE_YEAR + "/undo")
+                                                 .then()
+                                                 .statusCode(409)
+                                                 .body(containsString("is already reversed by [" + twin + "]")),
+                TIMEOUT_SECONDS);
+        // Not posted yet, the reversal retires nothing: the year stays closed.
+        closeYear(year, 409);
+
+        transition("PostJournal", twin);
+        assertBalance(expense, "2020-12-31", "150.25", "0");
+        assertBalance(revenue, "2020-12-31", "0", "300.10");
+        assertBalance(profitAndLoss, "2020-12-31", "0", "0");
+        // Reopened: the year closes again, to the same lines.
+        int again = closeYear(year, 200);
+        assertLine(again, expense, "0", "150.25");
+        assertLine(again, profitAndLoss, "150.25", "300.10");
+    }
+
+    /** A POSTED journal of one debit line and one credit line of {@code amount}. */
+    private void postedJournal(String date, int debitAccount, String amount, int creditAccount) {
+        int journal = create(JOURNALS, "{\"Date\":\"" + date + "\"}");
+        create(JOURNAL_LINES, "{\"Journal\":" + journal + ",\"Account\":" + debitAccount + ",\"Debit\":" + amount + "}");
+        create(JOURNAL_LINES, "{\"Journal\":" + journal + ",\"Account\":" + creditAccount + ",\"Credit\":" + amount + "}");
+        transition("PostJournal", journal);
+    }
+
+    /** Runs the close; the journal it answers on 200, else 0. */
+    private int closeYear(int year, int status) {
+        AtomicInteger journal = new AtomicInteger();
+        restAssuredExecutor.execute(() -> {
+            var response = given().contentType("application/json")
+                                  .body("{\"id\":" + year + "}")
+                                  .when()
+                                  .post(CLOSE_YEAR + "/run")
+                                  .then()
+                                  .statusCode(status);
+            if (status == 200) {
+                // The run answers its JSON as text, the way every generated create-from does.
+                journal.set(JsonPath.from(response.extract()
+                                                  .asString())
+                                    .getInt("Id"));
+            } else {
+                response.body(containsString("already generated Journal"));
+            }
+        }, TIMEOUT_SECONDS);
+        return journal.get();
+    }
+
+    /** The journal's one line on the account carries exactly these amounts. */
+    private void assertLine(int journal, int account, String debit, String credit) {
+        restAssuredExecutor.execute(() -> given().config(EXACT)
+                                                 .when()
+                                                 .get(JOURNAL_LINES + "?Journal=" + journal)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("findAll { it.Account == " + account + " }", hasSize(1))
+                                                 .body("find { it.Account == " + account + " }.Debit",
+                                                         comparesEqualTo(new BigDecimal(debit)))
+                                                 .body("find { it.Account == " + account + " }.Credit",
+                                                         comparesEqualTo(new BigDecimal(credit))),
+                TIMEOUT_SECONDS);
+    }
+
+    /** The account's closing debit and credit in the balance report over 2020-01-01..{@code to}. */
+    private void assertBalance(int account, String to, String debit, String credit) {
+        String row = "find { it['Account Id'] == " + account + " }";
+        restAssuredExecutor.execute(() -> given().config(EXACT)
+                                                 .when()
+                                                 .get(YEAR_BALANCE + "?fromDate=2020-01-01&toDate=" + to)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body(row + "['Closing Debit']", comparesEqualTo(new BigDecimal(debit)))
+                                                 .body(row + "['Closing Credit']", comparesEqualTo(new BigDecimal(credit))),
+                TIMEOUT_SECONDS);
     }
 
     /** The payment's one DRAFT entry, once its lines carry {@code amount} on both sides. */

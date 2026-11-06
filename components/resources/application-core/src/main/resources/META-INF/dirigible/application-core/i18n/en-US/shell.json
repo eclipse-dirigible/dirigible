@@ -23,7 +23,8 @@
     "user": {
       "user": "User",
       "logout": "Log out",
-      "reportIssue": "Report an issue"
+      "reportIssue": "Report an issue",
+      "about": "About"
     },
     "tenant": {
       "title": "Tenant",
@@ -518,6 +519,18 @@
         "Max": "This value is too large.",
         "Duplicate": "This value already exists."
       }
+    },
+    "about": {
+      "title": "About",
+      "description": "The versions you are running. Quote them when you report an issue.",
+      "application": "Application",
+      "platform": "Platform",
+      "commit": "Commit",
+      "tenant": "Tenant",
+      "copy": "Copy",
+      "copied": "Copied",
+      "close": "Close",
+      "unavailable": "The version could not be read."
     }
   }
 }

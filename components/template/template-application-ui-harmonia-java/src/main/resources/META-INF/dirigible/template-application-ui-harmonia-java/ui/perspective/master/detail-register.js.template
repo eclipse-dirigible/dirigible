@@ -72,7 +72,7 @@ App.registerDetail('${masterEntity}', {
   // Rendered as a Files panel (function: Attachment / Snapshot): the shared detailPanel lists the
   // uploaded files with download, and — unless read-only — an upload control + per-file remove.
   // Read-only (a generated Snapshot child) shows download only. See detailPanel `files`.
-  files: { readOnly: #if($attachmentReadOnly)true#{else}false#end },
+  files: { readOnly: #if($attachmentReadOnly || $systemWritten)true#{else}false#end },
 #end
 #if($locksWithMaster == "false")
   // This collection does NOT freeze with its master (intent `locksWithMaster: false`): the master's
@@ -80,6 +80,11 @@ App.registerDetail('${masterEntity}', {
   // (an issued invoice's payment allocations). The master's read-only mode therefore does not hide
   // this panel's Add / row actions. The server always allowed it - the child has its own controller.
   locksWithMaster: false,
+#end
+#if($systemWritten)
+  // Written by the application only (intent `systemWritten: true`, #8503): the shared detailPanel offers
+  // no Add, row edit or delete - its controller refuses each of them for every caller.
+  systemWritten: true,
 #end
 #if($hasRestrictedFields)
   // This child has role-scoped columns (intent `visibleTo:`): whoever renders it - the shared detail

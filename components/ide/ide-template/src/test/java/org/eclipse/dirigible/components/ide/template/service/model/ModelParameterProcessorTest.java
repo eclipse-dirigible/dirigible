@@ -1433,6 +1433,21 @@ class ModelParameterProcessorTest {
         assertTrue(Boolean.TRUE.equals(entity.get("hasNormalize")));
     }
 
+    /**
+     * {@code normalize: emptyToNull} alone (#8492) is a server step: the entity's normalize is
+     * generated, the form gets no function (it already sends an emptied field as null).
+     */
+    @Test
+    void anEmptyToNullAloneFlagsTheEntityButRendersNoFormFunction() {
+        Map<String, Object> vat = property("VatNumber", "VARCHAR");
+        vat.put("normalizeEmptyToNull", "true");
+        Map<String, Object> entity = entity("Company", "Companies", vat);
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        assertTrue(Boolean.TRUE.equals(entity.get("hasNormalize")));
+        assertNull(vat.get("normalizeJs"));
+    }
+
     @Test
     void anEntityWithoutNormalizeIsNotFlagged() {
         Map<String, Object> entity = entity("Book", "Books", property("Code", "VARCHAR"));

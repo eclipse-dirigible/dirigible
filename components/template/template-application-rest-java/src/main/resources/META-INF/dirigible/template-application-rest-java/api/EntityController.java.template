@@ -32,16 +32,18 @@ package gen.${javaGenFolderName}.api.${javaPerspectiveName};
 #end
 ## System-owned columns a user CREATE must never take from the payload (#7549), consumed by create():
 ## the same set the generated repository's update() preserves from the stored row - an author's
-## readOnly, the roll-up/aggregate targets, ProcessId(s), a label's Name - minus the number/uuid
-## stamps, which discard a client value in save() themselves (#7548). The predicate is the one that
-## builds preservedOnUpdate in Repository.java.template: keep the two in step. The drop lives on the
+## readOnly, the roll-up/aggregate targets, ProcessId(s), a label's Name, a `type: uuid` (#8485) -
+## minus the number stamps, which discard a client value in save() themselves (#7548). save() fills
+## a uuid only when it is blank, so dropping a client's here is what makes the server issue it. The
+## predicate is the one that builds preservedOnUpdate in Repository.java.template: keep the two in
+## step. The drop lives on the
 ## REST surface and never in the repository, because save() is the create path of every system
 ## writer - the attachment upload, the snapshot mint, a create-from, a posting - and those assign
 ## exactly these columns by design (#7620).
 #set($systemOwnedOnCreate = [])
 #set($reportedOnCreate = [])
 #foreach($property in $properties)
-#if(!$property.dataPrimaryKey && !$property.generatedUuid && !$property.numberStampOnCreate && ($property.isReadOnlyProperty || ($property.aggregate && !$property.calculatedPropertyExpressionUpdate && !$property.calculatedActionOnUpdate)))
+#if(!$property.dataPrimaryKey && !$property.numberStampOnIssue && !$property.numberStampOnCreate && ($property.isReadOnlyProperty || ($property.aggregate && !$property.calculatedPropertyExpressionUpdate && !$property.calculatedActionOnUpdate)))
 #set($ignore = $systemOwnedOnCreate.add($property))
 ## A date is dropped but not reported: the form's round-trip is lossy (whole minutes, midnight), so a
 ## differing date says nothing about who wrote it - the line reportedOnUpdate draws as well.
@@ -288,12 +290,27 @@ public class ${name}Controller {
     @Documentation("What the CURRENT caller may do with ${name}: read and write, by the same gates every endpoint applies - what the generated pages show or hide their write controls by; the 403 of each write stays authoritative")
     public Map<String, Boolean> access() {
         // Never a 403: a caller who may not read is told so, the way a reader is told it may not write.
-#if($needsRoles)
+#if($systemWritten)
+        // Written by the application only (#8503): no caller may write it over REST.
+        return Map.of("read", #if($needsRoles)mayRead()#{else}true#end, "write", false);
+#elseif($needsRoles)
         return Map.of("read", mayRead(), "write", mayWrite());
 #else
         return Map.of("read", true, "write", true);
 #end
     }
+#if($systemWritten)
+
+    /**
+     * ${name} is written by the application only (intent {@code systemWritten: true}, #8503) - a
+     * create-from's link row, a settlement, a reaction - each through the repository. A REST write is
+     * refused for every caller, ADMINISTRATOR included: a hand-made row is bookkeeping no flow recorded.
+     */
+    private static void refuseSystemWritten(String verb) {
+        throw new ResponseStatusException(HttpStatus.METHOD_NOT_ALLOWED,
+                "${name} records are written by the system only - they cannot be " + verb + " over REST");
+    }
+#end
 #if($history == "true")
 
     @Get("/{id}/history")
@@ -323,6 +340,9 @@ public class ${name}Controller {
     @Post
     @Documentation("Create ${name}")
     public ${name}Entity create(@Body ${name}Entity entity) {
+#if($systemWritten)
+        refuseSystemWritten("created");
+#end
 #if($attachmentReadOnly)
         // Its rows are written by the system only - an export run, a snapshot mint - each with the file
         // it stored (#8098): a row made over REST is a record no run produced, with no file to serve.
@@ -386,6 +406,9 @@ public class ${name}Controller {
     @Post("/upload")
     @Documentation("Upload one or more files as ${name} attachments (multipart/form-data)")
     public List<${name}Entity> upload(@QueryParam("${masterEntityId}") ${masterEntityIdJavaClass} ${masterEntityId}) {
+#if($systemWritten)
+        refuseSystemWritten("uploaded");
+#end
 #if($needsRoles)
         checkPermissions("write");
 #end
@@ -454,6 +477,9 @@ public class ${name}Controller {
     @Put("/{id}")
     @Documentation("Update ${name} by id")
     public ${name}Entity update(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id, @Body ${name}Entity entity) {
+#if($systemWritten)
+        refuseSystemWritten("updated");
+#end
 #set($lockedUpdate = $workflowStatusProperty || $immutableStatusProperty)
 #if($lockedUpdate)
         // The record is locked for the whole request (#8109): the checks below compare the payload with
@@ -571,6 +597,9 @@ public class ${name}Controller {
     @Delete("/{id}")
     @Documentation("Delete ${name} by id")
     public void deleteById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
+#if($systemWritten)
+        refuseSystemWritten("deleted");
+#end
 #if($needsRoles)
         checkPermissions("write");
 #end

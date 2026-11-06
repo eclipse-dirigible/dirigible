@@ -179,6 +179,7 @@ public class JavaLoader {
         registryGeneration.clear();
         registryGeneration.putAll(nextGeneration);
         Set<String> removed = applyGeneration(mergedGeneration(), nextLoader);
+        logBatch(compileUnits.size(), batch);
 
         currentBytecode.clear();
         currentBytecode.putAll(effectiveBytecode);
@@ -416,6 +417,36 @@ public class JavaLoader {
                                                                                  .getSimpleName(),
                         e.getMessage(), e);
             }
+        }
+    }
+
+    /**
+     * The batch summary, printed once the generation it compiled is installed: classes loaded, beans
+     * wired, every consumer notified and every generation closed - the entity consumer's close is the
+     * Hibernate {@code SessionFactory} rebuild. Printed straight after the compile, it came while the
+     * new controllers still queried the previous ORM model, and a client that started on it got "Could
+     * not interpret path expression" for the entities the batch had changed (#8497). Tooling reads a
+     * clean line as "the new code is serving".
+     *
+     * <p>
+     * INFO, not DEBUG: the batch runs only when the source set changed, and after a mid-publish failure
+     * this line is the ONLY visible evidence that the next cycle recovered - at DEBUG the stale failure
+     * ERROR stays the log's last word and a green system diagnoses as dead.
+     */
+    private static void logBatch(int units, JavaSourceCompiler.BatchResult batch) {
+        Map<String, String> failures = batch.failures();
+        if (failures.isEmpty()) {
+            LOGGER.info("Compiled batch: [{}] units, [{}] class file(s), no failures", units, batch.bytecode()
+                                                                                                   .size());
+        } else if (batch.rounds() <= 1) {
+            LOGGER.error("Compiled batch: [{}] units, [{}] class file(s); [{}] unit(s) failed to compile: {}", units, batch.bytecode()
+                                                                                                                           .size(),
+                    failures.size(), failures.keySet());
+        } else {
+            LOGGER.error("Compiled batch: [{}] units, [{}] class file(s) over [{}] compile rounds; [{}] unit(s) failed to compile: {}",
+                    units, batch.bytecode()
+                                .size(),
+                    batch.rounds(), failures.size(), failures.keySet());
         }
     }
 

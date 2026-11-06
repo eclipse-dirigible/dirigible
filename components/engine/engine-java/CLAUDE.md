@@ -29,6 +29,11 @@ component shapes. Read this before changing anything under `engine-java`, `data-
 - `JavaLoader.rebuild()` order each generation: compile → load classes → unload-notify consumers for
   removed/replaced FQNs → swap the loader → **`componentContainer.rebuild(...)`** → load-notify
   consumers. So when a consumer runs, every bean is already built and injected.
+- The `Compiled batch: [N] units, [M] class file(s), ...` line is the LAST step of that install
+  (`JavaLoader.logBatch`, after every consumer's `endGeneration()` - the entity consumer's is the
+  Hibernate `SessionFactory` rebuild). Tooling waits for it as "the new code is serving", so keep it
+  there: printed straight after `javac` (as before #8497), it came seconds before the ORM model
+  caught up and a client starting on it got "Could not interpret path expression".
 - Platform classpath for `javac` comes from `ClassPathIndex` — it extracts `BOOT-INF/lib/*.jar` once
   to disk; **never** introspect nested fat-jar entries in-process (closes pooled `NestedJarFile`
   handles → cascading `NoClassDefFoundError`). It also appends the drop-in module jars (next section).

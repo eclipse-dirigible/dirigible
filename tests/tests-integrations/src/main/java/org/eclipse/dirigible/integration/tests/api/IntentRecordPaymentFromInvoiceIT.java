@@ -11,7 +11,9 @@ package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.lessThan;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -37,6 +39,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
 
 import io.restassured.path.json.JsonPath;
+import io.restassured.specification.RequestSpecification;
 
 /**
  * Record a payment FROM the invoice it pays (#7748), through the published application.
@@ -49,7 +52,9 @@ import io.restassured.path.json.JsonPath;
  * the payment, so by the time the settlement listener sees the payment's create event the payment
  * is already fully allocated, and it touches nothing. The prompt's amount defaults to the invoice's
  * balance; a link row the invoice's capacity guard refuses takes the payment back with it; and the
- * allocation's payment picker offers no inline create ({@code inlineCreate: false}).
+ * allocation's payment picker offers no inline create ({@code inlineCreate: false}). The allocation
+ * is {@code systemWritten: true} (#8503): only the create-from and the settlement write it, and its
+ * controller refuses every REST write.
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentRecordPaymentFromInvoiceIT extends IntegrationTest {
@@ -104,6 +109,8 @@ class IntentRecordPaymentFromInvoiceIT extends IntegrationTest {
                   - { name: Customer, kind: manyToOne, to: Customer }
 
               - name: InvoicePayment
+                # Bookkeeping: the create-from's link row and the settlement write it, nobody over REST (#8503).
+                systemWritten: true
                 checks:
                   - { kind: compare, field: amount, op: ge, value: 0, message: "An allocation cannot be negative" }
                 fields:
@@ -243,6 +250,106 @@ class IntentRecordPaymentFromInvoiceIT extends IntegrationTest {
         assertRunRefused("{\"id\":987654}", 404, "source Invoice not found");
         assertRunRefused("{}", 400, "missing source id");
         assertEquals(paymentsBefore, count(PAYMENTS), "a refused run must create no payment");
+    }
+
+    /**
+     * A system-written junction (#8503): the create-from still writes its link row - through the
+     * repository, past its controller's validate - while the junction's controller answers 405 to an
+     * ADMINISTRATOR's POST, PUT and DELETE alike, and tells the pages nobody may write it. Before the
+     * key, a module said "system-written" with an always-true forbidWhen, which #8449's validate of the
+     * link row turned against the create-from itself. The master's delete still cascades to it.
+     */
+    @Test
+    void a_system_written_allocation_is_written_by_the_create_from_and_refused_over_rest() {
+        generateProject();
+        assertSystemWrittenUi();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        int customer = create(CUSTOMERS, "{\"Name\":\"junction\"}");
+        int invoice = create(INVOICES, invoiceBody("2026-10-01", "J-1", 70, customer));
+        int recorded = recordPayment(invoice, "{\"values\":{\"Amount\":25}}");
+        assertAllocations(invoice, List.of(Map.of(recorded, "25")));
+        int allocation = allocationId(invoice);
+
+        String row = "{\"Invoice\":" + invoice + ",\"Payment\":" + recorded + ",\"Amount\":5}";
+        assertRestWriteRefused("POST", ALLOCATIONS, row, "created");
+        assertRestWriteRefused("PUT", ALLOCATIONS + "/" + allocation, row, "updated");
+        assertRestWriteRefused("DELETE", ALLOCATIONS + "/" + allocation, null, "deleted");
+        assertAllocations(invoice, List.of(Map.of(recorded, "25")));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(ALLOCATIONS + "/access")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("write", equalTo(false))
+                                                 .body("read", equalTo(true)));
+
+        // The composition cascade is a repository write: deleting the invoice takes its allocation along.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .delete(INVOICES + "/" + invoice)
+                                                 .then()
+                                                 .statusCode(lessThan(300)),
+                TIMEOUT_SECONDS);
+        assertAllocations(invoice, List.of());
+    }
+
+    private void assertRestWriteRefused(String method, String path, String body, String verb) {
+        restAssuredExecutor.execute(() -> {
+            RequestSpecification request = given().contentType("application/json");
+            if (body != null) {
+                request.body(body);
+            }
+            request.when()
+                   .request(method, path)
+                   .then()
+                   .statusCode(405)
+                   .body(containsString("InvoicePayment records are written by the system only - they cannot be " + verb + " over REST"));
+        }, TIMEOUT_SECONDS);
+    }
+
+    private int allocationId(int invoice) {
+        AtomicInteger id = new AtomicInteger();
+        restAssuredExecutor.execute(() -> id.set(given().when()
+                                                        .get(ALLOCATIONS + "?Invoice=" + invoice)
+                                                        .then()
+                                                        .statusCode(200)
+                                                        .extract()
+                                                        .jsonPath()
+                                                        .getInt("[0].Id")));
+        return id.get();
+    }
+
+    /**
+     * The generated pages offer no write on the system-written allocation: its detail panel under the
+     * invoice is told so, and its own form page (a composition child has no list page of its own)
+     * settles {@code write: false} without asking.
+     */
+    private void assertSystemWrittenUi() {
+        String register = new String(
+                repository.getResource(PROJECT_PATH + "/gen/" + PROJECT + "/js/components/pages/Invoice/InvoicePayment.detail.js")
+                          .getContent(),
+                StandardCharsets.UTF_8);
+        assertTrue(register.contains("systemWritten: true"), register);
+        Map<String, String> scripts = new java.util.TreeMap<>();
+        collectScripts(repository.getCollection(PROJECT_PATH + "/gen"), "InvoicePaymentFormPage", scripts);
+        assertEquals(1, scripts.size(), "the allocation's form page: " + scripts.keySet());
+        assertTrue(scripts.values()
+                          .iterator()
+                          .next()
+                          .contains("this.access = { read: true, write: false };"),
+                "the allocation's form page must settle write: false");
+    }
+
+    private static void collectScripts(ICollection collection, String name, Map<String, String> scripts) {
+        for (IResource resource : collection.getResources()) {
+            if (resource.getName()
+                        .equals(name + ".js")) {
+                scripts.put(resource.getPath(), new String(resource.getContent(), StandardCharsets.UTF_8));
+            }
+        }
+        for (ICollection child : collection.getCollections()) {
+            collectScripts(child, name, scripts);
+        }
     }
 
     private void assertRunRefused(String body, int status, String message) {

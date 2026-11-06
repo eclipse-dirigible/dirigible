@@ -34,6 +34,7 @@ class TenantResolutionConfigValidatorTest {
         Configuration.remove(DirigibleConfig.TENANT_RESOLUTION_STRATEGY.getKey());
         Configuration.remove(DirigibleConfig.APP_ID.getKey());
         Configuration.remove(DirigibleConfig.TENANT_GROUPS_CLAIM.getKey());
+        Configuration.remove(DirigibleConfig.TENANT_GLOBAL_ROLES_SCOPE.getKey());
         Configuration.remove(DirigibleConfig.MULTI_TENANT_MODE_ENABLED.getKey());
         Configuration.remove(DirigibleConfig.MULTI_TENANT_MODE_COGNITO_SINGLE_USER_POOL_ENABLED.getKey());
     }
@@ -134,5 +135,22 @@ class TenantResolutionConfigValidatorTest {
                             .contains(expectedKey.getKey()),
                 "the message must name the offending key: " + exception.getMessage());
         return exception;
+    }
+
+    @Test
+    void theApplicationGlobalRolesScopeIsAcceptedUnderTokenGroups() {
+        configureTokenGroups();
+        DirigibleConfig.TENANT_GLOBAL_ROLES_SCOPE.setStringValue("APPLICATION");
+
+        assertDoesNotThrow(TenantResolutionConfigValidator::new);
+    }
+
+    @Test
+    void anUnknownGlobalRolesScopeFailsInAnyMode() {
+        DirigibleConfig.TENANT_GLOBAL_ROLES_SCOPE.setStringValue("TENANT");
+
+        InvalidConfigException exception = assertThrows(InvalidConfigException.class, TenantResolutionConfigValidator::new);
+
+        assertEquals(DirigibleConfig.TENANT_GLOBAL_ROLES_SCOPE.getKey(), exception.getConfigKey());
     }
 }
