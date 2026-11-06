@@ -2484,7 +2484,7 @@ final class ModelParameterProcessor {
 
     /**
      * Whether a property declares a {@code normalize:} (#7726) the generated repository applies: a
-     * trim, characters to strip, or an upper/lower case fold.
+     * trim, characters to strip, an upper/lower case fold, or {@code emptyToNull} (#8492).
      *
      * @param property the property
      * @return true when the repository's {@code normalize} rewrites the property's value
@@ -2494,7 +2494,7 @@ final class ModelParameterProcessor {
         String caseFold = str(property, "normalizeCase");
         return "true".equals(str(property, "normalizeTrim")) || (strip != null && !strip.toString()
                                                                                         .isEmpty())
-                || "upper".equals(caseFold) || "lower".equals(caseFold);
+                || "upper".equals(caseFold) || "lower".equals(caseFold) || "true".equals(str(property, "normalizeEmptyToNull"));
     }
 
     /**
@@ -2504,7 +2504,8 @@ final class ModelParameterProcessor {
      * transforms, in the same order, as {@code org.eclipse.dirigible.sdk.db.Normalize} on the server.
      * The function is written so it can sit verbatim inside a double-quoted HTML attribute and inside a
      * JavaScript file: every character of the strip set outside a plain safe set is a {@code \\uXXXX}
-     * escape.
+     * escape. {@code emptyToNull} alone renders no function: the forms already send an emptied field as
+     * null, so only the server has a blank to turn into NULL.
      *
      * @param property the property
      * @return whether the property normalizes anything
@@ -2519,6 +2520,9 @@ final class ModelParameterProcessor {
         String caseFold = str(property, "normalizeCase");
         boolean hasStrip = strip != null && !strip.isEmpty();
         boolean hasCase = "upper".equals(caseFold) || "lower".equals(caseFold);
+        if (!trim && !hasStrip && !hasCase) {
+            return true;
+        }
         StringBuilder js = new StringBuilder("((v) => typeof v === 'string' ? v");
         if (trim) {
             js.append(".trim()");

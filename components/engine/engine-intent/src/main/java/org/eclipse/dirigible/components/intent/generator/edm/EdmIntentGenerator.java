@@ -1989,7 +1989,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             p.put("widgetPattern", EMAIL_PATTERN);
         }
         // Input normalization (#7726): applied by the generated repository and controllers before the
-        // pattern and the checks, and by the form on blur. Three scalars rather than the authored list,
+        // pattern and the checks, and by the form on blur. Scalars rather than the authored list,
         // so they survive the scalar-only .edm, and emitted only when authored, so a model that
         // normalizes nothing generates byte-identically.
         if (field.normalizeTrim()) {
@@ -2000,6 +2000,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         }
         if (field.normalizeCase() != null) {
             p.put("normalizeCase", field.normalizeCase());
+        }
+        if (field.normalizeEmptyToNull()) {
+            p.put("normalizeEmptyToNull", "true");
         }
         return p;
     }

@@ -519,7 +519,9 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   repository applies it on every create and update (REST, client Java, workflow), the controllers before `pattern`
   and `checks`, and the form on blur. Pair it with a strict `pattern` - normalize what people type, then demand the
   canonical form. An IBAN is `normalize: [strip: " ", upper]`. A transform listed twice, both case folds, or `strip`
-  without its characters is refused.
+  without its characters is refused. `emptyToNull` (#8492) stores a blank result as NULL and always runs last: put it
+  on an optional `unique` text (`normalize: [trim, emptyToNull]`), else the second record saved without a value is
+  refused as a duplicate of `''`. Refused on a `required` field, which refuses a blank already.
 - `ageing(<date field>, [30, 60, 90])` (a report **dimension**) - **the receivables-ageing bucket**: groups rows by how
   long ago the date fell, yielding `0-30` / `31-60` / `61-90` / `90+` (a null date becomes `n/a`).
   `dimensions: ["ageing(due, [30, 60, 90])"]` with `measures: ["sum(balance)"]` is the standard receivables report.

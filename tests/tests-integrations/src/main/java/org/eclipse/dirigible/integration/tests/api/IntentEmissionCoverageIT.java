@@ -2435,6 +2435,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: email,    type: string, length: 200, format: email, unique: { ignoreCase: true } }
             """;
 
+    // Still the entities list. normalize: emptyToNull (#8492): an optional unique VAT number stores a
+    // blank as NULL, so any number of records without one never collide on ''.
+    private static final String INTENT_YAML_EMPTY_TO_NULL =
+            """
+                      - name: Registrant
+                        fields:
+                          - { name: id,        type: integer, primaryKey: true, generated: true }
+                          - { name: vatNumber, type: string, length: 20, unique: true, normalize: [trim, emptyToNull], pattern: '^[A-Z]{2}[0-9]{8,10}$' }
+                    """;
+
     // Still the entities list. A list column may show a record's child rows (#8295): a team member's
     // list shows the skills it was granted - a to-one's display text and a field's value - as the
     // texts of its TeamMemberSkill rows.
@@ -2526,6 +2536,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                                   .concat(INTENT_YAML_STATUS_STAMPS)
                                                                   .concat(INTENT_YAML_SINGLE_FLAGS)
                                                                   .concat(INTENT_YAML_UNIQUE_IGNORE_CASE)
+                                                                  .concat(INTENT_YAML_EMPTY_TO_NULL)
                                                                   .concat(INTENT_YAML_COLLECTION_COLUMNS)
                                                                   .concat(INTENT_YAML_GLUE);
 
@@ -2738,6 +2749,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertStatusStampsRuntime();
         assertSingleFlagsRuntime();
         assertUniqueIgnoringCaseRuntime();
+        assertEmptyToNullRuntime();
         assertTimedWaitRuntime();
         assertEarlyWaitEventRuntime();
         assertCollectionColumnsRuntime();
@@ -3005,6 +3017,31 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("size()", equalTo(2)));
+    }
+
+    /**
+     * {@code normalize: [trim, emptyToNull]} (#8492), generated, published and running: an optional
+     * {@code unique} field posted empty or as spaces is stored as NULL, so every such record saves (the
+     * second {@code ''} used to collide with 409); an update to a blank stores NULL too; two equal real
+     * values still collide, and the {@code pattern:} still refuses a real value that does not match.
+     */
+    private void assertEmptyToNullRuntime() {
+        String registrants = "/registrant/RegistrantController";
+        for (String blank : new String[] {"", "", "   ", "   "}) {
+            int id = createRecord(registrants, "{\"VatNumber\":\"" + blank + "\"}");
+            assertNull(readRecord(registrants, id).get("VatNumber"), "a blank must be stored as NULL, posted as [" + blank + "]");
+        }
+        int real = createRecord(registrants, "{\"VatNumber\":\" BG123456789 \"}");
+        assertEquals("BG123456789", readRecord(registrants, real).get("VatNumber"));
+        assertConflict(registrants, null, "{\"VatNumber\":\"BG123456789\"}", "A Registrant with this 'VatNumber' already exists");
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"VatNumber\":\"not a vat\"}")
+                                                 .when()
+                                                 .post(API + registrants)
+                                                 .then()
+                                                 .statusCode(400));
+        updateRecord(registrants, real, "{\"Id\":" + real + ",\"VatNumber\":\" \"}", 200);
+        assertNull(readRecord(registrants, real).get("VatNumber"), "an update to a blank must store NULL");
     }
 
     /** POSTs a record (no id) or PUTs it (an id) and expects a 409 carrying the given message. */

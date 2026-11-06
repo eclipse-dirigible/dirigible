@@ -1910,15 +1910,16 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 
     /**
      * Brings the string fields that declare {@code normalize:} (#7726) to their stored form: trimmed,
-     * stripped of the declared characters, case-folded - as declared. Idempotent, and public so the
-     * generated controllers apply it before their checks read the record.
+     * stripped of the declared characters, case-folded, a blank result stored as null (emptyToNull,
+     * #8492) - as declared. Idempotent, and public so the generated controllers apply it before their
+     * checks read the record.
      *
      * @param entity the record about to be written, normalized in place
      */
     public static void normalize(${name}Entity entity) {
 #foreach($property in $properties)
-#if($property.normalizeTrim || $property.normalizeStrip || $property.normalizeCase)
-        entity.${property.name} = org.eclipse.dirigible.sdk.db.Normalize.apply(entity.${property.name}, #if($property.normalizeTrim == "true")true#{else}false#end, #if($property.normalizeStrip)"${property.normalizeStripJava}"#{else}null#end, #if($property.normalizeCase)"${property.normalizeCase}"#{else}null#end);
+#if($property.normalizeTrim || $property.normalizeStrip || $property.normalizeCase || $property.normalizeEmptyToNull)
+        entity.${property.name} = org.eclipse.dirigible.sdk.db.Normalize.apply(entity.${property.name}, #if($property.normalizeTrim == "true")true#{else}false#end, #if($property.normalizeStrip)"${property.normalizeStripJava}"#{else}null#end, #if($property.normalizeCase)"${property.normalizeCase}"#{else}null#end#if($property.normalizeEmptyToNull == "true"), true#end);
 #end
 #end
     }
