@@ -21,6 +21,7 @@ import java.util.List;
 
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.data.migrations.MigrationExecutor.Outcome;
+import org.eclipse.dirigible.components.data.migrations.MigrationExecutor.Predecessor;
 import org.eclipse.dirigible.components.data.migrations.MigrationExecutor.Status;
 import org.eclipse.dirigible.components.data.migrations.MigrationLedger.Entry;
 import org.h2.jdbcx.JdbcDataSource;
@@ -37,6 +38,7 @@ class MigrationExecutorTest {
 
     private static final String V1 = "/orders/migrations/001__backfill_status.migration";
     private static final String V2 = "/orders/migrations/002__close_old.migration";
+    private static final String V3 = "/orders/migrations/003__mark_archived.migration";
 
     private final MigrationLedger ledger = new MigrationLedger();
     private final MigrationExecutor executor = new MigrationExecutor(ledger);
@@ -144,30 +146,62 @@ class MigrationExecutorTest {
         assertThat(ledger.findAll(dataSource)).isEmpty();
     }
 
+    /** A pass offers a project's migrations in no particular order (#8496). */
     @Test
-    void aLaterVersionWaitsForAnEarlierOneThatHasNotAppliedYet() throws Exception {
+    void theEarlierVersionsNotAppliedYetRunFirstLowestFirst() throws Exception {
         MigrationScript first = script(V1, "UPDATE ORDERS SET STATUS = 'OPEN' WHERE STATUS IS NULL;");
         MigrationScript second = script(V2, "UPDATE ORDERS SET STATUS = 'ARCHIVED' WHERE STATUS = 'OPEN';");
-        Migration pendingFirst = artefact(V1, first, ArtefactLifecycle.NEW);
+        MigrationScript third = script(V3, "UPDATE ORDERS SET STATUS = STATUS || '-3' WHERE STATUS = 'ARCHIVED';");
 
-        Outcome waiting = executor.apply(second, V2, TENANT, dataSource, List.of(pendingFirst));
+        Outcome outcome =
+                executor.apply(third, V3, TENANT, dataSource, List.of(new Predecessor(artefact(V2, second, ArtefactLifecycle.NEW), second),
+                        new Predecessor(artefact(V1, first, ArtefactLifecycle.NEW), first)));
+
+        assertThat(outcome.status()).isEqualTo(Status.APPLIED);
+        assertThat(status(1)).as("1 opened it, 2 archived it, 3 marked the archived row")
+                             .isEqualTo("ARCHIVED-3");
+        assertThat(ledger.findAll(dataSource)).extracting(Entry::version)
+                                              .containsExactlyInAnyOrder("1", "2", "3");
+        assertThat(executor.apply(second, V2, TENANT, dataSource, List.of())
+                           .status()).as("offered afterwards, the earlier one is already applied")
+                                     .isEqualTo(Status.ALREADY_APPLIED);
+    }
+
+    @Test
+    void aLaterVersionWaitsForAnEarlierOneWhoseFileCannotBeReadNow() throws Exception {
+        MigrationScript first = script(V1, "UPDATE ORDERS SET STATUS = 'OPEN' WHERE STATUS IS NULL;");
+        MigrationScript second = script(V2, "UPDATE ORDERS SET STATUS = 'ARCHIVED' WHERE STATUS = 'OPEN';");
+
+        Outcome waiting =
+                executor.apply(second, V2, TENANT, dataSource, List.of(new Predecessor(artefact(V1, first, ArtefactLifecycle.NEW), null)));
 
         assertThat(waiting.status()).isEqualTo(Status.WAITING);
         assertThat(waiting.message()).contains("waits for version [1]");
         assertThat(status(1)).isNull();
-
-        executor.apply(first, V1, TENANT, dataSource, List.of());
-        assertThat(executor.apply(second, V2, TENANT, dataSource, List.of(pendingFirst))
-                           .status()).isEqualTo(Status.APPLIED);
-        assertThat(status(1)).isEqualTo("ARCHIVED");
+        assertThat(ledger.findAll(dataSource)).isEmpty();
     }
 
     @Test
-    void aLaterVersionFailsWhenTheEarlierOneFailed() throws Exception {
+    void aLaterVersionFailsWhenTheEarlierOneFails() throws Exception {
         MigrationScript first = script(V1, "UPDATE NO_SUCH_TABLE SET STATUS = 'OPEN';");
         MigrationScript second = script(V2, "UPDATE ORDERS SET STATUS = 'ARCHIVED';");
 
-        Outcome outcome = executor.apply(second, V2, TENANT, dataSource, List.of(artefact(V1, first, ArtefactLifecycle.FAILED)));
+        Outcome outcome = executor.apply(second, V2, TENANT, dataSource,
+                List.of(new Predecessor(artefact(V1, first, ArtefactLifecycle.FAILED), first)));
+
+        assertThat(outcome.status()).isEqualTo(Status.FAILED);
+        assertThat(outcome.message()).contains("waits for version [1]", "which failed", "NO_SUCH_TABLE");
+        assertThat(status(2)).isEqualTo("CLOSED");
+        assertThat(ledger.findAll(dataSource)).isEmpty();
+    }
+
+    @Test
+    void aLaterVersionFailsWhenTheEarlierOneIsFatal() throws Exception {
+        MigrationScript first = script(V1, "UPDATE ORDERS SET STATUS = 'OPEN';");
+        MigrationScript second = script(V2, "UPDATE ORDERS SET STATUS = 'ARCHIVED';");
+
+        Outcome outcome = executor.apply(second, V2, TENANT, dataSource,
+                List.of(new Predecessor(artefact(V1, first, ArtefactLifecycle.FATAL), null)));
 
         assertThat(outcome.status()).isEqualTo(Status.FAILED);
         assertThat(outcome.message()).contains("waits for version [1]", "which failed");
