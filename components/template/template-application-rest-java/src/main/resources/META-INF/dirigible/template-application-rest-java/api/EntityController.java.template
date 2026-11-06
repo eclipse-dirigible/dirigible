@@ -239,12 +239,27 @@ public class ${name}Controller {
     @Documentation("What the CURRENT caller may do with ${name}: read and write, by the same gates every endpoint applies - what the generated pages show or hide their write controls by; the 403 of each write stays authoritative")
     public Map<String, Boolean> access() {
         // Never a 403: a caller who may not read is told so, the way a reader is told it may not write.
-#if($needsRoles)
+#if($systemWritten)
+        // Written by the application only (#8503): no caller may write it over REST.
+        return Map.of("read", #if($needsRoles)mayRead()#{else}true#end, "write", false);
+#elseif($needsRoles)
         return Map.of("read", mayRead(), "write", mayWrite());
 #else
         return Map.of("read", true, "write", true);
 #end
     }
+#if($systemWritten)
+
+    /**
+     * ${name} is written by the application only (intent {@code systemWritten: true}, #8503) - a
+     * create-from's link row, a settlement, a reaction - each through the repository. A REST write is
+     * refused for every caller, ADMINISTRATOR included: a hand-made row is bookkeeping no flow recorded.
+     */
+    private static void refuseSystemWritten(String verb) {
+        throw new ResponseStatusException(HttpStatus.METHOD_NOT_ALLOWED,
+                "${name} records are written by the system only - they cannot be " + verb + " over REST");
+    }
+#end
 #if($history == "true")
 
     @Get("/{id}/history")
@@ -274,6 +289,9 @@ public class ${name}Controller {
     @Post
     @Documentation("Create ${name}")
     public ${name}Entity create(@Body ${name}Entity entity) {
+#if($systemWritten)
+        refuseSystemWritten("created");
+#end
 #if($attachmentReadOnly)
         // Its rows are written by the system only - an export run, a snapshot mint - each with the file
         // it stored (#8098): a row made over REST is a record no run produced, with no file to serve.
@@ -337,6 +355,9 @@ public class ${name}Controller {
     @Post("/upload")
     @Documentation("Upload one or more files as ${name} attachments (multipart/form-data)")
     public List<${name}Entity> upload(@QueryParam("${masterEntityId}") ${masterEntityIdJavaClass} ${masterEntityId}) {
+#if($systemWritten)
+        refuseSystemWritten("uploaded");
+#end
 #if($needsRoles)
         checkPermissions("write");
 #end
@@ -405,6 +426,9 @@ public class ${name}Controller {
     @Put("/{id}")
     @Documentation("Update ${name} by id")
     public ${name}Entity update(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id, @Body ${name}Entity entity) {
+#if($systemWritten)
+        refuseSystemWritten("updated");
+#end
 #set($lockedUpdate = $workflowStatusProperty || $immutableStatusProperty)
 #if($lockedUpdate)
         // The record is locked for the whole request (#8109): the checks below compare the payload with
@@ -522,6 +546,9 @@ public class ${name}Controller {
     @Delete("/{id}")
     @Documentation("Delete ${name} by id")
     public void deleteById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
+#if($systemWritten)
+        refuseSystemWritten("deleted");
+#end
 #if($needsRoles)
         checkPermissions("write");
 #end

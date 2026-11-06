@@ -612,6 +612,14 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   snapshot entity (e.g. the frozen copy stored when an invoice is SENT): written once by the flow,
   never editable. System writes through the repository stay possible. Mutually exclusive with
   `immutableWhen` (always-immutable subsumes any status scope); needs no EntityStatus relation.
+- `systemWritten: true` (entity-level) - **only the application writes it**: a create-from's `link:`
+  junction, a settlement's allocation, a row a reaction or delegate records. Every generated
+  controller answers 405 to POST, PUT and DELETE for every caller, ADMINISTRATOR included, and the
+  pages offer no New, Edit or Delete. Repository writes stay possible - the create-from's link row,
+  the settlement, the composition cascade when its master is deleted - so, unlike `immutable: true`,
+  it never blocks deleting the master. Never author an always-true `forbidWhen` to say this: the
+  create-from validates its link row and would refuse itself. A system-written child is never a
+  document's line items (do not combine with `function: DocumentItem`).
 - `period: { start: <date field>, end: <date field>, closedWhen: "<Status> == <seed id>" }`
   (entity-level) - **marks the entity a PERIOD REGISTER**: its rows are the dated windows other
   entities are locked by. A fiscal period is an ordinary entity - a row with two dates and a
@@ -3097,9 +3105,11 @@ generates:
 - The link entity must live in the source's model, declare the composition to-one to the source and
   exactly ONE to-one to the target; with several, name it with `relation:`. A cross-model source
   (`fromUses:`) cannot carry a `link:`.
-- The ungated row checks (`compare`, `agree`, `forbidWhen`, `requiredWhen` without a `status:`) run
-  in the generated controller only and are not part of a repository write; express the refusal the link must honour as a roll-up capacity
-  (`capacity:`) or a status-gated check.
+- The create-from holds the link row to its controller's validation: the ungated row checks
+  (`compare`, `agree`, `forbidWhen`, `requiredWhen` without a `status:`) and the required, length and
+  pattern rules refuse the whole run with a 400. So a check on the link entity must hold for the row
+  the create-from writes - a value check (`amount >= 0`) belongs there, an always-true guard does not.
+  To keep people from writing the junction by hand, declare `systemWritten: true` on it.
 
 ### reversals - reverse a booked document by hand (red storno)
 

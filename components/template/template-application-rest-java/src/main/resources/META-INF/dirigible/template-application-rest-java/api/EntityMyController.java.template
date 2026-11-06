@@ -221,6 +221,9 @@ public class ${name}MyController {
     @Post
     @Documentation("Create a ${name} of mine")
     public ${name}Entity create(@Body ${name}Entity entity) {
+#if($systemWritten)
+        refuseSystemWritten("created");
+#end
 #if($personalParent)
         if (entity.${personalParent.fkProperty} == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${personalParent.fkProperty} is required");
@@ -295,6 +298,9 @@ public class ${name}MyController {
     @Put("/{id}")
     @Documentation("Update my ${name} by id")
     public ${name}Entity update(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id, @Body ${name}Entity entity) {
+#if($systemWritten)
+        refuseSystemWritten("updated");
+#end
 #set($lockedUpdate = $workflowStatusProperty || $immutableStatusProperty)
 #if($lockedUpdate)
         // The record is locked for the whole request (#8109): the checks below compare the payload with
@@ -394,6 +400,9 @@ public class ${name}MyController {
     @Delete("/{id}")
     @Documentation("Delete my ${name} by id")
     public void deleteById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
+#if($systemWritten)
+        refuseSystemWritten("deleted");
+#end
         ${name}Entity existing = requireMine(id);
 #if($immutableAlways || $immutableStatusProperty || $periodLock)
         requireMutable(existing);
@@ -1369,4 +1378,15 @@ public class ${name}MyController {
         }
         return false;
     }
+#if($systemWritten)
+
+    /**
+     * ${name} is written by the application only (intent {@code systemWritten: true}, #8503), through
+     * its repository. A REST write is refused for every caller, as the power controller refuses it.
+     */
+    private static void refuseSystemWritten(String verb) {
+        throw new ResponseStatusException(HttpStatus.METHOD_NOT_ALLOWED,
+                "${name} records are written by the system only - they cannot be " + verb + " over REST");
+    }
+#end
 }

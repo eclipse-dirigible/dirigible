@@ -662,6 +662,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Claim, kind: manyToOne, to: Claim, composition: true }
 
+              # systemWritten (#8503): a child only the application writes. It inherits Claim's personal
+              # scope, so the power AND the my controller both compile their refusal and answer 405.
+              - name: ClaimReceipt
+                systemWritten: true
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: amount, type: decimal }
+                relations:
+                  - { name: Claim, kind: manyToOne, to: Claim, composition: true, required: true }
+
               # personalReadOnly: a see-only personal surface - the owner reads their own Balance
               # rows but the my controller's writes 403 (a record the back office grants, the
               # person must never author - the self-grant guard).
@@ -911,6 +921,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: Person, kind: manyToOne, to: Person, required: true, partner: true }
                   # #7496: the partner form builds its options apart from the others, so it carries a rule too.
                   - { name: Unit, kind: manyToOne, to: Unit, pickable: { when: [unitPrice != null] } }
+
+              # systemWritten (#8503) on the partner surface: the partner controller refuses with 405 too.
+              - name: PartnerTicketStamp
+                systemWritten: true
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string, length: 100 }
+                relations:
+                  - { name: PartnerTicket, kind: manyToOne, to: PartnerTicket, composition: true, required: true }
 
               # BPM events wave 1 (wait + boundary timers): an RFQ whose flow escalates a stale
               # review (timeout), expires past its validity date (expire), and after review parks
@@ -2692,6 +2711,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertNowDefaultRuntime();
         assertAgreeGuardsTheParentsRuntime();
         assertRelationDimensionGroupsByKeyRuntime();
+        assertSystemWrittenRefusedOnEverySurface();
         assertStatusStampsRuntime();
         assertSingleFlagsRuntime();
         assertUniqueIgnoringCaseRuntime();
@@ -9847,4 +9867,32 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
 
 
+    /**
+     * {@code systemWritten: true} (#8503): every generated controller of the entity - the power one,
+     * the personal one, the partner one - answers 405 to a create, an update and a delete, for the
+     * ADMINISTRATOR this IT runs as; the refusal comes before any lookup, so no row is needed.
+     */
+    private void assertSystemWrittenRefusedOnEverySurface() {
+        for (String controller : List.of("/claim/ClaimReceiptController", "/claim/ClaimReceiptMyController",
+                "/partnerticket/PartnerTicketStampPartnerController")) {
+            String entity = controller.contains("ClaimReceipt") ? "ClaimReceipt" : "PartnerTicketStamp";
+            for (String[] call : List.of(new String[] {"POST", "", "created"}, new String[] {"PUT", "/1", "updated"},
+                    new String[] {"DELETE", "/1", "deleted"})) {
+                restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                         .body("{}")
+                                                         .when()
+                                                         .request(call[0], API + controller + call[1])
+                                                         .then()
+                                                         .statusCode(405)
+                                                         .body(containsString(
+                                                                 entity + " records are written by the system only - they cannot be "
+                                                                         + call[2] + " over REST")));
+            }
+        }
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/claim/ClaimReceiptController/access")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("write", equalTo(false)));
+    }
 }

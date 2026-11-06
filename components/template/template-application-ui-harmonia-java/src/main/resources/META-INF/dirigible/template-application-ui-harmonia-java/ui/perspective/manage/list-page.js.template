@@ -106,7 +106,10 @@ document.addEventListener('alpine:init', () => {
         this.exportColumns = this.exportColumns.filter(c => this.canSee(c.name));
       });
 #end
-#if($roleWrite)
+#if($systemWritten)
+      // ${name} is written by the application only (#8503): no caller gets New, Edit or Delete.
+      this.access = { read: true, write: false };
+#elseif($roleWrite)
       // Whether this caller may write ${name} at all (#8089): New, Edit and Delete stay hidden until
       // the controller answers, and stay hidden for a caller it would refuse. Not awaited - the rows
       // render at once.

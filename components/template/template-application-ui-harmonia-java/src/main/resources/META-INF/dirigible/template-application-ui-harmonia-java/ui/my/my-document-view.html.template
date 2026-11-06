@@ -82,7 +82,7 @@
         </li>
       </template>
     </ul>
-#if(!$personalReadOnly)
+#if(!$personalReadOnly && !$systemWritten)
     <!-- Delete (edit only), then Cancel/Discard + Save. A personal read-only surface has no write
          action - only the Back below. -->
     <button x-h-button data-variant="negative" class="shrink-0" x-show="mode === 'edit'#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="deleteOpen = true" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></button>

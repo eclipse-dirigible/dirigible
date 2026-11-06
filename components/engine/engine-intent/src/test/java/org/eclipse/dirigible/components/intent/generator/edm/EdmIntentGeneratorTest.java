@@ -803,6 +803,59 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * {@code systemWritten: true} (dirigible #8503) rides the entity as the attribute the controllers
+     * and pages read; it is not immutability (no {@code immutableAlways}, so a master delete still
+     * cascades to it), a picker targeting it offers no inline create, and a system-written child of a
+     * document is never its line items - not as the sole child, not by the {@code *Item} naming.
+     */
+    @Test
+    void systemWrittenEmitsTheAttributeAndKeepsItOutOfEveryCreateAffordance() {
+        String yaml = """
+                name: bank
+                entities:
+                  - name: Statement
+                    function: Document
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                  - name: StatementLinkItem
+                    systemWritten: true
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Statement, kind: manyToOne, to: Statement, composition: true, required: true }
+                  - name: Note
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Link, kind: manyToOne, to: StatementLinkItem }
+                      - { name: Statement, kind: manyToOne, to: Statement }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "bank");
+        List<Map<String, Object>> entities = entities(model);
+        Map<String, Object> link = entityByName(entities, "StatementLinkItem");
+        assertEquals("true", link.get("systemWritten"));
+        assertNull(link.get("immutableAlways"), "system-written is not immutability - the master's cascade must still reach it");
+
+        Map<String, Object> statement = entityByName(entities, "Statement");
+        assertNull(statement.get("documentItemsEntity"), "a system-written child is never a document's line items");
+
+        Map<String, Object> note = entityByName(entities, "Note");
+        assertEquals("false", propertyByName(note, "Link").get("widgetInlineCreate"), "no inline create toward a system-written entity");
+        assertNull(propertyByName(note, "Statement").get("widgetInlineCreate"), "an ordinary target keeps its inline create");
+
+        IntentValidationException asItems = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(yaml.replace("systemWritten: true", "systemWritten: true\n    function: DocumentItem")));
+        assertTrue(asItems.getIssues()
+                          .stream()
+                          .anyMatch(issue -> issue.startsWith(
+                                  "entity [StatementLinkItem] declares systemWritten: true and function: DocumentItem")),
+                asItems.getIssues()
+                       .toString());
+    }
+
+    /**
      * A process {@code whenDeleted: refuse} lands on its TRIGGER entity as the guard the controller
      * reads (dirigible #7074); the default ({@code abort}) is a listener and puts nothing on the
      * entity.

@@ -698,7 +698,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                             context);
                     putOptionsFilter(fkProperty, relation, info.propertyNames());
                     putPickable(fkProperty, name, relation, info.propertyNames());
-                    putInlineCreate(fkProperty, relation);
+                    putInlineCreate(fkProperty, relation, null);
                     putLeafOnly(fkProperty, relation, info.hierarchyProperty(), info.resolved());
                     putPersonal(fkProperty, relation, info.identityProperty(), info.labelField(), info.resolved());
                     putPartner(fkProperty, relation, info.identityProperty(), info.labelField(), info.resolved());
@@ -720,7 +720,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                         usesByAlias, context);
                 putOptionsFilter(fkProperty, relation, null);
                 putPickable(fkProperty, name, relation, null);
-                putInlineCreate(fkProperty, relation);
+                putInlineCreate(fkProperty, relation, target);
                 putStatusSteps(fkProperty, model, entity, relation);
                 putStatusVariants(fkProperty, model, relation);
                 putStatusStages(fkProperty, model, relation);
@@ -757,6 +757,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // Default row order (intent `orderBy:`, #7727): the sequence rides the entity as a single
             // scalar the generation pipeline turns into the list endpoint's ORDER BY.
             applyOrderBy(entityMap, entity.getOrderBy());
+            if (entity.isSystemWritten()) {
+                // Written by the application only (intent `systemWritten: true`, #8503): the controllers
+                // refuse every REST write and the pages offer none; the repository is untouched.
+                entityMap.put("systemWritten", "true");
+            }
             if (Boolean.TRUE.equals(entity.getImmutable())) {
                 // Append-only (intent `immutable: true`): every record is read-only for user writes from
                 // the moment it is created - e.g. the snapshot stored when a document is sent.
@@ -2707,11 +2712,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     /**
      * Emit {@code inlineCreate: false} (issue #7748) as {@code widgetInlineCreate="false"}: the
      * Harmonia templates then render the picker without its "New &lt;Entity&gt;" button in the form,
-     * the document header and the document item dialog. Nothing is emitted otherwise, so a model
-     * authored without the key is byte-identical.
+     * the document header and the document item dialog. A same-model target that is
+     * {@code systemWritten: true} (#8503) gets the same: its controller refuses every create. Nothing
+     * is emitted otherwise, so a model authored without either key is byte-identical.
      */
-    private static void putInlineCreate(Map<String, Object> p, RelationIntent relation) {
-        if (relation.isInlineCreateDisabled()) {
+    private static void putInlineCreate(Map<String, Object> p, RelationIntent relation, EntityIntent target) {
+        if (relation.isInlineCreateDisabled() || (target != null && target.isSystemWritten())) {
             p.put("widgetInlineCreate", "false");
         }
     }
