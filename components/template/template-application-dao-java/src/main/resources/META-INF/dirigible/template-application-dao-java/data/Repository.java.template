@@ -683,6 +683,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         }
 #end
 #end
+#if($hasLabel && $numbersOnCreate)
+        // The display name was computed in save() before the number existed; a label that reads the
+        // number (label: "{number}") would be stored empty on every new record, and every picker and
+        // lookup over it would list a blank option until the record's next write (#7822).
+        computeName(entity);
+#end
         // The create event is handed to the write itself, which records it in the tenant's event outbox
         // INSIDE the insert's transaction: row and event commit together, so a broker outage can
         // neither swallow an event whose row exists nor fail a call whose row was written. Listeners
