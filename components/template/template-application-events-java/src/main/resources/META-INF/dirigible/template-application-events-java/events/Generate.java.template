@@ -3,6 +3,30 @@ package gen.events.${javaGenFolderName};
 ## controller's validation (#7819). A reversal has neither, so its negated twin is not refused by a
 ## sign check the original passed.
 #set($validatesRows = $hasPrompt || $hasLink)
+## A report row's cell (#8329): one column, or a closing balance derived from two - converted exactly.
+#macro(reportCell $c)#if($c.derive != "")derivedCell(row, "${c.aliasJavaLiteral}", "${c.minusAliasJavaLiteral}", "${c.derive}", ${c.scale}, ${c.sourceScale})#{else}${c.kind}Cell(row, "${c.aliasJavaLiteral}", ${c.scale}, ${c.sourceScale})#end#end
+## The report run with the source's own values; one holding none is refused - the report would read its
+## all-time initial and book every balance there is.
+#macro(reportRows)
+            java.util.Map<String, Object> reportFilter = new java.util.LinkedHashMap<>();
+#foreach($p in $reportParameters)
+            if (source.${p.property} == null) {
+                throw new org.eclipse.dirigible.sdk.db.ValidationException(
+                        "${fromEntity} [" + sourceId + "] has no ${p.property}, which report ${reportName} is run with as ${p.name}");
+            }
+            reportFilter.put("${p.name}", source.${p.property});
+#end
+            java.util.List<java.util.Map<String, Object>> reportRows =
+                    new gen.${reportGenFolder}.data.${reportPerspective}.${reportName}Repository().findAll(null, null, reportFilter);
+#end
+## The row rule: a row failing any condition is not generated from.
+#macro(reportRowRule)
+#foreach($t in $reportWhere)
+                if (!holds(#if($t.derive != "")derivedCell(row, "${t.aliasJavaLiteral}", "${t.minusAliasJavaLiteral}", "${t.derive}", ${t.sourceScale}, ${t.sourceScale})#{else}row.get("${t.aliasJavaLiteral}")#end, "${t.op}", #if($t.isNull)null#else"${t.valueJavaLiteral}"#end)) {
+                    continue;
+                }
+#end
+#end
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 #if(!$eventOnly)
@@ -111,13 +135,24 @@ import org.eclipse.dirigible.sdk.http.Response;
  * document - which retires it once the reversal is posted, and frees the ${fromEntity} for another run.
 #end
 #end
+#if($hasReportRows)
+ *
+ * One ${toEntity} per report row (intent `fromReport:` - issue #8329): the ${reportName} report is run with
+ * the ${fromEntity}'s values as its parameters, and every result row passing the row rule becomes a
+ * ${toEntity} carrying ${backRefProperty} back to the ${fromEntity}, its cells read off the row's columns -
+ * an amount as the exact decimal its field holds, refused rather than rounded. The rows are written in ONE
+ * unit, and a second run is refused with 409 while any row back-references the ${fromEntity}.
+#if($hasUndo)
+ * The undo endpoint deletes exactly those rows, through the ${toEntity}'s own repository.
+#end
+#end
  */
 #if(!$eventOnly)
 @Controller
 @Component("${javaGenFolderName}_${className}Generate")
 #end
 public class ${className}Generate {
-#if($hasRefusals || $hasReportItems)
+#if($hasRefusals || $hasReportItems || $hasReportRows)
 
     /** A declared refusal held under the original's row lock - answered with 409 and its message. */
     static final class Refused extends RuntimeException {
@@ -179,6 +214,20 @@ public class ${className}Generate {
             return "{\"error\": \"${name} ${guardStatusText} - current status is [" + currentStatus + "]\"}";
         }
 #end
+#if($hasReportRows)
+        java.util.List<gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity> rows;
+        try {
+            rows = generateRows(req.id);
+        } catch (Refused refused) {
+            Response.setStatus(409);
+            return Json.stringify(java.util.Map.of("error", refused.getMessage()));
+        }
+        if (rows == null) {
+            Response.setStatus(404);
+            return "{\"error\": \"source ${fromEntity} not found\"}";
+        }
+        return Json.stringify(rows);
+#else
 #if($hasRefusals || $hasReportItems)
         gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity saved;
         try {
@@ -196,6 +245,7 @@ public class ${className}Generate {
             return "{\"error\": \"source ${fromEntity} not found\"}";
         }
         return Json.stringify(saved);
+#end
     }
 #if($hasUndo)
 
@@ -240,6 +290,63 @@ public class ${className}Generate {
         return false;
     }
 #end
+#if($hasReportRows)
+
+    /**
+     * Generates one ${toEntity} per qualifying row of report ${reportName} for the given ${fromEntity}, in
+     * ONE unit, or returns null when the source is gone. Every row is built - and every cell converted -
+     * before the first is saved, so a refused cell writes nothing.
+     */
+    public java.util.List<gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity> generateRows(Integer sourceId) {
+        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
+            // Locked before the guard reads, so two concurrent clicks cannot both find no rows.
+            if (!new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().lockForUpdate(sourceId)) {
+                return null;
+            }
+            gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity source =
+                    new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().findById(sourceId);
+            if (source == null) {
+                return null;
+            }
+            gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository targetRepository =
+                    new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository();
+            // A second run would carry the same balances forward twice.
+            int existing = targetRepository.findAll(Criteria.create()
+                                                            .eq("${backRefProperty}", sourceId))
+                                           .size();
+            if (existing > 0) {
+                throw new Refused("${name} already generated " + existing + " ${toEntity} rows from this ${fromEntity} - undo them"
+                        + " before running it again");
+            }
+#reportRows()
+            java.util.List<gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity> rows = new java.util.ArrayList<>();
+            for (java.util.Map<String, Object> row : reportRows) {
+#reportRowRule()
+                gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity target =
+                        new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity();
+    #foreach($c in $reportCells)
+                target.${c.targetProp} = #reportCell($c);
+    #end
+    #foreach($a in $fieldAssignments)
+                target.${a.targetProp} = ${a.expr};
+    #end
+                target.${backRefProperty} = sourceId;
+                rows.add(target);
+            }
+            if (rows.isEmpty()) {
+                // A run that generates nothing is not the run that was asked for, and leaves nothing a
+                // second run could be refused over.
+                throw new org.eclipse.dirigible.sdk.db.ValidationException(
+                        "no row of report ${reportName} qualifies for ${name}, so there is nothing to generate");
+            }
+            java.util.List<gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity> saved = new java.util.ArrayList<>();
+            for (gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity target : rows) {
+                saved.add(targetRepository.save(target));
+            }
+            return saved;
+        });
+    }
+#else
 
     /**
      * Creates the ${toEntity} for the given ${fromEntity}, or returns null when the source is gone.
@@ -368,32 +475,18 @@ public class ${className}Generate {
                             + "] from this ${fromEntity} - undo it before running it again");
                 }
             }
-            // The report is run with the ${fromEntity}'s own values. One holding none is refused: the
-            // report would read its all-time initial and book every balance there is.
-            java.util.Map<String, Object> reportFilter = new java.util.LinkedHashMap<>();
-    #foreach($p in $reportParameters)
-            if (source.${p.property} == null) {
-                throw new org.eclipse.dirigible.sdk.db.ValidationException(
-                        "${fromEntity} [" + sourceId + "] has no ${p.property}, which report ${reportName} is run with as ${p.name}");
-            }
-            reportFilter.put("${p.name}", source.${p.property});
-    #end
+#reportRows()
             // Every line is built - and every cell converted - BEFORE the header is saved, so a refused
             // cell spends no document number and leaves no history entry (#7224).
             java.util.List<gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity> reportLines = new java.util.ArrayList<>();
             java.util.Map<java.util.List<Object>, gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity> counterLines =
                     new java.util.LinkedHashMap<>();
-            for (java.util.Map<String, Object> row : new gen.${reportGenFolder}.data.${reportPerspective}.${reportName}Repository()
-                    .findAll(null, null, reportFilter)) {
-    #foreach($t in $reportWhere)
-                if (!holds(row.get("${t.aliasJavaLiteral}"), "${t.op}", #if($t.isNull)null#else"${t.valueJavaLiteral}"#end)) {
-                    continue;
-                }
-    #end
+            for (java.util.Map<String, Object> row : reportRows) {
+#reportRowRule()
                 gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity line =
                         new gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity();
     #foreach($c in $reportCells)
-                line.${c.targetProp} = ${c.kind}Cell(row, "${c.aliasJavaLiteral}", ${c.scale}, ${c.sourceScale});
+                line.${c.targetProp} = #reportCell($c);
     #end
     #foreach($a in $itemFieldAssignments)
                 line.${a.targetProp} = ${a.expr};
@@ -403,7 +496,7 @@ public class ${className}Generate {
                 gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity counter =
                         new gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity();
     #foreach($c in $counterCells)
-                counter.${c.targetProp} = ${c.kind}Cell(row, "${c.aliasJavaLiteral}", ${c.scale}, ${c.sourceScale});
+                counter.${c.targetProp} = #reportCell($c);
     #end
     #foreach($a in $itemFieldAssignments)
                 counter.${a.targetProp} = ${a.expr};
@@ -606,12 +699,18 @@ public class ${className}Generate {
         });
         return result;
     }
+#end
 #if($hasUndo)
 
     /**
+#if($undoDelete)
+     * Deletes the ${toEntity} rows a run generated from the ${fromEntity}, in ONE unit, the ${fromEntity}
+     * locked as the run locks it. Returns the deleted rows, or null when the source is gone.
+#else
      * Reverses the live ${toEntity} a run generated from the ${fromEntity}, in ONE unit: the ${fromEntity}
      * is locked as run() locks it, and each live document is reversed by ${undoReversalClass}, whose own
      * refusals and back-link write hold. Returns the reversals, or null when the source is gone.
+#end
      */
     public java.util.List<gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity> undo(Integer sourceId) {
         return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
@@ -620,6 +719,20 @@ public class ${className}Generate {
             }
             gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository targetRepository =
                     new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository();
+#if($undoDelete)
+            // Exactly the rows a run generated: those carrying ${backRefProperty} back to this ${fromEntity},
+            // deleted through the repository so the ${toEntity}'s own delete rules and events hold.
+            java.util.List<gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity> deleted =
+                    targetRepository.findAll(Criteria.create()
+                                                     .eq("${backRefProperty}", sourceId));
+            if (deleted.isEmpty()) {
+                throw new Refused("${name} has generated no ${toEntity} from this ${fromEntity} - there is nothing to undo");
+            }
+            for (gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity row : deleted) {
+                targetRepository.delete(row);
+            }
+            return deleted;
+#else
             java.util.List<gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity> reversals = new java.util.ArrayList<>();
             for (gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity candidate : targetRepository.findAll(
                     Criteria.create()
@@ -653,10 +766,30 @@ public class ${className}Generate {
                 throw new Refused("${name} has generated no live ${toEntity} from this ${fromEntity} - there is nothing to undo");
             }
             return reversals;
+#end
         });
     }
 #end
-#if($hasReportItems)
+#if($hasReportItems || $hasReportRows)
+
+    /**
+     * The closing balance as one exact number (#8329): the closing debit less the closing credit
+     * ({@code signed}), or the side it stands on ({@code netDebit} / {@code netCredit}) with the other side
+     * zero - converted as {@link #decimalCell} converts an amount, and refused rather than rounded.
+     */
+    private static java.math.BigDecimal derivedCell(java.util.Map<String, Object> row, String debitColumn, String creditColumn,
+            String derive, int scale, int sourceScale) {
+        java.math.BigDecimal debit = decimalCell(row, debitColumn, sourceScale, sourceScale);
+        java.math.BigDecimal credit = decimalCell(row, creditColumn, sourceScale, sourceScale);
+        java.math.BigDecimal balance = (debit == null ? java.math.BigDecimal.ZERO : debit).subtract(credit == null ? java.math.BigDecimal.ZERO : credit);
+        java.math.BigDecimal value = switch (derive) {
+            case "netDebit" -> balance.max(java.math.BigDecimal.ZERO);
+            case "netCredit" -> balance.negate()
+                                       .max(java.math.BigDecimal.ZERO);
+            default -> balance;
+        };
+        return decimalCell(java.util.Map.of(debitColumn, value), debitColumn, scale, sourceScale);
+    }
 
     /**
      * An amount column of a report row as the exact decimal a field of {@code scale} holds - refused,

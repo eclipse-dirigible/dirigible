@@ -998,7 +998,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     && generates.hasButton()) {
                 labels.put(generates.getName(), IntentNaming.customActionLabel(generates.getName(), generates.getLabel()));
             }
-            if (generates.hasUndo() && generates.hasReportItems()) {
+            if (generates.hasUndo() && generates.readsReport()) {
                 labels.put(ReportItemsSupport.undoName(generates), ReportItemsSupport.undoLabel(generates));
             }
         }

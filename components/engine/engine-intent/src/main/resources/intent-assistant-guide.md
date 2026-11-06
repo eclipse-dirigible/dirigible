@@ -2774,6 +2774,36 @@ generates:
   year.
 - Not available with `fromUses:`, a cross-model target, or `event:` - it is a click on a local record.
 
+**One row per report row - next year's opening balances (`fromReport:` at the top).** Without a
+header, every qualifying report row becomes one target row of its own:
+
+```yaml
+generates:
+  - name: openingBalances
+    from: FiscalYear
+    to: OpeningBalance
+    fromReport: YearBalance        # dimensions: [Account.id, Account.ClosingAccount, Partner.id, Document.id]
+    parameters: { fromDate: startDate, toDate: endDate }
+    where:
+      - { field: Account.ClosingAccount, op: eq, value: null }   # balance-sheet accounts
+      - { field: closingBalance, op: ne, value: 0 }              # a settled document carries nothing
+    backReference: Year            # REQUIRED: the target's to-one to the source, written on every row
+    map: { Account: Account.id, Partner: Partner.id, Document: Document.id,
+           debit: closingNetDebit, credit: closingNetCredit }
+    undo: delete                   # an Undo button: deletes exactly the rows carrying the back-reference
+```
+
+- `map:` reads the report's columns here (there is no header to map the source onto); `defaults:`
+  sets literals on every row. Do not map the `backReference:` - the run writes it.
+- Besides the six totals, both shapes may read the closing balance as one number: `closingBalance`
+  (closing debit minus credit), `closingNetDebit` / `closingNetCredit` (the side it stands on, zero
+  on the other). Derived exactly from the two totals.
+- A second run is refused (409) while any row back-references the source; `undo: delete` deletes
+  them in one unit through the target's repository, and refuses when there is nothing to delete.
+- Group the report by the subledger keys (`Partner.id`, `Document.id`) to carry open items forward
+  per counterparty and document.
+- Not combinable with `items:`, `prompt:`, `link:` or `sourceStatus:`.
+
 **A `map:` source may hop one relation - and that is how you SNAPSHOT a value.** A value is `map`ped
 rather than reached through a relation when the target must keep what was true at the moment it was
 created: an invoice keeps the customer's VAT number as it stood at invoicing, an audit log keeps the

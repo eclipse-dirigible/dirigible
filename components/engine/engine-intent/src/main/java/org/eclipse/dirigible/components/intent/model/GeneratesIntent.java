@@ -307,6 +307,26 @@ public class GeneratesIntent {
     private String undo;
 
     /**
+     * Optional report whose result rows become target ROWS, one each, with no header (issue #8329): the
+     * opening balances a year carries forward. The rows-mode twin of
+     * {@link GeneratesItemsIntent#getFromReport()}; {@link #map} then reads the row's columns.
+     */
+    private String fromReport;
+
+    /** {@link #fromReport} only: report parameter -> source property the report is run with. */
+    private Map<String, String> parameters = new LinkedHashMap<>();
+
+    /** {@link #fromReport} only: which report rows become target rows - conditions over its columns. */
+    private List<ScheduleConditionIntent> where;
+
+    /**
+     * {@link #fromReport} only: the target's to-one relation to the source, written on every generated
+     * row - how a second run finds them (and is refused) and how {@code undo: delete} finds what to
+     * delete.
+     */
+    private String backReference;
+
+    /**
      * The {@code reversals:} entry this create-from was expanded from (issue #7886), or {@code null}
      * for an authored one. Transient: it is never read from YAML - an author cannot spell its negation,
      * refusals or back-link on a {@code generates:} - and never written back out with the model.
@@ -590,6 +610,48 @@ public class GeneratesIntent {
     /** Whether an undo action is declared (see {@link #undo}). */
     public boolean hasUndo() {
         return undo != null && !undo.isBlank();
+    }
+
+    public String getFromReport() {
+        return fromReport;
+    }
+
+    public void setFromReport(String fromReport) {
+        this.fromReport = fromReport;
+    }
+
+    /** Whether every report row becomes one target row (see {@link #fromReport}). */
+    public boolean hasReportRows() {
+        return fromReport != null && !fromReport.isBlank();
+    }
+
+    public Map<String, String> getParameters() {
+        return parameters;
+    }
+
+    public void setParameters(Map<String, String> parameters) {
+        this.parameters = parameters == null ? new LinkedHashMap<>() : parameters;
+    }
+
+    public List<ScheduleConditionIntent> getWhere() {
+        return where;
+    }
+
+    public void setWhere(List<ScheduleConditionIntent> where) {
+        this.where = where;
+    }
+
+    public String getBackReference() {
+        return backReference;
+    }
+
+    public void setBackReference(String backReference) {
+        this.backReference = backReference;
+    }
+
+    /** Whether a report's rows are read - as lines of one document or as rows of their own. */
+    public boolean readsReport() {
+        return hasReportItems() || hasReportRows();
     }
 
     /**

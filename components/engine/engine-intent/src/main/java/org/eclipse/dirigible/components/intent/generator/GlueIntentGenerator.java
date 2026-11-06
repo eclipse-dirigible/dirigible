@@ -1137,7 +1137,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // hands those to the template - the same pair a notification's relation.field recipient uses.
             NotificationSupport.Resolver hops = crossModelSource ? null
                     : NotificationSupport.resolver(source, byName, compositionParents, crossModelLookup(model, context));
-            List<Map<String, Object>> fieldAssignments = assignments(g.getMap(), g.getDefaults(), "source",
+            // One row per report row (#8329): its map reads the report's columns (ReportItemsSupport), so only
+            // the literal defaults are assignments here.
+            List<Map<String, Object>> fieldAssignments = assignments(g.hasReportRows() ? Map.of() : g.getMap(), g.getDefaults(), "source",
                     temporalKinds(crossModel ? null : byName.get(g.getTo()), target), hops);
             if (fieldAssignments == null) {
                 reportDroppedGlue(context, "generates [" + g.getName() + "] map [" + firstHop(g.getMap())
@@ -1333,10 +1335,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("itemWhere", "");
                 e.put("itemRefuse", "");
             }
+            if (g.readsReport()) {
+                ReportItemsSupport.put(g, e, source, byName, model);
+            }
             if (g.hasReportItems()) {
                 // The lines are a report's result rows (#8329), each cell read off the row; the items
                 // `defaults` ride the same key as a mirror block's assignments, owner-less literals.
-                ReportItemsSupport.put(g, e, source, byName, model);
                 EntityIntent line = byName.get(items.getTo());
                 e.put("itemFieldAssignments",
                         childAssignments(Map.of(), items.getDefaults(), "row", temporalKinds(line, null), relationProperties(line, null)));
