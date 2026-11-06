@@ -46,6 +46,13 @@ import org.springframework.beans.factory.annotation.Autowired;
  * The direction flips as for #7657's delete rules: the junction's repository contributes an
  * {@code org.eclipse.dirigible.sdk.db.TargetAgreementRule}, and the parent's base repository asks
  * every contribution on its update paths.
+ *
+ * <p>
+ * dirigible #8494, on the same two projects: a status-gated {@code compare} whose right-hand side
+ * is a formula over a record ANOTHER model owns - a VAT protocol's stored base against its purchase
+ * invoice's net less what was credited, read when the protocol is issued. A
+ * {@code TargetAgreementRule} on the protocol's own status was the stop-gap, and it refused Cancel
+ * too.
  */
 class IntentCrossModelAgreeGuardIT extends IntegrationTest {
 
@@ -103,6 +110,57 @@ class IntentCrossModelAgreeGuardIT extends IntegrationTest {
                 relations:
                   - { name: SalesInvoice,    kind: manyToOne, to: SalesInvoice, required: true }
                   - { name: CustomerPayment, kind: manyToOne, to: CustomerPayment, model: payments, required: true }
+            """;
+
+    private static final String STALE = "The purchase invoice changed since this protocol was drafted";
+
+    private static final String INVOICE_OWNER_INTENT = """
+            name: payments
+            description: cross-model compare fixture - the owner of the purchase invoice
+
+            entities:
+              - name: PurchaseInvoice
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: net,      type: decimal, precision: 18, scale: 2 }
+                  - { name: credited, type: decimal, precision: 18, scale: 2 }
+            """;
+
+    private static final String PROTOCOL_INTENT = """
+            name: billing
+            description: cross-model compare fixture - a protocol checked against its purchase invoice at the Issue
+
+            uses:
+              - { model: payments, project: agree-owner }
+
+            entities:
+              - name: ProtocolStatus
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, length: 50 }
+              - name: VatProtocol
+                checks:
+                  - { kind: compare, field: base, op: eq, than: "PurchaseInvoice.net - PurchaseInvoice.credited", status: ISSUED,
+                      message: "The purchase invoice changed since this protocol was drafted" }
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: base, type: decimal, precision: 18, scale: 2 }
+                relations:
+                  - { name: PurchaseInvoice, kind: manyToOne, to: PurchaseInvoice, model: payments }
+                  - { name: Status, kind: manyToOne, to: ProtocolStatus, function: EntityStatus, init: DRAFT }
+
+            transitions:
+              - { name: IssueProtocol,  forEntity: VatProtocol, from: [DRAFT], setStatus: ISSUED }
+              - { name: CancelProtocol, forEntity: VatProtocol, from: [DRAFT], setStatus: CANCELLED }
+
+            seeds:
+              - name: protocol-statuses
+                entity: ProtocolStatus
+                rows:
+                  - { id: 1, name: DRAFT }
+                  - { id: 2, name: ISSUED }
+                  - { id: 3, name: CANCELLED, stage: cancelled }
             """;
 
     @Autowired
@@ -163,6 +221,57 @@ class IntentCrossModelAgreeGuardIT extends IntegrationTest {
                                                  .statusCode(both(greaterThanOrEqualTo(200)).and(lessThan(300))));
         assertUpdated(payments + "/" + payment, "{\"Id\":" + payment + ",\"Customer\":" + globex + ",\"Amount\":60}");
         assertField(payments + "/" + payment, "Customer", globex);
+    }
+
+    @Test
+    void a_gated_compare_reads_the_cross_model_source_at_the_move_and_leaves_cancel_alone() {
+        writeIntent(OWNER, INVOICE_OWNER_INTENT);
+        generateProject(OWNER);
+        writeIntent(CONSUMER, PROTOCOL_INTENT);
+        generateProject(CONSUMER);
+        publishProject(OWNER);
+        publishProject(CONSUMER);
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        String purchaseInvoices = "/services/java/" + OWNER + "/gen/" + OWNER_MODEL + "/api/purchaseinvoice/PurchaseInvoiceController";
+        String protocols = "/services/java/" + CONSUMER + "/gen/" + CONSUMER_MODEL + "/api/vatprotocol/VatProtocolController";
+        String transitions = "/services/java/" + CONSUMER + "/gen/events/" + CONSUMER_MODEL + "/";
+
+        int invoice = create(purchaseInvoices, "{\"Net\":1000,\"Credited\":0}");
+        int protocol = create(protocols, "{\"Base\":1000,\"PurchaseInvoice\":" + invoice + "}");
+        int cancelled = create(protocols, "{\"Base\":1000,\"PurchaseInvoice\":" + invoice + "}");
+
+        // A credit note approved after the drafts: the invoice now says 0, the drafts still say 1000.
+        assertUpdated(purchaseInvoices + "/" + invoice, "{\"Id\":" + invoice + ",\"Net\":1000,\"Credited\":1000}");
+
+        // The Issue reads the source as it stands at the move, and refuses the stale base.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + protocol + "}")
+                                                 .when()
+                                                 .post(transitions + "IssueProtocolTransition/run")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString(STALE)));
+        assertField(protocols + "/" + protocol, "Status", 1);
+
+        // Cancel is not the move the check is declared for: the stale draft is cancelled.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + cancelled + "}")
+                                                 .when()
+                                                 .post(transitions + "CancelProtocolTransition/run")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Status", equalTo(3)));
+
+        // Once the base agrees with the source, the same Issue goes through.
+        assertUpdated(protocols + "/" + protocol, "{\"Id\":" + protocol + ",\"Base\":0,\"PurchaseInvoice\":" + invoice + ",\"Status\":1}");
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + protocol + "}")
+                                                 .when()
+                                                 .post(transitions + "IssueProtocolTransition/run")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Status", equalTo(2)));
     }
 
     private void assertRefused(String record, String body) {

@@ -1742,7 +1742,22 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             // of the same row, or a literal (#7338) - gated on the status at which it must finally hold:
             // "days > 0 before SUBMITTED" refuses the transition, not the draft still being filled in.
             // An absent left operand is not a violation here either; requiredness is its own declaration.
-#if($check.literalJavaExpression)
+#if($check.thanJavaExpression)
+            // ...or a figure read off the record this one points at (#8494), loaded now - so the move is
+            // judged against the source as it stands at the move, not as it stood when the draft was
+            // written. A row pointing at none has no right-hand side, which is not a violation either.
+#foreach($load in $check.pathLoads)
+            Object ${load.local}Fk = ${load.sourceExpression};
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null
+                    : (${load.entityClass}) loadedHops.computeIfAbsent("${load.repositoryClass}:" + ${load.local}Fk,
+                            hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
+#end
+            java.math.BigDecimal than = ${check.thanJavaExpression};
+            if (entity.${check.field} != null && than != null
+                    && !(new java.math.BigDecimal(entity.${check.field}.toString()).compareTo(than) ${check.op} 0)) {
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
+            }
+#elseif($check.literalJavaExpression)
             if (entity.${check.field} != null
 #if($check.numeric == "true")
                     && !(new java.math.BigDecimal(entity.${check.field}.toString()).compareTo(${check.literalJavaExpression}) ${check.op} 0)) {
