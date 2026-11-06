@@ -1183,6 +1183,15 @@ class GlueGenerator {
         bindNotifyOutcome(item, context, parameters);
         bindAttachLanguage(item, context, parameters);
         bindAttachReport(item, context);
+        // The numbers the move issues (#8493), drawn as the NumberStamp delegate draws them - bound
+        // the way bindNumbering binds the one it stamps. A .glue written before the key issues none.
+        List<Map<String, Object>> stampNumbers = new ArrayList<>();
+        for (Map<String, Object> number : asMaps(item.get("stampNumbers"))) {
+            Map<String, Object> bound = new LinkedHashMap<>(number);
+            copyJavaLiterals(bound, number, "series", "perDefault");
+            stampNumbers.add(bound);
+        }
+        context.put("stampNumbers", stampNumbers);
         context.put("personalSurface", "false");
     }
 

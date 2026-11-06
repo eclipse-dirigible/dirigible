@@ -519,7 +519,9 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   repository applies it on every create and update (REST, client Java, workflow), the controllers before `pattern`
   and `checks`, and the form on blur. Pair it with a strict `pattern` - normalize what people type, then demand the
   canonical form. An IBAN is `normalize: [strip: " ", upper]`. A transform listed twice, both case folds, or `strip`
-  without its characters is refused.
+  without its characters is refused. `emptyToNull` (#8492) stores a blank result as NULL and always runs last: put it
+  on an optional `unique` text (`normalize: [trim, emptyToNull]`), else the second record saved without a value is
+  refused as a duplicate of `''`. Refused on a `required` field, which refuses a blank already.
 - `ageing(<date field>, [30, 60, 90])` (a report **dimension**) - **the receivables-ageing bucket**: groups rows by how
   long ago the date fell, yielding `0-30` / `31-60` / `61-90` / `90+` (a null date becomes `n/a`).
   `dimensions: ["ageing(due, [30, 60, 90])"]` with `measures: ["sum(balance)"]` is the standard receivables report.
@@ -533,7 +535,8 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   invoices, open orders) `orderBy` over its date and a by-product list `orderBy` over the name. Not on
   `kind: statement` / `kind: ledger`, which carry their own order.
 - relative moments in a report `filter:` - **a period without a parameter**: `CURRENT_DATE`, the period starts
-  `START_OF_YEAR` / `START_OF_QUARTER` / `START_OF_MONTH`, each optionally with one signed ISO-8601 date period -
+  `START_OF_YEAR` / `START_OF_QUARTER` / `START_OF_MONTH`, each optionally with signed ISO-8601 date periods
+  (applied left to right: `START_OF_MONTH+P1M-P1D` is the last day of this month) -
   `filter: "issuedOn >= START_OF_YEAR"` (year to date), `"issuedOn >= CURRENT_DATE-P30D"` (the last 30 days),
   `"issuedOn >= START_OF_YEAR-P1Y and issuedOn < START_OF_YEAR"` (last year). Years, months, weeks and days only
   (`PT1H` is refused). Say the period in the report's label or description ("Sales by product, year to date") -
@@ -612,6 +615,14 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   snapshot entity (e.g. the frozen copy stored when an invoice is SENT): written once by the flow,
   never editable. System writes through the repository stay possible. Mutually exclusive with
   `immutableWhen` (always-immutable subsumes any status scope); needs no EntityStatus relation.
+- `systemWritten: true` (entity-level) - **only the application writes it**: a create-from's `link:`
+  junction, a settlement's allocation, a row a reaction or delegate records. Every generated
+  controller answers 405 to POST, PUT and DELETE for every caller, ADMINISTRATOR included, and the
+  pages offer no New, Edit or Delete. Repository writes stay possible - the create-from's link row,
+  the settlement, the composition cascade when its master is deleted - so, unlike `immutable: true`,
+  it never blocks deleting the master. Never author an always-true `forbidWhen` to say this: the
+  create-from validates its link row and would refuse itself. A system-written child is never a
+  document's line items (do not combine with `function: DocumentItem`).
 - `period: { start: <date field>, end: <date field>, closedWhen: "<Status> == <seed id>" }`
   (entity-level) - **marks the entity a PERIOD REGISTER**: its rows are the dated windows other
   entities are locked by. A fiscal period is an ordinary entity - a row with two dates and a
@@ -757,6 +768,17 @@ a `required` text field is refused when it is blank after that trim - spaces alo
     "a submitted request covers at least one day" without forbidding the draft still being filled
     in - the rule to reach for instead of mis-authoring it as an `itemsMin` over a child the
     approval step has not created yet. A gated compare needs the `function: EntityStatus` relation.
+  - A GATED compare's `than:` may read **another record** (#8494): a formula over the fields of ONE
+    to-one relation, local or cross-model - `{ kind: compare, field: base, op: eq, than:
+    "PurchaseInvoice.net - PurchaseInvoice.credited", status: ISSUED, message: "..." }` is "the base
+    this protocol stored is still what its purchase invoice says, at the Issue". The related record
+    is read when the record is written carrying the gate status, so a credit note approved after the
+    draft refuses the Issue (400) while a Cancel - another status - is never asked. The formula takes
+    numbers, `+ - * /`, parentheses, `round`/`abs`/`min`/`max`/`ceil`/`floor` and
+    `<relation>.<field>` terms, all on the same relation; the left field is a number and the result
+    is rounded to its scale; a record pointing at none is not a violation. Refused without a
+    `status:` gate (the source changes on its own, so the rule is about the move). This is the
+    declaration to reach for instead of a `TargetAgreementRule` on the record's own status.
   - `{ kind: agree, relations: [SalesInvoice, CustomerPayment], onProperty: Customer, message: "..." }`
     (#7409): the two records a JUNCTION row links must point at the same third thing - **this is how
     "a payment may only be allocated against an invoice of the same customer, in the same currency"
@@ -1094,7 +1116,9 @@ gives the field a platform-allocated, gap-free document number. The intent decla
   sets the issued status (`setRelationField` on the status), with only service tasks between them, so
   a posting sees the real number. The stamp then checks that status's gated `checks:`, its lifecycle
   edge and its capacity guards before it allocates (#7577), so a refused Issue answers 400 and spends
-  no number of the series.
+  no number of the series. A document issued by a `transitions:` button instead of a process step
+  declares `stamp: number` on that transition (see § transitions) - never `stampOn: create` for it,
+  which numbers every draft, including the ones later deleted.
 
 The removed keys `format`, `scope` and `resetOn` are REJECTED at parse time - shape lives in
 `.numbers` + settings, partitioning is `per:`, and there is no auto-reset. Prefer `number:` over a
@@ -2640,6 +2664,19 @@ entity's personal controller does (**403** with no identity mapped), answers **4
 is not the caller's - before the `from:`/`when:` guards - and then writes exactly as the power run
 does. The power controller and pages are unchanged; without `personal: true` the owner has no button.
 
+`stamp: number` makes the transition the document's Issue: the entity's `number: { stampOn: issue }`
+is drawn and written in the SAME targeted write as `setStatus`, so a draft holds no number and a
+deleted draft leaves no gap in the series. The move is checked first (its lifecycle edge and the
+`checks:` gated on `setStatus`), so a refused Issue answers **400** and spends no number; a document
+already numbered keeps its number. Only the transition that declares it stamps - a Cancel from the
+same draft does not. Refused at parse when the entity has no `stampOn: issue` number.
+
+```yaml
+transitions:
+  - { name: IssueProtocol,  forEntity: Protocol, from: [DRAFT], setStatus: ISSUED, stamp: number }
+  - { name: CancelProtocol, forEntity: Protocol, from: [DRAFT], setStatus: CANCELLED }
+```
+
 ### generates - create one document from another (create-from)
 
 **Use when:** a record should spawn a new record of another type - often a document in another model:
@@ -3172,9 +3209,11 @@ generates:
 - The link entity must live in the source's model, declare the composition to-one to the source and
   exactly ONE to-one to the target; with several, name it with `relation:`. A cross-model source
   (`fromUses:`) cannot carry a `link:`.
-- The ungated row checks (`compare`, `agree`, `forbidWhen`, `requiredWhen` without a `status:`) run
-  in the generated controller only and are not part of a repository write; express the refusal the link must honour as a roll-up capacity
-  (`capacity:`) or a status-gated check.
+- The create-from holds the link row to its controller's validation: the ungated row checks
+  (`compare`, `agree`, `forbidWhen`, `requiredWhen` without a `status:`) and the required, length and
+  pattern rules refuse the whole run with a 400. So a check on the link entity must hold for the row
+  the create-from writes - a value check (`amount >= 0`) belongs there, an always-true guard does not.
+  To keep people from writing the junction by hand, declare `systemWritten: true` on it.
 
 ### reversals - reverse a booked document by hand (red storno)
 
@@ -3268,6 +3307,22 @@ reports:
 exactly like a dimension, so a parameter may filter by a field the report does not display. `op` is
 `ge` | `le` | `eq` | `like`. `initial` is the value bound when the user leaves the input empty, i.e.
 what the report shows before anyone touches it.
+
+**A movable window (#8506):** a date parameter's `initial` is a fixed `yyyy-MM-dd` date or a **relative
+moment** - the `filter:` moments (`CURRENT_DATE`, `START_OF_YEAR` / `START_OF_QUARTER` / `START_OF_MONTH`),
+each optionally followed by signed ISO-8601 date periods applied left to right. The moment is resolved on
+every request, so the window moves with the calendar without a regen, and the user can still change it:
+
+```yaml
+    parameters:
+      - { name: fromDate, target: date, op: ge, initial: CURRENT_DATE-P29D }        # the last 30 days...
+      - { name: toDate, target: date, op: le, initial: CURRENT_DATE }               # ...up to today
+      # previous month: START_OF_MONTH-P1M .. START_OF_MONTH-P1D
+      # current month:  START_OF_MONTH .. START_OF_MONTH+P1M-P1D
+```
+
+An unknown `START_OF_*`, a time period (`PT1H`), anything that is neither a date nor one moment, and a
+moment on a non-date parameter are refused at parse.
 
 **Rules:** a parameter is bound on **every** call, so `initial` is required unless the comparison has a
 neutral "any value" default - a date `ge`/`le` bound (widened to all time) and `like` (the empty
@@ -4678,7 +4733,7 @@ so before binding a reaction, check what the thing you care about publishes.
 |---|---|---|
 | A person creating / editing / deleting a record (app or REST) | create / `-updated` / `-deleted` | `onCreate` / `onUpdate` / `onDelete` |
 | Fields a reviewer edited in a task form (`editable:`) | `-updated` | `onUpdate` |
-| `number: { stampOn: issue }` stamping the document number | `-updated` | `onUpdate` |
+| `number: { stampOn: issue }` stamping the document number (a process's stamp step) | `-updated` | `onUpdate` |
 | A maintained roll-up / aggregate / keyed total | `-updated` | `onUpdate` |
 | `setField` / `clearField` / `setRelationField` on a step | `-transitioned` | `postings:`, `generates` `event: { onTransition }`, `abortOn:` |
 | A `transitions:` button (void / cancel / reopen) | `-transitioned` | the same three |
@@ -5512,6 +5567,7 @@ or a seeded name.
 | rollup `op` | `count` (default), `sum`, `latest` (needs `of` + `by`) |
 | expansion `unit` | `day`, `week`, `month` |
 | transition `when` op | `==`, `!=` |
+| transition `stamp` | `number` - the entity's `stampOn: issue` number, drawn in the move's own write |
 | resolve `event` | `onCreate`, `onUpdate` (never `onDelete`); `when` is `<Field> ==\|!= <value>` |
 | resolve `between` field type | `date`, `timestamp` |
 | resolve `outcome` values | `found`, `notFound`, `ambiguous`, plus `<outcome>-notRouted` when a `setStatus` route is rejected (stamped into a `string` field) |

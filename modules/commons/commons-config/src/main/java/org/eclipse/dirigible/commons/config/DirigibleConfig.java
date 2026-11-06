@@ -229,6 +229,17 @@ public enum DirigibleConfig {
     APP_ID("DIRIGIBLE_APP_ID", null),
 
     /**
+     * Which identity provider groups that carry no tenant are global roles of this application, while
+     * {@link #TENANT_RESOLUTION_STRATEGY} is {@code TOKEN_GROUPS}: {@code INSTANCE} (the default -
+     * every such group, e.g. {@code ADMINISTRATOR}) or {@code APPLICATION} (only a group
+     * {@code <appId>.<role>} naming {@link #APP_ID}, which grants {@code <role>}). Set it to
+     * {@code APPLICATION} when one identity provider serves several applications, so that staff of one
+     * of them are not staff of every other one. It applies to the roles of a login and of a bearer ID
+     * token, and to who may enter the default tenant without a tenant of their own.
+     */
+    TENANT_GLOBAL_ROLES_SCOPE("DIRIGIBLE_TENANT_GLOBAL_ROLES_SCOPE", "INSTANCE", meta().type(ConfigType.ENUM)),
+
+    /**
      * The token claim carrying the user groups. AWS Cognito puts them in {@code cognito:groups} (the
      * default), a Keycloak realm typically in {@code groups}.
      */
@@ -691,6 +702,20 @@ public enum DirigibleConfig {
     PRODUCT_COMMIT_ID("DIRIGIBLE_PRODUCT_COMMIT_ID", null), //
     PRODUCT_TYPE("DIRIGIBLE_PRODUCT_TYPE", null), //
     INSTANCE_NAME("DIRIGIBLE_INSTANCE_NAME", null), //
+
+    /**
+     * The name of the application or solution this deployment runs (e.g. {@code BusinessIntents}),
+     * shown beside its version in the About dialog of every Harmonia shell (#8502). Set by the image
+     * that packages the application; unset, the shells show the branding name.
+     */
+    APPLICATION_NAME("DIRIGIBLE_APPLICATION_NAME", null), //
+
+    /**
+     * The version of the application or solution this deployment runs (e.g. {@code 1.38.0}) - not the
+     * platform's, which is {@link #PRODUCT_VERSION}. Served by {@code /services/core/version} and shown
+     * in the About dialog of every Harmonia shell (#8502); unset, the dialog shows only the platform.
+     */
+    APPLICATION_VERSION("DIRIGIBLE_APPLICATION_VERSION", null), //
     SPARK_CLIENT_URI("DIRIGIBLE_SPARK_CLIENT_URI", null, meta().deprecated()), //
     TERMINAL_ENABLED("DIRIGIBLE_TERMINAL_ENABLED", Boolean.TRUE.toString()), //
     MAIL_CONFIG_PROVIDER("DIRIGIBLE_MAIL_CONFIG_PROVIDER", null), //

@@ -274,10 +274,11 @@
                 </li>
               </template>
               <div x-h-menu-separator></div>
+              <li x-h-menu-item id="user-menu-about" @click="$store.about.open()"><svg role="presentation" x-h-lucide data-lucide="info"></svg> <span x-text="T('application-core:shell.user.about', 'About')"></span></li>
               <template x-if="$store.issues.available">
                 <li x-h-menu-item id="user-menu-report-issue" @click="$store.issues.report()"><svg role="presentation" x-h-lucide data-lucide="message-square-warning"></svg> <span x-text="T('application-core:shell.user.reportIssue', 'Report an issue')"></span></li>
               </template>
-              <div x-h-menu-separator x-show="$store.issues.available"></div>
+              <div x-h-menu-separator></div>
               <li x-h-menu-item data-variant="negative" @click="$store.currentUser.logout()"><svg role="presentation" x-h-lucide data-lucide="log-out"></svg> <span x-text="T('application-core:shell.user.logout', 'Log out')"></span></li>
             </ul>
           </div>
@@ -497,6 +498,7 @@
     <!-- App-wide transient toasts (raised through Harmonia's notifications magic with this template). -->
     <!-- "Report an issue" (#7948): the ONE dialog the shared `issues` store renders (shell/views/_report-issue.html). -->
     <div x-html="$store.issues.markup"></div>
+    <div x-html="$store.about.markup"></div>
 
     <section x-h-notification-overlay>
       <template id="toast">
@@ -565,6 +567,7 @@
     <script src="/services/web/application-core/shell/js/stores/currentUser.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/tenant.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/issues.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/about.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/printTemplates.js" defer></script>
   <script src="/services/web/application-core/shell/js/stores/tenantUsers.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/shells.js" defer></script>

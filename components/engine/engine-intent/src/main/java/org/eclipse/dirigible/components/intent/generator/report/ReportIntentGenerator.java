@@ -1504,8 +1504,9 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The value a parameter binds when the request carries none - the authored {@code initial}, or the
-     * neutral default of the comparisons that have one: a date window bound widens to all time and a
+     * The value a parameter binds when the request carries none - the authored {@code initial} (a
+     * relative moment in its canonical spelling, see {@link ReportMoments#canonical}), or the neutral
+     * default of the comparisons that have one: a date window bound widens to all time and a
      * {@code like} search to the empty pattern, which matches every value. An {@code eq} selector and a
      * numeric bound have no neutral value; the parser requires their {@code initial}, so an empty one
      * here is a report authored before that check and binds as-is.
@@ -1518,8 +1519,11 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     private static String initialValue(ReportParameterIntent parameter, String type, String operation) {
         if (parameter.getInitial() != null && !parameter.getInitial()
                                                         .isBlank()) {
-            return parameter.getInitial()
-                            .trim();
+            String initial = parameter.getInitial()
+                                      .trim();
+            // A relative moment (#8506) is carried in its canonical spelling, which the generated
+            // repository resolves to a date on every request - never a date frozen here.
+            return DATE_TYPE.equals(type) && ReportMoments.isMoment(initial) ? ReportMoments.canonical(initial) : initial;
         }
         if (DATE_TYPE.equals(type) && !LIKE_OPERATION.equals(operation)) {
             return "<=".equals(operation) ? NEUTRAL_TO_DATE : NEUTRAL_FROM_DATE;

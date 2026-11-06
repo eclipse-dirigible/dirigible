@@ -373,6 +373,44 @@ class TableAlterProcessorTest {
         }
     }
 
+    /**
+     * #8498: the alter of a re-publish (an added column) must not add again a key the table was born
+     * with as a UNIQUE INDEX - on PostgreSQL that ADD is refused, the index already holding the name.
+     */
+    @Test
+    void theAlterDoesNotAddAgainAKeyTheTableWasBornWithAsAUniqueIndex() throws SQLException {
+        try (Connection connection = connect("alter_unique_born_as_index")) {
+            createTable(connection, "\"COMPANY\" INTEGER, \"NUMBER\" VARCHAR(100)");
+            insert(connection, "CREATE UNIQUE INDEX \"Notes_Company_Number\" ON \"T_NOTES\" (\"COMPANY\", \"NUMBER\")");
+            insert(connection, "INSERT INTO \"T_NOTES\" VALUES (1, 1, 'N1')");
+            Table tableModel = modelWithCompositeKey();
+            new TableColumn("NOTE", "VARCHAR", "20", tableModel);
+
+            TableAlterProcessor.execute(connection, tableModel);
+
+            assertTrue(hasColumn(connection, "NOTE"), "the added column is added");
+            assertTrue(uniqueConstraints(connection).isEmpty(), "the index the table was born with already enforces the key");
+            assertThrows(SQLException.class,
+                    () -> insert(connection, "INSERT INTO \"T_NOTES\" (\"ID\", \"COMPANY\", \"NUMBER\") VALUES (2, 1, 'N1')"),
+                    "the key still refuses a duplicate");
+        }
+    }
+
+    /**
+     * #8498: PostgreSQL's "relation already exists" is a name clash, not a refusal of the key - it is
+     * logged as such, apart from the duplicate-rows refusals the retry of #8317 waits on.
+     */
+    @Test
+    void aDuplicateRelationRefusalIsANameClash() {
+        assertTrue(TableAlterProcessor.isNameTaken(new SQLException("relation \"K\" already exists", "42P07")));
+        SQLException batch = new SQLException("batch failed", "25P02");
+        batch.setNextException(new SQLException("relation \"K\" already exists", "42P07"));
+        assertTrue(TableAlterProcessor.isNameTaken(batch), "the clash is found down the chain");
+        assertFalse(TableAlterProcessor.isNameTaken(new SQLException("could not create unique index", "23505")),
+                "duplicate rows refuse the key itself");
+        assertFalse(TableAlterProcessor.isNameTaken(new SQLException("no state")));
+    }
+
     @Test
     void aRetryOfATableNotYetCreatedDoesNothing() throws SQLException {
         try (Connection connection = connect("alter_unique_retry_missing")) {

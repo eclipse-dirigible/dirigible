@@ -11,10 +11,10 @@ package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
-import static org.hamcrest.Matchers.not;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -123,7 +123,8 @@ class TypeScriptToJavaMigrationIT extends IntegrationTest {
                                                  .get(INVENTORY)
                                                  .then()
                                                  .statusCode(200)
-                                                 .body("scripts.generated", not(hasItem(true)))
+                                                 // by path, so a leftover names itself (#8352)
+                                                 .body("scripts.findAll { it.generated }.path", empty())
                                                  .body("scripts.path",
                                                          hasItems("api/BooksReport.ts", "navigations/books/navigation.extension"))
                                                  .body("references.path", hasItem("widgets/books-count/controller.js")));

@@ -17,6 +17,7 @@ import org.springframework.util.FileSystemUtils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -87,8 +88,12 @@ public class FileUtil {
             if (Files.exists(baseDir)) {
                 Files.walkFileTree(baseDir, new SimpleFileVisitor<Path>() {
 
+                    // Decided BEFORE descending (#8470): the skipped folder is the live Lucene index, whose
+                    // writer deletes segment files while the previous test's context closes. Walking into
+                    // it threw NoSuchFileException on a vanished segment, which aborted the whole walk and
+                    // left the workspace behind for the next test method of the class.
                     @Override
-                    public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                    public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
                         boolean subdir = dir.startsWith(excludeDir);
                         if (subdir) {
                             LOGGER.debug("Folder [{}] will not be deleted since it is subfolder of [{}]", dir, excludeDir);
@@ -103,6 +108,14 @@ public class FileUtil {
 
                         deleteFolderResursively(dir.toFile());
                         return FileVisitResult.SKIP_SUBTREE;
+                    }
+
+                    @Override
+                    public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+                        if (exc instanceof NoSuchFileException) {
+                            return FileVisitResult.CONTINUE; // already gone
+                        }
+                        throw exc;
                     }
                 });
             }

@@ -48,6 +48,16 @@ public class Version {
     private String instanceName;
 
     /**
+     * The name of the application this deployment runs, {@code null} when it declares none.
+     */
+    private String applicationName;
+
+    /**
+     * The version of the application this deployment runs, {@code null} when it declares none.
+     */
+    private String applicationVersion;
+
+    /**
      * The repository provider.
      */
     private String repositoryProvider = "local";
@@ -168,6 +178,43 @@ public class Version {
      */
     public void setInstanceName(String instanceName) {
         this.instanceName = instanceName;
+    }
+
+    /**
+     * Gets the name of the application this deployment runs.
+     *
+     * @return the application name, {@code null} when the deployment declares none
+     */
+    public String getApplicationName() {
+        return applicationName;
+    }
+
+    /**
+     * Sets the name of the application this deployment runs.
+     *
+     * @param applicationName the application name
+     */
+    public void setApplicationName(String applicationName) {
+        this.applicationName = applicationName;
+    }
+
+    /**
+     * Gets the version of the application this deployment runs - not the platform's, which is
+     * {@link #getProductVersion()}.
+     *
+     * @return the application version, {@code null} when the deployment declares none
+     */
+    public String getApplicationVersion() {
+        return applicationVersion;
+    }
+
+    /**
+     * Sets the version of the application this deployment runs.
+     *
+     * @param applicationVersion the application version
+     */
+    public void setApplicationVersion(String applicationVersion) {
+        this.applicationVersion = applicationVersion;
     }
 
     /**

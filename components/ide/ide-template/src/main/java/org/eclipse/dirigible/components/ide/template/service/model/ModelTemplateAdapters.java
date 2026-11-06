@@ -268,6 +268,28 @@ final class ModelTemplateAdapters {
     }
 
     /**
+     * A relative moment (#8506): {@code CURRENT_DATE} or {@code START_OF_YEAR/_QUARTER/_MONTH}, then
+     * signed ISO-8601 date periods - the grammar of the intent's {@code ReportMoments}, which emits it
+     * in this canonical spelling (upper case, no whitespace).
+     */
+    private static final java.util.regex.Pattern REPORT_MOMENT = java.util.regex.Pattern.compile(
+            "(?:CURRENT_DATE|START_OF_(?:YEAR|QUARTER|MONTH))(?:[+-]P(?=\\d)(?:\\d{1,5}Y)?(?:\\d{1,5}M)?(?:\\d{1,5}W)?(?:\\d{1,5}D)?)*");
+
+    /**
+     * The canonical moment a DATE parameter's initial names, or null when it is a fixed value or the
+     * bare {@code CURRENT_DATE} (which the repository template resolves on its own branch).
+     */
+    static String reportMoment(String type, String initial) {
+        if (!"DATE".equalsIgnoreCase(type) || initial == null) {
+            return null;
+        }
+        String moment = initial.replaceAll("\\s+", "")
+                               .toUpperCase(java.util.Locale.ROOT);
+        return !"CURRENT_DATE".equals(moment) && REPORT_MOMENT.matcher(moment)
+                                                              .matches() ? moment : null;
+    }
+
+    /**
      * Prepares a standalone report, resolving its column and parameter types and pre-escaping its query
      * for the generated repository.
      *
@@ -308,6 +330,14 @@ final class ModelTemplateAdapters {
             // value is fine but a quote or a backslash would end that literal and fail the compile of
             // the whole generated module (#7295).
             parameter.put("initialJavaLiteral", JavaLiterals.escape(strOr(parameter, "initial", "")));
+            // A relative moment as a date parameter's initial (#8506) - START_OF_MONTH, CURRENT_DATE-P30D -
+            // is resolved by the generated repository on every request. A bare CURRENT_DATE keeps its own
+            // branch in the template.
+            String initialMoment = reportMoment(str(parameter, "type"), strOr(parameter, "initial", ""));
+            if (initialMoment != null) {
+                parameter.put("initialMoment", initialMoment);
+                model.put("hasMomentParameters", Boolean.TRUE);
+            }
             String placeholder = ":" + str(parameter, "name");
             for (Map<String, Object> condition : asMaps(model.get("conditions"))) {
                 if (placeholder.equals(str(condition, "right")) && "string".equals(dataType.typescript())

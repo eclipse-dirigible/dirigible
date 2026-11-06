@@ -70,6 +70,9 @@ class SystemOwnedOnCreateControllerTemplateIT {
             assertTrue(rendered.contains("entity.Solution = null;"), template + " must drop the readOnly column: " + rendered);
             assertTrue(rendered.contains("entity.Total = null;"), template + " must drop the aggregate column: " + rendered);
             assertTrue(rendered.contains("entity.CreatedAt = null;"), template + " must drop the date-typed readOnly column");
+            // A uuid is the server's to issue (#8485): save() fills it only when blank, so a client's goes.
+            assertTrue(rendered.contains("entity.Uuid = null;"), template + " must drop the uuid column: " + rendered);
+            assertTrue(rendered.contains("discarded.add(\"Uuid=\" + entity.Uuid);"), template + " must report the uuid discard");
             // ...and the discard is reported, except for the date, whose round-trip is lossy.
             assertTrue(rendered.contains("discarded.add(\"Solution=\" + entity.Solution);"), template + " must report the discard");
             assertTrue(rendered.contains("discarded.add(\"Total=\" + entity.Total);"), template + " must report the discard");
@@ -79,9 +82,10 @@ class SystemOwnedOnCreateControllerTemplateIT {
             assertTrue(rendered.contains("Logging.getLogger(\"gen.services.api.tickets." + controller.getValue() + "\")"),
                     template + " must log through the SDK logger of the generated class: " + rendered);
 
-            // An ordinary column, the primary key, the number and uuid stamps (save()'s own #7548
-            // discard) and an aggregate the repository recomputes on update are all left alone.
-            for (String kept : List.of("Title", "Id", "Number", "Uuid", "Balance")) {
+            // An ordinary column, the primary key, the number stamps - on create and the issue-time
+            // placeholder (save()'s own #7548 discard) - and an aggregate the repository recomputes on
+            // update are all left alone.
+            for (String kept : List.of("Title", "Id", "Number", "Code", "Balance")) {
                 assertFalse(rendered.contains("entity." + kept + " = null;"), template + " must not drop " + kept + ": " + rendered);
             }
             assertNoUnresolvedReferences(rendered);
@@ -193,16 +197,21 @@ class SystemOwnedOnCreateControllerTemplateIT {
     /**
      * One of each kind the rule distinguishes, as {@code ModelParameterProcessor} hands them to the
      * templates: an ordinary column, an author's readOnly, an aggregate footer field, an aggregate
-     * recomputed on update, a number stamped on create, a uuid, and a date-typed audit column.
+     * recomputed on update, a number stamped on create, a number's issue-time UUID placeholder, a uuid,
+     * and a date-typed audit column.
      */
     private static List<Map<String, Object>> systemOwnedProperties() {
         Map<String, Object> balance = aggregate("Balance");
         balance.put("calculatedPropertyExpressionUpdate", "Total - Paid");
         Map<String, Object> number = readOnly("Number");
         number.put("numberStampOnCreate", "true");
+        Map<String, Object> placeholder = readOnly("Code");
+        placeholder.put("generatedUuid", "true");
+        placeholder.put("numberStampOnIssue", "true");
         Map<String, Object> uuid = readOnly("Uuid");
         uuid.put("generatedUuid", "true");
-        return List.of(primaryKey(), plain("Title"), readOnly("Solution"), aggregate("Total"), balance, number, uuid, createdAt());
+        return List.of(primaryKey(), plain("Title"), readOnly("Solution"), aggregate("Total"), balance, number, placeholder, uuid,
+                createdAt());
     }
 
     private static Map<String, Object> primaryKey() {

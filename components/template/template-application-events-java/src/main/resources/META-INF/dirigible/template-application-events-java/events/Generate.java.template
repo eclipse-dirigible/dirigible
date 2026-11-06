@@ -363,7 +363,7 @@ public class ${className}Generate {
         // administrator (dirigible #7069). Reads inside the block see the block's own writes, so the
         // status the flip below wrote is what the rest of the block - and its announcement's payload -
         // reads. Everything the block writes it builds from what it reads inside it, so a unit the
-        // database rolled back to break a deadlock is run once more instead of answering 409 (#8341).
+        // database rolled back to break a deadlock is run again instead of answering 409 (#8341, #8507).
         gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity result =
                 org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
     #if($hasRefusals || $hasReportItems)

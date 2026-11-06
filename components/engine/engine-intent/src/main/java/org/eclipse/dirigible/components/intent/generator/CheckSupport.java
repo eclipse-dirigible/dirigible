@@ -835,4 +835,79 @@ public final class CheckSupport {
         }
         return null;
     }
+
+    /** The {@code Calc} functions a {@code compare} formula may call - its numeric ones. */
+    private static final Set<String> FORMULA_FUNCTIONS = Set.of("round", "abs", "min", "max", "ceil", "floor");
+
+    /** One token of a formula: a (dotted) identifier, a number, an operator, or anything else. */
+    private static final Pattern FORMULA_TOKEN =
+            Pattern.compile("\\s+|([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*)|(\\d*\\.?\\d+)|([-+*/(),])|(.)");
+
+    /**
+     * A {@code compare} right-hand side read off ANOTHER record (#8494): an arithmetic formula over the
+     * fields of one to-one relation of the record - {@code PurchaseInvoice.net -
+     * PurchaseInvoice.credited}.
+     *
+     * @param relation the to-one relation every term reads
+     * @param fields the authored field names the formula reads, in order of appearance
+     * @param formula the {@code Calc} formula over the related record's own (PascalCase) properties
+     * @param failure the reason the right-hand side is refused, or {@code null}
+     */
+    public record HopFormula(String relation, List<String> fields, String formula, String failure) {
+    }
+
+    /**
+     * Reads a {@code compare}'s {@code than} as a formula over one to-one relation (#8494): numbers,
+     * {@code + - * /}, parentheses, {@code Calc}'s numeric functions and {@code <relation>.<field>}
+     * terms, every term on the same relation - the formula is evaluated against the one record that
+     * relation loads. The one rule both the parser and the generator read.
+     *
+     * @param than the authored right-hand side
+     * @return the reading - a formula or the reason it is refused, never both
+     */
+    public static HopFormula hopFormula(String than) {
+        String relation = null;
+        List<String> fields = new ArrayList<>();
+        StringBuilder formula = new StringBuilder();
+        Matcher token = FORMULA_TOKEN.matcher(than == null ? "" : than);
+        while (token.find()) {
+            String name = token.group(1);
+            if (token.group(4) != null) {
+                return refusedFormula("[" + than + "] has [" + token.group(4) + "] - a formula takes numbers, + - * /, parentheses,"
+                        + " functions and <relation>.<field> terms");
+            }
+            if (name == null) {
+                formula.append(token.group());
+                continue;
+            }
+            String[] segments = name.split("\\.");
+            if (than.substring(token.end())
+                    .trim()
+                    .startsWith("(")) {
+                if (segments.length > 1 || !FORMULA_FUNCTIONS.contains(name)) {
+                    return refusedFormula("[" + than + "] calls [" + name + "] - a formula calls " + new TreeSet<>(FORMULA_FUNCTIONS));
+                }
+                formula.append(name);
+                continue;
+            }
+            if (segments.length != 2) {
+                return refusedFormula("[" + than + "] reads [" + name + "] - every term is a <relation>.<field> of one to-one relation");
+            }
+            if (relation != null && !relation.equals(segments[0])) {
+                return refusedFormula(
+                        "[" + than + "] reads [" + relation + "] and [" + segments[0] + "] - every term reads the same to-one relation");
+            }
+            relation = segments[0];
+            fields.add(segments[1]);
+            formula.append(IntentNaming.pascalCase(segments[1]));
+        }
+        if (relation == null) {
+            return refusedFormula("[" + than + "] reads no <relation>.<field>");
+        }
+        return new HopFormula(relation, fields, formula.toString(), null);
+    }
+
+    private static HopFormula refusedFormula(String failure) {
+        return new HopFormula(null, List.of(), null, failure);
+    }
 }
