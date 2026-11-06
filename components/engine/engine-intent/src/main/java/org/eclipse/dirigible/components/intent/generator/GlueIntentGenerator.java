@@ -1927,6 +1927,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // process step authors. Fail-soft in the generated controller: the flip is the contract.
             e.putAll(notifyFields(t.getNotify(), entity, model, byName, compositionParents, context,
                     "Transition [" + t.getName() + "] notify"));
+            if (t.stampsNumber()) {
+                // The move issues the document (#8493): its stampOn: issue number is drawn and written
+                // with the status, as the NumberStamp delegate draws it at a process's issue step.
+                e.put("stampNumbers", NumberingSupport.issueNumbers(entity));
+            }
             if (t.isPersonal()) {
                 // The owner's run from the personal surface (#8406): scoped to the caller's identity
                 // record through the entity's personal relation, as its personal controller is.

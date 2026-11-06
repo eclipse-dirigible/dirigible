@@ -139,8 +139,39 @@ public class ${controllerClass} {
         // targeted write into the outbox, so a broker outage delays the announcement instead of losing
         // it, and the event payload is the row exactly as the statement left it - never a re-read a
         // concurrent write could have moved on.
+#if($stampNumbers && $stampNumbers.size() > 0)
+        // This move ISSUES the ${entity} (issue #8493): its stampOn: issue number is drawn here, as the
+        // NumberStamp delegate draws it at a process's issue step, and written in the SAME statement as
+        // the status. The move is asked first, so a refused one spends no value of the series (#7577):
+        // the lifecycle edge, the gated capacity guards and the gated checks the write applies. The
+        // draw joins the write's unit of work (#8113), so a write refused after it takes the number
+        // back. A ${entity} already numbered keeps its number.
+        repository.checkFor(source, ${setStatus});
+        gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity issued = source;
+        org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+            java.util.Map<String, Object> values = new java.util.LinkedHashMap<>();
+            values.put("${statusProperty}", ${setStatus});
+#foreach($number in $stampNumbers)
+            if (unnumbered(issued.${number.field})) {
+#if($number.per && $number.per != "")
+#if($number.perDefault && $number.perDefault != "")
+                values.put("${number.field}", org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${number.seriesJavaLiteral}",
+                        issued.${number.per} == null ? "${number.perDefaultJavaLiteral}" : String.valueOf(issued.${number.per})));
+#else
+                values.put("${number.field}", org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${number.seriesJavaLiteral}",
+                        issued.${number.per} == null ? null : String.valueOf(issued.${number.per})));
+#end
+#else
+                values.put("${number.field}", org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${number.seriesJavaLiteral}"));
+#end
+            }
+#end
+            return repository.updateProperties(req.id, values, "${projectName}-${perspective}-${entity}-transitioned");
+        });
+#else
         repository.updateProperties(req.id, java.util.Map.of("${statusProperty}", ${setStatus}),
                 "${projectName}-${perspective}-${entity}-transitioned");
+#end
         // Reload so the response (and the notify block) carries the committed row, not the pre-check snapshot.
         source = repository.findById(req.id);
 #if($notify == "true")
@@ -537,6 +568,21 @@ public class ${controllerClass} {
             new ${notifyOutcomeRepositoryClass}().updateProperties(id, java.util.Map.of("${notifyOutcomeProperty}", value), eventTopic);
         } catch (Exception ex) {
             LOG.error("Could not record the delivery outcome [{}] on ${notifyOutcomeEntity} [{}]", value, id, ex);
+        }
+    }
+#end
+#if($stampNumbers && $stampNumbers.size() > 0)
+
+    /** Whether a number still holds its create-time UUID placeholder (or nothing) - not yet issued. */
+    private static boolean unnumbered(String value) {
+        if (value == null) {
+            return true;
+        }
+        try {
+            java.util.UUID.fromString(value);
+            return true;
+        } catch (IllegalArgumentException numbered) {
+            return false;
         }
     }
 #end

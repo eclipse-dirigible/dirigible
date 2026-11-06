@@ -63,16 +63,7 @@ final class NumberingSupport {
                 descriptor.put("entity", entity.getName());
                 descriptor.put("perspective", IntentEntities.resolvePerspective(entity.getName(), compositionParents, model));
                 descriptor.put("masterPk", IntentEntities.keyFieldName(entity));
-                descriptor.put("field", IntentNaming.pascalCase(field.getName()));
-                descriptor.put("series", number.getSeries() == null ? entity.getName() : number.getSeries());
-                // The partition FK property the stamp reads off the entity ("" = tenant-wide series).
-                String per = number.getPer() == null || number.getPer()
-                                                              .isBlank() ? "" : IntentNaming.pascalCase(number.getPer());
-                descriptor.put("per", per);
-                // The partition the stamp falls back to when the FK is null on the loaded row: the
-                // relation's `init:` default (#7101) - the same value the create-time allocator uses,
-                // so both stamp paths resolve the default company to ITS partition, never the base row.
-                descriptor.put("perDefault", partitionDefault(entity, per));
+                descriptor.putAll(coordinates(entity, field, number));
                 // The status each step running this stamp precedes (#7577): the stamp asks the
                 // repository whether that move will be accepted BEFORE it spends a series value.
                 descriptor.put("gates", statusGates(model, entity, setters));
@@ -80,6 +71,41 @@ final class NumberingSupport {
             }
         }
         return numbering;
+    }
+
+    /**
+     * The coordinates of every {@code stampOn: issue} number of the entity - what a
+     * {@code transitions:} move declaring {@code stamp: number} draws and writes with its status
+     * (#8493), exactly as the {@code <Entity>NumberStamp} delegate does.
+     *
+     * @param entity the entity the move issues
+     * @return one {@code {field, series, per, perDefault}} entry per issue-stamped number field
+     */
+    static List<Map<String, Object>> issueNumbers(EntityIntent entity) {
+        List<Map<String, Object>> numbers = new ArrayList<>();
+        for (FieldIntent field : entity.getFields()) {
+            NumberIntent number = field.getNumber();
+            if (number != null && "issue".equalsIgnoreCase(number.getStampOn())) {
+                numbers.add(coordinates(entity, field, number));
+            }
+        }
+        return numbers;
+    }
+
+    /** The number property, its series and its partition, as both issue stamps allocate them. */
+    private static Map<String, Object> coordinates(EntityIntent entity, FieldIntent field, NumberIntent number) {
+        Map<String, Object> coordinates = new LinkedHashMap<>();
+        coordinates.put("field", IntentNaming.pascalCase(field.getName()));
+        coordinates.put("series", number.getSeries() == null ? entity.getName() : number.getSeries());
+        // The partition FK property the stamp reads off the entity ("" = tenant-wide series).
+        String per = number.getPer() == null || number.getPer()
+                                                      .isBlank() ? "" : IntentNaming.pascalCase(number.getPer());
+        coordinates.put("per", per);
+        // The partition the stamp falls back to when the FK is null on the loaded row: the
+        // relation's `init:` default (#7101) - the same value the create-time allocator uses,
+        // so both stamp paths resolve the default company to ITS partition, never the base row.
+        coordinates.put("perDefault", partitionDefault(entity, per));
+        return coordinates;
     }
 
     /**

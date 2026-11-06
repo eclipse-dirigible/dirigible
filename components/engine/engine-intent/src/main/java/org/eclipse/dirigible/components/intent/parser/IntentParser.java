@@ -12598,6 +12598,9 @@ public final class IntentParser {
                 if (t.isPersonal()) {
                     validatePersonalTransition(subject, entity, issues);
                 }
+                if (t.getStamp() != null) {
+                    validateTransitionStamp(subject, t, entity, issues);
+                }
             }
             if (t.getFrom() == null || t.getFrom()
                                         .isEmpty()) {
@@ -12632,6 +12635,25 @@ public final class IntentParser {
             // transitioned record itself.
             validateNotifyBlock(t.getNotify(), subject + " notify", entity == null ? null : entity.getName(), model, true, issues);
         }
+    }
+
+    /**
+     * {@code stamp: number} on a transition (#8493) issues the entity's {@code stampOn: issue} number
+     * with the move, so the entity must declare one - and a number is the only thing a move stamps.
+     */
+    private static void validateTransitionStamp(String subject, TransitionIntent t, EntityIntent entity, List<String> issues) {
+        if (!t.stampsNumber()) {
+            issues.add(subject + " stamp [" + t.getStamp() + "] must be `number` - the entity's stampOn: issue document number");
+            return;
+        }
+        for (FieldIntent field : entity.getFields()) {
+            if (field.getNumber() != null && "issue".equals(field.getNumber()
+                                                                 .getStampOn())) {
+                return;
+            }
+        }
+        issues.add(subject + " declares stamp: number but [" + entity.getName()
+                + "] has no `number: { stampOn: issue }` field - there is no number for the move to issue");
     }
 
     /**
