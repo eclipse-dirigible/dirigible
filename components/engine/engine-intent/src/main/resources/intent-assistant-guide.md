@@ -533,7 +533,8 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   invoices, open orders) `orderBy` over its date and a by-product list `orderBy` over the name. Not on
   `kind: statement` / `kind: ledger`, which carry their own order.
 - relative moments in a report `filter:` - **a period without a parameter**: `CURRENT_DATE`, the period starts
-  `START_OF_YEAR` / `START_OF_QUARTER` / `START_OF_MONTH`, each optionally with one signed ISO-8601 date period -
+  `START_OF_YEAR` / `START_OF_QUARTER` / `START_OF_MONTH`, each optionally with signed ISO-8601 date periods
+  (applied left to right: `START_OF_MONTH+P1M-P1D` is the last day of this month) -
   `filter: "issuedOn >= START_OF_YEAR"` (year to date), `"issuedOn >= CURRENT_DATE-P30D"` (the last 30 days),
   `"issuedOn >= START_OF_YEAR-P1Y and issuedOn < START_OF_YEAR"` (last year). Years, months, weeks and days only
   (`PT1H` is refused). Say the period in the report's label or description ("Sales by product, year to date") -
@@ -3203,6 +3204,22 @@ reports:
 exactly like a dimension, so a parameter may filter by a field the report does not display. `op` is
 `ge` | `le` | `eq` | `like`. `initial` is the value bound when the user leaves the input empty, i.e.
 what the report shows before anyone touches it.
+
+**A movable window (#8506):** a date parameter's `initial` is a fixed `yyyy-MM-dd` date or a **relative
+moment** - the `filter:` moments (`CURRENT_DATE`, `START_OF_YEAR` / `START_OF_QUARTER` / `START_OF_MONTH`),
+each optionally followed by signed ISO-8601 date periods applied left to right. The moment is resolved on
+every request, so the window moves with the calendar without a regen, and the user can still change it:
+
+```yaml
+    parameters:
+      - { name: fromDate, target: date, op: ge, initial: CURRENT_DATE-P29D }        # the last 30 days...
+      - { name: toDate, target: date, op: le, initial: CURRENT_DATE }               # ...up to today
+      # previous month: START_OF_MONTH-P1M .. START_OF_MONTH-P1D
+      # current month:  START_OF_MONTH .. START_OF_MONTH+P1M-P1D
+```
+
+An unknown `START_OF_*`, a time period (`PT1H`), anything that is neither a date nor one moment, and a
+moment on a non-date parameter are refused at parse.
 
 **Rules:** a parameter is bound on **every** call, so `initial` is required unless the comparison has a
 neutral "any value" default - a date `ge`/`le` bound (widened to all time) and `like` (the empty

@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.ide.template.service.model;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -44,5 +45,24 @@ class ModelTemplateAdaptersTest {
         Map<String, Object> parameters = Map.of("genFolderName", "Sales", "javaGenFolderName", "sales", "name", "Sales");
         assertTrue(ModelTemplateAdapters.retiredOutputs("template-application-ui-harmonia-java/template/template.js", parameters)
                                         .isEmpty());
+    }
+
+    /**
+     * A relative moment as a DATE parameter's initial (#8506) is handed to the repository template for
+     * per-request resolution, in its canonical spelling; a fixed date, a bare CURRENT_DATE (its own
+     * template branch), a non-date parameter and a malformed moment are not.
+     */
+    @Test
+    void aRelativeMomentInitialIsResolvedByTheRepository() {
+        assertEquals("CURRENT_DATE-P30D", ModelTemplateAdapters.reportMoment("DATE", "CURRENT_DATE-P30D"));
+        assertEquals("START_OF_MONTH+P1M-P1D", ModelTemplateAdapters.reportMoment("DATE", "start_of_month + P1M - P1D"));
+        assertEquals("START_OF_YEAR", ModelTemplateAdapters.reportMoment("DATE", "START_OF_YEAR"));
+        assertEquals("START_OF_QUARTER-P1M2W", ModelTemplateAdapters.reportMoment("DATE", "START_OF_QUARTER-P1M2W"));
+        assertNull(ModelTemplateAdapters.reportMoment("DATE", "CURRENT_DATE"));
+        assertNull(ModelTemplateAdapters.reportMoment("DATE", "2026-01-01"));
+        assertNull(ModelTemplateAdapters.reportMoment("INTEGER", "START_OF_YEAR"));
+        assertNull(ModelTemplateAdapters.reportMoment("DATE", "CURRENT_DATE-PT1H"));
+        assertNull(ModelTemplateAdapters.reportMoment("DATE", "START_OF_WEEK"));
+        assertNull(ModelTemplateAdapters.reportMoment("DATE", "CURRENT_DATE-P"));
     }
 }

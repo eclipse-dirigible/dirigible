@@ -2128,6 +2128,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         measures: ["sum(debit)"]
                         filter: "debit > 0 and CashVoucher.bookedOn >= START_OF_YEAR-P100Y and CashVoucher.bookedOn < CURRENT_DATE+P1D"
                         orderBy: [{ field: "sum(debit)", dir: desc }]
+                      # Relative moments as parameter initials (#8506): the window moves with the calendar
+                      # without a regen, and a request value still wins. The seeded vouchers (2026-02) lie
+                      # inside [START_OF_YEAR-P100Y, START_OF_MONTH+P1M-P1D] on any run date, and none lies
+                      # on or after CURRENT_DATE+P1D - so the second report is empty only if the moment
+                      # really resolves to a date at run time.
+                      - name: DebitInWindow
+                        source: CashVoucherLine
+                        dimensions: [LedgerAccount.code]
+                        measures: ["sum(debit)"]
+                        filter: "debit > 0"
+                        orderBy: [{ field: "sum(debit)", dir: desc }]
+                        parameters:
+                          - { name: fromDay, target: CashVoucher.bookedOn, op: ge, initial: START_OF_YEAR-P100Y }
+                          - { name: toDay, target: CashVoucher.bookedOn, op: le, initial: "START_OF_MONTH + P1M - P1D" }
+                      - name: DebitFromTomorrow
+                        source: CashVoucherLine
+                        dimensions: [LedgerAccount.code]
+                        measures: ["sum(debit)"]
+                        filter: "debit > 0"
+                        parameters:
+                          - { name: fromDay, target: CashVoucher.bookedOn, op: ge, initial: CURRENT_DATE+P1D }
 
                     seeds:
                       - name: people
@@ -3917,6 +3938,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 entryAgingRepository.contains(
                         "parameter(\"asOf\", \"DATE\", value(filter, \"asOf\", \"DATE\", java.time.LocalDate.now().toString()))"),
                 "the aging report must bind its as-of date to today when the request carries none: " + entryAgingRepository);
+
+        // A relative-moment initial (#8506) is resolved by the repository per request - never a date
+        // frozen at generation.
+        String debitInWindowRepository = contentOf("gen/debitinwindow/data/reports/DebitInWindowRepository.java");
+        assertTrue(debitInWindowRepository.contains("value(filter, \"toDay\", \"DATE\", moment(\"START_OF_MONTH+P1M-P1D\"))"),
+                "the to-bound must resolve its moment per request: " + debitInWindowRepository);
 
         // kind: statement (#6938): the line classification is a generated .view artifact next to the
         // .report - the selectors and labels live THERE, as data the ViewsSynchronizer provisions,
@@ -6441,6 +6468,28 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("'Sum Debit'", contains(1050.0F, 400.0F)));
+
+        // Relative moments as parameter initials, end to end (#8506): the generated repository resolves
+        // the moment on every request. Unparameterized, the window is the moments' (all four seeded
+        // accounts); a request value replaces a moment; and a window starting tomorrow holds nothing.
+        String debitInWindow = "/services/java/" + PROJECT + "/gen/debitinwindow/api/reports/DebitInWindowController";
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(debitInWindow)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("'Sum Debit'", contains(1050.0F, 400.0F, 200.0F, 120.0F)));
+        restAssuredExecutor.execute(() -> given().queryParam("toDay", "2026-02-05")
+                                                 .when()
+                                                 .get(debitInWindow)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("'Sum Debit'", contains(300.0F, 120.0F)));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/services/java/" + PROJECT
+                                                         + "/gen/debitfromtomorrow/api/reports/DebitFromTomorrowController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("size()", equalTo(0)));
 
         // kind: ledger, end to end (#7887): the card of the GROUP 50 over [2026-02-06, 2026-12-31].
         // Before the window the desk took +300 and the bank -120, so the card opens at 180; the five

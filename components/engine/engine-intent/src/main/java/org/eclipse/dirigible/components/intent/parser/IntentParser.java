@@ -13463,12 +13463,58 @@ public final class IntentParser {
                 issues.add(subject + " compares with op: like, which matches text - [" + parameter.getNormalizedTarget() + "] is a [" + kind
                         + "] field");
             }
+            validateReportParameterInitial(parameter, subject, kind, issues);
             boolean neutral =
                     "like".equals(op) || (("date".equals(kind) || "timestamp".equals(kind)) && ("ge".equals(op) || "le".equals(op)));
             if (!neutral && op != null && (parameter.getInitial() == null || parameter.getInitial()
                                                                                       .isBlank())) {
                 issues.add(subject + " needs an initial value - it is bound on every call and [" + op
                         + "] has no neutral default, so declare what the report shows before the user sets it");
+            }
+        }
+    }
+
+    /**
+     * A parameter's {@code initial} that names a day (dirigible #8506): a date parameter's initial is a
+     * fixed ISO date ({@code 2026-01-01}) or one relative moment - {@code CURRENT_DATE},
+     * {@code START_OF_YEAR}/{@code _QUARTER}/{@code _MONTH}, each optionally with signed ISO-8601 date
+     * periods ({@code CURRENT_DATE-P30D}, {@code START_OF_MONTH+P1M-P1D}) - checked by the same
+     * {@link ReportMoments#problems} a {@code filter:} moment is. A moment is resolved by the generated
+     * repository on every request, so the window moves with the calendar without a regen. A moment on a
+     * parameter that does not filter a date is refused: it names a day, not a number or a text.
+     */
+    private static void validateReportParameterInitial(ReportParameterIntent parameter, String subject, String kind, List<String> issues) {
+        String initial = parameter.getInitial() == null ? null
+                : parameter.getInitial()
+                           .trim();
+        if (initial == null || initial.isEmpty()) {
+            return;
+        }
+        boolean dated = "date".equals(kind) || "timestamp".equals(kind);
+        String upper = initial.toUpperCase(Locale.ROOT);
+        boolean momentLike = upper.startsWith("CURRENT_DATE") || upper.startsWith("START_OF_");
+        if (momentLike) {
+            if (kind != null && !dated) {
+                issues.add(subject + " has the moment initial [" + initial + "] but filters a [" + kind
+                        + "] field - a moment names a day, so only a date or timestamp parameter takes one");
+                return;
+            }
+            List<String> problems = ReportMoments.problems(initial);
+            for (String problem : problems) {
+                issues.add(subject + " initial " + problem);
+            }
+            if (problems.isEmpty() && !ReportMoments.isMoment(initial)) {
+                issues.add(subject + " initial [" + initial + "] must be one moment - CURRENT_DATE or START_OF_YEAR / START_OF_QUARTER /"
+                        + " START_OF_MONTH, optionally followed by signed date periods such as -P30D or +P1M-P1D");
+            }
+            return;
+        }
+        if (dated) {
+            try {
+                java.time.LocalDate.parse(initial);
+            } catch (java.time.format.DateTimeParseException notADate) {
+                issues.add(subject + " has initial [" + initial + "], which is neither a date (yyyy-MM-dd) nor a relative moment such as"
+                        + " CURRENT_DATE-P30D, START_OF_MONTH or START_OF_YEAR");
             }
         }
     }

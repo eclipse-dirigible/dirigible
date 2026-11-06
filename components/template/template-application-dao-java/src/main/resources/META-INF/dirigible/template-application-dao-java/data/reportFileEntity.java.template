@@ -308,6 +308,9 @@ public class ${name}Repository {
 #if($parameter.type == "DATE" && $parameter.initial == "CURRENT_DATE")
         // initial: CURRENT_DATE - the day the report is run, resolved per request.
         parameters.add(parameter("${parameter.name}", "${parameter.type}", value(filter, "${parameter.name}", "${parameter.type}", java.time.LocalDate.now().toString())));
+#elseif($parameter.initialMoment)
+        // initial: ${parameter.initialMoment} - a relative moment, resolved per request (#8506).
+        parameters.add(parameter("${parameter.name}", "${parameter.type}", value(filter, "${parameter.name}", "${parameter.type}", moment("${parameter.initialMoment}"))));
 #else
         parameters.add(parameter("${parameter.name}", "${parameter.type}", value(filter, "${parameter.name}", "${parameter.type}", "${parameter.initialJavaLiteral}")));
 #end
@@ -315,6 +318,34 @@ public class ${name}Repository {
         return parameters;
     }
 
+#if($hasMomentParameters)
+    /**
+     * A relative moment (#8506) - CURRENT_DATE or START_OF_YEAR / START_OF_QUARTER / START_OF_MONTH,
+     * then signed ISO-8601 date periods applied left to right (START_OF_MONTH+P1M-P1D is the last day of
+     * this month) - as the ISO date it names on the day the report runs. Each period applies its years,
+     * then its months, then its days, as the report filter's INTERVAL arithmetic does in SQL.
+     */
+    private static String moment(String moment) {
+        LocalDate today = LocalDate.now();
+        String token = moment.replaceAll("[+-].*", "");
+        LocalDate day = switch (token) {
+            case "START_OF_YEAR" -> today.withDayOfYear(1);
+            case "START_OF_QUARTER" -> today.withDayOfMonth(1).withMonth((today.getMonthValue() - 1) / 3 * 3 + 1);
+            case "START_OF_MONTH" -> today.withDayOfMonth(1);
+            default -> today;
+        };
+        java.util.regex.Matcher offset = java.util.regex.Pattern.compile("([+-])(P[0-9A-Z]+)").matcher(moment.substring(token.length()));
+        while (offset.find()) {
+            java.time.Period period = java.time.Period.parse(offset.group(2));
+            int sign = "-".equals(offset.group(1)) ? -1 : 1;
+            day = day.plusYears(sign * (long) period.getYears())
+                     .plusMonths(sign * (long) period.getMonths())
+                     .plusDays(sign * (long) period.getDays());
+        }
+        return day.toString();
+    }
+
+#end
 #if($query && $query.contains(":language"))
     /**
      * The caller's language for the translation overlay: the primary subtag of the Accept-Language
