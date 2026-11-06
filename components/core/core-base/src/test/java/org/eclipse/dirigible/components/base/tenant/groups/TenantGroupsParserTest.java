@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.base.tenant.groups;
 
+import org.eclipse.dirigible.components.base.tenant.GlobalRolesScope;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -145,5 +146,71 @@ class TenantGroupsParserTest {
                                                                            .add("Admin"));
         assertThrows(UnsupportedOperationException.class, () -> assignments.globalRoles()
                                                                            .add("DEVELOPER"));
+    }
+
+    @Test
+    void theTwoArgumentParseUsesTheInstanceScope() {
+        List<String> groups = List.of("ADMINISTRATOR", "library.DEVELOPER", "acme.library.Owner");
+
+        assertEquals(TenantGroupsParser.parse(groups, APP_ID, GlobalRolesScope.INSTANCE)
+                                       .globalRoles(),
+                TenantGroupsParser.parse(groups, APP_ID)
+                                  .globalRoles());
+        assertEquals(Set.of("ADMINISTRATOR", "library.DEVELOPER"), TenantGroupsParser.parse(groups, APP_ID, null)
+                                                                                     .globalRoles());
+    }
+
+    @Test
+    void underTheApplicationScopeAnUnscopedGroupGrantsNothing() {
+        UserTenantAssignments assignments = TenantGroupsParser.parse(List.of("ADMINISTRATOR", "DEVELOPER", "eu-west-1_abc_Google"), APP_ID,
+                GlobalRolesScope.APPLICATION);
+
+        assertTrue(assignments.hasNoTenants());
+        assertTrue(assignments.globalRoles()
+                              .isEmpty());
+    }
+
+    @Test
+    void underTheApplicationScopeAGroupNamingThisApplicationGrantsItsRole() {
+        UserTenantAssignments assignments =
+                TenantGroupsParser.parse(List.of("library.ADMINISTRATOR", "library.DEVELOPER"), APP_ID, GlobalRolesScope.APPLICATION);
+
+        assertTrue(assignments.hasNoTenants());
+        assertEquals(Set.of("ADMINISTRATOR", "DEVELOPER"), assignments.globalRoles());
+    }
+
+    @Test
+    void underTheApplicationScopeAGroupOfAnotherApplicationGrantsNothing() {
+        UserTenantAssignments assignments = TenantGroupsParser.parse(
+                List.of("suite.ADMINISTRATOR", "LIBRARY.ADMINISTRATOR", "library2.DEVELOPER"), APP_ID, GlobalRolesScope.APPLICATION);
+
+        assertTrue(assignments.globalRoles()
+                              .isEmpty());
+    }
+
+    @Test
+    void underTheApplicationScopeTenantGroupsWorkAsBefore() {
+        List<String> groups = List.of("acme.library.Owner", "acme.library.Tenant.Owner", "globex.library.User", "acme.bi.Owner",
+                "library.library.Owner", "library.ADMINISTRATOR");
+
+        UserTenantAssignments scoped = TenantGroupsParser.parse(groups, APP_ID, GlobalRolesScope.APPLICATION);
+        UserTenantAssignments unscoped = TenantGroupsParser.parse(groups, APP_ID, GlobalRolesScope.INSTANCE);
+
+        assertEquals(Set.of("acme", "globex", "library"), scoped.tenantIds());
+        assertEquals(unscoped.tenantIds(), scoped.tenantIds());
+        assertEquals(Set.of("Owner", "Tenant.Owner"), scoped.rolesFor("acme"));
+        assertEquals(Set.of("User"), scoped.rolesFor("globex"));
+        assertEquals(Set.of("Owner"), scoped.rolesFor("library"), "a group with two dots is a tenant group, whatever its first segment");
+        assertEquals(Set.of("ADMINISTRATOR"), scoped.globalRoles());
+    }
+
+    @Test
+    void underTheApplicationScopeMalformedGroupsGrantNothing() {
+        UserTenantAssignments assignments =
+                TenantGroupsParser.parse(List.of("library.", ".ADMINISTRATOR", "library", "acme..Owner", " library.OPERATOR "), APP_ID,
+                        GlobalRolesScope.APPLICATION);
+
+        assertTrue(assignments.hasNoTenants());
+        assertEquals(Set.of("OPERATOR"), assignments.globalRoles());
     }
 }

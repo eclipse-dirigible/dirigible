@@ -9,6 +9,8 @@
  */
 package org.eclipse.dirigible.components.security.oauth2.tenant;
 
+import org.eclipse.dirigible.components.base.tenant.groups.TenantGroupsParser;
+import org.eclipse.dirigible.components.base.tenant.GlobalRolesScope;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -670,5 +672,28 @@ class TenantSelectionFilterTest {
 
     private static UserTenantAssignments assignments(Map<String, Set<String>> tenantRoles, Set<String> globalRoles) {
         return new UserTenantAssignments(tenantRoles, globalRoles);
+    }
+
+    @Test
+    void underTheApplicationScopeAnUnscopedStaffGroupIsRefusedTheDefaultTenant() throws Exception {
+        authenticate();
+        when(tenantSelectionManager.assignmentsOf(any())).thenReturn(
+                TenantGroupsParser.parse(List.of("DEVELOPER", "suite.DEVELOPER"), "library", GlobalRolesScope.APPLICATION));
+
+        filter.doFilter(request, response, chain);
+
+        assertNoTenantAssigned();
+    }
+
+    @Test
+    void underTheApplicationScopeStaffOfThisApplicationEnterTheDefaultTenant() throws Exception {
+        authenticate();
+        when(tenantSelectionManager.assignmentsOf(any())).thenReturn(
+                TenantGroupsParser.parse(List.of("library.DEVELOPER"), "library", GlobalRolesScope.APPLICATION));
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(chain.getRequest()).isNotNull();
+        assertThat(response.getStatus()).isEqualTo(200);
     }
 }

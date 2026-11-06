@@ -19,6 +19,7 @@ import java.util.stream.Collectors;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.components.base.tenant.TenantResolutionStrategy;
+import org.eclipse.dirigible.components.base.tenant.GlobalRolesScope;
 import org.eclipse.dirigible.components.base.tenant.groups.TenantGroupsParser;
 import org.eclipse.dirigible.components.base.util.AuthoritiesUtil;
 import org.slf4j.Logger;
@@ -123,8 +124,9 @@ public class TenantAwareAuthoritiesMapper implements GrantedAuthoritiesMapper {
             LOGGER.debug("No groups found in claim [{}] of the current user.", groupsClaim.getName());
             return Collections.emptySet();
         }
-        Set<String> globalRoles = TenantGroupsParser.parse(groups, DirigibleConfig.APP_ID.getStringValue())
-                                                    .globalRoles();
+        Set<String> globalRoles =
+                TenantGroupsParser.parse(groups, DirigibleConfig.APP_ID.getStringValue(), GlobalRolesScope.fromConfiguration())
+                                  .globalRoles();
         LOGGER.debug("Mapped [{}] global roles out of [{}] groups. The roles of a tenant are granted when it is selected.",
                 globalRoles.size(), groups.size());
         return AuthoritiesUtil.toAuthorities(globalRoles);

@@ -229,6 +229,17 @@ public enum DirigibleConfig {
     APP_ID("DIRIGIBLE_APP_ID", null),
 
     /**
+     * Which identity provider groups that carry no tenant are global roles of this application, while
+     * {@link #TENANT_RESOLUTION_STRATEGY} is {@code TOKEN_GROUPS}: {@code INSTANCE} (the default -
+     * every such group, e.g. {@code ADMINISTRATOR}) or {@code APPLICATION} (only a group
+     * {@code <appId>.<role>} naming {@link #APP_ID}, which grants {@code <role>}). Set it to
+     * {@code APPLICATION} when one identity provider serves several applications, so that staff of one
+     * of them are not staff of every other one. It applies to the roles of a login and of a bearer ID
+     * token, and to who may enter the default tenant without a tenant of their own.
+     */
+    TENANT_GLOBAL_ROLES_SCOPE("DIRIGIBLE_TENANT_GLOBAL_ROLES_SCOPE", "INSTANCE", meta().type(ConfigType.ENUM)),
+
+    /**
      * The token claim carrying the user groups. AWS Cognito puts them in {@code cognito:groups} (the
      * default), a Keycloak realm typically in {@code groups}.
      */
