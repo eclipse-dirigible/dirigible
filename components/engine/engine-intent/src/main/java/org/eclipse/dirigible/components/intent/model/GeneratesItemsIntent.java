@@ -74,6 +74,58 @@ public class GeneratesItemsIntent {
      */
     private String refuse;
 
+    /**
+     * Optional report whose RESULT ROWS become the lines, instead of the rows of {@link #from} (issue
+     * #8329): a {@code kind: balance} report run for the source record - one line per row passing
+     * {@link #where}, its cells read from the row's columns by {@link #map}. A year close books the
+     * result accounts' balances this way. Mutually exclusive with {@link #from}.
+     */
+    private String fromReport;
+
+    /**
+     * {@link #fromReport} only: report parameter -> source property whose value the report is run with
+     * (the window bounds and any authored parameter). A source holding no value is refused, never run
+     * with the report's all-time initial.
+     */
+    private Map<String, String> parameters = new LinkedHashMap<>();
+
+    /**
+     * {@link #fromReport} only: the cells of the optional COUNTER line - target item property -> report
+     * column, as {@link #map}. Rows whose counter cells other than the decimal ones are equal share ONE
+     * counter line carrying the sum of their decimal cells: the year close's line on the closing
+     * account receiving the opposite of every result account it closes.
+     */
+    private Map<String, String> counter = new LinkedHashMap<>();
+
+    public String getFromReport() {
+        return fromReport;
+    }
+
+    public void setFromReport(String fromReport) {
+        this.fromReport = fromReport;
+    }
+
+    /** Whether the lines are a report's result rows ({@link #fromReport}). */
+    public boolean isFromReport() {
+        return fromReport != null && !fromReport.isBlank();
+    }
+
+    public Map<String, String> getParameters() {
+        return parameters;
+    }
+
+    public void setParameters(Map<String, String> parameters) {
+        this.parameters = parameters == null ? new LinkedHashMap<>() : parameters;
+    }
+
+    public Map<String, String> getCounter() {
+        return counter;
+    }
+
+    public void setCounter(Map<String, String> counter) {
+        this.counter = counter == null ? new LinkedHashMap<>() : counter;
+    }
+
     public String getFrom() {
         return from;
     }

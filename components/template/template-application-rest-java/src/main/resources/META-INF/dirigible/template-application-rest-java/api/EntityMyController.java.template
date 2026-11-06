@@ -25,16 +25,18 @@ package gen.${javaGenFolderName}.api.${javaPerspectiveName};
 
 ## System-owned columns a user CREATE must never take from the payload (#7549), consumed by create():
 ## the same set the generated repository's update() preserves from the stored row - an author's
-## readOnly, the roll-up/aggregate targets, ProcessId(s), a label's Name - minus the number/uuid
-## stamps, which discard a client value in save() themselves (#7548). The predicate is the one that
-## builds preservedOnUpdate in Repository.java.template: keep the two in step. The drop lives on the
+## readOnly, the roll-up/aggregate targets, ProcessId(s), a label's Name, a `type: uuid` (#8485) -
+## minus the number stamps, which discard a client value in save() themselves (#7548). save() fills
+## a uuid only when it is blank, so dropping a client's here is what makes the server issue it. The
+## predicate is the one that builds preservedOnUpdate in Repository.java.template: keep the two in
+## step. The drop lives on the
 ## REST surface and never in the repository, because save() is the create path of every system
 ## writer - the attachment upload, the snapshot mint, a create-from, a posting - and those assign
 ## exactly these columns by design (#7620).
 #set($systemOwnedOnCreate = [])
 #set($reportedOnCreate = [])
 #foreach($property in $properties)
-#if(!$property.dataPrimaryKey && !$property.generatedUuid && !$property.numberStampOnCreate && ($property.isReadOnlyProperty || ($property.aggregate && !$property.calculatedPropertyExpressionUpdate && !$property.calculatedActionOnUpdate)))
+#if(!$property.dataPrimaryKey && !$property.numberStampOnIssue && !$property.numberStampOnCreate && ($property.isReadOnlyProperty || ($property.aggregate && !$property.calculatedPropertyExpressionUpdate && !$property.calculatedActionOnUpdate)))
 #set($ignore = $systemOwnedOnCreate.add($property))
 ## A date is dropped but not reported: the form's round-trip is lossy (whole minutes, midnight), so a
 ## differing date says nothing about who wrote it - the line reportedOnUpdate draws as well.
@@ -221,6 +223,9 @@ public class ${name}MyController {
     @Post
     @Documentation("Create a ${name} of mine")
     public ${name}Entity create(@Body ${name}Entity entity) {
+#if($systemWritten)
+        refuseSystemWritten("created");
+#end
 #if($personalParent)
         if (entity.${personalParent.fkProperty} == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${personalParent.fkProperty} is required");
@@ -295,6 +300,9 @@ public class ${name}MyController {
     @Put("/{id}")
     @Documentation("Update my ${name} by id")
     public ${name}Entity update(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id, @Body ${name}Entity entity) {
+#if($systemWritten)
+        refuseSystemWritten("updated");
+#end
 #set($lockedUpdate = $workflowStatusProperty || $immutableStatusProperty)
 #if($lockedUpdate)
         // The record is locked for the whole request (#8109): the checks below compare the payload with
@@ -394,6 +402,9 @@ public class ${name}MyController {
     @Delete("/{id}")
     @Documentation("Delete my ${name} by id")
     public void deleteById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
+#if($systemWritten)
+        refuseSystemWritten("deleted");
+#end
         ${name}Entity existing = requireMine(id);
 #if($immutableAlways || $immutableStatusProperty || $periodLock)
         requireMutable(existing);
@@ -1369,4 +1380,15 @@ public class ${name}MyController {
         }
         return false;
     }
+#if($systemWritten)
+
+    /**
+     * ${name} is written by the application only (intent {@code systemWritten: true}, #8503), through
+     * its repository. A REST write is refused for every caller, as the power controller refuses it.
+     */
+    private static void refuseSystemWritten(String verb) {
+        throw new ResponseStatusException(HttpStatus.METHOD_NOT_ALLOWED,
+                "${name} records are written by the system only - they cannot be " + verb + " over REST");
+    }
+#end
 }

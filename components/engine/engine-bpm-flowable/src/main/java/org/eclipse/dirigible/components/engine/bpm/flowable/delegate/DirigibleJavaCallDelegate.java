@@ -29,6 +29,7 @@ import org.flowable.common.engine.impl.el.FixedValue;
 import org.flowable.engine.delegate.DelegateExecution;
 import org.flowable.engine.delegate.JavaDelegate;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,6 +58,10 @@ import io.opentelemetry.context.Scope;
 // don't change the name of the bean or the class name and package
 // otherwise processes will stop working
 @Component("JavaTask")
+// A new instance per resolution (#8392): Flowable resolves the delegate expression on every
+// execution and injects the step's handler field into the instance it got - on a shared singleton a
+// concurrent job's injection could land before this one read its handler and run the wrong step.
+@org.springframework.context.annotation.Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 public class DirigibleJavaCallDelegate implements JavaDelegate {
 
     private final TenantContext tenantContext;

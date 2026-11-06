@@ -14,6 +14,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Pattern;
 
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.repository.api.IRepository;
@@ -34,6 +36,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
 
+import io.restassured.path.json.JsonPath;
 import io.restassured.response.ValidatableResponse;
 import io.restassured.specification.RequestSpecification;
 
@@ -66,6 +69,11 @@ class IntentFixedAfterCreateIT extends IntegrationTest {
     private static final String EXPENSES = API + "/expense/ExpenseController";
     private static final String PARTNER_EXPENSES = API + "/expense/ExpensePartnerController";
     private static final String APPROVALS = API + "/approval/ApprovalController";
+    private static final String EMPLOYEES = API + "/employee/EmployeeController";
+    private static final String EXPENSE_FROM_TIMESHEET =
+            "/services/java/" + PROJECT + "/gen/events/" + PROJECT + "/ExpenseFromTimesheetGenerate/run";
+    private static final String SEEDED_UUID = "5f0c8a52-6b1e-4c4e-9a43-2d1e8b7c0001";
+    private static final Pattern UUID_SHAPE = Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
     private static final String CATALOG_KEY = "Timesheet_fixed_Project";
     private static final String REFUSAL = "'Project' cannot change once the Timesheet is created";
     private static final String REFUSAL_BG = "Проектът не може да се смени след създаването на отчета";
@@ -92,6 +100,8 @@ class IntentFixedAfterCreateIT extends IntegrationTest {
                   - { name: id,    type: integer, primaryKey: true, generated: true }
                   - { name: name,  type: string, required: true, length: 100 }
                   - { name: email, type: string, required: true, length: 100 }
+                  # Loaded by the seed below with the UUID it carries (#8485).
+                  - { name: uuid,  type: uuid, unique: true, major: false }
 
               - name: Project
                 kind: setting
@@ -108,6 +118,8 @@ class IntentFixedAfterCreateIT extends IntegrationTest {
                   - { name: rate,      type: decimal, fixedAfterCreate: true }
                   # Fixed once an approval references the row (#8194).
                   - { name: batch,     type: string, length: 20, fixedWhenReferenced: true }
+                  # Issued by the server on create, whatever the payload carries (#8485).
+                  - { name: uuid,      type: uuid, unique: true, major: false }
                 relations:
                   - { name: Project,  kind: manyToOne, to: Project, required: true, fixedAfterCreate: true }
                   - { name: Employee, kind: manyToOne, to: Employee, required: true, personal: true, fixedAfterCreate: true }
@@ -119,6 +131,7 @@ class IntentFixedAfterCreateIT extends IntegrationTest {
                   - { name: note,      type: string, length: 200 }
                   - { name: reference, type: string, length: 20, normalize: upper, fixedAfterCreate: true }
                   - { name: batch,     type: string, length: 20, fixedWhenReferenced: true }
+                  - { name: uuid,      type: uuid, unique: true, major: false }
                 relations:
                   - { name: Project,  kind: manyToOne, to: Project, required: true, fixedAfterCreate: true }
                   - { name: Employee, kind: manyToOne, to: Employee, required: true, partner: true }
@@ -156,11 +169,19 @@ class IntentFixedAfterCreateIT extends IntegrationTest {
                   - { name: rename, kind: serviceTask, args: { setField: reference, value: SYS-1 } }
                   - { name: end,    kind: end }
 
+            # A system writer of a uuid: the create-from mints an expense through the repository (#8485).
+            generates:
+              - name: expense-from-timesheet
+                from: Timesheet
+                to: Expense
+                label: Expense
+                map: { Project: Project, Employee: Employee, note: note }
+
             seeds:
               - name: employees
                 entity: Employee
                 rows:
-                  - { id: 1, name: Admin, email: admin }
+                  - { id: 1, name: Admin, email: admin, uuid: 5f0c8a52-6b1e-4c4e-9a43-2d1e8b7c0001 }
               - name: projects
                 entity: Project
                 rows:
@@ -337,6 +358,80 @@ class IntentFixedAfterCreateIT extends IntegrationTest {
         create(INVOICE_ITEMS, "{\"Invoice\":" + second + ",\"Note\":\"services\",\"Amount\":40}");
         awaitAmount(second, "40");
         awaitAmount(first, "300");
+    }
+
+    /**
+     * A uuid field is issued by the server on every client create (#8485): the value a client posts -
+     * any string, or another record's uuid - is discarded on the power, the personal and the partner
+     * surface, and a PUT cannot change the one issued. A system writer keeps the repository's own fill,
+     * so a create-from draws one for the record it mints, and data loaded below the application - a
+     * seed, a demo CSV - keeps the UUID it was loaded with.
+     */
+    @Test
+    void a_uuid_is_issued_by_the_server_on_create_and_never_taken_from_the_payload() {
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        int timesheet = create(TIMESHEETS, "{\"Note\":\"week 1\",\"Project\":1,\"Employee\":1,\"Uuid\":\"not-a-uuid\"}");
+        String issued = issuedUuid(TIMESHEETS, timesheet);
+        int mine = create(MY_TIMESHEETS, "{\"Note\":\"week 2\",\"Project\":1,\"Uuid\":\"not-a-uuid\"}");
+        issuedUuid(TIMESHEETS, mine);
+        int expense = create(PARTNER_EXPENSES, "{\"Note\":\"taxi\",\"Project\":1,\"Uuid\":\"not-a-uuid\"}");
+        issuedUuid(EXPENSES, expense);
+        // Another record's uuid is not taken either - it was answered 409 by the unique key.
+        int copy = create(TIMESHEETS, "{\"Note\":\"week 3\",\"Project\":1,\"Employee\":1,\"Uuid\":\"" + issued + "\"}");
+        assertNotEquals(issued, issuedUuid(TIMESHEETS, copy), "a create must not take another record's uuid");
+
+        // An update keeps the issued value, as it did.
+        put(TIMESHEETS, timesheet, "{\"Note\":\"edited\",\"Employee\":1,\"Uuid\":\"not-a-uuid\"}", null).statusCode(200);
+        assertEquals(issued, issuedUuid(TIMESHEETS, timesheet), "an update must not change the issued uuid");
+
+        // A create-from draws one for the expense it mints. It answers its JSON as text, so the body
+        // is parsed rather than path-extracted.
+        AtomicReference<String> minted = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> minted.set(JsonPath.from(given().contentType("application/json")
+                                                                          .body("{\"id\":" + timesheet + "}")
+                                                                          .when()
+                                                                          .post(EXPENSE_FROM_TIMESHEET)
+                                                                          .then()
+                                                                          .statusCode(200)
+                                                                          .extract()
+                                                                          .asString())
+                                                             .getString("Uuid")),
+                TIMEOUT_SECONDS);
+        assertWellFormedUuid(minted.get());
+        assertNotEquals(issued, minted.get(), "the minted expense must get its own uuid");
+
+        // The seed's explicit UUID is kept.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(EMPLOYEES + "/1")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Uuid", equalTo(SEEDED_UUID)),
+                TIMEOUT_SECONDS);
+    }
+
+    /**
+     * The record's uuid, read back through the power controller, asserted to be a server-drawn UUID.
+     */
+    private String issuedUuid(String controller, int id) {
+        AtomicReference<String> uuid = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> uuid.set(given().when()
+                                                          .get(controller + "/" + id)
+                                                          .then()
+                                                          .statusCode(200)
+                                                          .extract()
+                                                          .path("Uuid")),
+                TIMEOUT_SECONDS);
+        assertWellFormedUuid(uuid.get());
+        return uuid.get();
+    }
+
+    private static void assertWellFormedUuid(String value) {
+        assertTrue(value != null && UUID_SHAPE.matcher(value)
+                                              .matches(),
+                "the uuid must be a server-drawn UUID, not the payload's value: " + value);
     }
 
     private ValidatableResponse readItem(int item) {

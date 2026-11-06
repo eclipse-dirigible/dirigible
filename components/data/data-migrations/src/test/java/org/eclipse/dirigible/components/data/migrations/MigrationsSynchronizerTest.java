@@ -22,7 +22,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -40,12 +44,16 @@ import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.base.tenant.TenantArtefactLedger;
 import org.eclipse.dirigible.components.base.tenant.TenantResult;
 import org.eclipse.dirigible.components.data.migrations.MigrationExecutor.Outcome;
+import org.eclipse.dirigible.components.data.migrations.MigrationExecutor.Predecessor;
 import org.eclipse.dirigible.components.data.migrations.MigrationExecutor.Status;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.database.DatabaseSystem;
+import org.eclipse.dirigible.components.database.DirigibleConnection;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
+import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -164,9 +172,64 @@ class MigrationsSynchronizerTest {
         synchronizer.completeImpl(wrap(second), ArtefactPhase.CREATE);
 
         @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<Migration>> predecessors = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<List<Predecessor>> predecessors = ArgumentCaptor.forClass(List.class);
         verify(executor, org.mockito.Mockito.atLeastOnce()).apply(any(), eq(V2), any(), any(), predecessors.capture());
-        assertThat(predecessors.getValue()).containsExactly(first);
+        assertThat(predecessors.getValue()).singleElement()
+                                           .satisfies(predecessor -> {
+                                               assertThat(predecessor.migration()).isSameAs(first);
+                                               assertThat(predecessor.script()
+                                                                     .sql()).contains("STATUS = 'A'");
+                                           });
+    }
+
+    /**
+     * A pass offers a project's migrations in no particular order - the order of a hash set, different
+     * from boot to boot - and across phases: a new version in CREATE, an earlier one in START. Whatever
+     * comes first, the versions apply lowest first, every offer completes, and nothing is reported as
+     * failed (#8496). Real executor, real ledger, in-memory database.
+     */
+    @Test
+    void aProjectsMigrationsOfferedInReverseApplyInVersionOrderWithoutAFailure() throws Exception {
+        JdbcDataSource database = new JdbcDataSource();
+        database.setURL("jdbc:h2:mem:migrations_synchronizer_order_test;DB_CLOSE_DELAY=-1");
+        // Both tenants of setUp() share this one database: the second finds every version applied.
+        when(tenantDataSource.getConnection()).thenAnswer(invocation -> h2(database.getConnection()));
+        try (Connection connection = database.getConnection(); Statement statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE ORDERS (ID INT PRIMARY KEY, STATUS VARCHAR(40))");
+            statement.execute("INSERT INTO ORDERS VALUES (1, NULL)");
+        }
+        MigrationsSynchronizer ordered = new MigrationsSynchronizer(migrationService, new MigrationExecutor(new MigrationLedger()),
+                dataSourcesManager, tenantContext, repository, tenantArtefactLedger);
+        ordered.setCallback(callback);
+        Migration first = published(V1, "UPDATE ORDERS SET STATUS = 'OPEN' WHERE STATUS IS NULL;", ArtefactLifecycle.NEW);
+        Migration second = published(V2, "UPDATE ORDERS SET STATUS = 'ARCHIVED' WHERE STATUS = 'OPEN';", ArtefactLifecycle.NEW);
+        Migration third = published(V3, "UPDATE ORDERS SET STATUS = STATUS || '-3' WHERE STATUS = 'ARCHIVED';", ArtefactLifecycle.NEW);
+        // An earlier pass left the oldest one FAILED: this pass retries it in START, after CREATE.
+        Migration zero = published("/orders/migrations/000__zero.migration", "UPDATE ORDERS SET STATUS = NULL;", ArtefactLifecycle.FAILED);
+        when(migrationService.findAllByProject("orders")).thenReturn(List.of(zero, first, second, third));
+
+        for (Migration migration : List.of(third, second, first)) {
+            assertThat(ordered.completeImpl(wrap(migration, ordered), ArtefactPhase.CREATE)).as(migration.getLocation() + " completes")
+                                                                                            .isTrue();
+        }
+        assertThat(ordered.completeImpl(wrap(zero, ordered), ArtefactPhase.START)).isTrue();
+
+        try (Connection connection = database.getConnection();
+                Statement statement = connection.createStatement();
+                ResultSet resultSet = statement.executeQuery("SELECT STATUS FROM ORDERS WHERE ID = 1")) {
+            assertThat(resultSet.next()).isTrue();
+            assertThat(resultSet.getString(1)).as("0 cleared it, 1 opened it, 2 archived it, 3 marked the archived row")
+                                              .isEqualTo("ARCHIVED-3");
+        }
+        assertThat(new MigrationLedger().findAll(database)).extracting(MigrationLedger.Entry::version)
+                                                           .containsExactlyInAnyOrder("0", "1", "2", "3");
+        verify(callback, never()).registerState(any(), any(TopologyWrapper.class), eq(ArtefactLifecycle.FAILED), anyString(), any());
+        verify(callback, never()).addError(anyString());
+        verify(callback, org.mockito.Mockito.times(4)).registerState(eq(ordered), any(TopologyWrapper.class),
+                eq(ArtefactLifecycle.CREATED));
+        try (Connection connection = database.getConnection(); Statement statement = connection.createStatement()) {
+            statement.execute("DROP ALL OBJECTS");
+        }
     }
 
     @Test
@@ -214,7 +277,31 @@ class MigrationsSynchronizerTest {
     }
 
     private TopologyWrapper<Migration> wrap(Migration migration) {
-        return new TopologyWrapper<>(migration, new HashMap<>(), synchronizer);
+        return wrap(migration, synchronizer);
+    }
+
+    private static TopologyWrapper<Migration> wrap(Migration migration, MigrationsSynchronizer owner) {
+        return new TopologyWrapper<>(migration, new HashMap<>(), owner);
+    }
+
+    /** The connection the platform hands out: a JDBC connection that knows its database system. */
+    private static DirigibleConnection h2(Connection connection) {
+        return mock(DirigibleConnection.class, call -> {
+            switch (call.getMethod()
+                        .getName()) {
+                case "getDatabaseSystem":
+                    return DatabaseSystem.H2;
+                case "isOfType":
+                    return DatabaseSystem.H2 == call.getArgument(0);
+                default:
+                    try {
+                        return call.getMethod()
+                                   .invoke(connection, call.getArguments());
+                    } catch (InvocationTargetException ex) {
+                        throw ex.getCause();
+                    }
+            }
+        });
     }
 
     private IResource resource(String path) {

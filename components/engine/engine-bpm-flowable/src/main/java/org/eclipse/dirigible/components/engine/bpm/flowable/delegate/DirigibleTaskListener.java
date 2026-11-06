@@ -26,6 +26,7 @@ import org.flowable.engine.delegate.BpmnError;
 import org.flowable.task.service.delegate.DelegateTask;
 import org.flowable.task.service.delegate.TaskListener;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import io.opentelemetry.api.trace.Span;
@@ -33,6 +34,10 @@ import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Scope;
 
 @Component("JSListener")
+// A new instance per resolution (#8392): Flowable resolves the delegate expression on every
+// execution and injects the step's handler field into the instance it got - on a shared singleton a
+// concurrent job's injection could land before this one read its handler and run the wrong step.
+@org.springframework.context.annotation.Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 public class DirigibleTaskListener implements TaskListener {
 
     private final TenantContext tenantContext;
