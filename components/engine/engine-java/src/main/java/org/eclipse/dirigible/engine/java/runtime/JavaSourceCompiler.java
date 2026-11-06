@@ -72,9 +72,11 @@ public class JavaSourceCompiler {
      * @param diagnostics per top-level FQN → the structured diagnostics behind that failure, so
      *        consumers can render one entry per error at its line/column; absent for FQNs that failed
      *        without an attributable diagnostic (e.g. produced no class file)
+     * @param rounds the {@code javac} rounds the batch took - more than one only when units were
+     *        salvaged from a batch holding an error
      */
-    public record BatchResult(Map<String, byte[]> bytecode, Map<String, String> failures,
-            Map<String, List<CompileDiagnostic>> diagnostics) {
+    public record BatchResult(Map<String, byte[]> bytecode, Map<String, String> failures, Map<String, List<CompileDiagnostic>> diagnostics,
+            int rounds) {
     }
 
     /**
@@ -120,7 +122,7 @@ public class JavaSourceCompiler {
      */
     public BatchResult compileBatch(List<SourceUnit> units) {
         if (units.isEmpty()) {
-            return new BatchResult(Map.of(), Map.of(), Map.of());
+            return new BatchResult(Map.of(), Map.of(), Map.of(), 0);
         }
 
         List<SourceUnit> remaining = new ArrayList<>(units);
@@ -160,21 +162,8 @@ public class JavaSourceCompiler {
             round++;
         }
 
-        if (failures.isEmpty()) {
-            // INFO, not DEBUG: the batch runs only when the source set changed, and after a
-            // mid-publish failure this line is the ONLY visible evidence that the next cycle
-            // recovered - at DEBUG the stale failure ERROR stays the log's last word and a
-            // green system diagnoses as dead.
-            LOGGER.info("Compiled batch: [{}] units, [{}] class file(s), no failures", units.size(), bytecode.size());
-        } else if (round == 1) {
-            LOGGER.error("Compiled batch: [{}] units, [{}] class file(s); [{}] unit(s) failed to compile: {}", units.size(),
-                    bytecode.size(), failures.size(), failures.keySet());
-        } else {
-            LOGGER.error("Compiled batch: [{}] units, [{}] class file(s) over [{}] compile rounds; [{}] unit(s) failed to compile: {}",
-                    units.size(), bytecode.size(), round, failures.size(), failures.keySet());
-        }
-
-        return new BatchResult(bytecode, Collections.unmodifiableMap(failures), Collections.unmodifiableMap(diagnostics));
+        // The "Compiled batch" summary is JavaLoader's: it prints once the generation is installed (#8497).
+        return new BatchResult(bytecode, Collections.unmodifiableMap(failures), Collections.unmodifiableMap(diagnostics), round);
     }
 
     /**
