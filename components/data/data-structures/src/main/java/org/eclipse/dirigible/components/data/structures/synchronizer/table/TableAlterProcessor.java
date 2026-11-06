@@ -57,6 +57,11 @@ public class TableAlterProcessor {
      * ones {@link #retryUniqueConstraints} has nothing to attempt on (#8317).
      */
     private static final Set<String> UNIQUE_KEYS_HOLD = ConcurrentHashMap.newKeySet();
+
+    /**
+     * PostgreSQL's {@code duplicate_table}: a relation - table or index - of that name already exists.
+     */
+    private static final String DUPLICATE_RELATION_SQL_STATE = "42P07";
     // $NON-NLS-1$
 
     /**
@@ -635,10 +640,35 @@ public class TableAlterProcessor {
             statement.executeUpdate();
             return true;
         } catch (SQLException e) {
+            if (isNameTaken(e)) {
+                logger.warn("Unique constraint [{}] on table [{}] is not added - the name is already taken by another index or table in"
+                        + " the schema, over other columns than the declared ones. Rename the key or drop that relation; it is attempted"
+                        + " again on the next pass. Statement: [{}], database: {}", constraint, tableName, sql, e.getMessage());
+                return false;
+            }
             logger.error("Unique constraint [{}] on table [{}] could not be reconciled - the table's other changes stand, and it is"
                     + " attempted again on the next pass. Statement: [{}]", constraint, tableName, sql, e);
             return false;
         }
+    }
+
+    /**
+     * Whether the database refused the statement because the constraint's name is taken by another
+     * relation (#8498). On PostgreSQL a constraint is backed by an index of the same name, and index
+     * names are unique across the schema, so an index the key was born as - or any other relation of
+     * that name - refuses the ADD with SQLState {@code 42P07}. A key whose index already covers the
+     * declared columns never gets here: {@link #uniqueIndexes} counts it as present.
+     *
+     * @param e the refusal
+     * @return whether it is a name clash rather than a refusal of the key itself
+     */
+    static boolean isNameTaken(SQLException e) {
+        for (SQLException cause = e; cause != null; cause = cause.getNextException()) {
+            if (DUPLICATE_RELATION_SQL_STATE.equals(cause.getSQLState())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
