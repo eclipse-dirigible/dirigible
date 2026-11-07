@@ -5437,7 +5437,7 @@ public final class IntentParser {
             if (entity.getChecks() != null) {
                 Set<String> checkIds = new java.util.HashSet<>();
                 for (CheckIntent check : entity.getChecks()) {
-                    validateCheck(entity, check, byName, model.getEntities(), model.getAggregates(), issues);
+                    validateCheck(entity, check, byName, model.getEntities(), model.getAggregates(), usesAliases, issues);
                     String checkSubject =
                             "entity [" + entity.getName() + "] check [" + (check.getKind() == null ? "?" : check.getKind()) + "]";
                     validateCheckId(checkSubject, check, checkIds, issues);
@@ -7010,7 +7010,7 @@ public final class IntentParser {
 
     private static void validateCheck(EntityIntent entity, CheckIntent check, java.util.Map<String, EntityIntent> byName,
             java.util.List<EntityIntent> entities, List<org.eclipse.dirigible.components.intent.model.AggregateIntent> aggregates,
-            List<String> issues) {
+            Set<String> usesAliases, List<String> issues) {
         String subject = "entity [" + entity.getName() + "] check [" + (check.getKind() == null ? "?" : check.getKind()) + "]";
         String kind = check.getKind();
         validateSeverity(check, subject, issues);
@@ -7089,6 +7089,10 @@ public final class IntentParser {
             validateAgreeCheck(entity, check, byName, subject, issues);
             return;
         }
+        if ("exists".equals(kind)) {
+            validateExistsCheck(entity, check, byName, usesAliases, subject, issues);
+            return;
+        }
         if ("itemsSumEqual".equals(kind) || "itemsMin".equals(kind)) {
             EntityIntent items = compositionChildOf(entity, entities);
             if (items == null) {
@@ -7128,9 +7132,9 @@ public final class IntentParser {
             }
             return;
         }
-        issues.add(subject
-                + " has unknown kind - expected exactlyOne, compare, agree, requiredWhen, forbidWhen, guard, itemsSumEqual, itemsMin,"
-                + " duplicate or itemsCompare");
+        issues.add(
+                subject + " has unknown kind - expected exactlyOne, compare, agree, requiredWhen, forbidWhen, exists, guard, itemsSumEqual,"
+                        + " itemsMin, duplicate or itemsCompare");
     }
 
     /** The verbs a {@code forbidWhen} scope may name (#7710). */
@@ -7150,10 +7154,15 @@ public final class IntentParser {
         if (verbs == null) {
             return;
         }
-        if (!"forbidWhen".equals(check.getKind())) {
+        boolean exists = "exists".equals(check.getKind());
+        if (!"forbidWhen".equals(check.getKind()) && !exists) {
             issues.add(subject + " carries `verbs` - only a forbidWhen is scoped by verb; every other check is about the values a"
                     + " create or update carries");
             return;
+        }
+        if (exists && verbs.contains("delete")) {
+            issues.add(subject + " names delete in `verbs` - an exists check reads the values a create or update carries, and a"
+                    + " delete carries none");
         }
         if (verbs.isEmpty()) {
             issues.add(subject + " has an empty `verbs` - a forbidWhen that covers no verb refuses nothing; drop the rule, or"
@@ -7381,6 +7390,87 @@ public final class IntentParser {
             issues.add(subject + " compares [" + relations.get(0) + "." + on + "], a [" + terminals[0] + "], with [" + relations.get(1)
                     + "." + on + "], a [" + terminals[1]
                     + "] - both sides must be the same kind of value, or the comparison is always false");
+        }
+    }
+
+    /**
+     * An {@code exists} check (dirigible #8338): the write is refused unless a row of ANOTHER entity
+     * carries the values the record names - a billable expense line needs the employee's assignment to
+     * the project, a row neither of the line's targets holds. {@code entity} is this model's own, or -
+     * with {@code model} - one a {@code uses:} entry owns; {@code match} maps each target property to a
+     * path on the record (its own field or to-one, or a one-hop {@code Relation.field}) walked by the
+     * shared resolver. A local target's properties are checked here, and each pair must compare the
+     * same kind of value - a foreign key with a foreign key, a field with a field of its type - or no
+     * row ever matches; a cross-model target is checked against its owner's {@code .model} at
+     * generation, where that model is read. {@code when} takes the forbidWhen grammar, and the
+     * {@code status} gate routes the check as it routes a requiredWhen.
+     */
+    private static void validateExistsCheck(EntityIntent entity, CheckIntent check, java.util.Map<String, EntityIntent> byName,
+            Set<String> usesAliases, String subject, List<String> issues) {
+        if (isBlank(check.getMessage())) {
+            issues.add(subject + " requires `message`: the reason the write is refused, shown to the user");
+        }
+        if (isBlank(check.getEntity())) {
+            issues.add(subject + " requires `entity`: the entity a matching row must exist in");
+            return;
+        }
+        EntityIntent target = null;
+        if (!isBlank(check.getModel())) {
+            if (!usesAliases.contains(check.getModel())) {
+                issues.add(subject + " references undeclared model [" + check.getModel() + "] - add it to uses:");
+            }
+        } else {
+            target = byName.get(check.getEntity());
+            if (target == null) {
+                issues.add(subject + " entity [" + check.getEntity()
+                        + "] is not a declared entity (add model: <alias> when another model owns it)");
+                return;
+            }
+            if (target == entity) {
+                issues.add(subject + " reads its own entity [" + entity.getName()
+                        + "] - an update always matches the row it writes; name another entity");
+            }
+        }
+        if (check.getMatch() == null || check.getMatch()
+                                             .isEmpty()) {
+            issues.add(subject + " requires `match`: { <property of " + check.getEntity() + ">: <path on this record> }");
+        } else {
+            ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, java.util.Map.of(), null);
+            for (Map.Entry<String, String> pair : check.getMatch()
+                                                       .entrySet()) {
+                ResolvePathSupport.Path path = walker.resolve(pair.getValue());
+                if (!path.resolved()) {
+                    issues.add(subject + " match [" + pair.getKey() + "] " + path.failure());
+                    continue;
+                }
+                if (target == null) {
+                    continue; // a cross-model target is read from its owner's .model at generation
+                }
+                FieldIntent field = CheckSupport.field(target, pair.getKey());
+                if (field == null && CheckSupport.toOne(target, pair.getKey()) == null) {
+                    issues.add(subject + " match [" + pair.getKey() + "] is not a field or to-one relation of [" + target.getName() + "]");
+                    continue;
+                }
+                String keyType = field == null ? ResolvePathSupport.RELATION_TERMINAL : CheckSupport.guardType(field.getType());
+                String valueType = path.terminalType() == null || ResolvePathSupport.RELATION_TERMINAL.equals(path.terminalType())
+                        ? path.terminalType()
+                        : CheckSupport.guardType(path.terminalType());
+                if (valueType != null && !keyType.equals(valueType)) {
+                    issues.add(subject + " match [" + pair.getKey() + "] compares a [" + keyType + "] with [" + pair.getValue() + "], a ["
+                            + valueType + "] - both sides must be the same kind of value, or no row ever matches");
+                }
+            }
+        }
+        List<String> terms = CheckSupport.terms(check.getWhen());
+        if (check.getWhen() != null && terms.isEmpty()) {
+            issues.add(subject + " when must not be an empty list");
+        }
+        for (String term : terms) {
+            validateForbidWhenTerm(entity, byName, term, subject, issues);
+        }
+        if (check.getStatus() != null && entityStatusRelationOf(entity) == null) {
+            issues.add(subject + " carries a `status` gate but [" + entity.getName()
+                    + "] declares no `function: EntityStatus` relation to read it from");
         }
     }
 

@@ -3265,6 +3265,56 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 checkMaps.add(checkMap);
                 continue;
             }
+            if ("exists".equals(check.getKind())) {
+                // A row of ANOTHER entity must carry the values the record names (#8338). Each match value
+                // is a path off the record through the shared walker - its own property, or one hop loaded
+                // by FK as requiredWhen's value is - and the condition reads through the same walker. The
+                // target is addressed by its generated repository, resolved like a cross-model hop.
+                if (check.getEntity() == null || check.getMatch() == null || check.getMatch()
+                                                                                  .isEmpty()) {
+                    continue; // the parser already reported it
+                }
+                ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, compositionParents, crossModel);
+                List<Map<String, Object>> match = new ArrayList<>();
+                for (Map.Entry<String, String> pair : check.getMatch()
+                                                           .entrySet()) {
+                    ResolvePathSupport.Path path = walker.resolve(pair.getValue());
+                    if (path.resolved()) {
+                        Map<String, Object> pairMap = new LinkedHashMap<>();
+                        pairMap.put("property", IntentNaming.pascalCase(pair.getKey()));
+                        pairMap.put("expression", path.expression());
+                        match.add(pairMap);
+                    }
+                }
+                List<Map<String, Object>> when =
+                        check.getWhen() == null ? null : CheckSupport.conditionTerms(entity, byName, walker, check.getWhen());
+                if (match.size() != check.getMatch()
+                                         .size()
+                        || (check.getWhen() != null && when == null)) {
+                    continue; // the parser already reported it
+                }
+                checkMap.put("match", match);
+                checkMap.put("target", existsTarget(entity, check, byName, compositionParents, crossModel));
+                if (when != null) {
+                    checkMap.put("when", when);
+                }
+                List<Map<String, Object>> pathLoads = pathLoadsOf(walker);
+                if (!pathLoads.isEmpty()) {
+                    checkMap.put("pathLoads", pathLoads);
+                }
+                // The optional gate, as on requiredWhen: no gate = every user write (the controllers), a
+                // gate = the repository when the record is persisted carrying that status.
+                if (check.getStatus() != null) {
+                    RelationIntent gate = entityStatusRelation(entity);
+                    if (gate == null) {
+                        continue; // the parser already reported it
+                    }
+                    checkMap.put("status", String.valueOf(check.getStatus()));
+                    checkMap.put("statusProperty", IntentNaming.pascalCase(gate.getName()));
+                }
+                checkMaps.add(checkMap);
+                continue;
+            }
             if ("forbidWhen".equals(check.getKind())) {
                 // The reject-twin of requiredWhen (#7275): the condition compiled to a Java boolean, but
                 // now a term may read a value ONE HOP away (`SalesInvoice.Status == PAID`) so a child can
@@ -3490,6 +3540,49 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
         }
         return null;
+    }
+
+    /**
+     * Where an {@code exists} check's target lives (#8338), in the coordinates a path hop carries, so
+     * the template layer resolves its generated repository the way it resolves a hop's: this model's
+     * own entity, or the {@code uses:} owner's - whose {@code .model} names the perspective and the
+     * properties, so a match property the owner does not declare is refused here rather than failing
+     * the generated query on every write.
+     */
+    private static Map<String, Object> existsTarget(EntityIntent entity, org.eclipse.dirigible.components.intent.model.CheckIntent check,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel) {
+        boolean isCrossModel = check.getModel() != null && !check.getModel()
+                                                                 .isBlank();
+        String perspective;
+        if (isCrossModel) {
+            RelationIntent relation = new RelationIntent();
+            relation.setTo(check.getEntity());
+            relation.setModel(check.getModel());
+            NotificationSupport.CrossModelTarget owner = crossModel.resolve(relation);
+            perspective = owner == null || owner.perspectiveName() == null ? check.getEntity() : owner.perspectiveName();
+            if (owner != null && owner.propertyNames() != null) {
+                List<String> missing = check.getMatch()
+                                            .keySet()
+                                            .stream()
+                                            .map(IntentNaming::pascalCase)
+                                            .filter(property -> !owner.propertyNames()
+                                                                      .contains(property))
+                                            .toList();
+                if (!missing.isEmpty()) {
+                    throw new IntentValidationException(List.of("entity [" + entity.getName() + "] check [exists] matches " + missing
+                            + ", which [" + check.getModel() + ":" + check.getEntity() + "] does not declare"));
+                }
+            }
+        } else {
+            perspective = IntentEntities.resolvePerspective(check.getEntity(), compositionParents,
+                    IntentEntities.settingEntities(byName.values()));
+        }
+        Map<String, Object> target = new LinkedHashMap<>();
+        target.put("entity", check.getEntity());
+        target.put("perspective", perspective);
+        target.put("crossModel", isCrossModel);
+        target.put("targetModel", isCrossModel ? check.getModel() : "");
+        return target;
     }
 
     /**

@@ -232,9 +232,9 @@ final class StatusSymbolResolver {
                 // rewrite would match the `Status == PAID` tail of the path and resolve it against the
                 // record's own nomenclature: a wrong id, silently. A record-local term may also name any
                 // other to-one relation (`type == CLOSE`, #8057), which resolves against that relation's
-                // target, as a trigger guard's does.
+                // target, as a trigger guard's does. An exists check's `when` takes the same grammar (#8338).
                 String kind = lower(text(check, "kind"));
-                if ("forbidwhen".equals(kind) || "requiredwhen".equals(kind)) {
+                if ("forbidwhen".equals(kind) || "requiredwhen".equals(kind) || "exists".equals(kind)) {
                     rewriteForbidWhen(entityName, check, subject + " when");
                 } else {
                     rewriteRecordWhen(check, "when", entityName, subject + " when");
