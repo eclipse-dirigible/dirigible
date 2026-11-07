@@ -140,6 +140,17 @@
       </div>
     </div>
 
+#if($ownerProperty)
+    <!-- All / Mine (intent `owner: true`, #8499): Mine lists only the rows the signed-in user owns,
+         filtered by the controller; All, the default, is every row the caller may read. -->
+    <div x-h-button-group x-model="ownerScope" :aria-label="T('application-core:shell.list.whose', 'Whose records')">
+      <button type="button" x-h-button data-variant="outline" x-h-button-group-radio="'all'"
+              x-text="T('application-core:shell.list.all', 'All')"></button>
+      <button type="button" x-h-button data-variant="outline" x-h-button-group-radio="'mine'"
+              x-text="T('application-core:shell.list.mine', 'Mine')"></button>
+    </div>
+
+#end
     <!-- A filter query is in flight: the table keeps the previous rows (see displayState), this
          spinner just signals the refresh so the empty state is never shown mid-query (#7461). -->
     <span x-show="filtering" x-h-spinner aria-hidden="true"></span>

@@ -77,6 +77,14 @@ document.addEventListener('alpine:init', () => {
     deleteBusy: false,
     deleteError: '',
 
+#if($ownerProperty)
+    // All / Mine (intent `owner: true`, #8499): Mine asks the controller for the caller's own rows, so
+    // the filter is the server's and the search, the paging and the export follow it. All, the default,
+    // is the list as it always was.
+    ownerScope: 'all',
+    get ownerScopeQuery() { return this.ownerScope === 'mine' ? '?mine=true' : ''; },
+
+#end
     // Controller path for ${name}, relative to App.config.restBase
     // (the default base api.* prepends): <restBase>/<perspective>/<Entity>Controller.
     apiPath: '/${javaPerspectiveName}/${name}Controller',
@@ -92,6 +100,10 @@ document.addEventListener('alpine:init', () => {
       this.$watch('detailsOpen', (open) => { if (!open && this.selected) this.closeDetails(); });
       // The menu always opens on its "add a filter" step, whatever editor it was last left on.
       this.$watch('filterOpen', (open) => { if (open) { this.filterEditing = null; this.filterDraft = ''; } });
+#if($ownerProperty)
+      // Switching All / Mine re-reads the rows under the filters in force, from the first page.
+      this.$watch('ownerScope', () => this.applyServerFilter());
+#end
 #if($hierarchyProperty)
       // The remembered Tree / Table choice is per user, and the user's name arrives asynchronously.
       this.restoreViewMode();
@@ -205,8 +217,8 @@ document.addEventListener('alpine:init', () => {
         const conditions = quiet ? this.buildConditions() : [];
         this.items = quiet && this.filterMatchesNothing ? []
           : conditions.length
-          ? await App.services.api.post(this.apiPath + '/search', { conditions })
-          : await App.services.api.getAll(this.apiPath);
+          ? await App.services.api.post(this.apiPath + '/search'#if($ownerProperty) + this.ownerScopeQuery#end, { conditions })
+          : await App.services.api.getAll(this.apiPath#if($ownerProperty) + this.ownerScopeQuery#end);
         this.state = this.items.length === 0 ? 'empty' : 'default';
         // A quiet re-read keeps the page, unless the rows it stood on are gone.
         this.currentPage = Math.min(this.currentPage, this.totalPages);
@@ -659,8 +671,8 @@ document.addEventListener('alpine:init', () => {
       try {
         const rows = this.filterMatchesNothing ? []
           : conditions.length
-          ? await App.services.api.post(this.apiPath + '/search', { conditions })
-          : await App.services.api.getAll(this.apiPath);
+          ? await App.services.api.post(this.apiPath + '/search'#if($ownerProperty) + this.ownerScopeQuery#end, { conditions })
+          : await App.services.api.getAll(this.apiPath#if($ownerProperty) + this.ownerScopeQuery#end);
         if (seq !== this.filterSeq) return;   // a newer keystroke already superseded this response
         this.items = rows;
         this.currentPage = 1;

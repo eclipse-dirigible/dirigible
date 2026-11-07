@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
@@ -47,6 +48,12 @@ import org.springframework.test.annotation.DirtiesContext;
  * and then writes exactly as the power run does, its {@code -transitioned} event included. Its
  * answer is the record as the personal surface serves it, so a sensitive field never leaves through
  * it, while the power run is unchanged.
+ *
+ * <p>
+ * The same identity mapping narrows a STANDARD list (#8499): a relation that declares
+ * {@code owner: true} gives the entity's own controller a {@code ?mine=true} filter on its list,
+ * count and search, under the controller's roles and with no personal surface. A caller with no
+ * identity record owns nothing, so their Mine list is empty rather than everything.
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentPersonalTransitionIT extends IntegrationTest {
@@ -59,6 +66,11 @@ class IntentPersonalTransitionIT extends IntegrationTest {
     private static final String REQUESTS = API + "/vacationrequest/VacationRequestController";
     private static final String EVENTS = "/services/java/" + PROJECT + "/gen/events/" + PROJECT;
     private static final String POWER_RUN = EVENTS + "/WithdrawVacationRequestTransition/run";
+    private static final String QUOTATIONS = API + "/quotation/QuotationController";
+    /**
+     * The convention read role of Quotation: the Mine list is the normal controller's, roles and all.
+     */
+    private static final String QUOTATION_READER = PROJECT + ".Quotation.QuotationReadOnly";
     private static final String PERSONAL_RUN = EVENTS + "/WithdrawVacationRequestTransitionMy/run";
     private static final long TIMEOUT_SECONDS = 90;
     /** The roll-up runs off the request's topics, after the commit. */
@@ -71,6 +83,12 @@ class IntentPersonalTransitionIT extends IntegrationTest {
     private static final String COLLEAGUE = "personal-transition-it-colleague";
     /** Signed in, mapped to no employee record. */
     private static final String STRANGER = "personal-transition-it-stranger";
+    /** A sales rep: mapped to an employee record, reading quotations. */
+    private static final String REP = "owner-filter-it-rep";
+    /** Another sales rep, mapped to another employee record. */
+    private static final String OTHER_REP = "owner-filter-it-other-rep";
+    /** Reads quotations, mapped to no employee record. */
+    private static final String UNMAPPED_REP = "owner-filter-it-unmapped-rep";
 
     private static final int DRAFT = 1;
     private static final int SUBMITTED = 2;
@@ -103,6 +121,14 @@ class IntentPersonalTransitionIT extends IntegrationTest {
                 relations:
                   - { name: Employee, kind: manyToOne, to: Employee, required: true, personal: true }
                   - { name: Status, kind: manyToOne, to: VacationStatus, function: EntityStatus, init: 1 }
+
+              # owner: true (#8499) - the standard list's Mine filter: no personal surface, no extra controller.
+              - name: Quotation
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: title, type: string, length: 100 }
+                relations:
+                  - { name: SalesRep, kind: manyToOne, to: Employee, owner: true }
 
             transitions:
               - { name: WithdrawVacationRequest, forEntity: VacationRequest, from: [2, 3], setStatus: 6, label: Withdraw, personal: true }
@@ -199,6 +225,113 @@ class IntentPersonalTransitionIT extends IntegrationTest {
                 TIMEOUT_SECONDS);
         awaitWithdrawn(owner, 2);
         awaitWithdrawn(colleague, 0);
+    }
+
+    @Test
+    void mine_narrows_the_standard_list_to_the_callers_own_rows() {
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+        securityUtil.ensureUserInDefaultTenant(REP, PASSWORD, QUOTATION_READER);
+        securityUtil.ensureUserInDefaultTenant(OTHER_REP, PASSWORD, QUOTATION_READER);
+        securityUtil.ensureUserInDefaultTenant(UNMAPPED_REP, PASSWORD, QUOTATION_READER);
+        securityUtil.ensureUserInDefaultTenant(STRANGER, PASSWORD);
+
+        int rep = create(EMPLOYEES, "{\"Email\":\"" + REP + "\"}");
+        int otherRep = create(EMPLOYEES, "{\"Email\":\"" + OTHER_REP + "\"}");
+        int first = create(QUOTATIONS, "{\"Title\":\"first\",\"SalesRep\":" + rep + "}");
+        int second = create(QUOTATIONS, "{\"Title\":\"second\",\"SalesRep\":" + rep + "}");
+        int others = create(QUOTATIONS, "{\"Title\":\"others\",\"SalesRep\":" + otherRep + "}");
+        int unowned = create(QUOTATIONS, "{\"Title\":\"unowned\"}");
+        String titleHasO = "{\"conditions\":[{\"propertyName\":\"Title\",\"operator\":\"CONTAINS\",\"value\":\"o\"}]}";
+
+        // Mine: each rep's own rows only, on the list and its count, and on the search and its count.
+        assertEquals(List.of(first, second), listed(REP, QUOTATIONS + "?mine=true"));
+        assertEquals(2, counted(REP, QUOTATIONS + "/count?mine=true"));
+        assertEquals(List.of(others), listed(OTHER_REP, QUOTATIONS + "?mine=true"));
+        assertEquals(1, counted(OTHER_REP, QUOTATIONS + "/count?mine=true"));
+        assertEquals(List.of(second), searched(REP, QUOTATIONS + "/search?mine=true", titleHasO));
+        assertEquals(1, searchCounted(REP, QUOTATIONS + "/count?mine=true", titleHasO));
+
+        // Without it: every row, as before.
+        assertEquals(List.of(first, second, others, unowned), listed(REP, QUOTATIONS));
+        assertEquals(4, counted(REP, QUOTATIONS + "/count"));
+        assertEquals(List.of(second, others, unowned), searched(REP, QUOTATIONS + "/search", titleHasO));
+
+        // No employee record maps the caller: they own nothing, so Mine is empty - never everything.
+        assertEquals(List.of(), listed(UNMAPPED_REP, QUOTATIONS + "?mine=true"));
+        assertEquals(0, counted(UNMAPPED_REP, QUOTATIONS + "/count?mine=true"));
+        assertEquals(List.of(), searched(UNMAPPED_REP, QUOTATIONS + "/search?mine=true", titleHasO));
+        assertEquals(4, counted(UNMAPPED_REP, QUOTATIONS + "/count"));
+
+        // The controller's roles apply unchanged: Mine is no way around the read gate.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(QUOTATIONS + "?mine=true")
+                                                 .then()
+                                                 .statusCode(403),
+                STRANGER, PASSWORD, TIMEOUT_SECONDS);
+    }
+
+    private List<Integer> listed(String user, String url) {
+        AtomicReference<List<Integer>> ids = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> ids.set(given().when()
+                                                         .get(url)
+                                                         .then()
+                                                         .statusCode(200)
+                                                         .extract()
+                                                         .jsonPath()
+                                                         .getList("Id", Integer.class)),
+                user, PASSWORD, TIMEOUT_SECONDS);
+        return ids.get()
+                  .stream()
+                  .sorted()
+                  .toList();
+    }
+
+    private List<Integer> searched(String user, String url, String body) {
+        AtomicReference<List<Integer>> ids = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> ids.set(given().contentType("application/json")
+                                                         .body(body)
+                                                         .when()
+                                                         .post(url)
+                                                         .then()
+                                                         .statusCode(200)
+                                                         .extract()
+                                                         .jsonPath()
+                                                         .getList("Id", Integer.class)),
+                user, PASSWORD, TIMEOUT_SECONDS);
+        return ids.get()
+                  .stream()
+                  .sorted()
+                  .toList();
+    }
+
+    private long counted(String user, String url) {
+        AtomicLong count = new AtomicLong();
+        restAssuredExecutor.execute(() -> count.set(given().when()
+                                                           .get(url)
+                                                           .then()
+                                                           .statusCode(200)
+                                                           .extract()
+                                                           .jsonPath()
+                                                           .getLong("count")),
+                user, PASSWORD, TIMEOUT_SECONDS);
+        return count.get();
+    }
+
+    private long searchCounted(String user, String url, String body) {
+        AtomicLong count = new AtomicLong();
+        restAssuredExecutor.execute(() -> count.set(given().contentType("application/json")
+                                                           .body(body)
+                                                           .when()
+                                                           .post(url)
+                                                           .then()
+                                                           .statusCode(200)
+                                                           .extract()
+                                                           .jsonPath()
+                                                           .getLong("count")),
+                user, PASSWORD, TIMEOUT_SECONDS);
+        return count.get();
     }
 
     private static String request(int employee, int status) {

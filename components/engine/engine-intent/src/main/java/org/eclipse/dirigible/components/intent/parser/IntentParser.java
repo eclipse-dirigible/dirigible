@@ -5247,6 +5247,7 @@ public final class IntentParser {
             }
             int personalCount = 0;
             int partnerCount = 0;
+            int ownerCount = 0;
             for (RelationIntent relation : entity.getRelations()) {
                 if (relation.getName() == null || relation.getName()
                                                           .isBlank()) {
@@ -5390,6 +5391,10 @@ public final class IntentParser {
                     partnerCount++;
                     validatePartner(entity, relation, byName, issues);
                 }
+                if (relation.isOwner()) {
+                    ownerCount++;
+                    validateOwner(entity, relation, byName, issues);
+                }
             }
             if (personalCount > 1) {
                 issues.add("entity [" + entity.getName() + "] declares " + personalCount
@@ -5398,6 +5403,10 @@ public final class IntentParser {
             if (partnerCount > 1) {
                 issues.add(
                         "entity [" + entity.getName() + "] declares " + partnerCount + " partner relations - exactly one owner is allowed");
+            }
+            if (ownerCount > 1) {
+                issues.add("entity [" + entity.getName() + "] declares " + ownerCount
+                        + " owner relations - the Mine list filters by exactly one");
             }
             if (entity.getHierarchy() != null && !entity.getHierarchy()
                                                         .isBlank()) {
@@ -5571,6 +5580,9 @@ public final class IntentParser {
         }
         if (relation.isPartner()) {
             unsupported.add("partner");
+        }
+        if (relation.isOwner()) {
+            unsupported.add("owner");
         }
         if (relation.isCalculated()) {
             unsupported.add("calculatedAction");
@@ -6098,6 +6110,27 @@ public final class IntentParser {
             if (target != null && (target.getIdentity() == null || target.getIdentity()
                                                                          .isBlank())) {
                 issues.add(subject + " declares personal but its target [" + relation.getTo() + "] declares no identity");
+            }
+        }
+    }
+
+    /**
+     * {@code owner: true} (#8499) - the to-one whose FK the standard list's Mine filter compares with
+     * the caller's identity record, so its target must declare {@code identity}. A same-model target's
+     * identity is checked here; a cross-model one at generation. Unlike {@code personal:} nothing is
+     * inherited through it, so a composition parent may be the owner too.
+     */
+    private static void validateOwner(EntityIntent entity, RelationIntent relation, java.util.Map<String, EntityIntent> byName,
+            List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
+        if (!"manyToOne".equals(relation.getKind()) && !"oneToOne".equals(relation.getKind())) {
+            issues.add(subject + " declares owner but only a manyToOne/oneToOne relation can own the record");
+            return;
+        }
+        if (!relation.isCrossModel()) {
+            EntityIntent target = byName.get(relation.getTo());
+            if (target != null && isBlank(target.getIdentity())) {
+                issues.add(subject + " declares owner but its target [" + relation.getTo() + "] declares no identity");
             }
         }
     }

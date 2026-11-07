@@ -202,6 +202,9 @@ final class ManyToManyExpander {
         if (relation.isPartner()) {
             unsupported.add("partner");
         }
+        if (relation.isOwner()) {
+            unsupported.add("owner");
+        }
         if (relation.isFixedAfterCreate()) {
             unsupported.add("fixedAfterCreate");
         }

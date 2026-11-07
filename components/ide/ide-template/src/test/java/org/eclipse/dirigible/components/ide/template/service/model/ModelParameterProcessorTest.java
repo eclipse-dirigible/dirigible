@@ -2112,6 +2112,30 @@ class ModelParameterProcessorTest {
         assertEquals(Boolean.FALSE, request.get("personalReadOnly"), "the master it inherits the scope from stays writable");
     }
 
+    /**
+     * {@code owner: true} (dirigible #8499) hands the power controller what its Mine filter needs - the
+     * FK, its type and the identity entity's repository and property - and opens no personal surface.
+     */
+    @Test
+    void anOwnerRelationFeedsTheStandardListsMineFilter() {
+        Map<String, Object> owner = property("SalesRep", "INTEGER");
+        owner.put("widgetType", "DROPDOWN");
+        owner.put("relationshipEntityName", "Employee");
+        owner.put("relationshipEntityPerspectiveName", "hr");
+        owner.put("relationshipOwner", "true");
+        owner.put("relationshipIdentityProperty", "Email");
+        Map<String, Object> quotation = entity("Quotation", "sales", property("Id", "INTEGER"), owner);
+
+        ModelParameterProcessor.process(model(quotation), javaParameters());
+
+        assertEquals("SalesRep", quotation.get("ownerProperty"));
+        assertEquals("Email", quotation.get("ownerIdentityProperty"));
+        assertTrue(String.valueOf(quotation.get("ownerIdentityRepositoryClass"))
+                         .endsWith(".hr.EmployeeRepository"),
+                String.valueOf(quotation.get("ownerIdentityRepositoryClass")));
+        assertNull(quotation.get("personalProperty"), "owner opens no personal surface");
+    }
+
     /** Without the marker the child inherits the master's writable personal surface, as before. */
     @Test
     void withoutTheMarkerTheChildInheritsTheMastersWritableSurface() {
