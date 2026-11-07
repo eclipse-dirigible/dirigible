@@ -1109,6 +1109,39 @@ class GlueGeneratesTest {
      * what it rendered before the trigger existed, including no at-most-once guard (minting several
      * targets from one source by clicking twice is a legitimate manual act).
      */
+    /**
+     * #8510: the listener judges its moment on the event's payload, so it needs to know which statuses
+     * WITHDRAW a source that moved on before it ran - the source nomenclature's cancelled and void
+     * stages. A rule fired by a withdrawal itself, and a nomenclature with no stages, keep no veto.
+     */
+    @Test
+    void anEventDrivenCreateFromCarriesTheStatusesThatWithdrawItsSource() {
+        String rows = "      - { id: 1, name: DRAFT }\n      - { id: 2, name: POSTED }\n";
+        assertTrue(EVENT_YAML.endsWith(rows));
+        String staged =
+                EVENT_YAML.replace(rows, "      - { id: 1, name: DRAFT, stage: draft }\n      - { id: 2, name: POSTED, stage: live }\n"
+                        + "      - { id: 3, name: CANCELLED, stage: cancelled }\n      - { id: 4, name: VOIDED, stage: void }\n");
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(staged))
+                                                   .get(0);
+        assertEquals("Status", g.get("withdrawnStatusProperty"));
+        assertEquals("3,4", g.get("withdrawnStatusValues"));
+
+        Map<String, Object> onCancel =
+                GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(staged.replace("Status == POSTED", "Status == CANCELLED")))
+                                   .get(0);
+        assertEquals("", onCancel.get("withdrawnStatusProperty"), "a rule fired by the withdrawal itself must not veto it");
+        assertEquals("", onCancel.get("withdrawnStatusValues"));
+
+        Map<String, Object> unstaged = GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(EVENT_YAML))
+                                                          .get(0);
+        assertEquals("", unstaged.get("withdrawnStatusValues"));
+
+        assertFalse(GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(YAML))
+                                       .get(0)
+                                       .containsKey("withdrawnStatusValues"),
+                "a create-from with no event has no listener to veto anything");
+    }
+
     @Test
     void aCreateFromWithoutAnEventCarriesNoTriggerAndNoGuard() {
         Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(YAML))

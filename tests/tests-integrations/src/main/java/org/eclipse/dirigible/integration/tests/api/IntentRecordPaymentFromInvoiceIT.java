@@ -247,7 +247,7 @@ class IntentRecordPaymentFromInvoiceIT extends IntegrationTest {
         synchronizationProcessor.forceProcessSynchronizers();
 
         int paymentsBefore = count(PAYMENTS);
-        assertRunRefused("{\"id\":987654}", 404, "source Invoice not found");
+        assertRunRefused("{\"id\":987654}", 404, "Invoice 987654 does not exist");
         assertRunRefused("{}", 400, "missing source id");
         assertEquals(paymentsBefore, count(PAYMENTS), "a refused run must create no payment");
     }
