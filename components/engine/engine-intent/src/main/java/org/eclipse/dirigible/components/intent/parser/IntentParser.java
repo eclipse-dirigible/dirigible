@@ -108,6 +108,7 @@ import org.eclipse.dirigible.components.intent.model.ReportIntent;
 import org.eclipse.dirigible.components.intent.generator.report.ReportMoments;
 import org.eclipse.dirigible.components.intent.model.ReportAgingIntent;
 import org.eclipse.dirigible.components.intent.model.ReportParameterIntent;
+import org.eclipse.dirigible.components.intent.model.ReportPeriodIntent;
 import org.eclipse.dirigible.components.intent.model.StatementLineIntent;
 import org.eclipse.dirigible.components.intent.model.ExpansionIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
@@ -430,6 +431,9 @@ public final class IntentParser {
         // generator below sees an ordinary composition + association pair - the DSL holds exactly one
         // representation of a many-to-many, and nothing is accepted and then silently dropped.
         ManyToManyExpander.expand(model, issues);
+        // A report's period: shorthand becomes its from/to parameter pair before any report check
+        // runs (#8506), so every validator and generator sees two ordinary parameters.
+        expandReportPeriods(model, issues);
         Set<String> usesAliases = validateUses(model, issues);
         Set<String> entityNames = validateEntities(model, usesAliases, issues);
         validateFunctions(model, issues);
@@ -13215,6 +13219,7 @@ public final class IntentParser {
             }
             validateAgeingDimensions(model, report, issues);
             validateReportParameters(model, report, issues);
+            validateReportPeriodTarget(model, report, issues);
             validateBalanceReport(model, report, issues);
             validateAgingReport(model, report, issues);
             validateReportScope(model, report, issues);
@@ -13716,6 +13721,92 @@ public final class IntentParser {
                 issues.add(subject + " needs an initial value - it is bound on every call and [" + op
                         + "] has no neutral default, so declare what the report shows before the user sets it");
             }
+        }
+    }
+
+    /**
+     * A report's {@code period:} (dirigible #8506): checks its presets and appends the from/to
+     * parameter pair it stands for - {@code { name: <from>, target, op: ge, initial: <default's from
+     * moment> }} and {@code { name: <to>, target, op: le, initial: <default's to moment> }}. A
+     * {@code custom} default declares no initials, so the report opens on all time. The pair is then
+     * validated like any authored parameter (a name collision, a reserved name, a ledger window clash).
+     */
+    private static void expandReportPeriods(IntentModel model, List<String> issues) {
+        for (ReportIntent report : model.getReports()) {
+            ReportPeriodIntent period = report.getPeriod();
+            if (period == null) {
+                continue;
+            }
+            String subject = "report [" + report.getName() + "] period";
+            if (report.isLedgerKind() || report.isLedger()) {
+                issues.add(subject + " cannot be combined with kind [" + report.getKind()
+                                                                               .trim()
+                        + "] - a ledger kind declares its own fromDate/toDate window");
+                continue;
+            }
+            if (period.getTarget() == null || period.getTarget()
+                                                    .isBlank()) {
+                issues.add(subject + " has no target - name the date field the window filters, e.g. period: { target: orderedOn }");
+                continue;
+            }
+            List<String> presets = period.getEffectivePresets();
+            Set<String> seen = new HashSet<>();
+            for (String preset : presets) {
+                if (ReportPeriodIntent.CUSTOM.equals(preset)) {
+                    issues.add(subject + " lists [custom] among its presets - the custom window is always offered, so leave it out");
+                } else if (!ReportPeriodIntent.PRESETS.containsKey(preset)) {
+                    issues.add(subject + " has unknown preset [" + preset + "] - expected one of " + ReportPeriodIntent.PRESETS.keySet()
+                            + UnknownKeyValidator.suggestion(preset, ReportPeriodIntent.PRESETS.keySet()));
+                } else if (!seen.add(preset)) {
+                    issues.add(subject + " lists preset [" + preset + "] twice");
+                }
+            }
+            String preset = period.getEffectiveDefault();
+            ReportPeriodIntent.Window window = ReportPeriodIntent.PRESETS.get(preset);
+            if (!ReportPeriodIntent.CUSTOM.equals(preset) && !presets.contains(preset)) {
+                issues.add(subject + " default [" + preset + "] is not one of its presets " + presets + " - add it there, or use custom");
+            }
+            if (period.getFromName()
+                      .equals(period.getToName())) {
+                issues.add(subject + " names both bounds [" + period.getFromName() + "] - from and to must differ");
+                continue;
+            }
+            report.getParameters()
+                  .add(periodBound(period.getFromName(), period.getTarget(), "ge", window == null ? null : window.from()));
+            report.getParameters()
+                  .add(periodBound(period.getToName(), period.getTarget(), "le", window == null ? null : window.to()));
+        }
+    }
+
+    private static ReportParameterIntent periodBound(String name, String target, String op, String initial) {
+        ReportParameterIntent parameter = new ReportParameterIntent();
+        parameter.setName(name);
+        parameter.setTarget(target.trim());
+        parameter.setOp(op);
+        parameter.setInitial(initial);
+        return parameter;
+    }
+
+    /**
+     * A period filters a date: its target must be a {@code date}/{@code timestamp} field of the source
+     * or one relation hop away (an unresolvable path is reported by the expanded parameters).
+     */
+    private static void validateReportPeriodTarget(IntentModel model, ReportIntent report, List<String> issues) {
+        ReportPeriodIntent period = report.getPeriod();
+        EntityIntent source = reportSource(model, report);
+        if (period == null || source == null || period.getTarget() == null || period.getTarget()
+                                                                                    .isBlank()) {
+            return;
+        }
+        String target = period.getTarget()
+                              .trim();
+        if (relationByName(source, target) != null) {
+            return; // reported by the expanded parameters
+        }
+        FieldIntent field = reportPathField(model, source, "report [" + report.getName() + "] period", target, new ArrayList<>());
+        if (field != null && !"date".equals(fieldType(field)) && !"timestamp".equals(fieldType(field))) {
+            issues.add("report [" + report.getName() + "] period target [" + target + "] is a [" + field.getType()
+                    + "] field - a period filters a date or timestamp");
         }
     }
 

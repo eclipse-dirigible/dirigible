@@ -67,6 +67,11 @@ document.addEventListener('alpine:init', () => {
 #end
     ],
     params: {},         // parameter name -> value ('' = use the server-side default)
+    // The movable window (#8506): the .report `period` - the from/to parameters it fills, the default
+    // preset and each offered preset's bounds as relative moments, resolved here when chosen. `preset`
+    // is the active one; editing either date switches it to 'custom'. Null without a period.
+    period: #if($periodJs)${periodJs}#{else}null#end,
+    preset: '',
 #if($drill)
     // Drill-down (#8374): each row links to the source's list, filtered by the row's dimension values -
     // a relation by its label, a number or boolean by its value. `app` is the application's shell page,
@@ -129,6 +134,16 @@ document.addEventListener('alpine:init', () => {
       for (const p of this.reportParams) {
         this.params[p.name] = '';
       }
+      if (this.period) {
+        this.preset = this.period.default || 'custom';
+        this.applyPreset(this.preset);
+        // A typed or picked date leaves the preset's window: the select says Custom from then on.
+        this.${dollar}watch(() => this.params[this.period.from] + '|' + this.params[this.period.to], () => this.onPeriodEdited());
+        // Choosing a preset fills both dates and re-reads the report.
+        this.${dollar}watch('preset', (name) => {
+          if (name !== 'custom' && this.applyPreset(name)) this.applyFilters();
+        });
+      }
       try { document.title = this.displayName; } catch (e) { /* no document */ }
       this.load();
     },
@@ -141,6 +156,76 @@ document.addEventListener('alpine:init', () => {
         if (v !== '' && v != null) out[p.name] = v;
       }
       return out;
+    },
+
+    // The preset's window as two ISO dates, or null for 'custom' (and an unknown name).
+    presetWindow(name) {
+      const preset = this.period && (this.period.presets || []).find(p => p.name === name);
+      return preset ? { from: this.momentDate(preset.from), to: this.momentDate(preset.to) } : null;
+    },
+
+    // Fill the period's two date inputs from a preset; false when there is nothing to fill ('custom').
+    applyPreset(name) {
+      const range = this.presetWindow(name);
+      if (!range) return false;
+      this.params[this.period.from] = range.from;
+      this.params[this.period.to] = range.to;
+      return true;
+    },
+
+    // A date the user set by hand: the window is no longer the preset's.
+    onPeriodEdited() {
+      if (this.preset === 'custom') return;
+      const range = this.presetWindow(this.preset);
+      if (!range || range.from !== this.params[this.period.from] || range.to !== this.params[this.period.to]) {
+        this.preset = 'custom';
+      }
+    },
+
+    // A relative moment (#8506) as the ISO date it names today - the grammar the generated repository
+    // resolves: CURRENT_DATE or START_OF_YEAR / _QUARTER / _MONTH, then signed periods applied left to
+    // right, each by its years, then months (clamped to the month's last day), then days.
+    momentDate(moment) {
+      const m = String(moment || '').match(/^(CURRENT_DATE|START_OF_YEAR|START_OF_QUARTER|START_OF_MONTH)(.*)/);
+      if (!m) return '';
+      const now = new Date();
+      let y = now.getFullYear(), mo = now.getMonth(), d = now.getDate();
+      if (m[1] === 'START_OF_YEAR') { mo = 0; d = 1; }
+      else if (m[1] === 'START_OF_QUARTER') { mo = Math.floor(mo / 3) * 3; d = 1; }
+      else if (m[1] === 'START_OF_MONTH') { d = 1; }
+      const offset = /([+-])P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)W)?(?:(\d+)D)?/g;
+      let o;
+      while ((o = offset.exec(m[2])) !== null) {
+        const sign = o[1] === '-' ? -1 : 1;
+        const total = y * 12 + mo + sign * (Number(o[2] || 0) * 12 + Number(o[3] || 0));
+        y = Math.floor(total / 12);
+        mo = total - y * 12;
+        d = Math.min(d, new Date(y, mo + 1, 0).getDate());
+        const t = new Date(y, mo, d + sign * (Number(o[4] || 0) * 7 + Number(o[5] || 0)));
+        y = t.getFullYear(); mo = t.getMonth(); d = t.getDate();
+      }
+      return y + '-' + String(mo + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    },
+
+    // A preset's translated name - the select's options and the window named in the title.
+    presetLabel(name) {
+      const fallback = {
+        custom: 'Custom', last7Days: 'Last 7 days', last30Days: 'Last 30 days', currentMonth: 'Current month',
+        previousMonth: 'Previous month', currentQuarter: 'Current quarter', lastQuarter: 'Last quarter',
+        yearToDate: 'Year to date', currentYear: 'Current year', previousYear: 'Previous year',
+      };
+      return T('application-core:shell.report.periods.' + name, fallback[name] || name);
+    },
+
+    // The active window, for the title: the preset's name, or a custom window's two dates (#8506).
+    // Empty without a period, and for a custom window left open on both ends.
+    get periodText() {
+      if (!this.period) return '';
+      if (this.preset && this.preset !== 'custom') return this.presetLabel(this.preset);
+      const from = this.params[this.period.from], to = this.params[this.period.to];
+      if (!from && !to) return '';
+      const show = (v) => v ? HarmoniaFormat.date(v) : '...';
+      return show(from) + ' - ' + show(to);
     },
 
     // "fromDate" -> "From Date" for the parameter strip labels.

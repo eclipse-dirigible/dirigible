@@ -106,6 +106,12 @@ public class ReportIntent {
      */
     private List<ReportParameterIntent> parameters = new ArrayList<>();
     /**
+     * A movable date window with presets (dirigible #8506) - shorthand for a from/to parameter pair
+     * whose initials are the default preset's relative moments; the parser appends that pair to
+     * {@link #parameters}. See {@link ReportPeriodIntent}.
+     */
+    private ReportPeriodIntent period;
+    /**
      * Optional aging shape - open documents bucketed by days past due as of a report date, one column
      * per bucket beside the dimensions (aged receivables / payables). See {@link ReportAgingIntent}.
      */
@@ -351,6 +357,14 @@ public class ReportIntent {
 
     public void setParameters(List<ReportParameterIntent> parameters) {
         this.parameters = parameters == null ? new ArrayList<>() : parameters;
+    }
+
+    public ReportPeriodIntent getPeriod() {
+        return period;
+    }
+
+    public void setPeriod(ReportPeriodIntent period) {
+        this.period = period;
     }
 
     public ReportAgingIntent getAging() {

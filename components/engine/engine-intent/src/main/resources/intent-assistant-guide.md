@@ -3339,6 +3339,31 @@ every request, so the window moves with the calendar without a regen, and the us
 An unknown `START_OF_*`, a time period (`PT1H`), anything that is neither a date nor one moment, and a
 moment on a non-date parameter are refused at parse.
 
+**`period:` - the window with presets (#8506).** For the usual "from / to over one date" pair, declare the
+period instead of the two parameters:
+
+```yaml
+reports:
+  - name: SalesByProduct
+    source: SalesInvoiceItem
+    dimensions: [Product.name]
+    measures: ["sum(net)"]
+    period:
+      target: SalesInvoice.date          # a date/timestamp field, or a one-hop relation.field
+      default: last30Days                # the window the report (and its dashboard tile) opens on
+      presets: [last30Days, currentMonth, previousMonth, lastQuarter, yearToDate]
+```
+
+It expands to `{ name: fromDate, target, op: ge }` + `{ name: toDate, target, op: le }` whose initials are the
+default preset's moments (`from:` / `to:` rename them). The report page shows a Period select beside the two
+dates - choosing a preset fills both, editing a date switches it to Custom - and the page title and the
+dashboard tile name the window ("Sales By Product (Last 30 days)"). Presets: `last7Days`, `last30Days`,
+`currentMonth`, `previousMonth`, `currentQuarter`, `lastQuarter` (the previous full quarter), `yearToDate`,
+`currentYear`, `previousYear`; Custom is always offered. `default: custom` opens on all time. Both `default`
+and `presets` are optional (last 30 days, and the five above). Not on a `kind: balance|statement|ledger`
+report, which declares its own window. Prefer `period:` over a moment-filter whenever the reader may want
+another window.
+
 **Rules:** a parameter is bound on **every** call, so `initial` is required unless the comparison has a
 neutral "any value" default - a date `ge`/`le` bound (widened to all time) and `like` (the empty
 pattern, which matches everything). An `eq` selector and a numeric bound have none: declare the
