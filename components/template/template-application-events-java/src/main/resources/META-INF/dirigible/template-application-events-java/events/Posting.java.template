@@ -16,9 +16,10 @@ import org.eclipse.dirigible.sdk.utils.Json;
  * application.
  *
  * Contract (the accounting posting semantics, generalized):
- * - binds the topic the source's own publisher raises when it ${moment} (see destination() below)
- *   and RE-LOADS the source by id - the payload is as-of the event and lacks later-step data such as
- *   a stamped document number;
+ * - binds the topic the source's own publisher raises when it ${moment} (see destination() below);
+ *   the EVENT decides whether to post - its guard is read off the payload, the row as the write that
+ *   raised it left it - and the source is then RE-LOADED by id only for the values posted, since the
+ *   payload lacks later-step data such as a stamped document number (#8505);
  * - idempotent + resumable + amendable via the ${backRefProperty} back-reference: the derived content
  *   is compared with what the existing post carries, so a redelivery of a complete post is a no-op,
  *   a half-post (an item write failed after the target was saved) is completed, and a source that was
@@ -46,6 +47,8 @@ import org.eclipse.dirigible.sdk.utils.Json;
  *   and a source with NO post is left alone: the first post is the create handler's, and two handlers
  *   each finding nothing posted for a create and an edit committed together would post twice. A source
  *   whose every post was rejected or reversed (#7959) is posted afresh: nobody else will post it again.
+ *   A DERIVED write on the source (a roll-up total, a counter kept from the entries) is not an edit
+ *   unless it moved a property the derivation reads (#8504).
 #end
 #if($mirrorsOriginal)
  * - DELETED SOURCE (#7634): the source no longer exists, so it is read off the -deleted payload (the
@@ -72,35 +75,64 @@ public class ${className}Posting implements MessageHandler {
 
     @Override
     public void onMessage(String message) {
+#if($followsSource && $watchesDerivedWrites)
+        // A derived write keeps the -updated contract (a transitive roll-up, the intent's own onUpdate
+        // reactions), but it is not an EDIT of the ${sourceEntity}: a roll-up the reversal's twin moves, a
+        // counter kept from the entries. Taken for one, it re-drafted a source whose entry a booked twin
+        // had just reversed (#8504). Only a write that moved what the derivation reads is followed.
+        if (org.eclipse.dirigible.components.data.store.java.repository.DerivedWrite.touchedNoneOf(message#foreach($p in $derivationReads), "${p}"#end)) {
+            return;
+        }
+#end
         gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Entity payload =
                 Json.parse(message, gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Entity.class);
         if (payload == null || payload.${sourceKeyField} == null) {
             return;
         }
+#if($guardProperty != "")
+        // The event is this posting's moment only when it is the move INTO ${guardValue}, and the EVENT
+        // says so: the payload is the row as the write that raised it left it (#8505). This listener runs
+        // after that write committed, so by now a settlement, a roll-up's status write or the next step
+        // may have moved the ${sourceEntity} on - judged on the re-loaded row, the moment was lost for
+        // good. A later move is not the moment either: re-deriving on it would rewrite a post only the
+        // amend path owns.
+        if (payload.${guardProperty} == null || payload.${guardProperty} != ${guardValue}) {
+            return;
+        }
+#end
 #if($fromPayload)
         // The source is deleted, so it cannot be re-loaded: the -deleted payload is the whole row as it
         // was deleted (the repository announces the stored row, not the caller's snapshot).
         gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Entity source = payload;
 #else
-        // Re-load: the event payload lacks later-step data (e.g. the number stamped after Issue).
+        // Re-load for the values posted: the event payload lacks later-step data (e.g. the number
+        // stamped after Issue).
         gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Entity source =
                 new gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Repository().findById(payload.${sourceKeyField});
+        if (source == null) {
+            return; // deleted since - nothing left to post
+        }
 #end
-#if($guardProperty != "")
-        // The event is this posting's moment only when it is the move INTO ${guardValue}. post() also takes
-        // the later statuses the posting holds in (#8243) - the reopen sweep needs them - but a later
-        // move is not the moment, and re-deriving on it would rewrite a post only the amend path owns.
-        if (source == null || source.${guardProperty} == null || source.${guardProperty} != ${guardValue}) {
+#if($withdrawnStatusValues != "")
+        // ...unless it was WITHDRAWN since: cancelled or voided before this listener ran. Booking it now
+        // would leave the ledger a sale its reversal - already run, and finding nothing to reverse -
+        // never answers; the reversal is the one that answers for a withdrawn ${sourceEntity}, as for
+        // the reopen sweep (#8243).
+        if (source.${sourceStatusProperty} != null
+                && java.util.List.of("${withdrawnStatusValues}".split(",")).contains(String.valueOf(source.${sourceStatusProperty}))) {
+            LOG.info("Posting ${name}: ${sourceEntity} [{}] was withdrawn (status [{}]) before its posting ran - not posted",
+                    source.${sourceKeyField}, source.${sourceStatusProperty});
             return;
         }
 #end
-        post(source);
+        book(source);
     }
 
     /**
-     * The post itself, for a ${sourceEntity} already in hand. The event path above reads it off the
-     * topic; the period-reopen sweep (#7703) hands over the documents a closed ${targetEntity} period
-     * refused, so both run the one body and cannot drift apart.
+     * The post of a ${sourceEntity} already in hand, offered with no event - the period-reopen sweep
+     * (#7703) hands over the documents a closed ${targetEntity} period refused. It runs the same body
+     * as the event path above, so the two cannot drift apart; only what decides that the source is due
+     * differs.
      *
      * @param source the ${sourceEntity} to post
      */
@@ -108,7 +140,8 @@ public class ${className}Posting implements MessageHandler {
 #if($guardProperty != "")
         // Only a ${sourceEntity} standing where this posting holds (#8243): status ${guardValue}, or a later
         // live status it can only have reached through it. A draft, a cancelled or a voided one is never
-        // posted here, whoever offers it.
+        // posted here, whoever offers it. With no event in hand, the status it stands in is all there is
+        // to judge by - the event path above judges the transition itself (#8505).
         if (source == null || !java.util.List.of("${heldStatusValues}".split(","))
                                               .contains(String.valueOf(source.${guardProperty}))) {
             return;
@@ -118,6 +151,14 @@ public class ${className}Posting implements MessageHandler {
             return;
         }
 #end
+        book(source);
+    }
+
+    /**
+     * Derives the post of a ${sourceEntity} the caller has decided is due and writes it - fresh,
+     * completed or rewritten, at most once per source.
+     */
+    private void book(gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Entity source) {
 #if($hasRule && !$mirrorsOriginal)
         // Determination rule first (the item derivation depends on it): a missing rule or a null
         // referenced column SKIPS - the document stays on the unposted worklist, never half-posted.

@@ -62,7 +62,8 @@ import io.restassured.path.json.config.JsonPathConfig.NumberReturnType;
  *
  * <p>
  * An entry an {@code onCreate} posting drafted for a payment, once rejected or reversed, is history
- * (#7959): the payment's next edit drafts a new entry from what it says now.
+ * (#7959): the payment's next edit drafts a new entry from what it says now - and only an edit
+ * does, not the derived write a roll-up makes on the payment when the twin is posted (#8504).
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentReversalIT extends IntegrationTest {
@@ -124,6 +125,9 @@ class IntentReversalIT extends IntegrationTest {
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: date,   type: date, required: true }
                   - { name: amount, type: decimal, precision: 18, scale: 2 }
+                  # Kept from the entries by a roll-up: a DERIVED write on the payment, which posting the
+                  # reversal's twin moves (#8504).
+                  - { name: postedEntries, type: integer }
 
               - name: Entry
                 immutableWhen: "Status == POSTED"
@@ -287,6 +291,14 @@ class IntentReversalIT extends IntegrationTest {
                 items:
                   - { debit: "Amount" }
                   - { credit: "Amount" }
+
+            rollups:
+              - name: paymentPostedEntries
+                entity: Entry
+                via: Payment
+                field: postedEntries
+                where:
+                  - { field: Status, op: eq, value: POSTED }
 
             reversals:
               - name: reverseEntry
@@ -463,8 +475,18 @@ class IntentReversalIT extends IntegrationTest {
         int original = draftOf(reversed, 20.0f);
         post(original);
         post(reverse(original));
+        // Posting the twin moves the payment's roll-up - a derived write, announced on the payment's
+        // -updated topic like an edit, but marked with the one column it wrote. It is not an edit: the
+        // reversed payment keeps its two entries, the original and the twin (#8504).
+        awaitPostedEntries(reversed, 2);
+        Awaitility.await()
+                  .pollInterval(1, TimeUnit.SECONDS)
+                  .during(10, TimeUnit.SECONDS)
+                  .atMost(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                  .until(() -> entriesOf(reversed).size() == 2);
         updatePayment(reversed, today, 25);
         draftOf(reversed, 25.0f);
+        assertEquals(3, entriesOf(reversed).size(), "the edit drafts the third entry, the original and the twin stay history");
 
         // Posted and not reversed, edited: reported, not redrafted.
         int posted = create(PAYMENTS, "{\"Date\":\"" + today + "\",\"Amount\":30}");
@@ -799,6 +821,16 @@ class IntentReversalIT extends IntegrationTest {
                 TIMEOUT_SECONDS);
         awaitLines(entry.get(), amount);
         return entry.get();
+    }
+
+    /** The payment's roll-up of its POSTED entries, once it reads {@code count}. */
+    private void awaitPostedEntries(int payment, int count) {
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(PAYMENTS + "/" + payment)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("PostedEntries", equalTo(count)),
+                TIMEOUT_SECONDS);
     }
 
     private List<Integer> entriesOf(int payment) {

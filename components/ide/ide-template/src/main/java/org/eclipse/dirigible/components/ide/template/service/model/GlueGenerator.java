@@ -1317,6 +1317,15 @@ class GlueGenerator {
         // The statuses the posting holds in (#8243). A .glue written before it holds the guard status
         // alone - exactly what that shape's handler and sweep tested.
         context.put("heldStatusValues", strOr(item, "heldStatusValues", strOr(item, "guardValue", "")));
+        // The statuses that say the source was withdrawn before its posting ran (#8505). A .glue written
+        // before it vetoes none, as that shape's handler judged only the guard.
+        context.put("sourceStatusProperty", strOr(item, "sourceStatusProperty", ""));
+        context.put("withdrawnStatusValues", strOr(item, "withdrawnStatusValues", ""));
+        // The source properties the derivation reads, which a derived write must touch to count as an
+        // edit for the follower (#8504). Absent from a .glue written before it, which must not read as
+        // "reads nothing" - that would skip every derived write - so the skip is gated on the key.
+        context.put("watchesDerivedWrites", item.containsKey("derivationReads"));
+        context.put("derivationReads", item.containsKey("derivationReads") ? item.get("derivationReads") : List.of());
         // The derived line rows, each cell and each row guard rendered from the reading the glue
         // carries (issue #7425); the classifier ternaries the handler null-guards up front are the
         // very cells that carry one, collected here rather than shipped twice.

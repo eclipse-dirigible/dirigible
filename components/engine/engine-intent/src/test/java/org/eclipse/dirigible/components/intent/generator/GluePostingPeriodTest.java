@@ -220,6 +220,21 @@ class GluePostingPeriodTest {
         assertEquals("5", posting(CLASSIFIED, "salesInvoiceStorno").get("heldStatusValues"));
     }
 
+    /**
+     * #8505: the event decides whether to post, but a source withdrawn before the listener ran is the
+     * reversal's to answer for - the cancelled and void statuses, read off the classification. A
+     * reversal vetoes nothing (its moment IS the withdrawal), and an unclassified nomenclature cannot
+     * say what withdrawn is.
+     */
+    @Test
+    void aPostingVetoesASourceWithdrawnBeforeItRan() {
+        Map<String, Object> posting = posting(CLASSIFIED, "salesInvoicePosting");
+        assertEquals("Status", posting.get("sourceStatusProperty"));
+        assertEquals("5", posting.get("withdrawnStatusValues"));
+        assertEquals("", posting(CLASSIFIED, "salesInvoiceStorno").get("withdrawnStatusValues"));
+        assertEquals("", posting(YAML, "salesInvoicePosting").get("withdrawnStatusValues"));
+    }
+
     private static Map<String, Object> posting(String yaml, String name) {
         return GlueIntentGenerator.buildPostingsForTest(IntentParser.parse(yaml))
                                   .stream()

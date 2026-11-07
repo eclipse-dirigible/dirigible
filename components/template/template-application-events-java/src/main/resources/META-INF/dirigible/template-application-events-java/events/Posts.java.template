@@ -15,8 +15,9 @@ import org.eclipse.dirigible.sdk.utils.Json;
  * PROPOSAL_EVENT_POSTING.md.
  *
  * Contract (mirrors the postings skeleton, flattened - no header document):
- * - binds the source's #if($isCreate)create (bare entity)#{else}-transitioned#end topic and RE-LOADS the source by
- *   id (the payload is as-of the event and may lack later-step data);
+ * - binds the source's #if($isCreate)create (bare entity)#{else}-transitioned#end topic#if(!$isCreate), judges the transition on the
+ *   payload (the row as the transition left it - dirigible #8505),#end and RE-LOADS the source by id for
+ *   the values posted (the payload is as-of the event and may lack later-step data);
  * - idempotent by ${backRef}: if ${into} rows already back-reference this source, it is a no-op;
  * - all writes go through the generated ${into} repository (so its own create logic fires), and the
  *   rows one source event derives are ONE transaction, so the back-reference either finds the whole
@@ -48,16 +49,20 @@ public class ${className}Post implements MessageHandler {
         if (payload == null || payload.${sourceKeyField} == null) {
             return;
         }
+#if(!$isCreate)
+        // Only fires on the transition into status ${statusValue} - and the EVENT says whether it was one:
+        // the payload is the row as the transition left it. The source re-loaded below may already have
+        // moved on (a settlement, a roll-up's status write, the next step), and judged on it the
+        // transition was lost for good (dirigible #8505).
+        if (payload.${statusProperty} == null || payload.${statusProperty} != ${statusValue}) {
+            return;
+        }
+#end
         gen.${javaGenFolderName}.data.${sourceJavaPerspective}.${sourceEntity}Entity source =
                 new gen.${javaGenFolderName}.data.${sourceJavaPerspective}.${sourceEntity}Repository().findById(payload.${sourceKeyField});
         if (source == null) {
             return;
         }
-#if(!$isCreate)
-        if (source.${statusProperty} == null || source.${statusProperty} != ${statusValue}) {
-            return; // only fires on the transition into status ${statusValue}
-        }
-#end
         gen.${javaGenFolderName}.data.${targetJavaPerspective}.${into}Repository targetRepository =
                 new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${into}Repository();
 #if($backRef != "")

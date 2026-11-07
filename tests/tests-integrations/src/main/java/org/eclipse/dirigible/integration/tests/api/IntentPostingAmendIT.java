@@ -10,9 +10,11 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.lessThan;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.nio.charset.StandardCharsets;
@@ -23,6 +25,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.awaitility.Awaitility;
+import org.eclipse.dirigible.components.api.messaging.MessagingFacade;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
@@ -68,6 +71,10 @@ import ch.qos.logback.classic.Level;
  * is posted when it reopens - a red storno whose original was posted while the period was still
  * open, and a document that moved on in its flow while the period was closed - and nothing the
  * posting does not hold is: a document sent back to draft, or voided before it was ever posted.
+ *
+ * <p>
+ * And the moment itself is the transition's, not the document's later state (#8505): a document
+ * moved on before the asynchronous posting ran is posted all the same, unless it was withdrawn.
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentPostingAmendIT extends IntegrationTest {
@@ -338,6 +345,63 @@ class IntentPostingAmendIT extends IntegrationTest {
                           "Posting docPosting: FiscalPeriod [" + period + "] reopened - posted [2] Doc document(s)", Level.INFO));
         assertUnposted(redrafted);
         assertUnposted(withdrawn);
+    }
+
+    /**
+     * #8505: the posting runs on a listener, after the transition committed, and it used to judge its
+     * {@code when:} against the RE-LOADED document - so a document something had already moved on
+     * (issued, then sent, paid or settled before the listener ran) was never posted, and nothing
+     * offered it again. The transition decides now, read off the event.
+     *
+     * <p>
+     * The race is staged deterministically. Each document is issued into a CLOSED period, so the
+     * posting that runs on its Issue writes nothing (#7703), and is then moved on - sent, or voided.
+     * The period is DELETED rather than reopened, so no reopen sweep offers anything, and the Issue's
+     * {@code -transitioned} event - the row as the transition left it, in status 2 - is delivered
+     * again: exactly what a listener that fell behind receives. The sent document is posted; the voided
+     * one is not - withdrawn, it is the reversal's to answer for.
+     */
+    @Test
+    void the_transition_decides_the_post_not_the_status_the_document_moved_on_to() {
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        int period = create(PERIODS, "{\"StartDate\":\"2026-04-01\",\"EndDate\":\"2026-04-30\",\"Status\":1}");
+        transition("ClosePeriod", period);
+        int sent = create(DOCS, "{\"Date\":\"2026-04-02\",\"Amount\":210}");
+        transition("IssueDoc", sent);
+        awaitRefusal(sent);
+        transition("SendDoc", sent);
+        int voided = create(DOCS, "{\"Date\":\"2026-04-03\",\"Amount\":40}");
+        transition("IssueDoc", voided);
+        awaitRefusal(voided);
+        transition("VoidDoc", voided);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .delete(PERIODS + "/" + period)
+                                                 .then()
+                                                 .statusCode(both(greaterThanOrEqualTo(200)).and(lessThan(300))),
+                TIMEOUT_SECONDS);
+
+        deliverIssued(sent, "2026-04-02", 210);
+        awaitLines(onlyEntryOf(sent), 210.0f);
+
+        deliverIssued(voided, "2026-04-03", 40);
+        Awaitility.await()
+                  .pollInterval(1, TimeUnit.SECONDS)
+                  .atMost(POSTING_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                  .until(() -> postingLogs.containsMessage("Doc [" + voided + "] was withdrawn (status [4]) before its posting ran",
+                          Level.INFO));
+        assertUnposted(voided);
+    }
+
+    /**
+     * Delivers the {@code -transitioned} event of the document's Issue - the row in status 2 - as the
+     * transition endpoint publishes it.
+     */
+    private void deliverIssued(int doc, String date, int amount) {
+        MessagingFacade.sendToTopic(PROJECT + "-Doc-Doc-transitioned",
+                "{\"Id\":" + doc + ",\"Date\":\"" + date + "\",\"Amount\":" + amount + ",\"Status\":2}");
     }
 
     /**
