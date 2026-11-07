@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -140,6 +141,67 @@ class HarmoniaListColumnsIT {
         String css = read("/META-INF/dirigible/application-core/shell/css/app.css");
         assertTrue(css.contains("table[data-list-columns]") && css.contains("text-overflow: ellipsis"),
                 "the shared stylesheet does not truncate list cells");
+    }
+
+    /**
+     * The truncation tooltip never fires on the row-actions cell (dirigible #8432). The open action
+     * menu lives inside that cell, so the cell measured as cut and took "Preview Edit Delete" as a
+     * native title - a second, smaller menu under the real one. The shipped {@code app.js} runs over
+     * stub elements here, with every cell measuring as cut, so only the guard decides.
+     */
+    @Test
+    void theTruncationTooltipSkipsRowActionsAndMenus() throws Exception {
+        try (Context context = Context.newBuilder("js")
+                                      .allowAllAccess(true)
+                                      // The interpreter-only notice is written straight to the native stream,
+                                      // which the forked test JVM reports as a corrupted channel.
+                                      .option("engine.WarnInterpreterOnly", "false")
+                                      .build()) {
+            context.eval("js", """
+                    var window = this;
+                    var document = { addEventListener: function () {} };
+                    function matches(el, selector) {
+                      return selector.split(',').some(function (part) {
+                        part = part.trim();
+                        var attr = /^\\[([\\w-]+)(?:="?([^"\\]]*)"?)?\\]$/.exec(part);
+                        if (!attr) return el.tagName === part.toUpperCase();
+                        return el.attrs[attr[1]] !== undefined && (attr[2] === undefined || el.attrs[attr[1]] === attr[2]);
+                      });
+                    }
+                    function element(tagName, attrs, parent, text) {
+                      return { tagName: tagName, attrs: attrs, parentElement: parent, textContent: text,
+                        hasAttribute: function (name) { return this.attrs[name] !== undefined; },
+                        setAttribute: function (name, value) { this.attrs[name] = value; },
+                        removeAttribute: function (name) { delete this.attrs[name]; },
+                        querySelector: function () { return null; },
+                        closest: function (selector) {
+                          for (var el = this; el; el = el.parentElement) { if (matches(el, selector)) return el; }
+                          return null;
+                        } };
+                    }
+                    """);
+            context.eval("js", read("/META-INF/dirigible/application-core/shell/js/app.js"));
+            context.eval("js", """
+                    App.listColumns.isCut = function () { return true; };
+                    var hover = function (target) { App.listColumns.tooltip({ target: target }); };
+                    var actions = element('TD', { 'data-row-actions': '' }, null, 'Preview Edit Delete');
+                    var menu = element('UL', { role: 'menu' }, actions, 'Preview Edit Delete');
+                    var item = element('LI', { role: 'menuitem' }, menu, 'Edit');
+                    var value = element('TD', {}, null, 'A company name too long for its column');
+                    """);
+            context.eval("js", "hover(item); hover(menu); hover(actions);");
+            assertEquals(false, context.eval("js", "actions.hasAttribute('title')")
+                                       .asBoolean(),
+                    "hovering the row-actions menu put its items' text on the cell as a native tooltip");
+            context.eval("js", "var detached = element('LI', {}, element('UL', { role: 'menu' }, value, ''), 'Edit'); hover(detached);");
+            assertEquals(false, context.eval("js", "value.hasAttribute('title')")
+                                       .asBoolean(),
+                    "hovering a menu inside a cell measured the cell for a tooltip");
+            context.eval("js", "hover(value);");
+            assertEquals("A company name too long for its column", context.eval("js", "value.attrs.title")
+                                                                          .asString(),
+                    "a cut value lost its tooltip");
+        }
     }
 
     private static int count(String haystack, String needle) {
