@@ -33,15 +33,31 @@ import com.google.gson.JsonParser;
  * <p>
  * The release workflow writes it ({@code -Dperf.baseline.record=true}) and commits it with the
  * development version; every other run is measured against it. A step fails when its p95 exceeds
- * the baseline's by more than {@link #P95_TOLERANCE}, or when a typical request of it executes more
- * statements than the baseline's - a statement count does not depend on the machine, so it is held
- * exactly, and it is the number an N+1 moves first. A value the file does not carry is not gated: a
- * baseline holding statement counts alone gates statements alone.
+ * the baseline's, scaled by the run's {@linkplain #machineFactor machine factor}, by more than
+ * {@link #P95_TOLERANCE}, or when a typical request of it executes more statements than the
+ * baseline's - a statement count does not depend on the machine, so it is held exactly, and it is
+ * the number an N+1 moves first. A value the file does not carry is not gated: a baseline holding
+ * statement counts alone gates statements alone.
+ *
+ * <p>
+ * The baseline is one run on a shared CI runner, and runners of the same label differ in speed by
+ * up to 2x: a baseline recorded on a fast one failed every later run on an ordinary one, each step
+ * about 1.5x its p95 with no change in what it executes. So the latencies are compared relative to
+ * the machine: the factor is the median, over the steps, of the measured p50 against the
+ * baseline's, which a uniformly slower runner moves and a regression of one step does not. A factor
+ * beyond {@link #MACHINE_FACTOR_CEILING} is itself reported, so a slowdown of every step still
+ * fails.
  */
 final class PerformanceBaseline {
 
-    /** How far a step's p95 may exceed the baseline's: 50 %. */
+    /** How far a step's p95 may exceed the baseline's, after the machine factor: 50 %. */
     static final double P95_TOLERANCE = 1.5;
+
+    /**
+     * How much slower than the baseline's runner a run may be as a whole before that is reported - the
+     * runners measured so far differ by up to 1.6x.
+     */
+    static final double MACHINE_FACTOR_CEILING = 2.0;
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting()
                                                       .create();
@@ -105,25 +121,61 @@ final class PerformanceBaseline {
     }
 
     /**
-     * What the measurement of a step exceeds the baseline by.
+     * What the measurements exceed the baseline by.
      *
-     * @param measurement the measured step
-     * @return one sentence per exceeded value, empty when the step is within its baseline
+     * @param measurements the measured steps of one run
+     * @return one sentence per exceeded value, empty when the run is within its baseline
      */
-    List<String> regressions(StepMeasurement measurement) {
+    List<String> regressions(List<StepMeasurement> measurements) {
+        List<String> regressions = new ArrayList<>();
+        double machineFactor = machineFactor(measurements);
+        if (machineFactor > MACHINE_FACTOR_CEILING) {
+            regressions.add(String.format("every step is slower: the median p50 is %.2fx the baseline's, more than %.1fx", machineFactor,
+                    MACHINE_FACTOR_CEILING));
+        }
+        for (StepMeasurement measurement : measurements) {
+            regressions.addAll(regressions(measurement, Math.min(machineFactor, MACHINE_FACTOR_CEILING)));
+        }
+        return regressions;
+    }
+
+    /**
+     * How much slower the machine of this run is than the baseline's: the median, over the steps the
+     * baseline carries a p50 for, of the measured p50 against the baseline's - never below 1, so a
+     * faster runner does not tighten the gate.
+     *
+     * @param measurements the measured steps of one run
+     * @return the factor the baseline's latencies are scaled by
+     */
+    double machineFactor(List<StepMeasurement> measurements) {
+        List<Double> ratios = new ArrayList<>();
+        for (StepMeasurement measurement : measurements) {
+            JsonObject step = steps.get(measurement.step());
+            if (step != null && step.has("p50Millis") && step.get("p50Millis")
+                                                             .getAsDouble() > 0) {
+                ratios.add(measurement.p50Millis() / step.get("p50Millis")
+                                                         .getAsDouble());
+            }
+        }
+        return Math.max(1.0, median(ratios));
+    }
+
+    private List<String> regressions(StepMeasurement measurement, double machineFactor) {
         List<String> regressions = new ArrayList<>();
         JsonObject step = steps.get(measurement.step());
         if (step == null) {
             return regressions;
         }
         if (step.has("p95Millis")) {
-            double allowed = step.get("p95Millis")
-                                 .getAsDouble()
-                    * P95_TOLERANCE;
-            if (measurement.p95Millis() > allowed) {
-                regressions.add(String.format("[%s] p95 %.1f ms exceeds the baseline %.1f ms by more than 50 %%", measurement.step(),
-                        measurement.p95Millis(), step.get("p95Millis")
-                                                     .getAsDouble()));
+            double expected = step.get("p95Millis")
+                                  .getAsDouble()
+                    * machineFactor;
+            if (measurement.p95Millis() > expected * P95_TOLERANCE) {
+                regressions.add(String.format(
+                        "[%s] p95 %.1f ms exceeds the baseline %.1f ms (%.1f ms at this run's machine factor %.2f) by more than 50 %%",
+                        measurement.step(), measurement.p95Millis(), step.get("p95Millis")
+                                                                         .getAsDouble(),
+                        expected, machineFactor));
             }
         }
         if (step.has("statements")) {
@@ -135,6 +187,17 @@ final class PerformanceBaseline {
             }
         }
         return regressions;
+    }
+
+    private static double median(List<Double> values) {
+        if (values.isEmpty()) {
+            return 1.0;
+        }
+        List<Double> sorted = values.stream()
+                                    .sorted()
+                                    .toList();
+        int middle = sorted.size() / 2;
+        return sorted.size() % 2 == 1 ? sorted.get(middle) : (sorted.get(middle - 1) + sorted.get(middle)) / 2;
     }
 
     private static double rounded(double millis) {
