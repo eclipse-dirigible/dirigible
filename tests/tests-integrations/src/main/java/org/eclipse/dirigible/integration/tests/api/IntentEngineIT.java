@@ -4282,7 +4282,7 @@ class IntentEngineIT extends IntegrationTest {
         // The completion hook also IMPLIES the from-status guard (#7068): a Proforma already standing
         // at the status the hook writes has been invoiced, so a second click - or a second POST to the
         // endpoint - is refused with 409 instead of minting a second invoice for the same customer.
-        assertTrue(generate.contains("Calc.eval(\"Status\", guarded, 0).intValue()"),
+        assertTrue(generate.contains("Calc.eval(\"Status\", source, 0).intValue()"),
                 "the run endpoint must read the source's status before creating anything");
         assertTrue(generate.contains("if (!(currentStatus != 3))"), "the implied guard is the completion hook's own status");
         assertTrue(generate.contains("Response.setStatus(409)"), "a barred status must be refused with 409");

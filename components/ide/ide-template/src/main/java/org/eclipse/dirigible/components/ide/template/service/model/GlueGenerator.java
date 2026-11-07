@@ -1078,6 +1078,11 @@ class GlueGenerator {
         // reference renders as its own literal into a destination nothing ever publishes on. An absent
         // one is the lifecycle suffix that shape implied: none for a create, -transitioned otherwise.
         context.put("topicSuffix", strOr(item, "topicSuffix", truthy(item, "isCreate") ? "" : "-transitioned"));
+        // The source statuses that withdraw it before the listener ran (issue #8510): the listener
+        // judges the moment on the event's payload and skips a source cancelled or voided since. A
+        // .glue written before the keys existed carries neither, and renders no veto.
+        context.put("withdrawnStatusProperty", strOr(item, "withdrawnStatusProperty", ""));
+        context.put("withdrawnStatusValues", strOr(item, "withdrawnStatusValues", ""));
         // The role gate of the click (issue #7913): the write gates of the source and the target, each
         // a comma-separated role list written into a Java string literal. A .glue written before the
         // keys existed carries neither, and an absent gate renders as an empty one that no caller

@@ -1,4 +1,6 @@
 package gen.events.${javaGenFolderName};
+## The completion hook follows the event (#8510): create() is told the status the event's row carried.
+#set($flipFollowsEvent = $sourceStatusValue != "")
 
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.log.Logger;
@@ -22,8 +24,21 @@ import org.eclipse.dirigible.sdk.utils.Json;
  *   register lookup that sets a status), which -updated reactions never see, so there are no loops.
  *   It is NOT every status write: a plain REST update() publishes only -updated, and a targeted
  *   updateProperty/updateProperties write publishes nothing unless its own template publishes#end;
- * - RE-LOADS the source by id before the guard, because the event payload is as-of the event and lacks
- *   later-step data such as a stamped document number;
+ * - the EVENT decides whether to generate: the guard is read off the payload - the row as the write that
+ *   raised it left it - never off the re-loaded source (#8510). This listener runs after that write
+ *   committed, so a settlement, a roll-up's status write or the next step may already have moved the
+ *   ${fromEntity} on, and judged on its current state the moment was lost for good. The create-from
+ *   re-loads the source itself, for the values it copies;
+#if($withdrawnStatusValues != "")
+ * - ...unless the ${fromEntity} was WITHDRAWN since - cancelled or voided before this listener ran, its
+ *   ${withdrawnStatusProperty} now in [${withdrawnStatusValues}] - which is not generated from, as a
+ *   posting holds (#8505);
+#end
+#if($flipFollowsEvent)
+ * - the completion hook flips the ${fromEntity} to status ${sourceStatusValue} only while it still stands
+ *   where the event left it, so a later move is never overruled;
+#end
+ * - a source that no longer exists is logged, not answered: there is no caller to answer (#8488);
  * - delegates to ${className}Generate, the SAME create-from a button would call, so the mapping, the
  *   items and the sourceStatus completion hook cannot diverge between the two triggers;
 #if($appendMode)
@@ -57,25 +72,36 @@ public class ${className}GenerateOnEvent implements MessageHandler {
         gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity payload =
                 Json.parse(message, gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity.class);
         if (payload == null || payload.${fromPk} == null) {
+            LOG.warn("Generate ${name}: an event on [{}] named no ${fromEntity} - nothing generated", destination());
             return;
         }
 #if($guardCondition && $guardCondition != "")
-        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity source =
-                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().findById(payload.${fromPk});
-        ## The complete pre-rendered guard - the status comparison AND any string-field terms of the
-        ## intent's `when` list (issue #6957), all evaluated against the re-loaded source.
-        if (source == null || !(${guardCondition})) {
+        // The complete pre-rendered guard - the status comparison AND any string-field terms of the
+        // intent's `when` list (issue #6957) - rendered over a `source` local, which is the row as the
+        // event left it (#8510).
+        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity source = payload;
+        if (!(${guardCondition})) {
             return;
         }
 #elseif($guardProperty != "")
         ## A .glue written before guardCondition existed: render the single status guard it always had.
-        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity source =
-                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().findById(payload.${fromPk});
-        if (source == null || source.${guardProperty} == null || source.${guardProperty} != ${guardValue}) {
+        if (payload.${guardProperty} == null || payload.${guardProperty} != ${guardValue}) {
             return;
         }
 #end
-        new ${className}Generate().create(payload.${fromPk});
+#if($withdrawnStatusValues != "")
+        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity current =
+                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().findById(payload.${fromPk});
+        if (current != null && current.${withdrawnStatusProperty} != null
+                && java.util.List.of("${withdrawnStatusValues}".split(",")).contains(String.valueOf(current.${withdrawnStatusProperty}))) {
+            LOG.info("Generate ${name}: ${fromEntity} [{}] was withdrawn (status [{}]) before its create-from ran - not generated",
+                    current.${fromPk}, current.${withdrawnStatusProperty});
+            return;
+        }
+#end
+        if (new ${className}Generate().create(payload.${fromPk}#if($flipFollowsEvent), true, payload.${sourceStatusProperty}#end) == null) {
+            LOG.warn("Generate ${name}: ${fromEntity} {} does not exist - nothing generated", payload.${fromPk});
+        }
     }
 
     @Override
