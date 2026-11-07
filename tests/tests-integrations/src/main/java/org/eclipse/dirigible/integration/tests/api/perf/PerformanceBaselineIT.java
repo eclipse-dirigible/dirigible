@@ -250,10 +250,8 @@ class PerformanceBaselineIT extends IntegrationTest {
             return;
         }
         PerformanceBaseline baseline = PerformanceBaseline.read(BASELINE);
-        List<String> regressions = measurements.stream()
-                                               .flatMap(measurement -> baseline.regressions(measurement)
-                                                                               .stream())
-                                               .toList();
+        LOGGER.info("Machine factor against the baseline: {}", String.format("%.2f", baseline.machineFactor(measurements)));
+        List<String> regressions = baseline.regressions(measurements);
         assertThat(regressions).as("steps beyond the baseline in [%s]", BASELINE.toAbsolutePath())
                                .isEmpty();
     }

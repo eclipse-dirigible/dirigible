@@ -251,6 +251,11 @@ class BrowserImpl implements Browser {
             }
 
             return Collections.emptySet();
+        } catch (StaleElementReferenceException ex) {
+            // the frame re-rendered between finding the elements and reading them - nothing was found
+            // in this pass, and the caller's retry loop searches again
+            LOGGER.debug("An element found by [{}] went stale while it was read. Will be searched again.", by, ex);
+            return Collections.emptySet();
         }
     }
 
