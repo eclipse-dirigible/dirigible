@@ -157,6 +157,41 @@ class StatusSymbolIntentTest {
                 "not a seeded status of [InvoiceStatus]");
     }
 
+    /**
+     * A generation child's row rule (#8491) takes the schedule query's triples, and names a status the
+     * same way: resolved to the seed id on a local collection, refused when there is no such seed.
+     */
+    @Test
+    void aStatusNameInAChildRowRuleResolves() {
+        String child = YAML.replace("""
+                    notify: { to: ops@example.com, subject: "Invoice overdue" }
+                """, """
+                    notify: { to: ops@example.com, subject: "Invoice overdue" }
+                  - name: copies
+                    cron: "0 0 2 1 * ?"
+                    entity: Invoice
+                    generate:
+                      to: Invoice
+                      map: { paid: paid }
+                      children:
+                        - to: Invoice
+                          parent: Invoice
+                          forEach: { entity: Invoice, match: { paid: paid } }
+                          where:
+                            - { field: Status, op: eq, value: ISSUED }
+                """);
+        assertEquals("3", String.valueOf(IntentParser.parse(child)
+                                                     .getSchedules()
+                                                     .get(1)
+                                                     .getGenerate()
+                                                     .getChildren()
+                                                     .get(0)
+                                                     .getWhere()
+                                                     .get(0)
+                                                     .getValue()));
+        assertIssue(child.replace("value: ISSUED }\nseeds", "value: ISUED }\nseeds"), "not a seeded status of [InvoiceStatus]");
+    }
+
     /** The point of the exercise: a mistyped status is a parse error, not another status. */
     @Test
     void anUnknownStatusNameIsRejected() {

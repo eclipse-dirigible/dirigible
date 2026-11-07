@@ -133,6 +133,26 @@ class GluePostingsFollowSourceTest {
                 "the follower retires the same entries");
     }
 
+    /**
+     * #8504: the follower skips a derived write that touched none of the source properties its
+     * derivation reads - the map's copies and placeholders, the item expressions and row guards, a rule
+     * selector's classifier and a copied foreign key - never a rule column or a quoted literal.
+     */
+    @Test
+    void theFollowerKnowsWhichSourcePropertiesItsDerivationReads() {
+        String items = "    items:\n      - { Account: rule(cashAccount), debit: \"Amount\" }\n      - { credit: \"Amount\" }\n";
+        String entry = "  - name: Entry\n    fields:\n      - { name: id, type: integer, primaryKey: true, generated: true }\n";
+        assertTrue(YAML.contains(items) && YAML.contains(entry), "the fixture edits below must apply");
+        String yaml = YAML
+                          .replace(items, "    map: { note: \"Payment {number}\", date: valueDate }\n    items:\n"
+                                  + "      - { Account: \"rule(by: method, cases: { 1: cashAccount })\", debit: \"Amount - Fee\" }\n"
+                                  + "      - { when: \"Kind == 'CASH'\", Account: rule(cashAccount), credit: \"Amount\" }\n")
+                          .replace(entry, entry + "      - { name: note, type: string }\n      - { name: date, type: date }\n");
+        List<Map<String, Object>> postings = GlueIntentGenerator.buildPostingsForTest(IntentParser.parse(yaml));
+        assertEquals(List.of("Number", "ValueDate", "Method", "Amount", "Fee", "Kind"), postings.get(1)
+                                                                                                .get("derivationReads"));
+    }
+
     @SuppressWarnings("unchecked")
     @Test
     void aDeleteReversalMirrorsTheOriginalsStoredLines() {

@@ -32,7 +32,8 @@
            of its own, opened at its own URL or in the application shell's Reports, where no
            breadcrumb names it. Hidden in preview mode (the dashboard tile): just the data. -->
       <div x-show="!preview" class="hbox flex-wrap items-center gap-2">
-        <h1 class="truncate text-xl font-semibold tracking-tight" x-text="T('$projectName:${tprefix}.t.${tId}', displayName)"></h1>
+        <!-- A report with a period names the window its rows cover (#8506): "Sales (Last 30 days)". -->
+        <h1 class="truncate text-xl font-semibold tracking-tight" x-text="T('$projectName:${tprefix}.t.${tId}', displayName) + (periodText ? ' (' + periodText + ')' : '')"></h1>
         <span x-show="state === 'default'" x-h-badge data-variant="information" x-text="T('application-core:shell.report.rows', '{{count}} rows', { count: count })"></span>
         <button x-h-button data-variant="outline" :data-toggled="showFilters" :aria-expanded="showFilters ? 'true' : 'false'" aria-controls="report-filters" @click="showFilters = !showFilters">
           <svg role="presentation" x-h-lucide data-lucide="filter"></svg><span x-text="T('application-core:shell.report.filters', 'Filters')"></span>
@@ -91,6 +92,24 @@
            fromDate/toDate window): first-class inputs sent by name with every query. An empty value
            uses the parameter's server-side default. Renders nothing for parameter-less reports. -->
       <div x-show="!preview && reportParams.length" class="hbox items-end gap-2 flex-wrap">
+#if($periodJs)
+        <!-- The period presets (#8506): choosing one fills the two dates beside it and re-reads the
+             report; a date set by hand switches the select to Custom. -->
+        <div class="vbox gap-1">
+          <label x-h-label id="report-period-label" x-text="T('application-core:shell.report.period', 'Period')"></label>
+          <div x-h-select>
+            <input x-h-select-input x-model="preset" aria-labelledby="report-period-label" />
+            <div x-h-select-content>
+              <div x-h-select-list>
+                <template x-for="p in period.presets" :key="p.name">
+                  <div x-h-select-option="presetLabel(p.name)" :data-value="p.name"></div>
+                </template>
+                <div x-h-select-option="presetLabel('custom')" data-value="custom"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+#end
         <template x-for="(p, pi) in reportParams" :key="p.name">
           <div class="vbox gap-1">
             <label x-h-label :for="'report-param-' + pi" x-text="paramLabel(p.name)"></label>

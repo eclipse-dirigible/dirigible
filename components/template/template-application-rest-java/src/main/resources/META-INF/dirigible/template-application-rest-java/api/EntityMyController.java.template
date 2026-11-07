@@ -1056,6 +1056,30 @@ public class ${name}MyController {
                 throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
             }
         }
+#elseif($check.kind == "exists")
+## A row of ANOTHER entity must carry the values the record names (intent `checks: exists`, #8338) - an
+## expense billed to a project by an employee assigned to it. A match value one hop away is loaded by FK
+## first; an unset one skips the check, as agree's whenNull: skip does. Ungated, so it holds on every
+## user write; a gated exists is the repository's, like a document check. The query binds its values.
+        {
+#foreach($load in $check.pathLoads)
+            Object ${load.local}Fk = ${load.sourceExpression};
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null
+                    : (${load.entityClass}) loadedHops.computeIfAbsent("${load.repositoryClass}:" + ${load.local}Fk,
+                            hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
+#end
+#foreach($pair in $check.match)
+            Object match${foreach.count} = ${pair.expression};
+#end
+            if (#if($check.guardJavaExpression)(${check.guardJavaExpression}) && #end#foreach($pair in $check.match)match${foreach.count} != null && #{end}new ${check.targetRepositoryClass}().count(
+                    org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+#foreach($pair in $check.match)
+                                                                                       .eq("${pair.property}", match${foreach.count})
+#end
+            ) == 0) {
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
+            }
+        }
 #elseif($check.kind == "compare")
 ## A value of the row compared with a second one (intent `checks: compare`) - another field of the
 ## SAME row, or a LITERAL (#7338: the positive quantity, the percentage at most 100, the date that is

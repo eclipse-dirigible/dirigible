@@ -169,7 +169,20 @@
       "retry": "Retry",
       "noMatch": "No matching rows",
       "noMatchHint": "Try adjusting the filters.",
-      "clearFilters": "Clear filters"
+      "clearFilters": "Clear filters",
+      "period": "Period",
+      "periods": {
+        "custom": "Custom",
+        "last7Days": "Last 7 days",
+        "last30Days": "Last 30 days",
+        "currentMonth": "Current month",
+        "previousMonth": "Previous month",
+        "currentQuarter": "Current quarter",
+        "lastQuarter": "Last quarter",
+        "yearToDate": "Year to date",
+        "currentYear": "Current year",
+        "previousYear": "Previous year"
+      }
     },
     "notfound": {
       "title": "Page not found",

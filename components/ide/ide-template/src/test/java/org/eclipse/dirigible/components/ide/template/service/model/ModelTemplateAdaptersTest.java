@@ -65,4 +65,29 @@ class ModelTemplateAdaptersTest {
         assertNull(ModelTemplateAdapters.reportMoment("DATE", "START_OF_WEEK"));
         assertNull(ModelTemplateAdapters.reportMoment("DATE", "CURRENT_DATE-P"));
     }
+
+    /**
+     * A report's period (#8506) reaches the report page as a JS literal - only while both of its
+     * parameters are still declared (the report editor may have dropped one).
+     */
+    @Test
+    void aPeriodReachesTheReportPageWhileItsParametersStand() {
+        String report = """
+                { "name": "Sales", "query": "SELECT 1", "columns": [],
+                  "parameters": [ { "name": "fromDate", "type": "DATE", "initial": "CURRENT_DATE-P29D" },
+                                  { "name": "toDate", "type": "DATE", "initial": "CURRENT_DATE" } ],
+                  "period": { "from": "fromDate", "to": "toDate", "default": "last30Days",
+                              "presets": [ { "name": "last30Days", "from": "CURRENT_DATE-P29D", "to": "CURRENT_DATE" } ] } }
+                """;
+        Map<String, Object> model = ModelTemplateAdapters.prepare(REPORT_FILE_TEMPLATE, report, new java.util.HashMap<>())
+                                                         .model();
+        String period = String.valueOf(model.get("periodJs"));
+        assertTrue(period.contains("last30Days") && period.contains("CURRENT_DATE-P29D") && period.contains("fromDate"), period);
+        assertEquals(Boolean.TRUE, model.get("hasMomentParameters"));
+
+        Map<String, Object> orphaned = ModelTemplateAdapters.prepare(REPORT_FILE_TEMPLATE,
+                report.replace("\"toDate\", \"type\"", "\"until\", \"type\""), new java.util.HashMap<>())
+                                                            .model();
+        assertNull(orphaned.get("periodJs"));
+    }
 }

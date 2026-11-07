@@ -329,16 +329,27 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 entry.put("forEachEntity", collection);
                 entry.put("forEachCrossModel", forEachCrossModel);
                 entry.put("forEachModel", forEachCrossModel ? String.valueOf(forEachModelObj) : "");
+                UsesIntent collectionUses = forEachCrossModel ? findUses(model, String.valueOf(forEachModelObj)) : null;
                 if (forEachCrossModel) {
                     // The collection lives in another model; its perspective comes from the owner's
                     // .model (already validated resolvable in firstUnresolvableScheduleRef, so this
                     // resolve does not fail for a schedule that reached here).
-                    UsesIntent collectionUses = findUses(model, String.valueOf(forEachModelObj));
                     CrossModelSupport.TargetInfo collectionTarget =
                             collectionUses == null ? null : CrossModelSupport.resolve(context, collectionUses, collection);
                     entry.put("forEachPerspective", collectionTarget != null ? collectionTarget.perspectiveName() : collection);
+                    if ("skip".equals(child.getOnRefused())) {
+                        // Names the row a refused child came from in the job's log line.
+                        entry.put("forEachPk", collectionTarget != null ? collectionTarget.keyField() : "Id");
+                    }
                 } else {
                     entry.put("forEachPerspective", IntentEntities.resolvePerspective(collection, compositionParents, model));
+                    if ("skip".equals(child.getOnRefused())) {
+                        entry.put("forEachPk", IntentEntities.keyFieldName(byName.get(collection)));
+                    }
+                }
+                if (child.getWhere() != null && !child.getWhere()
+                                                      .isEmpty()) {
+                    putChildWhere(entry, child, collection, collectionUses, model, byName, compositionParents, context);
                 }
                 @SuppressWarnings("unchecked")
                 Map<String, Object> match = (Map<String, Object>) child.getForEach()
@@ -354,6 +365,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                 relationProperties(crossModel ? null : byName.get(child.getTo()), target)));
             }
             entry.put("rowVar", rowVar);
+            if ("skip".equals(child.getOnRefused())) {
+                // Only where authored, so a job without it - and its .glue - stays byte-identical.
+                entry.put("onRefusedSkip", true);
+            }
             if (child.getChildren() != null && !child.getChildren()
                                                      .isEmpty()) {
                 entry.put("children",
@@ -362,6 +377,124 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             result.add(entry);
         }
         return result;
+    }
+
+    /**
+     * The row rule of an {@code entity} child (#8491), as the clauses the glue carries:
+     * {@code criteria} over the collection row's own fields - appended to the query that already
+     * selects the rows by their match key - and one {@code hops} entry per relation the rule reads
+     * through, with the relation's foreign key, its target's coordinates and the clauses on the target.
+     * The job narrows the rows to those whose foreign key is among the target rows the clauses select,
+     * so the {@code schedules[].where} reading and rendering serve both halves and nothing is compared
+     * in generated code.
+     *
+     * <p>
+     * A local collection's relations are read off the intent by the notify {@code Resolver}, which also
+     * resolves a target another model owns. A cross-model collection ({@code collectionUses}) is read
+     * off its owner's {@code .model}: its fields, the entity each to-one points at, and - through
+     * {@link CrossModelSupport#ownerOf} - the model that really owns that entity when the owner carries
+     * it as a projection of a third model (the projects model's assignment pointing at the employees
+     * model's employee). A field or relation that does not resolve fails the generation, naming it.
+     */
+    private static void putChildWhere(Map<String, Object> entry, GenerateChildIntent child, String collectionName,
+            UsesIntent collectionUses, IntentModel model, Map<String, EntityIntent> byName, Map<String, String> compositionParents,
+            IntentGenerationContext context) {
+        List<ScheduleConditionIntent> own = new ArrayList<>();
+        Map<String, List<ScheduleConditionIntent>> byRelation = new LinkedHashMap<>();
+        for (ScheduleConditionIntent condition : child.getWhere()) {
+            int dot = condition.getField()
+                               .indexOf('.');
+            if (dot < 0) {
+                own.add(condition);
+                continue;
+            }
+            ScheduleConditionIntent onTarget = new ScheduleConditionIntent();
+            onTarget.setField(condition.getField()
+                                       .substring(dot + 1));
+            onTarget.setOp(condition.getOp());
+            onTarget.setValue(condition.getValue());
+            byRelation.computeIfAbsent(condition.getField()
+                                                .substring(0, dot),
+                    ignored -> new ArrayList<>())
+                      .add(onTarget);
+        }
+        CrossModelSupport.TargetInfo collectionTarget =
+                collectionUses == null ? null : CrossModelSupport.resolve(context, collectionUses, collectionName);
+        EntityIntent collection = collectionTarget == null ? byName.get(collectionName) : null;
+        if (collectionTarget == null && collection == null) {
+            // The parser refuses a forEach entity this model does not declare and a forEach model alias
+            // it does not use, so a parsed intent never gets here; a model assembled another way is
+            // refused naming the child rather than read as an empty rule.
+            throw new IntentValidationException(List.of("schedule generate child [" + child.getTo() + "] forEach entity [" + collectionName
+                    + "] is neither an entity of this model nor of a uses: model, so its where: cannot be read"));
+        }
+        if (collectionTarget != null) {
+            requireOwnerProperties(child, collectionName, collectionTarget, own);
+        }
+        entry.put("criteria", ScheduleSupport.conditions(own));
+        if (byRelation.isEmpty()) {
+            return;
+        }
+        List<Map<String, Object>> hops = new ArrayList<>();
+        entry.put("hops", hops);
+        if (collectionTarget != null) {
+            for (Map.Entry<String, List<ScheduleConditionIntent>> relation : byRelation.entrySet()) {
+                String fk = IntentNaming.pascalCase(relation.getKey());
+                String targetEntity = collectionTarget.propertyRelations() == null ? null
+                        : collectionTarget.propertyRelations()
+                                          .get(fk);
+                if (targetEntity == null) {
+                    throw new IntentValidationException(List.of("schedule generate child [" + child.getTo() + "] where-condition ["
+                            + relation.getKey() + ".*] names no to-one relation of [" + collectionName + "] in model ["
+                            + collectionUses.getModel() + "]"));
+                }
+                UsesIntent owner = CrossModelSupport.ownerOf(context, collectionUses, targetEntity);
+                CrossModelSupport.TargetInfo target = CrossModelSupport.resolve(context, owner, targetEntity);
+                requireOwnerProperties(child, targetEntity, target, relation.getValue());
+                Map<String, Object> hop = NotificationSupport.loadFields(List.of(new NotificationSupport.RelationLoad(relation.getKey(),
+                        targetEntity, target.perspectiveName(), fk, true, owner.getModel(), owner.resolveProject())))
+                                                             .get(0);
+                hop.put("targetPk", target.keyField());
+                hop.put("criteria", ScheduleSupport.conditions(relation.getValue()));
+                hops.add(hop);
+            }
+            return;
+        }
+        NotificationSupport.Resolver resolver =
+                NotificationSupport.resolver(collection, byName, compositionParents, crossModelLookup(model, context));
+        for (ScheduleConditionIntent condition : child.getWhere()) {
+            if (condition.getField()
+                         .indexOf('.') >= 0
+                    && resolver.access(condition.getField(), false) == null) {
+                throw new IntentValidationException(List.of("schedule generate child [" + child.getTo() + "] where-condition ["
+                        + condition.getField() + "] is not a resolvable one-hop relation.field of the forEach entity"));
+            }
+        }
+        for (NotificationSupport.RelationLoad load : resolver.loads()) {
+            Map<String, Object> hop = NotificationSupport.loadFields(List.of(load))
+                                                         .get(0);
+            hop.put("targetPk", load.crossModel()
+                    ? CrossModelSupport.resolve(context, findUses(model, load.targetModel()), load.targetEntity())
+                                       .keyField()
+                    : IntentEntities.keyFieldName(byName.get(load.targetEntity())));
+            hop.put("criteria", ScheduleSupport.conditions(byRelation.get(load.local())));
+            hops.add(hop);
+        }
+    }
+
+    /**
+     * A children row rule read against an entity another model owns: every field must be one of the
+     * owner's properties, or the query would name a column the generated repository does not have and
+     * fail on every tick. The owner model was not resolved (no property list) - trusted as authored.
+     */
+    private static void requireOwnerProperties(GenerateChildIntent child, String entity, CrossModelSupport.TargetInfo owner,
+            List<ScheduleConditionIntent> conditions) {
+        for (ScheduleConditionIntent condition : conditions) {
+            if (owner.propertyNames() != null && isMissing(owner.propertyNames(), condition.getField())) {
+                throw new IntentValidationException(List.of("schedule generate child [" + child.getTo() + "] where-condition reads ["
+                        + condition.getField() + "], which is not a property of [" + entity + "] in its owner model"));
+            }
+        }
     }
 
     private static Map<String, String> toStringMap(Map<String, String> map) {
@@ -1137,7 +1270,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // hands those to the template - the same pair a notification's relation.field recipient uses.
             NotificationSupport.Resolver hops = crossModelSource ? null
                     : NotificationSupport.resolver(source, byName, compositionParents, crossModelLookup(model, context));
-            List<Map<String, Object>> fieldAssignments = assignments(g.getMap(), g.getDefaults(), "source",
+            // One row per report row (#8329): its map reads the report's columns (ReportItemsSupport), so only
+            // the literal defaults are assignments here.
+            List<Map<String, Object>> fieldAssignments = assignments(g.hasReportRows() ? Map.of() : g.getMap(), g.getDefaults(), "source",
                     temporalKinds(crossModel ? null : byName.get(g.getTo()), target), hops);
             if (fieldAssignments == null) {
                 reportDroppedGlue(context, "generates [" + g.getName() + "] map [" + firstHop(g.getMap())
@@ -1333,10 +1468,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("itemWhere", "");
                 e.put("itemRefuse", "");
             }
+            if (g.readsReport()) {
+                ReportItemsSupport.put(g, e, source, byName, model);
+            }
             if (g.hasReportItems()) {
                 // The lines are a report's result rows (#8329), each cell read off the row; the items
                 // `defaults` ride the same key as a mirror block's assignments, owner-less literals.
-                ReportItemsSupport.put(g, e, source, byName, model);
                 EntityIntent line = byName.get(items.getTo());
                 e.put("itemFieldAssignments",
                         childAssignments(Map.of(), items.getDefaults(), "row", temporalKinds(line, null), relationProperties(line, null)));
@@ -2912,6 +3049,21 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("guardValue", guardValue);
             e.put("heldStatusValues", heldStatusValues(guardProperty, guardValue, sourceStatusProperty,
                     sourceStages.getOrDefault(LifecycleStages.LIVE, List.of())));
+            // The event decides whether to post, read off its payload (#8505) - but a source WITHDRAWN
+            // before the listener ran (its status now classified cancelled or void) is the reversal's to
+            // answer for, as the reopen sweep holds (#8243). Not for a reversal: withdrawing the source
+            // is usually its very moment.
+            List<Integer> withdrawn = new ArrayList<>(sourceStages.getOrDefault(LifecycleStages.CANCELLED, List.of()));
+            withdrawn.addAll(sourceStages.getOrDefault(LifecycleStages.VOID, List.of()));
+            boolean vetoesWithdrawn = !isReverse && sourceStatusProperty != null && !withdrawn.isEmpty();
+            e.put("sourceStatusProperty", vetoesWithdrawn ? sourceStatusProperty : "");
+            e.put("withdrawnStatusValues", vetoesWithdrawn ? String.join(",", withdrawn.stream()
+                                                                                       .map(String::valueOf)
+                                                                                       .toList())
+                    : "");
+            // The source properties the derivation reads (#8504): a derived write that moved none of them
+            // is not an edit of anything the post says, and the follower skips it.
+            e.put("derivationReads", derivationReads(guardProperty, effective.getMap(), effective.getItems(), itemsEntity));
             e.put("targetEntity", creates.getName());
             e.put("targetPerspective", IntentEntities.resolvePerspective(creates.getName(), compositionParents, model));
             e.put("targetPk", IntentEntities.keyFieldName(creates));
@@ -3139,6 +3291,64 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             }
         }
         return out;
+    }
+
+    /**
+     * The source properties a posting's derivation reads (#8504): its event guard, the properties its
+     * {@code map:} copies or interpolates, and every property an {@code items:} cell or row
+     * {@code when:} names - a rule selector's {@code by:} classifier and a copied foreign key included,
+     * a plain {@code rule(<column>)} reference (a column of the rule row) not. A derived write that
+     * touched none of them cannot change what the post says, which is what lets the follower tell it
+     * from an edit. Over-inclusion only makes the follower act on a recompute it could have skipped, so
+     * a quoted literal is dropped and every other identifier of an expression is kept.
+     *
+     * @param guardProperty the event guard's property, empty when the posting has none
+     * @param map the header assignments as authored, may be null
+     * @param items the item rows as authored, may be null
+     * @param itemsEntity the items entity, which tells a copied foreign key from an expression
+     * @return the PascalCase source properties, in first-read order
+     */
+    private static List<String> derivationReads(String guardProperty, Map<String, String> map, List<Map<String, String>> items,
+            EntityIntent itemsEntity) {
+        java.util.Set<String> reads = new java.util.LinkedHashSet<>();
+        if (!guardProperty.isEmpty()) {
+            reads.add(guardProperty);
+        }
+        for (String value : map == null ? List.<String>of() : map.values()) {
+            String v = value == null ? "" : value.trim();
+            if (v.matches("\\w+") && !v.matches("\\d+")) {
+                reads.add(IntentNaming.pascalCase(v));
+            } else if (v.contains("{")) {
+                java.util.regex.Matcher placeholder = java.util.regex.Pattern.compile("\\{(\\w+)\\}")
+                                                                             .matcher(v);
+                while (placeholder.find()) {
+                    reads.add(IntentNaming.pascalCase(placeholder.group(1)));
+                }
+            }
+        }
+        for (Map<String, String> row : items == null ? List.<Map<String, String>>of() : items) {
+            for (Map.Entry<String, String> cell : row.entrySet()) {
+                String value = cell.getValue() == null ? ""
+                        : cell.getValue()
+                              .trim();
+                java.util.Optional<PostingRuleSelector> selector = PostingRuleSelector.parse(value);
+                if (selector.isPresent()) {
+                    reads.add(IntentNaming.pascalCase(selector.get()
+                                                              .by()));
+                } else if (value.matches("rule\\(\\w+\\)")) {
+                    continue; // a column of the rule row, not of the source
+                } else if (!"when".equals(cell.getKey()) && toOneRelation(itemsEntity, cell.getKey()) != null) {
+                    reads.add(IntentNaming.pascalCase(value));
+                } else {
+                    java.util.regex.Matcher identifier = java.util.regex.Pattern.compile("[A-Za-z_]\\w*")
+                                                                                .matcher(value.replaceAll("\"[^\"]*\"|'[^']*'", " "));
+                    while (identifier.find()) {
+                        reads.add(IntentNaming.pascalCase(identifier.group()));
+                    }
+                }
+            }
+        }
+        return new ArrayList<>(reads);
     }
 
     /**
@@ -5441,6 +5651,16 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                          .values()) {
                                 if (isMissing(collectionProps, mapSource)) {
                                     return "generate child map source [" + mapSource + "]";
+                                }
+                            }
+                            for (ScheduleConditionIntent condition : child.getWhere() == null ? List.<ScheduleConditionIntent>of()
+                                    : child.getWhere()) {
+                                // A hop is checked against its own target by putChildWhere; here only the
+                                // relation it goes through is the collection's.
+                                String head = condition.getField()
+                                                       .split("\\.")[0];
+                                if (isMissing(collectionProps, head)) {
+                                    return "generate child where field [" + condition.getField() + "]";
                                 }
                             }
                         }

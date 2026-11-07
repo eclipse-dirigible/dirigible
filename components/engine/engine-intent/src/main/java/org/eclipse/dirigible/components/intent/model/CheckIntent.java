@@ -49,6 +49,11 @@ import java.util.List;
  * <li>{@code itemsMin} (document-level): the document has at least {@link #count} items - same
  * gate.</li>
  * <li>{@code duplicate} and {@code itemsCompare}: the soft tier only - see {@link #severity}.</li>
+ * <li>{@code exists}: the write is refused unless a row of ANOTHER {@link #entity} - owned by this
+ * model or, with {@link #model}, by one it {@code uses:} - carries the values {@link #match} reads
+ * off the record (a billable expense line needs the employee's assignment to the project). Same
+ * routing as {@code requiredWhen}: no gate = every user write, a {@link #status} gate = the
+ * repository at that transition; {@link #when} narrows it, and a null match value skips it.</li>
  * </ul>
  */
 public class CheckIntent {
@@ -103,6 +108,18 @@ public class CheckIntent {
      * {@code refuse}.
      */
     private String whenNull;
+    /**
+     * {@code exists}: the entity a matching row must exist in - another entity of this model, or of the
+     * {@link #model} it names.
+     */
+    private String entity;
+    /** {@code exists}: the {@code uses:} model owning {@link #entity}; omitted for this model's own. */
+    private String model;
+    /**
+     * {@code exists}: the target's property to the path on this record its value must equal - the
+     * record's own field or to-one, or a one-hop {@code Relation.field}. All pairs must match one row.
+     */
+    private java.util.Map<String, String> match;
     /** {@code itemsMin}: the minimum number of items. */
     private Integer count;
     /**
@@ -387,6 +404,30 @@ public class CheckIntent {
 
     public void setWhenNull(String whenNull) {
         this.whenNull = whenNull;
+    }
+
+    public String getEntity() {
+        return entity;
+    }
+
+    public void setEntity(String entity) {
+        this.entity = entity;
+    }
+
+    public String getModel() {
+        return model;
+    }
+
+    public void setModel(String model) {
+        this.model = model;
+    }
+
+    public java.util.Map<String, String> getMatch() {
+        return match;
+    }
+
+    public void setMatch(java.util.Map<String, String> match) {
+        this.match = match;
     }
 
     public Integer getCount() {

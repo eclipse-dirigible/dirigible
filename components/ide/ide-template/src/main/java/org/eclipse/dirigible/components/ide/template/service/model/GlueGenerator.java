@@ -549,10 +549,52 @@ class GlueGenerator {
                 resolved.remove("forEachRepositoryClass");
             }
             resolved.put("fieldAssignments", assignments(child.get("fieldAssignments")));
+            resolved.put("whereChain", childWhereChain(child, parameters));
             resolved.put("children", scheduleChildren(child.get("children"), parameters));
             children.add(resolved);
         }
         return children;
+    }
+
+    /**
+     * An entity child's row rule (#8491) as the {@code Criteria} chain appended to the query that
+     * selects its rows by their match key: the row's own clauses, then one {@code in} per relation the
+     * rule reads through - the relation's foreign key among the keys of the target rows that the same
+     * clauses select. Empty for a child without a rule, so its job renders as it always did.
+     *
+     * @param child the child descriptor
+     * @param parameters the generation parameters
+     * @return the chain, e.g.
+     *         {@code .in("Employee", new ...EmployeeRepository().findAll(Criteria.create()
+     *         .eq("Active", true)).stream().map(r1Hop -> r1Hop.Id).toList())}
+     */
+    private static String childWhereChain(Map<String, Object> child, Map<String, Object> parameters) {
+        StringBuilder chain = new StringBuilder(JavaLiterals.criteriaChain(asMaps(child.get("criteria"))));
+        String hopVar = str(child, "rowVar") + "Hop";
+        for (Object raw : relationLoads(child.get("hops"), parameters)) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> hop = (Map<String, Object>) raw;
+            // ponytail: the target's keys are read whole and bound as an IN list, once per source row; a
+            // subquery in Criteria is the upgrade if a hop target grows past a few thousand rows.
+            chain.append(".in(\"")
+                 .append(JavaLiterals.escape(str(hop, "fkProperty")))
+                 .append("\", new gen.")
+                 .append(str(hop, "javaGenFolder"))
+                 .append(".data.")
+                 .append(str(hop, "javaTargetPerspective"))
+                 .append('.')
+                 .append(str(hop, "targetEntity"))
+                 .append("Repository().findAll(Criteria.create()")
+                 .append(JavaLiterals.criteriaChain(asMaps(hop.get("criteria"))))
+                 .append(").stream().map(")
+                 .append(hopVar)
+                 .append(" -> ")
+                 .append(hopVar)
+                 .append('.')
+                 .append(str(hop, "targetPk"))
+                 .append(").toList())");
+        }
+        return chain.toString();
     }
 
     /**
@@ -1095,25 +1137,23 @@ class GlueGenerator {
         // over, and the undo booking the target's reversal. A .glue written before the keys existed
         // carries no hasReportItems and renders the create-from it always had.
         copy(context, item, "hasReportItems", "reportName", "liveCondition", "hasUndo", "undoReversalClass", "undoReversalRefuses",
-                "undoBackLinkProperty", "undoStatusProperty", "undoStatusExpr", "undoStatuses");
+                "undoBackLinkProperty", "undoStatusProperty", "undoStatusExpr", "undoStatuses",
+                // One target row per report row, and the undo that deletes them (#8329).
+                "hasReportRows", "undoDelete");
         context.put("reportGenFolder", sanitize(item, "reportName"));
         context.put("reportPerspective", NamingHelper.sanitizeJavaIdentifier(REPORT_PERSPECTIVE));
         context.put("reportParameters", asMaps(item.get("reportParameters")));
         context.put("reportCells", reportCells(item.get("reportCells")));
         context.put("counterCells", reportCells(item.get("counterCells")));
-        List<Map<String, Object>> where = new ArrayList<>();
-        for (Map<String, Object> declared : asMaps(item.get("reportWhere"))) {
-            Map<String, Object> term = ModelValues.copy(declared);
-            term.put("aliasJavaLiteral", JavaLiterals.escape(str(declared, "alias")));
-            term.put("valueJavaLiteral", JavaLiterals.escape(strOr(declared, "value", "")));
-            where.add(term);
-        }
+        List<Map<String, Object>> where = reportCells(item.get("reportWhere"));
+        where.forEach(term -> term.put("valueJavaLiteral", JavaLiterals.escape(strOr(term, "value", ""))));
         context.put("reportWhere", where);
     }
 
     /**
-     * The cells of a report-sourced line (issue #8329), each with its column alias as a Java string
-     * literal's content and its scales as whole numbers - the glue's JSON reads them back as doubles.
+     * The cells (or row conditions) of a report-sourced row (issue #8329), each with its column aliases
+     * as Java string literals' content and its scales as whole numbers - the glue's JSON reads them
+     * back as doubles.
      *
      * @param raw the declared cells, may be absent
      * @return the cells the template renders
@@ -1123,6 +1163,9 @@ class GlueGenerator {
         for (Map<String, Object> declared : asMaps(raw)) {
             Map<String, Object> cell = ModelValues.copy(declared);
             cell.put("aliasJavaLiteral", JavaLiterals.escape(str(declared, "alias")));
+            // A closing balance derived from two columns names the second one and how (#8329).
+            cell.put("minusAliasJavaLiteral", JavaLiterals.escape(strOr(declared, "minusAlias", "")));
+            cell.put("derive", strOr(declared, "derive", ""));
             for (String scale : List.of("scale", "sourceScale")) {
                 Object value = declared.get(scale);
                 cell.put(scale, value instanceof Number number ? String.valueOf(number.intValue()) : strOr(declared, scale, "0"));
@@ -1274,6 +1317,15 @@ class GlueGenerator {
         // The statuses the posting holds in (#8243). A .glue written before it holds the guard status
         // alone - exactly what that shape's handler and sweep tested.
         context.put("heldStatusValues", strOr(item, "heldStatusValues", strOr(item, "guardValue", "")));
+        // The statuses that say the source was withdrawn before its posting ran (#8505). A .glue written
+        // before it vetoes none, as that shape's handler judged only the guard.
+        context.put("sourceStatusProperty", strOr(item, "sourceStatusProperty", ""));
+        context.put("withdrawnStatusValues", strOr(item, "withdrawnStatusValues", ""));
+        // The source properties the derivation reads, which a derived write must touch to count as an
+        // edit for the follower (#8504). Absent from a .glue written before it, which must not read as
+        // "reads nothing" - that would skip every derived write - so the skip is gated on the key.
+        context.put("watchesDerivedWrites", item.containsKey("derivationReads"));
+        context.put("derivationReads", item.containsKey("derivationReads") ? item.get("derivationReads") : List.of());
         // The derived line rows, each cell and each row guard rendered from the reading the glue
         // carries (issue #7425); the classifier ternaries the handler null-guards up front are the
         // very cells that carry one, collected here rather than shipped twice.

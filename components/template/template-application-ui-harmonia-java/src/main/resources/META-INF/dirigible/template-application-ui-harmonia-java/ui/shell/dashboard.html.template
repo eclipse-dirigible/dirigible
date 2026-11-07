@@ -47,7 +47,7 @@
         <div x-h-card role="button" tabindex="0" class="cursor-pointer"
              @click="openReport(r)" @keydown.enter.prevent="openReport(r)">
           <div x-h-card-header>
-            <div x-h-card-description x-text="$store.reports.widgetLabel(r)"></div>
+            <div x-h-card-description x-text="$store.reports.tileWidgetLabel(r)"></div>
             <template x-if="!kpiState(r).loaded"><div x-h-skeleton class="mt-1 h-8 w-1/2"></div></template>
             <div x-show="kpiState(r).loaded && !kpiState(r).error" x-h-card-title class="text-2xl" x-text="kpiValueText(r)"></div>
             <div x-show="kpiState(r).error" x-h-card-title class="text-2xl text-muted-foreground">—</div>
@@ -76,11 +76,11 @@
       <template x-for="r in listKpis" :key="r.name">
         <div x-h-card class="overflow-hidden">
           <div x-h-card-header class="border-b">
-            <div x-h-card-title x-text="$store.reports.widgetLabel(r)"></div>
+            <div x-h-card-title x-text="$store.reports.tileWidgetLabel(r)"></div>
             <div x-h-card-description x-show="r.description" x-text="r.description"></div>
             <div x-h-card-action>
               <button x-h-button data-variant="outline" @click="openReport(r)"
-                      :aria-label="T('application-core:shell.dashboard.viewAllOf', 'Open the {{name}} report', { name: $store.reports.widgetLabel(r) })"
+                      :aria-label="T('application-core:shell.dashboard.viewAllOf', 'Open the {{name}} report', { name: $store.reports.tileWidgetLabel(r) })"
                       x-text="T('application-core:shell.dashboard.viewAll', 'View all')"></button>
             </div>
           </div>
@@ -89,7 +89,7 @@
             <div x-show="kpiState(r).error" x-h-text.muted class="p-4">—</div>
             <div x-show="kpiState(r).loaded && !kpiState(r).error" x-h-table-container>
               <table x-h-table>
-                <caption class="sr-only" x-text="$store.reports.widgetLabel(r)"></caption>
+                <caption class="sr-only" x-text="$store.reports.tileWidgetLabel(r)"></caption>
                 <thead x-h-table-header>
                   <tr x-h-table-row>
                     <template x-for="c in kpiColumns(r)" :key="c.alias">
@@ -152,11 +152,11 @@
       <template x-for="r in reports" :key="r.url">
         <div x-h-card :class="r.chart ? '' : 'overflow-hidden'">
           <div x-h-card-header :class="r.chart ? '' : 'border-b'">
-            <div x-h-card-title x-text="$store.reports.displayLabel(r)"></div>
+            <div x-h-card-title x-text="$store.reports.tileLabel(r)"></div>
             <div x-h-card-description x-show="r.description" x-text="r.description"></div>
             <div x-h-card-action>
               <button x-h-button data-variant="outline" @click="openReport(r)"
-                      :aria-label="T('application-core:shell.dashboard.viewAllOf', 'Open the {{name}} report', { name: $store.reports.displayLabel(r) })"
+                      :aria-label="T('application-core:shell.dashboard.viewAllOf', 'Open the {{name}} report', { name: $store.reports.tileLabel(r) })"
                       x-text="T('application-core:shell.dashboard.viewAll', 'View all')"></button>
             </div>
           </div>

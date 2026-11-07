@@ -346,6 +346,18 @@ final class ModelTemplateAdapters {
                 }
             }
         }
+        // The movable window (#8506): the report page offers its presets beside the two date inputs.
+        // Only when both of its parameters are still declared - a report edited in the report editor
+        // may have lost one, and then the page shows the plain inputs.
+        if (model.get("period") instanceof Map<?, ?> period) {
+            Set<String> declared = new java.util.HashSet<>();
+            for (Map<String, Object> parameter : asMaps(model.get("parameters"))) {
+                declared.add(str(parameter, "name"));
+            }
+            if (declared.contains(String.valueOf(period.get("from"))) && declared.contains(String.valueOf(period.get("to")))) {
+                model.put("periodJs", JavaScriptJson.compact(period));
+            }
+        }
         String query = strOr(model, "query", "");
         // The report's query pre-escaped as PER-LINE Java string literals, for the generated
         // repository to join back with newlines. Deliberately never one single-line literal: a

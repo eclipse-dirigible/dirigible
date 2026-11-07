@@ -150,6 +150,27 @@ class ReportEditorRoundTripTest {
                         .toString());
     }
 
+    /**
+     * A movable window (dirigible #8506): the period's from/to pair is two plain parameter conditions
+     * the builder owns, and the {@code period} block itself is no part of the query model - the editor
+     * keeps it as an unknown key on save.
+     */
+    @Test
+    void aPeriodReportRoundTrips() {
+        Map<String, Object> document = document("""
+                  - name: RevenueInWindow
+                    source: Invoice
+                    dimensions: [Customer.name]
+                    measures: ["sum(total)"]
+                    period: { target: issuedOn, default: previousMonth, presets: [previousMonth, yearToDate] }
+                """);
+        assertRoundTrips(document);
+        assertTrue(String.valueOf(document.get("query"))
+                         .contains(":fromDate"),
+                document.get("query")
+                        .toString());
+    }
+
     @Test
     void aTranslatedDimensionRoundTrips() {
         Map<String, Object> document = document("""

@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.data.store.java.store;
 
 import java.lang.reflect.Field;
 import java.sql.SQLException;
+import java.sql.Savepoint;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -144,6 +145,63 @@ public class JavaEntityStore implements WriteTransaction {
         } finally {
             UNIT_OF_WORK.remove();
             unit.session.close();
+        }
+    }
+
+    /**
+     * Runs a block as a NESTED unit of the thread's open one (dirigible #8491): on a savepoint, so a
+     * block that throws takes back exactly its own writes - and the events they recorded - while the
+     * enclosing unit stays usable and still owns the commit. A plain nested {@link #inUnitOfWork} joins
+     * the outer unit and cannot do that: a failure there can only roll back everything.
+     *
+     * <p>
+     * The block's failure is rethrown for the caller to decide on; one that catches it and goes on (a
+     * scheduled generation leaving out a child the target refused) keeps the rest of the unit. The
+     * session's cache is cleared with the rollback, so no row the block wrote - or a parent total it
+     * moved - is read back from memory afterwards.
+     *
+     * <p>
+     * Outside a unit of work this is {@link #inUnitOfWork}. A database without savepoints cannot take
+     * back part of a transaction, so there a failure is rethrown wrapped in an
+     * {@link IllegalStateException}: the caller cannot mistake it for the block's own refusal and keep
+     * the half the block wrote, and the enclosing unit rolls back whole.
+     *
+     * @param <R> the block's result type
+     * @param work the block to run
+     * @return whatever the block returned
+     */
+    public <R> R inNestedUnitOfWork(Supplier<R> work) {
+        UnitOfWork unit = UNIT_OF_WORK.get();
+        if (unit == null) {
+            return inUnitOfWork(work);
+        }
+        // Flushed first: what the unit wrote before the block belongs before the savepoint, so the
+        // rollback below cannot take it back.
+        unit.session.flush();
+        Savepoint savepoint = unit.session.doReturningWork(connection -> connection.getMetaData()
+                                                                                   .supportsSavepoints() ? connection.setSavepoint()
+                                                                                           : null);
+        int recorded = unit.events.size();
+        try {
+            return work.get();
+        } catch (Throwable ex) {
+            if (savepoint == null) {
+                throw new IllegalStateException("The database does not support savepoints, so a failed nested unit of work cannot be"
+                        + " taken back on its own - the enclosing unit rolls back whole", ex);
+            }
+            // A rollback that fails leaves the unit in an unknown state: its own failure is what the
+            // caller sees, so it is never caught as the block's refusal and the enclosing unit is not
+            // committed.
+            try {
+                unit.session.doWork(connection -> connection.rollback(savepoint));
+            } catch (RuntimeException rollbackFailure) {
+                rollbackFailure.addSuppressed(ex);
+                throw rollbackFailure;
+            }
+            unit.session.clear();
+            unit.events.subList(recorded, unit.events.size())
+                       .clear();
+            throw ex;
         }
     }
 

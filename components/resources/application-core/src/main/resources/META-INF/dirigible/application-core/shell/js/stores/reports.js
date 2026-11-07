@@ -154,6 +154,8 @@ document.addEventListener('alpine:init', () => {
       // A report whose rows open the records they count (#8374): the generated app's list tile links
       // each row there. Read by that dashboard only.
       if (r.drill) it.drill = r.drill;
+      // A report with a movable window (#8506): its tile names the window it shows.
+      if (r.period) it.period = r.period;
       return it;
     },
 
@@ -205,6 +207,7 @@ document.addEventListener('alpine:init', () => {
             it.columns = def.columns || [];
           }
           if (def.drill) it.drill = def.drill;
+          if (def.period) it.period = def.period;
         } catch (e) { /* keep defaults */ }
       }));
       // Reassign so Alpine re-renders the sidebar / dashboard with the enriched items.
@@ -283,6 +286,27 @@ document.addEventListener('alpine:init', () => {
       const w = it.widget || {};
       return (window.T && w.tId) ? T(this.tkey(it, w.tId), w.label) : w.label;
     },
+    // The window a period report's tile shows (#8506) - its default preset, which is what the tile's
+    // unparameterized read covers - translated; '' for a report without one or a custom default.
+    periodText(it) {
+      const preset = it && it.period && it.period.default;
+      if (!preset || preset === 'custom') return '';
+      const fallback = {
+        last7Days: 'Last 7 days', last30Days: 'Last 30 days', currentMonth: 'Current month', previousMonth: 'Previous month',
+        currentQuarter: 'Current quarter', lastQuarter: 'Last quarter', yearToDate: 'Year to date', currentYear: 'Current year',
+        previousYear: 'Previous year',
+      };
+      const label = fallback[preset] || preset;
+      return window.T ? T('application-core:shell.report.periods.' + preset, label) : label;
+    },
+    // A dashboard tile's title: the label with the window it covers - "Sales By Product (Last 30 days)",
+    // so a number on the dashboard is never read without its period.
+    withPeriod(it, label) {
+      const period = this.periodText(it);
+      return period ? label + ' (' + period + ')' : label;
+    },
+    tileLabel(it) { return this.withPeriod(it, this.displayLabel(it)); },
+    tileWidgetLabel(it) { return this.withPeriod(it, this.widgetLabel(it)); },
     // A list tile's column header: the report catalog carries one entry per column (its tId), the
     // same label the report page itself shows - never the raw column alias (#7610).
     widgetColumnLabel(it, c) {

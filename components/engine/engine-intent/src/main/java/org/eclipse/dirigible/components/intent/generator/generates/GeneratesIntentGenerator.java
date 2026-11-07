@@ -105,7 +105,7 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
                             IntentNaming.customActionTranslationKey(project, context, name),
                             GeneratesGuardSupport.of(g, GeneratesGuardSupport.statusProperty(g, model, context)),
                             PromptColumns.of(g, model, context)));
-            if (g.hasUndo() && g.hasReportItems()) {
+            if (g.hasUndo() && g.readsReport()) {
                 // The undo of what a run generated (#8329): a second button on the same record, served by
                 // the same controller.
                 String undoBase = ReportItemsSupport.undoName(g) + "-generate-action";

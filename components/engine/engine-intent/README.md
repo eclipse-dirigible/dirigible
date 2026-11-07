@@ -558,7 +558,10 @@ A scheduled generation may create CHILD rows under each generated record: one pe
 a LOCAL collection entity (`forEach: {entity, match}`) or one per working day (Mon-Fri) of the
 month the job runs in (`forEach: {days: workingDays}` + `dayField`). `parent:` names the child's
 to-one back to the generated record; children nest one more level (depth two). Numeric literal
-defaults render as decimals.
+defaults render as decimals. An `entity` child may narrow its rows with `where:` (the `schedules[].where`
+triples, over the row's fields or one relation hop such as `Employee.active`), and `onRefused: skip`
+leaves out a child the target refuses - with what it wrote beneath it - instead of rolling the whole
+source row back.
 
 ## uses - cross-model references
 

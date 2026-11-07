@@ -800,6 +800,21 @@ a `required` text field is refused when it is blank after that trim - spaces alo
     `{ kind: agree, relations: [year, company], onProperty: company }`. Both sides must still end on
     the same entity: comparing a Company key with a Customer key is refused, the two nomenclatures
     making the comparison always false.
+  - `{ kind: exists, entity: EmployeeProjectAssignment, model: projects,
+      match: { Project: Project, Employee: ExpenseClaim.Employee }, when: "billable == true",
+      message: "..." }` (#8338): the write is refused (400 with the message) unless a row of ANOTHER
+    entity matches values the record names - **this is how "only an employee assigned to the project
+    may bill an expense to it" is declared** (and "a timesheet entry only by a project member", "an
+    approver from the requester's team"). `entity:` is the target - this model's own, or with
+    `model:` one a `uses:` entry owns; `match:` maps each TARGET property to a path on this record:
+    its own field or to-one, or a one-hop `Relation.field` (the line's claim's employee). Every pair
+    must hold on one row. A match value that is null skips the check (as `agree`'s `whenNull: skip`),
+    so make the relation `required` when it must be there. `when` narrows the rule (the `forbidWhen`
+    grammar); `verbs:` may only be `[create, update]` - a delete carries no values. The optional
+    `status:` gate routes it like `requiredWhen`'s: without one every user write, with one the
+    repository when the record is persisted carrying that status ("a claim is submitted only on a
+    project its employee is assigned to"). Do not write this rule as a `calculatedActionOnCreate`
+    that throws.
   - `{ kind: requiredWhen, field: vatGround, whenAnyItem: "vatRate == 0", status: ISSUED, message: "..." }`
     (#7560): a header value required when **ANY LINE** satisfies the condition - the legal ground a
     zero-rated line calls for (ЗДДС чл. 114). `whenAnyItem` uses the `when` grammar over the ITEMS
@@ -2821,6 +2836,36 @@ generates:
   year.
 - Not available with `fromUses:`, a cross-model target, or `event:` - it is a click on a local record.
 
+**One row per report row - next year's opening balances (`fromReport:` at the top).** Without a
+header, every qualifying report row becomes one target row of its own:
+
+```yaml
+generates:
+  - name: openingBalances
+    from: FiscalYear
+    to: OpeningBalance
+    fromReport: YearBalance        # dimensions: [Account.id, Account.ClosingAccount, Partner.id, Document.id]
+    parameters: { fromDate: startDate, toDate: endDate }
+    where:
+      - { field: Account.ClosingAccount, op: eq, value: null }   # balance-sheet accounts
+      - { field: closingBalance, op: ne, value: 0 }              # a settled document carries nothing
+    backReference: Year            # REQUIRED: the target's to-one to the source, written on every row
+    map: { Account: Account.id, Partner: Partner.id, Document: Document.id,
+           debit: closingNetDebit, credit: closingNetCredit }
+    undo: delete                   # an Undo button: deletes exactly the rows carrying the back-reference
+```
+
+- `map:` reads the report's columns here (there is no header to map the source onto); `defaults:`
+  sets literals on every row. Do not map the `backReference:` - the run writes it.
+- Besides the six totals, both shapes may read the closing balance as one number: `closingBalance`
+  (closing debit minus credit), `closingNetDebit` / `closingNetCredit` (the side it stands on, zero
+  on the other). Derived exactly from the two totals.
+- A second run is refused (409) while any row back-references the source; `undo: delete` deletes
+  them in one unit through the target's repository, and refuses when there is nothing to delete.
+- Group the report by the subledger keys (`Partner.id`, `Document.id`) to carry open items forward
+  per counterparty and document.
+- Not combinable with `items:`, `prompt:`, `link:` or `sourceStatus:`.
+
 **A `map:` source may hop one relation - and that is how you SNAPSHOT a value.** A value is `map`ped
 rather than reached through a relation when the target must keep what was true at the moment it was
 created: an invoice keeps the customer's VAT number as it stood at invoicing, an audit log keeps the
@@ -3190,7 +3235,7 @@ generates:
   exactly ONE to-one to the target; with several, name it with `relation:`. A cross-model source
   (`fromUses:`) cannot carry a `link:`.
 - The create-from holds the link row to its controller's validation: the ungated row checks
-  (`compare`, `agree`, `forbidWhen`, `requiredWhen` without a `status:`) and the required, length and
+  (`compare`, `agree`, `exists`, `forbidWhen`, `requiredWhen` without a `status:`) and the required, length and
   pattern rules refuse the whole run with a 400. So a check on the link entity must hold for the row
   the create-from writes - a value check (`amount >= 0`) belongs there, an always-true guard does not.
   To keep people from writing the junction by hand, declare `systemWritten: true` on it.
@@ -3303,6 +3348,31 @@ every request, so the window moves with the calendar without a regen, and the us
 
 An unknown `START_OF_*`, a time period (`PT1H`), anything that is neither a date nor one moment, and a
 moment on a non-date parameter are refused at parse.
+
+**`period:` - the window with presets (#8506).** For the usual "from / to over one date" pair, declare the
+period instead of the two parameters:
+
+```yaml
+reports:
+  - name: SalesByProduct
+    source: SalesInvoiceItem
+    dimensions: [Product.name]
+    measures: ["sum(net)"]
+    period:
+      target: SalesInvoice.date          # a date/timestamp field, or a one-hop relation.field
+      default: last30Days                # the window the report (and its dashboard tile) opens on
+      presets: [last30Days, currentMonth, previousMonth, lastQuarter, yearToDate]
+```
+
+It expands to `{ name: fromDate, target, op: ge }` + `{ name: toDate, target, op: le }` whose initials are the
+default preset's moments (`from:` / `to:` rename them). The report page shows a Period select beside the two
+dates - choosing a preset fills both, editing a date switches it to Custom - and the page title and the
+dashboard tile name the window ("Sales By Product (Last 30 days)"). Presets: `last7Days`, `last30Days`,
+`currentMonth`, `previousMonth`, `currentQuarter`, `lastQuarter` (the previous full quarter), `yearToDate`,
+`currentYear`, `previousYear`; Custom is always offered. `default: custom` opens on all time. Both `default`
+and `presets` are optional (last 30 days, and the five above). Not on a `kind: balance|statement|ledger`
+report, which declares its own window. Prefer `period:` over a moment-filter whenever the reader may want
+another window.
 
 **Rules:** a parameter is bound on **every** call, so `initial` is required unless the comparison has a
 neutral "any value" default - a date `ge`/`le` bound (widened to all time) and `like` (the empty
@@ -4364,6 +4434,42 @@ schedules:
           forEach: { days: workingDays }   # one child per working day of the period
           dayField: day
 ```
+
+**Which rows become children, and a child the target refuses (`where:` / `onRefused: skip`).** An
+`entity` child takes a `where:` - the same `{ field, op, value }` triples as `schedules[].where` - over
+the collection row's own fields or through ONE to-one relation (`Employee.active`); only the rows that
+pass become children. Without it every matched row does. By default the whole source row is one unit,
+so one child the target's own rules refuse (a capacity, a required value, a check the repository
+enforces) rolls back the parent and every sibling. `onRefused: skip` on that children entry leaves the
+refused child out instead - logged, and taken back together with everything it wrote beneath it - and
+the parent and its other children are still created; any other failure still rolls the row back.
+
+```yaml
+      children:
+        - to: EmployeeTimesheet
+          parent: ProjectTimesheet
+          forEach: { entity: EmployeeProjectAssignment, match: { Project: id } }
+          where:
+            - { field: Employee.active, op: eq, value: true }   # an inactive employee gets no timesheet
+          map: { Employee: Employee }
+          onRefused: skip                 # a timesheet its own rules refuse is left out, not the month
+          children:
+            - to: EmployeeDayAllocation
+              parent: EmployeeTimesheet
+              forEach: { days: workingDays }
+              dayField: day
+              onRefused: skip             # a day the allocation refuses (before the hire date, over 24 h) is left out
+```
+
+- A cross-model collection (`forEach: { entity, model, match }`) takes `where:` too, a hop included -
+  even into a third model (the projects model's assignment -> the employees model's employee). A
+  `days` child has no row to filter and takes no `where:`.
+- A status may be named on a collection of this model, as in `schedules[].where`; through a hop or on
+  a cross-model collection, give its numeric seed id.
+- `onRefused` is per children entry, and `skip` is its only value. A refused child takes its own
+  children with it unless they declare their own `onRefused: skip`.
+- The parent's totals count only the children that were created: a roll-up or a document total never
+  sees a skipped child.
 
 **notify AND generate together - a tick that records what it sent.** A `notify` mails but leaves no
 trace, so a reminder history fed only by it fills from manual clicks and never from the automated
@@ -5563,6 +5669,7 @@ or a seeded name.
 - "who/which was assigned / in force / valid on that date (from a register with from-to dates)" -> **resolves**
 - "X must be filled in before/when it reaches STATUS (but may be empty while it is a draft)" -> **checks** `requiredWhen` WITH the `status:` gate - a workflow's own status set is a repository write and never reaches a controller
 - "this must not be changed/added once the parent is PAID/CLOSED" -> **checks** `forbidWhen`
+- "only an employee assigned to the project / a member of the team may book it" (a row of a third entity must exist for the pair) -> **checks** `exists`
 - "nothing new may be added once the parent is PAID (but a wrong one must still be removable)" -> **checks** `forbidWhen` with `verbs: [create, update]`
 - "warn me / ask before saving when ... (but let me save anyway)" -> **checks** with `severity: warn`; "a record with the same name already exists" -> `duplicate`; "a line has price 0 / a zero-value line" -> `itemsCompare` on the document
 - "auto-expire the offer/request when its validity date passes" -> **processes** (userTask `expire:`)

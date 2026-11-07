@@ -79,4 +79,20 @@ public final class UnitOfWork {
         });
     }
 
+    /**
+     * Runs the given work as a nested unit of the open one: when it throws, its own writes and their
+     * events are taken back and the failure is rethrown, while the enclosing unit keeps everything else
+     * and still owns the commit - see {@link JavaEntityStore#inNestedUnitOfWork(Supplier)}. Outside a
+     * unit it is {@link #run(Runnable)}.
+     *
+     * @param work the writes that stand or fall together, apart from the rest of the unit
+     */
+    public static void runNested(Runnable work) {
+        BeanProvider.getBean(JavaEntityStore.class)
+                    .inNestedUnitOfWork(() -> {
+                        work.run();
+                        return null;
+                    });
+    }
+
 }

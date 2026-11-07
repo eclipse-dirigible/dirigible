@@ -391,10 +391,11 @@ final class ModelParameterProcessor {
                 // Both hold from the first save and take no gate: one relates the row's own fields, the
                 // other the two records a junction row links (#7409).
                 rowChecks.add(check);
-            } else if ("compare".equals(kind)) {
+            } else if ("compare".equals(kind) || "exists".equals(kind)) {
                 // A comparison is row-level unless it names the status it is enforced at - the same
                 // routing requiredWhen has: without a gate it holds on every user write, with one it is
-                // the repository's, so "days > 0 before SUBMITTED" does not forbid the draft (#7338).
+                // the repository's, so "days > 0 before SUBMITTED" does not forbid the draft (#7338). An
+                // existence check routes the same way (#8338).
                 (str(check, "status") == null || str(check, "status").isEmpty() ? rowChecks : documentChecks).add(check);
             } else if ("guard".equals(kind)) {
                 guardChecks.add(check);
@@ -756,16 +757,18 @@ final class ModelParameterProcessor {
      * @param parameters the generation parameters
      */
     private static void resolveCheckPathLoads(Map<String, Object> check, Map<String, Object> parameters) {
+        // An exists check's target (#8338) carries a hop's coordinates, so it resolves the same way.
+        Map<String, Object> target = asMap(check.get("target"));
+        if (target != null) {
+            check.put("targetRepositoryClass", generatedClass(target, parameters) + "Repository");
+        }
         List<Map<String, Object>> hops = asMaps(check.get("pathLoads"));
         if (hops.isEmpty()) {
             return;
         }
         List<Object> loads = new ArrayList<>();
         for (Map<String, Object> hop : hops) {
-            String genFolder = truthy(hop, "crossModel") ? NamingHelper.sanitizeJavaIdentifier(str(hop, "targetModel"))
-                    : str(parameters, "javaGenFolderName");
-            String qualified =
-                    "gen." + genFolder + ".data." + NamingHelper.sanitizeJavaIdentifier(str(hop, "perspective")) + "." + str(hop, "entity");
+            String qualified = generatedClass(hop, parameters);
             Map<String, Object> load = new LinkedHashMap<>();
             load.put("local", hop.get("local"));
             load.put("sourceExpression", hop.get("sourceExpression"));
@@ -774,6 +777,21 @@ final class ModelParameterProcessor {
             loads.add(load);
         }
         check.put("pathLoads", loads);
+    }
+
+    /**
+     * The generated class stem ({@code gen.<folder>.data.<perspective>.<Entity>}) of an entity a check
+     * reaches, its owner model's generation folder when it is cross-model.
+     *
+     * @param coordinates the entity, perspective, crossModel and targetModel the intent generator emits
+     * @param parameters the generation parameters
+     * @return the fully qualified stem, to which {@code Entity} or {@code Repository} is appended
+     */
+    private static String generatedClass(Map<String, Object> coordinates, Map<String, Object> parameters) {
+        String genFolder = truthy(coordinates, "crossModel") ? NamingHelper.sanitizeJavaIdentifier(str(coordinates, "targetModel"))
+                : str(parameters, "javaGenFolderName");
+        return "gen." + genFolder + ".data." + NamingHelper.sanitizeJavaIdentifier(str(coordinates, "perspective")) + "."
+                + str(coordinates, "entity");
     }
 
     /**

@@ -855,4 +855,63 @@ class GlueSchedulesTest {
         when(repository.getResource("/users/admin/workspace/invoices/invoices.model")).thenReturn(owner);
         return TestContexts.context(model, repository, "/users/admin/workspace/dunning", "app");
     }
+
+    /**
+     * A children row rule whose collection is neither this model's nor a uses: model's (#8491). The
+     * parser refuses it, so only a model assembled without it gets here - and it is refused naming the
+     * child and the collection, not read as an empty rule or dereferenced as one.
+     */
+    @Test
+    void childRowRuleOnAnUnknownCollectionIsRefused() {
+        IntentModel model = IntentParser.parse("""
+                name: hr
+                entities:
+                  - name: Project
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Assignment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: hours, type: integer }
+                    relations:
+                      - { name: Project, kind: manyToOne, to: Project }
+                  - name: Sheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Project, kind: manyToOne, to: Project }
+                  - name: SheetLine
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Sheet, kind: manyToOne, to: Sheet }
+                schedules:
+                  - name: monthly
+                    cron: "0 0 2 1 * ?"
+                    entity: Project
+                    generate:
+                      to: Sheet
+                      map: { Project: id }
+                      children:
+                        - to: SheetLine
+                          parent: Sheet
+                          forEach: { entity: Assignment, match: { Project: id } }
+                          where: [ { field: hours, op: gt, value: 0 } ]
+                """);
+        model.getSchedules()
+             .get(0)
+             .getGenerate()
+             .getChildren()
+             .get(0)
+             .getForEach()
+             .put("entity", "Ghost");
+
+        IntentValidationException refused =
+                assertThrows(IntentValidationException.class, () -> GlueIntentGenerator.buildSchedulesForTest(model));
+        assertTrue(refused.getIssues()
+                          .get(0)
+                          .contains("child [SheetLine] forEach entity [Ghost]"),
+                "issues: " + refused.getIssues());
+    }
+
 }
