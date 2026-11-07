@@ -549,10 +549,52 @@ class GlueGenerator {
                 resolved.remove("forEachRepositoryClass");
             }
             resolved.put("fieldAssignments", assignments(child.get("fieldAssignments")));
+            resolved.put("whereChain", childWhereChain(child, parameters));
             resolved.put("children", scheduleChildren(child.get("children"), parameters));
             children.add(resolved);
         }
         return children;
+    }
+
+    /**
+     * An entity child's row rule (#8491) as the {@code Criteria} chain appended to the query that
+     * selects its rows by their match key: the row's own clauses, then one {@code in} per relation the
+     * rule reads through - the relation's foreign key among the keys of the target rows that the same
+     * clauses select. Empty for a child without a rule, so its job renders as it always did.
+     *
+     * @param child the child descriptor
+     * @param parameters the generation parameters
+     * @return the chain, e.g.
+     *         {@code .in("Employee", new ...EmployeeRepository().findAll(Criteria.create()
+     *         .eq("Active", true)).stream().map(r1Hop -> r1Hop.Id).toList())}
+     */
+    private static String childWhereChain(Map<String, Object> child, Map<String, Object> parameters) {
+        StringBuilder chain = new StringBuilder(JavaLiterals.criteriaChain(asMaps(child.get("criteria"))));
+        String hopVar = str(child, "rowVar") + "Hop";
+        for (Object raw : relationLoads(child.get("hops"), parameters)) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> hop = (Map<String, Object>) raw;
+            // ponytail: the target's keys are read whole and bound as an IN list, once per source row; a
+            // subquery in Criteria is the upgrade if a hop target grows past a few thousand rows.
+            chain.append(".in(\"")
+                 .append(JavaLiterals.escape(str(hop, "fkProperty")))
+                 .append("\", new gen.")
+                 .append(str(hop, "javaGenFolder"))
+                 .append(".data.")
+                 .append(str(hop, "javaTargetPerspective"))
+                 .append('.')
+                 .append(str(hop, "targetEntity"))
+                 .append("Repository().findAll(Criteria.create()")
+                 .append(JavaLiterals.criteriaChain(asMaps(hop.get("criteria"))))
+                 .append(").stream().map(")
+                 .append(hopVar)
+                 .append(" -> ")
+                 .append(hopVar)
+                 .append('.')
+                 .append(str(hop, "targetPk"))
+                 .append(").toList())");
+        }
+        return chain.toString();
     }
 
     /**

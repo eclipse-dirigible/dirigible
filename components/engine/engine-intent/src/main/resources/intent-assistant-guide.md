@@ -4385,6 +4385,42 @@ schedules:
           dayField: day
 ```
 
+**Which rows become children, and a child the target refuses (`where:` / `onRefused: skip`).** An
+`entity` child takes a `where:` - the same `{ field, op, value }` triples as `schedules[].where` - over
+the collection row's own fields or through ONE to-one relation (`Employee.active`); only the rows that
+pass become children. Without it every matched row does. By default the whole source row is one unit,
+so one child the target's own rules refuse (a capacity, a required value, a check the repository
+enforces) rolls back the parent and every sibling. `onRefused: skip` on that children entry leaves the
+refused child out instead - logged, and taken back together with everything it wrote beneath it - and
+the parent and its other children are still created; any other failure still rolls the row back.
+
+```yaml
+      children:
+        - to: EmployeeTimesheet
+          parent: ProjectTimesheet
+          forEach: { entity: EmployeeProjectAssignment, match: { Project: id } }
+          where:
+            - { field: Employee.active, op: eq, value: true }   # an inactive employee gets no timesheet
+          map: { Employee: Employee }
+          onRefused: skip                 # a timesheet its own rules refuse is left out, not the month
+          children:
+            - to: EmployeeDayAllocation
+              parent: EmployeeTimesheet
+              forEach: { days: workingDays }
+              dayField: day
+              onRefused: skip             # a day the allocation refuses (before the hire date, over 24 h) is left out
+```
+
+- A cross-model collection (`forEach: { entity, model, match }`) takes `where:` too, a hop included -
+  even into a third model (the projects model's assignment -> the employees model's employee). A
+  `days` child has no row to filter and takes no `where:`.
+- A status may be named on a collection of this model, as in `schedules[].where`; through a hop or on
+  a cross-model collection, give its numeric seed id.
+- `onRefused` is per children entry, and `skip` is its only value. A refused child takes its own
+  children with it unless they declare their own `onRefused: skip`.
+- The parent's totals count only the children that were created: a roll-up or a document total never
+  sees a skipped child.
+
 **notify AND generate together - a tick that records what it sent.** A `notify` mails but leaves no
 trace, so a reminder history fed only by it fills from manual clicks and never from the automated
 sends. Declare both: per matched row the target record is created first and the mail goes out after

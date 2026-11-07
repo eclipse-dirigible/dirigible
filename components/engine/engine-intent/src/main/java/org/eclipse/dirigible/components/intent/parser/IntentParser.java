@@ -1909,7 +1909,7 @@ public final class IntentParser {
                           .getInto(),
                 issues);
         if (g.getChildren() != null) {
-            validateGenerateChildren(name, g.getChildren(), 1, source, entityNames, usesAliases, issues);
+            validateGenerateChildren(name, g.getChildren(), 1, source, byName, entityNames, usesAliases, issues);
         }
     }
 
@@ -2106,7 +2106,7 @@ public final class IntentParser {
      * (resolved in the target's model at generation). Depth is capped at two levels.
      */
     private static void validateGenerateChildren(String name, List<GenerateChildIntent> children, int depth, EntityIntent source,
-            Set<String> entityNames, Set<String> usesAliases, List<String> issues) {
+            Map<String, EntityIntent> byName, Set<String> entityNames, Set<String> usesAliases, List<String> issues) {
         if (depth > 2) {
             issues.add("schedule [" + name + "] generate children nest deeper than two levels - flatten the shape");
             return;
@@ -2142,6 +2142,10 @@ public final class IntentParser {
                           .isEmpty()) {
                     issues.add(subject + " a days child cannot map from a collection row - use defaults for literals");
                 }
+                if (child.getWhere() != null && !child.getWhere()
+                                                      .isEmpty()) {
+                    issues.add(subject + " a days child has no collection row to filter - where needs forEach entity");
+                }
             } else {
                 String collection = String.valueOf(forEachEntity);
                 // The forEach collection may itself live in another model (forEach.model: <uses alias>);
@@ -2163,10 +2167,81 @@ public final class IntentParser {
                 if (!(match instanceof Map) || ((Map<?, ?>) match).isEmpty()) {
                     issues.add(subject + " forEach entity requires a match: { <collection field>: <source field> } condition");
                 }
+                validateGenerateChildWhere(child, subject, forEachCrossModel ? null : byName.get(collection), forEachCrossModel, byName,
+                        issues);
+            }
+            if (child.getOnRefused() != null && !"skip".equals(child.getOnRefused())) {
+                issues.add(subject + " onRefused [" + child.getOnRefused()
+                        + "] is not supported - only skip (omit it to roll the whole source row back on a refusal)");
             }
             if (child.getChildren() != null) {
-                validateGenerateChildren(name, child.getChildren(), depth + 1, source, entityNames, usesAliases, issues);
+                validateGenerateChildren(name, child.getChildren(), depth + 1, source, byName, entityNames, usesAliases, issues);
             }
+        }
+    }
+
+    /**
+     * The row rule of an {@code entity} child (#8491): the {@code schedules[].where} triples, checked
+     * by the same validators, over a field of the collection row or ONE relation hop
+     * ({@code Employee.active}) - the hop is pushed into the row query as an {@code in} over the
+     * relation's foreign key. A cross-model collection's fields and relations, and a cross-model hop
+     * target's fields, belong to their owner models: they are checked where the owners' {@code .model}
+     * files are read, at generation.
+     */
+    private static void validateGenerateChildWhere(GenerateChildIntent child, String subject, EntityIntent collection,
+            boolean crossModelCollection, Map<String, EntityIntent> byName, List<String> issues) {
+        if (child.getWhere() == null) {
+            return;
+        }
+        for (ScheduleConditionIntent condition : child.getWhere()) {
+            String field = condition.getField();
+            if (field == null || field.isBlank()) {
+                issues.add(subject + " has a where-condition with no field");
+                continue;
+            }
+            if (!SCHEDULE_OPERATORS.contains(condition.getOp())) {
+                issues.add(subject + " where-condition uses unsupported operator [" + condition.getOp()
+                        + "] (supported: eq/ne/gt/ge/lt/le/like)");
+            }
+            String[] path = field.split("\\.", -1);
+            if (path.length > 2) {
+                issues.add(subject + " where-condition [" + field + "] goes deeper than one relation hop");
+                continue;
+            }
+            EntityIntent owner = collection;
+            ScheduleConditionIntent own = condition;
+            if (path.length == 2) {
+                if (crossModelCollection) {
+                    // Its relations - and the model their targets live in - are in its owner's .model,
+                    // read at generation; the operator check above is all that can be said here.
+                    continue;
+                }
+                RelationIntent relation = collection == null ? null : toOneRelationByName(collection, path[0]);
+                if (relation == null) {
+                    issues.add(
+                            subject + " where-condition [" + field + "] names no to-one relation [" + path[0] + "] of the forEach entity");
+                    continue;
+                }
+                boolean crossModelTarget = relation.getModel() != null && !relation.getModel()
+                                                                                   .isBlank();
+                // A cross-model target's fields are the owner's: checked at generation against its .model.
+                owner = crossModelTarget ? null : byName.get(relation.getTo());
+                if (owner != null && fieldByName(owner, path[1]) == null) {
+                    issues.add(subject + " where-condition [" + field + "] reads [" + path[1] + "], which is not a field of ["
+                            + relation.getTo() + "]");
+                    continue;
+                }
+                own = new ScheduleConditionIntent();
+                own.setField(path[1]);
+                own.setOp(condition.getOp());
+                own.setValue(condition.getValue());
+            } else if (collection != null && !hasPropertyIgnoreCase(collection, field)) {
+                issues.add(subject + " where-condition reads [" + field + "], which is not a field or to-one relation of ["
+                        + collection.getName() + "]");
+                continue;
+            }
+            validateScheduleMoment(own, owner, subject, issues);
+            validateWhereStatusValue(own, owner, subject, issues);
         }
     }
 
