@@ -1897,8 +1897,10 @@ public final class IntentParser {
             issues.add("schedule [" + name + "] generate declares items - item cloning is not supported for a scheduled generation;"
                     + " use an on-demand generates action for document-to-document cloning");
         }
-        if (g.hasUndo()) {
-            issues.add("schedule [" + name + "] generate declares undo - an undo is a click on the record an on-demand generates ran from");
+        if (g.hasUndo() || g.hasReportRows() || g.getBackReference() != null || g.getWhere() != null || !g.getParameters()
+                                                                                                          .isEmpty()) {
+            issues.add("schedule [" + name + "] generate declares undo or a report's rows (fromReport, parameters, where, backReference)"
+                    + " - those are a click on the record an on-demand generates runs from");
         }
         // The escalation writes its chosen level onto the target too (issue #7276), so the natural key
         // may - and must - name it, although no map / defaults entry does.
@@ -11437,7 +11439,8 @@ public final class IntentParser {
                 issues.add("generates [" + name + "] has invalid scope [" + scope + "] (expected 'entity' or 'page')");
             }
             validateGeneratesEvent(g, name, source, crossModelSource, model, issues);
-            validateMapSource(source, byName, g.getMap(), "generates [" + name + "]", "map", true, issues);
+            // One row per report row (#8329) maps the report's columns, checked by ReportItemsSupport below.
+            validateMapSource(source, byName, g.hasReportRows() ? Map.of() : g.getMap(), "generates [" + name + "]", "map", true, issues);
             validateMapTarget(crossModel || g.getTo() == null ? null : byName.get(g.getTo()), g.getMap(), "generates [" + name + "]", "map",
                     issues);
             // Lines read from a report (#8329) are checked by ReportItemsSupport, below.

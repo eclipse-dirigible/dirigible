@@ -155,6 +155,61 @@ class GlueGeneratesTest {
                 undo: reverse
             """;
 
+    /** Next year's opening balances (issue #8329): one row per balance-sheet row of the same report. */
+    private static final String YEAR_OPEN = YEAR_CLOSE.replace("""
+              - name: JournalLine
+            """, """
+              - name: OpeningBalance
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: debit, type: decimal }
+                  - { name: credit, type: decimal }
+                relations:
+                  - { name: Year, kind: manyToOne, to: FiscalYear }
+                  - { name: Account, kind: manyToOne, to: Account }
+              - name: JournalLine
+            """) + """
+              - name: openYear
+                from: FiscalYear
+                to: OpeningBalance
+                fromReport: YearBalance
+                parameters: { fromDate: startDate, toDate: endDate }
+                where:
+                  - { field: Account.ClosingAccount, op: eq, value: null }
+                  - { field: closingBalance, op: ne, value: 0 }
+                backReference: Year
+                map: { Account: Account.id, debit: closingNetDebit, credit: closingNetCredit }
+                undo: delete
+            """;
+
+    @Test
+    void oneRowPerReportRowCarriesTheBackReferenceAndTheDeleteUndo() {
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(YEAR_OPEN))
+                                                   .stream()
+                                                   .filter(entry -> "openYear".equals(entry.get("name")))
+                                                   .findFirst()
+                                                   .orElseThrow();
+        assertEquals(true, g.get("hasReportRows"));
+        assertEquals(null, g.get("hasReportItems"));
+        assertEquals("Year", g.get("backRefProperty"));
+        assertEquals(true, g.get("undoDelete"));
+        // A net side is the closing debit and credit read together, exactly.
+        assertEquals(Map.of("targetProp", "Debit", "alias", "Closing Debit", "minusAlias", "Closing Credit", "derive", "netDebit", "kind",
+                "decimal", "scale", 2, "sourceScale", 2), ((List<?>) g.get("reportCells")).get(1));
+        assertEquals("signed", ((Map<?, ?>) ((List<?>) g.get("reportWhere")).get(1)).get("derive"));
+        // Its map reads the report, so the header assignments carry nothing of it.
+        assertTrue(((List<?>) g.get("fieldAssignments")).isEmpty());
+    }
+
+    @Test
+    void refusesARowsShapeWithoutItsBackReferenceOrWithTheOtherUndo() {
+        assertRefused(YEAR_OPEN.replace("backReference: Year", "backReference: Account"), "backReference [Account] is not a to-one");
+        assertRefused(YEAR_OPEN.replace("undo: delete", "undo: reverse"), "undo [reverse] is not supported here (supported: delete");
+        assertRefused(YEAR_OPEN.replace("map: { Account: Account.id,", "map: { Year: Account.id, Account: Account.id,"),
+                "maps the backReference [Year]");
+        assertRefused(YEAR_OPEN.replace("debit: closingNetDebit", "debit: Account.id"), "an amount column");
+    }
+
     @Test
     void parsesAYearCloseFromABalanceReport() {
         org.eclipse.dirigible.components.intent.model.GeneratesIntent close = IntentParser.parse(YEAR_CLOSE)
@@ -185,7 +240,7 @@ class GlueGeneratesTest {
                 "an amount column");
         assertRefused(YEAR_CLOSE.replace("debit: closingCredit, credit: closingDebit", "memo: closingCredit, credit: closingDebit"),
                 "an amount column");
-        assertRefused(YEAR_CLOSE.replace("credit: closingDebit }", "credit: closingBalance }"), "is not a column of the report");
+        assertRefused(YEAR_CLOSE.replace("credit: closingDebit }", "credit: closingTotal }"), "is not a column of the report");
         assertRefused(YEAR_CLOSE.replace("op: ne, value: null", "op: gt, value: null"), "an ordering compares a number");
         assertRefused(YEAR_CLOSE.replace("    backLink: ReversedBy\n", ""),
                 "undo: reverse needs a reversals: entry on [Journal] declaring backLink");
@@ -217,7 +272,8 @@ class GlueGeneratesTest {
         assertEquals(Map.of("targetProp", "Debit", "alias", "Closing Credit", "kind", "decimal", "scale", 2, "sourceScale", 2),
                 cells.get(1));
         assertEquals("Account Closing Account", ((Map<?, ?>) ((List<?>) g.get("counterCells")).get(0)).get("alias"));
-        assertEquals(List.of(Map.of("alias", "Account Closing Account", "op", "ne", "value", "", "isNull", true)), g.get("reportWhere"));
+        assertEquals(List.of(Map.of("alias", "Account Closing Account", "op", "ne", "value", "", "isNull", true, "sourceScale", 2)),
+                g.get("reportWhere"));
         // The back-reference a second run is refused over, and the reversal the undo books.
         assertEquals("Year", g.get("backRefProperty"));
         assertEquals("JournalLine", g.get("toItemEntity"));

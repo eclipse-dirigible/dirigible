@@ -1095,25 +1095,23 @@ class GlueGenerator {
         // over, and the undo booking the target's reversal. A .glue written before the keys existed
         // carries no hasReportItems and renders the create-from it always had.
         copy(context, item, "hasReportItems", "reportName", "liveCondition", "hasUndo", "undoReversalClass", "undoReversalRefuses",
-                "undoBackLinkProperty", "undoStatusProperty", "undoStatusExpr", "undoStatuses");
+                "undoBackLinkProperty", "undoStatusProperty", "undoStatusExpr", "undoStatuses",
+                // One target row per report row, and the undo that deletes them (#8329).
+                "hasReportRows", "undoDelete");
         context.put("reportGenFolder", sanitize(item, "reportName"));
         context.put("reportPerspective", NamingHelper.sanitizeJavaIdentifier(REPORT_PERSPECTIVE));
         context.put("reportParameters", asMaps(item.get("reportParameters")));
         context.put("reportCells", reportCells(item.get("reportCells")));
         context.put("counterCells", reportCells(item.get("counterCells")));
-        List<Map<String, Object>> where = new ArrayList<>();
-        for (Map<String, Object> declared : asMaps(item.get("reportWhere"))) {
-            Map<String, Object> term = ModelValues.copy(declared);
-            term.put("aliasJavaLiteral", JavaLiterals.escape(str(declared, "alias")));
-            term.put("valueJavaLiteral", JavaLiterals.escape(strOr(declared, "value", "")));
-            where.add(term);
-        }
+        List<Map<String, Object>> where = reportCells(item.get("reportWhere"));
+        where.forEach(term -> term.put("valueJavaLiteral", JavaLiterals.escape(strOr(term, "value", ""))));
         context.put("reportWhere", where);
     }
 
     /**
-     * The cells of a report-sourced line (issue #8329), each with its column alias as a Java string
-     * literal's content and its scales as whole numbers - the glue's JSON reads them back as doubles.
+     * The cells (or row conditions) of a report-sourced row (issue #8329), each with its column aliases
+     * as Java string literals' content and its scales as whole numbers - the glue's JSON reads them
+     * back as doubles.
      *
      * @param raw the declared cells, may be absent
      * @return the cells the template renders
@@ -1123,6 +1121,9 @@ class GlueGenerator {
         for (Map<String, Object> declared : asMaps(raw)) {
             Map<String, Object> cell = ModelValues.copy(declared);
             cell.put("aliasJavaLiteral", JavaLiterals.escape(str(declared, "alias")));
+            // A closing balance derived from two columns names the second one and how (#8329).
+            cell.put("minusAliasJavaLiteral", JavaLiterals.escape(strOr(declared, "minusAlias", "")));
+            cell.put("derive", strOr(declared, "derive", ""));
             for (String scale : List.of("scale", "sourceScale")) {
                 Object value = declared.get(scale);
                 cell.put(scale, value instanceof Number number ? String.valueOf(number.intValue()) : strOr(declared, scale, "0"));

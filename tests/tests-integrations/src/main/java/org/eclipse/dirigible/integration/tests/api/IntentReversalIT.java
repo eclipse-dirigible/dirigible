@@ -82,6 +82,8 @@ class IntentReversalIT extends IntegrationTest {
     private static final String JOURNALS = API + "/journal/JournalController";
     private static final String JOURNAL_LINES = API + "/journal/JournalLineController";
     private static final String CLOSE_YEAR = EVENTS + "/CloseYearGenerate";
+    private static final String OPENING_BALANCES = EVENTS + "/OpeningBalancesGenerate";
+    private static final String OPENINGS = API + "/openingbalance/OpeningBalanceController";
     private static final String YEAR_BALANCE = "/services/java/" + PROJECT + "/gen/yearbalance/api/reports/YearBalanceController";
     /**
      * Numbers read as the decimals they are written as - an amount compared exactly, never as a float.
@@ -169,8 +171,33 @@ class IntentReversalIT extends IntegrationTest {
                   - { name: debit,  type: decimal, precision: 18, scale: 2 }
                   - { name: credit, type: decimal, precision: 18, scale: 2 }
                 relations:
-                  - { name: Journal, kind: manyToOne, to: Journal, composition: true, required: true }
-                  - { name: Account, kind: manyToOne, to: Account, required: true }
+                  - { name: Journal,  kind: manyToOne, to: Journal, composition: true, required: true }
+                  - { name: Account,  kind: manyToOne, to: Account, required: true }
+                  - { name: Partner,  kind: manyToOne, to: Partner }
+                  - { name: Document, kind: manyToOne, to: Invoice }
+
+              # The subledger dimensions of a line: the counterparty and the open document it settles.
+              - name: Partner
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, length: 100 }
+
+              - name: Invoice
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string, length: 20 }
+
+              # Next year's opening balances (#8329): one row per balance-sheet row of the year's balance.
+              - name: OpeningBalance
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: debit,  type: decimal, precision: 18, scale: 2 }
+                  - { name: credit, type: decimal, precision: 18, scale: 2 }
+                relations:
+                  - { name: Year,     kind: manyToOne, to: FiscalYear }
+                  - { name: Account,  kind: manyToOne, to: Account, required: true }
+                  - { name: Partner,  kind: manyToOne, to: Partner }
+                  - { name: Document, kind: manyToOne, to: Invoice }
 
               - name: EntryItem
                 fields:
@@ -217,7 +244,7 @@ class IntentReversalIT extends IntegrationTest {
                 date: Journal.date
                 debit: debit
                 credit: credit
-                dimensions: [Account.id, Account.ClosingAccount]
+                dimensions: [Account.id, Account.ClosingAccount, Partner.id, Document.id]
 
             # The year close (#8329): one journal whose lines take every result account's balance off it,
             # and one counter line per closing account receiving the opposite.
@@ -237,6 +264,19 @@ class IntentReversalIT extends IntegrationTest {
                   map: { Account: Account.id, debit: closingCredit, credit: closingDebit }
                   counter: { Account: Account.ClosingAccount, debit: closingDebit, credit: closingCredit }
                 undo: reverse
+              # One opening row per balance-sheet account, counterparty and document still open (#8329).
+              - name: openingBalances
+                from: FiscalYear
+                to: OpeningBalance
+                label: Carry balances forward
+                fromReport: YearBalance
+                parameters: { fromDate: startDate, toDate: endDate }
+                where:
+                  - { field: Account.ClosingAccount, op: eq, value: null }
+                  - { field: closingBalance, op: ne, value: 0 }
+                backReference: Year
+                map: { Account: Account.id, Partner: Partner.id, Document: Document.id, debit: closingNetDebit, credit: closingNetCredit }
+                undo: delete
 
             postings:
               - name: paymentPosting
@@ -530,6 +570,160 @@ class IntentReversalIT extends IntegrationTest {
         int again = closeYear(year, 200);
         assertLine(again, expense, "0", "150.25");
         assertLine(again, profitAndLoss, "150.25", "300.10");
+    }
+
+    /**
+     * Next year's opening balances generated from the same balance report (#8329): one row per
+     * balance-sheet account, and per counterparty and document where the line carries them, holding its
+     * net closing balance exactly - a settled document carries nothing forward. A second run is
+     * refused, the undo deletes exactly the rows the run wrote, and the year can then be carried
+     * forward again.
+     */
+    @Test
+    void the_opening_balances_reproduce_the_closing_balance_sheet_and_the_undo_deletes_them() {
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        int bank = create(ACCOUNTS, "{\"Code\":\"101\"}");
+        int receivables = create(ACCOUNTS, "{\"Code\":\"411\"}");
+        int equity = create(ACCOUNTS, "{\"Code\":\"301\"}");
+        int acme = create(API + "/partner/PartnerController", "{\"Name\":\"Acme\"}");
+        int globex = create(API + "/partner/PartnerController", "{\"Name\":\"Globex\"}");
+        int paid = create(API + "/invoice/InvoiceController", "{\"Number\":\"INV-1\"}");
+        int open = create(API + "/invoice/InvoiceController", "{\"Number\":\"INV-2\"}");
+        int partly = create(API + "/invoice/InvoiceController", "{\"Number\":\"INV-3\"}");
+        int year = create(API + "/fiscalyear/FiscalYearController",
+                "{\"Name\":\"2018\",\"StartDate\":\"2018-01-01\",\"EndDate\":\"2018-12-31\"}");
+        int earlier = create(API + "/fiscalyear/FiscalYearController",
+                "{\"Name\":\"2017\",\"StartDate\":\"2017-01-01\",\"EndDate\":\"2017-12-31\"}");
+        postedJournal("2018-02-01", receivable(receivables, acme, paid, "1000.00", true), line(equity, "1000.00", false));
+        postedJournal("2018-03-01", receivable(receivables, globex, open, "250.50", true), line(equity, "250.50", false));
+        postedJournal("2018-04-01", line(bank, "1000.00", true), receivable(receivables, acme, paid, "1000.00", false));
+        postedJournal("2018-05-01", receivable(receivables, acme, partly, "99.99", true), line(equity, "99.99", false));
+        // Paid after the year: still open at its end.
+        postedJournal("2019-01-10", line(bank, "250.50", true), receivable(receivables, globex, open, "250.50", false));
+        // A row of another year, which the undo of this one must leave alone.
+        int other = create(OPENINGS, "{\"Year\":" + earlier + ",\"Account\":" + bank + ",\"Debit\":5}");
+
+        AtomicReference<String> answer = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> answer.set(given().contentType("application/json")
+                                                            .body("{\"id\":" + year + "}")
+                                                            .when()
+                                                            .post(OPENING_BALANCES + "/run")
+                                                            .then()
+                                                            .statusCode(200)
+                                                            .extract()
+                                                            .asString()),
+                TIMEOUT_SECONDS);
+        assertEquals(4, JsonPath.from(answer.get())
+                                .getList("")
+                                .size(),
+                "one row per balance-sheet account, counterparty and open document, got: " + answer.get());
+        // The closing balance sheet: the bank, each document still open on its counterparty, the equity -
+        // and nothing for the settled invoice.
+        assertOpening(year, "it.Account == " + bank, "1000.00", "0");
+        assertOpening(year, "it.Document == " + open + " && it.Partner == " + globex, "250.50", "0");
+        assertOpening(year, "it.Document == " + partly + " && it.Partner == " + acme, "99.99", "0");
+        assertOpening(year, "it.Account == " + equity, "0", "1350.49");
+        assertOpening(year, "it.Document == " + paid, null, null);
+
+        // A second run is refused while the rows stand.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + year + "}")
+                                                 .when()
+                                                 .post(OPENING_BALANCES + "/run")
+                                                 .then()
+                                                 .statusCode(409)
+                                                 .body(containsString("already generated 4 OpeningBalance rows")),
+                TIMEOUT_SECONDS);
+
+        // Undo deletes exactly the rows the run wrote; another year's row stays.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + year + "}")
+                                                 .when()
+                                                 .post(OPENING_BALANCES + "/undo")
+                                                 .then()
+                                                 .statusCode(200),
+                TIMEOUT_SECONDS);
+        assertEquals(0, openingRows(year).size());
+        assertEquals(1, openingRows(earlier).size());
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(OPENINGS + "/" + other)
+                                                 .then()
+                                                 .statusCode(200),
+                TIMEOUT_SECONDS);
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + year + "}")
+                                                 .when()
+                                                 .post(OPENING_BALANCES + "/undo")
+                                                 .then()
+                                                 .statusCode(409)
+                                                 .body(containsString("there is nothing to undo")),
+                TIMEOUT_SECONDS);
+
+        // Undone, the year is carried forward again, to the same rows.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + year + "}")
+                                                 .when()
+                                                 .post(OPENING_BALANCES + "/run")
+                                                 .then()
+                                                 .statusCode(200),
+                TIMEOUT_SECONDS);
+        assertEquals(4, openingRows(year).size());
+        assertOpening(year, "it.Account == " + equity, "0", "1350.49");
+    }
+
+    /** A line on the account, debit or credit. */
+    private static String line(int account, String amount, boolean debit) {
+        return "\"Account\":" + account + ",\"" + (debit ? "Debit" : "Credit") + "\":" + amount;
+    }
+
+    /** A line on the account kept per counterparty and document. */
+    private static String receivable(int account, int partner, int document, String amount, boolean debit) {
+        return line(account, amount, debit) + ",\"Partner\":" + partner + ",\"Document\":" + document;
+    }
+
+    /** A POSTED journal of the two lines. */
+    private void postedJournal(String date, String debitLine, String creditLine) {
+        int journal = create(JOURNALS, "{\"Date\":\"" + date + "\"}");
+        create(JOURNAL_LINES, "{\"Journal\":" + journal + "," + debitLine + "}");
+        create(JOURNAL_LINES, "{\"Journal\":" + journal + "," + creditLine + "}");
+        transition("PostJournal", journal);
+    }
+
+    /** The opening rows the year's run wrote. */
+    private List<Object> openingRows(int year) {
+        AtomicReference<List<Object>> rows = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> rows.set(given().when()
+                                                          .get(OPENINGS + "?$limit=1000")
+                                                          .then()
+                                                          .statusCode(200)
+                                                          .extract()
+                                                          .jsonPath()
+                                                          .getList("findAll { it.Year == " + year + " }")),
+                TIMEOUT_SECONDS);
+        return rows.get();
+    }
+
+    /**
+     * The year's one opening row matching {@code where} carries exactly these amounts - or, given none,
+     * no row matches.
+     */
+    private void assertOpening(int year, String where, String debit, String credit) {
+        String rows = "findAll { it.Year == " + year + " && " + where + " }";
+        restAssuredExecutor.execute(() -> {
+            var body = given().config(EXACT)
+                              .when()
+                              .get(OPENINGS + "?$limit=1000")
+                              .then()
+                              .statusCode(200)
+                              .body(rows, hasSize(debit == null ? 0 : 1));
+            if (debit != null) {
+                body.body(rows + "[0].Debit", comparesEqualTo(new BigDecimal(debit)))
+                    .body(rows + "[0].Credit", comparesEqualTo(new BigDecimal(credit)));
+            }
+        }, TIMEOUT_SECONDS);
     }
 
     /** A POSTED journal of one debit line and one credit line of {@code amount}. */
