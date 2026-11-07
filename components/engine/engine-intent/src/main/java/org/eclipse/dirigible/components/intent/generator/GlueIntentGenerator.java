@@ -1249,6 +1249,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // always did (a regeneration from an older glue file must not silently drop the button).
             e.put("eventOnly", !g.hasButton());
             putGeneratesEvent(g, e, fromPk, source, context);
+            putWithdrawnSource(g, e, model, source, sourceInfo);
             putSupersededTarget(g, e, model, crossModel ? null : byName.get(g.getTo()), context);
             // Cross-model source: the gen folder and the project that owns the source's topics/views.
             e.put("crossModelSource", crossModelSource);
@@ -1554,8 +1555,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * topic suffix the listener binds to (an {@code onCreate} the source's bare create topic, an
      * {@code onTransition} its {@code -transitioned} topic, an {@code onPhase} the declared phase's
      * topic, a step binding the step-scoped topic the generated emitter publishes to), the optional
-     * status guard as a property/value pair evaluated against the RE-LOADED source, the cardinality,
-     * and the back-reference.
+     * status guard as a property/value pair evaluated against the event's payload (#8510), the
+     * cardinality, and the back-reference.
      *
      * <p>
      * The back-reference is DERIVED from the {@code map} entry that copies the source's primary key
@@ -1605,6 +1606,50 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * The source statuses that WITHDRAW an event-driven create-from's source (#8510): its status
+     * nomenclature's seeds classified {@code stage: cancelled|void}. The listener judges the moment on
+     * the event's payload, so a source moved on before the listener ran is still generated from - but
+     * one cancelled or voided since is not, as a posting holds (#8505). A rule whose own moment IS a
+     * withdrawal (its {@code when:} names such a status - a credit note minted on cancel) keeps no
+     * veto, and neither does a source whose nomenclature classifies no stage. Emitted for event-driven
+     * rules only; the template reads an absent key as no veto.
+     *
+     * @param g the create-from
+     * @param e the glue entry being built, its event guard already put
+     * @param model the model being generated
+     * @param source the local source entity, {@code null} for a cross-model source
+     * @param sourceInfo the cross-model source, {@code null} for a local one
+     */
+    private static void putWithdrawnSource(GeneratesIntent g, Map<String, Object> e, IntentModel model, EntityIntent source,
+            CrossModelSupport.TargetInfo sourceInfo) {
+        if (!g.isEventDriven()) {
+            return;
+        }
+        String statusProperty = null;
+        Map<String, List<Integer>> stages = Map.of();
+        if (sourceInfo != null) {
+            statusProperty = sourceInfo.statusProperty();
+            stages = sourceInfo.statusStages();
+        } else {
+            RelationIntent status = LifecycleStages.statusRelation(source);
+            if (status != null && !status.isCrossModel()) {
+                statusProperty = IntentNaming.pascalCase(status.getName());
+                stages = LifecycleStages.stagesOf(model, status.getTo());
+            }
+        }
+        List<Integer> withdrawn = new ArrayList<>(stages.getOrDefault(LifecycleStages.CANCELLED, List.of()));
+        withdrawn.addAll(stages.getOrDefault(LifecycleStages.VOID, List.of()));
+        String guardValue = String.valueOf(e.get("guardValue"));
+        boolean momentIsWithdrawal = guardValue.matches("\\d+") && withdrawn.contains(Integer.valueOf(guardValue));
+        boolean vetoes = statusProperty != null && !withdrawn.isEmpty() && !momentIsWithdrawal;
+        e.put("withdrawnStatusProperty", vetoes ? statusProperty : "");
+        e.put("withdrawnStatusValues", vetoes ? String.join(",", withdrawn.stream()
+                                                                          .map(String::valueOf)
+                                                                          .toList())
+                : "");
+    }
+
+    /**
      * The target property the {@code map} copies the source's primary key onto, refused when there is
      * none - an event-driven create-from guards on it and a reopen finds its source through it.
      */
@@ -1640,11 +1685,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * outcome:} trace field versus the manual one).
      *
      * <p>
-     * Emits {@code guardCondition} - the complete Java condition over the RE-LOADED {@code source} -
-     * and keeps {@code guardProperty}/{@code guardValue} (the status term) for the javadoc line and
-     * older templates. A string term against a field the developer can edit gets an actionable warning
-     * (never a refusal): a guard on an editable field means a UI edit silently changes which
-     * automations fire, and the fix - {@code readOnly: true} on the trace field - is one line.
+     * Emits {@code guardCondition} - the complete Java condition over a {@code source} local, which the
+     * listener binds to the event's payload (#8510) - and keeps
+     * {@code guardProperty}/{@code guardValue} (the status term) for the javadoc line and older
+     * templates. A string term against a field the developer can edit gets an actionable warning (never
+     * a refusal): a guard on an editable field means a UI edit silently changes which automations fire,
+     * and the fix - {@code readOnly: true} on the trace field - is one line.
      */
     private static void putGeneratesGuard(GeneratesIntent g, Map<String, Object> e, EntityIntent source, IntentGenerationContext context) {
         String guardProperty = "";

@@ -3,6 +3,9 @@ package gen.events.${javaGenFolderName};
 ## controller's validation (#7819). A reversal has neither, so its negated twin is not refused by a
 ## sign check the original passed.
 #set($validatesRows = $hasPrompt || $hasLink)
+## An event-driven create-from with a completion hook flips its source only while the source still
+## stands where the triggering event left it (#8510) - so the event path tells create() what that was.
+#set($flipFollowsEvent = $hasEvent && $sourceStatusValue != "")
 ## A report row's cell (#8329): one column, or a closing balance derived from two - converted exactly.
 #macro(reportCell $c)#if($c.derive != "")derivedCell(row, "${c.aliasJavaLiteral}", "${c.minusAliasJavaLiteral}", "${c.derive}", ${c.scale}, ${c.sourceScale})#{else}${c.kind}Cell(row, "${c.aliasJavaLiteral}", ${c.scale}, ${c.sourceScale})#end#end
 ## The report run with the source's own values; one holding none is refused - the report would read its
@@ -37,6 +40,10 @@ import org.eclipse.dirigible.sdk.http.Post;
 import org.eclipse.dirigible.sdk.security.User;
 #end
 import org.eclipse.dirigible.sdk.utils.Json;
+#if($flipFollowsEvent)
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+#end
 #if($hasItemLines)
 import org.eclipse.dirigible.sdk.utils.Calc;
 #end
@@ -95,6 +102,13 @@ import org.eclipse.dirigible.sdk.http.Response;
  * A create-from with no event trigger deliberately keeps NO such guard - minting several targets from
  * one source is a legitimate manual act.
 #end
+#if($flipFollowsEvent)
+ *
+ * The event path flips the ${fromEntity} to status ${sourceStatusValue} only while it still stands where
+ * the triggering event left it (#8510). The listener runs after that transition committed, so a
+ * settlement or the next step may already have moved the ${fromEntity} on: the ${toEntity} is created all
+ * the same - the transition decided that - and the later move is not overruled.
+#end
 #end
 #if($hasStatusGuard)
  *
@@ -152,6 +166,10 @@ import org.eclipse.dirigible.sdk.http.Response;
 @Component("${javaGenFolderName}_${className}Generate")
 #end
 public class ${className}Generate {
+#if($flipFollowsEvent)
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}Generate");
+#end
 #if($hasRefusals || $hasReportItems || $hasReportRows)
 
     /** A declared refusal held under the original's row lock - answered with 409 and its message. */
@@ -199,16 +217,18 @@ public class ${className}Generate {
         }
 #end
 #end
+        // The source must exist, whatever else the run requires (#8488): asked once, up front, for every
+        // shape of create-from, and the from-status guard below reads the same row. It used to be asked
+        // only by that guard, while every other shape answered from what create() returned.
+        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity source =
+                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().findById(req.id);
+        if (source == null) {
+            return sourceNotFound(req.id);
+        }
 #if($hasStatusGuard)
         // The from-status guard, asked BEFORE anything is created and only on this path: the click.
         // Calc reads the status FK with the calculated-field semantics (null -> 0, never a seed id).
-        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity guarded =
-                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().findById(req.id);
-        if (guarded == null) {
-            Response.setStatus(404);
-            return "{\"error\": \"source ${fromEntity} not found\"}";
-        }
-        int currentStatus = org.eclipse.dirigible.sdk.utils.Calc.eval("${guardStatusProperty}", guarded, 0).intValue();
+        int currentStatus = org.eclipse.dirigible.sdk.utils.Calc.eval("${guardStatusProperty}", source, 0).intValue();
         if (!(${guardStatusExpr})) {
             Response.setStatus(409);
             return "{\"error\": \"${name} ${guardStatusText} - current status is [" + currentStatus + "]\"}";
@@ -223,8 +243,7 @@ public class ${className}Generate {
             return Json.stringify(java.util.Map.of("error", refused.getMessage()));
         }
         if (rows == null) {
-            Response.setStatus(404);
-            return "{\"error\": \"source ${fromEntity} not found\"}";
+            return sourceNotFound(req.id); // deleted since the check above
         }
         return Json.stringify(rows);
 #else
@@ -241,8 +260,7 @@ public class ${className}Generate {
         gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity saved = create(req.id#if($hasPrompt), req.values#end);
 #end
         if (saved == null) {
-            Response.setStatus(404);
-            return "{\"error\": \"source ${fromEntity} not found\"}";
+            return sourceNotFound(req.id); // deleted since the check above
         }
         return Json.stringify(saved);
 #end
@@ -272,12 +290,20 @@ public class ${className}Generate {
             return Json.stringify(java.util.Map.of("error", refused.getMessage()));
         }
         if (reversals == null) {
-            Response.setStatus(404);
-            return "{\"error\": \"source ${fromEntity} not found\"}";
+            return sourceNotFound(req.id);
         }
         return Json.stringify(reversals);
     }
 #end
+
+    /**
+     * The answer to a run naming a ${fromEntity} that does not exist (#8488) - a 404, worded once for
+     * every path that finds no source.
+     */
+    private static String sourceNotFound(Integer sourceId) {
+        Response.setStatus(404);
+        return Json.stringify(java.util.Map.of("error", "${fromEntity} " + sourceId + " does not exist"));
+    }
 
     /** Whether the caller holds ANY role of a comma-separated gate; an empty gate admits nobody. */
     private static boolean isInAnyRole(String roles) {
@@ -347,14 +373,31 @@ public class ${className}Generate {
         });
     }
 #else
+#if($flipFollowsEvent)
+
+    /**
+     * Creates the ${toEntity} for the given ${fromEntity} as a click does - flipping the ${fromEntity}
+     * wherever it stands - or returns null when the source is gone.
+     */
+    public gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity create(Integer sourceId) {
+        return create(sourceId, false, null);
+    }
+#end
 
     /**
      * Creates the ${toEntity} for the given ${fromEntity}, or returns null when the source is gone.
 #if($hasPrompt)
      * The values map carries the declared `prompt:` inputs collected by the action dialog.
 #end
+#if($flipFollowsEvent)
+     * On the event path the ${fromEntity} is flipped only while it still stands in the status the
+     * triggering event's row carried (#8510).
+     *
+     * @param onEvent whether ${className}GenerateOnEvent runs it, rather than a click
+     * @param eventStatus the ${sourceStatusProperty} the triggering event's row carried
+#end
      */
-    public gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity create(Integer sourceId#if($hasPrompt), java.util.Map<String, Object> values#end) {
+    public gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity create(Integer sourceId#if($hasPrompt), java.util.Map<String, Object> values#end#if($flipFollowsEvent), boolean onEvent, Object eventStatus#end) {
         // ONE transaction for the whole create-from: the target header, its lines and the source's
         // sourceStatus flip either all become durable or none of them does. Written as separate
         // transactions, a line that a validation or a constraint refuses left behind a header-only
@@ -592,10 +635,28 @@ public class ${className}Generate {
             // could have moved on. No "-updated" re-fire either (no onUpdate reactions): the dedicated
             // "-transitioned" channel is what posting glue and integrations bind, as for a transitions
             // button and a workflow setter.
+    #if($flipFollowsEvent)
+            // On the EVENT path the flip is this create-from's move off the status the event fired on,
+            // and it is made only while the ${fromEntity} still stands there (#8510). The listener runs
+            // after the transition committed, so a settlement or the next step may have moved the
+            // ${fromEntity} on already: that later move is not overruled - re-flipping a moved-on record
+            // is a move its lifecycle may not even declare, which refused the whole create-from and lost
+            // the ${toEntity} the transition had decided on. The at-most-once guard above keeps a
+            // redelivery from minting a second one either way.
+            if (onEvent && !java.util.Objects.equals(source.${sourceStatusProperty}, eventStatus)) {
+                LOG.info("Generate ${name}: ${fromEntity} [{}] moved on to status [{}] before the create-from ran - left there,"
+                        + " not flipped to ${sourceStatusValue}", sourceId, source.${sourceStatusProperty});
+            } else {
+                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().updateProperties(sourceId,
+                        java.util.Map.of("${sourceStatusProperty}", ${sourceStatusValue}),
+                        "${fromProjectName}-${fromPerspective}-${fromEntity}-transitioned");
+            }
+    #else
             gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository sourceRepository =
                     new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository();
             sourceRepository.updateProperties(sourceId, java.util.Map.of("${sourceStatusProperty}", ${sourceStatusValue}),
                     "${fromProjectName}-${fromPerspective}-${fromEntity}-transitioned");
+    #end
     #end
             gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity saved =
                     new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository().save(target);
