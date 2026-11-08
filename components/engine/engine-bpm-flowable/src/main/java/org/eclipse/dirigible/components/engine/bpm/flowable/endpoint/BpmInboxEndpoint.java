@@ -276,10 +276,10 @@ public class BpmInboxEndpoint extends BaseEndpoint {
     private ResponseEntity<String> performTaskAction(String taskId, TaskActionData actionData) {
         if (CLAIM.getActionName()
                  .equals(actionData.getAction())) {
-            bpmService.claimTask(taskId, claimantFor(taskId));
+            return rejectedOrOk(taskId, () -> bpmService.claimTask(taskId, claimantFor(taskId)));
         } else if (UNCLAIM.getActionName()
                           .equals(actionData.getAction())) {
-            bpmService.unclaimTask(taskId);
+            return rejectedOrOk(taskId, () -> bpmService.unclaimTask(taskId));
         } else if (COMPLETE.getActionName()
                            .equals(actionData.getAction())) {
             if (bpmService.retireIfRecordGone(taskId)) {
@@ -316,6 +316,29 @@ public class BpmInboxEndpoint extends BaseEndpoint {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                                  .contentType(MediaType.TEXT_PLAIN)
                                  .body("Invalid action id provided [" + actionData.getAction() + "]");
+        }
+        return ResponseEntity.ok()
+                             .build();
+    }
+
+    /**
+     * Runs a claim or an unclaim, answering a declarative refusal with its message. A user task's
+     * {@code onClaim} / {@code onUnclaim} moves its record inside the claim (issue #8461), so the
+     * record's lifecycle may refuse it: the claim rolls back and the person who acted is told why, as a
+     * refused completion is.
+     */
+    private ResponseEntity<String> rejectedOrOk(String taskId, Runnable action) {
+        try {
+            action.run();
+        } catch (RuntimeException ex) {
+            String rejection = ClientValidationFailure.messageOf(ex);
+            if (rejection == null) {
+                throw ex;
+            }
+            logger.debug("Claim change of task [{}] was rejected: {}", taskId, rejection, ex);
+            return ResponseEntity.badRequest()
+                                 .contentType(MediaType.TEXT_PLAIN)
+                                 .body(rejection);
         }
         return ResponseEntity.ok()
                              .build();

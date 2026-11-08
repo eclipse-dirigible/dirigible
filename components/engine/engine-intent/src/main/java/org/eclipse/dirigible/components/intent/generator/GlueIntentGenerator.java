@@ -118,6 +118,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> deleteAborts = buildDeleteAborts(model, settings);
         List<Map<String, Object>> writers = buildWriters(model, settings);
         List<Map<String, Object>> setters = buildSetters(model, settings);
+        List<Map<String, Object>> claimListeners = buildClaimListeners(model, settings);
         List<Map<String, Object>> notifications = buildNotifications(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> schedules = buildSchedules(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> integrations = buildIntegrations(model, byName, compositionParents, settings, context);
@@ -170,6 +171,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("deleteAborts", deleteAborts);
         glue.put("writers", writers);
         glue.put("setters", setters);
+        // A user task's onClaim / onUnclaim (#8461). Emitted only when used, so every other intent's
+        // descriptor stays byte-identical.
+        if (!claimListeners.isEmpty()) {
+            glue.put("claimListeners", claimListeners);
+        }
         glue.put("notifications", notifications);
         glue.put("schedules", schedules);
         glue.put("integrations", integrations);
@@ -6477,6 +6483,30 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             setters.add(entry);
         }
         return setters;
+    }
+
+    private static List<Map<String, Object>> buildClaimListeners(IntentModel model, IntentSettings settings) {
+        List<Map<String, Object>> listeners = new ArrayList<>();
+        for (ClaimSupport.Claim claim : ClaimSupport.claims(model)) {
+            if (!settings.shouldGenerate("claimListeners", claim.className())) {
+                LOGGER.info("Settings opt-out: keeping existing handler for claim listener [{}] (not generated)",
+                        LoggedValue.of(claim.className()));
+                continue;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("process", claim.process());
+            entry.put("userTask", claim.step());
+            entry.put("className", claim.className());
+            entry.put("entity", claim.entity());
+            entry.put("perspective", claim.perspective());
+            entry.put("keyProperty", claim.keyProperty());
+            entry.put("keyAccessor", claim.keyAccessor());
+            entry.put("field", claim.field());
+            entry.put("claimValue", claim.claimValue());
+            entry.put("unclaimValue", claim.unclaimValue());
+            listeners.add(entry);
+        }
+        return listeners;
     }
 
     /**

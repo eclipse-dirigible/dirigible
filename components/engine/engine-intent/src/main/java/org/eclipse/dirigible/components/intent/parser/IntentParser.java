@@ -44,6 +44,7 @@ import org.eclipse.dirigible.components.intent.generator.PostSetSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAssigneeSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResilienceSupport;
+import org.eclipse.dirigible.components.intent.generator.ClaimSupport;
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport;
 import org.eclipse.dirigible.components.intent.generator.CheckSupport;
 import org.eclipse.dirigible.components.intent.generator.CronSupport;
@@ -186,7 +187,8 @@ public final class IntentParser {
      * keys.
      */
     private static final Map<String, Set<String>> STEP_ARGS_BY_KIND = Map.of("userTask",
-            Set.of("assignee", "form", "timeout", "expire", "setRelationField", "set", "value", "next", "separateFrom", "extraRoles"),
+            Set.of("assignee", "form", "timeout", "expire", "setRelationField", "set", "value", "next", "separateFrom", "extraRoles",
+                    "onClaim", "onUnclaim"),
             "serviceTask",
             Set.of("setField", "clearField", "setRelationField", "set", "value", "call", "delegate", "fields", "javaHandler", "notify",
                     "next", "retry", "onError", "produces", "uses"),
@@ -9105,6 +9107,7 @@ public final class IntentParser {
             validateTaskFormActions(process, model, issues);
             validateTaskAssigneePaths(process, triggerEntity, byName, model, issues);
             validateTaskSeparation(process, issues);
+            validateTaskClaim(process, triggerEntity, byName, issues);
         }
     }
 
@@ -9142,6 +9145,86 @@ public final class IntentParser {
                 }
             }
         }
+    }
+
+    /**
+     * A user task's {@code onClaim} / {@code onUnclaim} (issue #8461) move the trigger record into a
+     * status while the task is claimed and back when it is unclaimed, so a {@code forbidWhen} on the
+     * record's lines freezes them while the approver decides. Each is {@code { setRelationField, value
+     * }} on a to-one relation of the trigger record itself, and the two come together: a claim with no
+     * unclaim would leave an unclaimed record in the claim status with nobody deciding it, and an
+     * unclaim alone writes a status nothing ever left.
+     */
+    private static void validateTaskClaim(ProcessIntent process, String triggerEntity, Map<String, EntityIntent> byName,
+            List<String> issues) {
+        EntityIntent trigger = triggerEntity == null ? null : byName.get(triggerEntity);
+        for (StepIntent step : process.getSteps()) {
+            if (step.getArgs() == null || (step.getKind() != null && !"userTask".equals(step.getKind()))) {
+                continue;
+            }
+            Object onClaim = step.getArgs()
+                                 .get(ClaimSupport.ON_CLAIM);
+            Object onUnclaim = step.getArgs()
+                                   .get(ClaimSupport.ON_UNCLAIM);
+            if (onClaim == null && onUnclaim == null) {
+                continue;
+            }
+            String subject = "process [" + process.getName() + "] step [" + step.getName() + "]";
+            if (onClaim == null || onUnclaim == null) {
+                issues.add(subject + " declares " + (onClaim == null ? ClaimSupport.ON_UNCLAIM : ClaimSupport.ON_CLAIM) + " without "
+                        + (onClaim == null ? ClaimSupport.ON_CLAIM : ClaimSupport.ON_UNCLAIM)
+                        + " - a claim moves the record and an unclaim moves it back, so both are declared");
+                continue;
+            }
+            if (trigger == null) {
+                issues.add(subject + " declares onClaim/onUnclaim but the process has no trigger entity to write them on");
+                continue;
+            }
+            String claimRelation = validateClaimWrite(subject, ClaimSupport.ON_CLAIM, onClaim, trigger, issues);
+            String unclaimRelation = validateClaimWrite(subject, ClaimSupport.ON_UNCLAIM, onUnclaim, trigger, issues);
+            if (claimRelation != null && unclaimRelation != null && !claimRelation.equals(unclaimRelation)) {
+                issues.add(subject + " onClaim writes [" + claimRelation + "] but onUnclaim writes [" + unclaimRelation
+                        + "] - an unclaim moves back the relation the claim moved");
+            } else if (claimRelation != null && unclaimRelation != null && String.valueOf(((Map<?, ?>) onClaim).get("value"))
+                                                                                 .equals(String.valueOf(
+                                                                                         ((Map<?, ?>) onUnclaim).get("value")))) {
+                issues.add(subject + " onClaim and onUnclaim set the same value - a claim holds the record in another status than the"
+                        + " one it waits in");
+            }
+        }
+    }
+
+    /**
+     * One half of a claim declaration: a map naming a to-one relation of the trigger record and the
+     * integer seed id it is set to (a seeded name is already resolved to its id).
+     *
+     * @return the relation written, or null when the half is refused
+     */
+    private static String validateClaimWrite(String subject, String key, Object write, EntityIntent trigger, List<String> issues) {
+        if (!(write instanceof Map<?, ?> map)) {
+            issues.add(subject + " " + key + " must be a map { setRelationField: <relation>, value: <status> }");
+            return null;
+        }
+        Object relation = map.get("setRelationField");
+        Object value = map.get("value");
+        if (relation == null || String.valueOf(relation)
+                                      .isBlank()) {
+            issues.add(subject + " " + key + " must name the relation it writes (setRelationField)");
+            return null;
+        }
+        String name = String.valueOf(relation)
+                            .trim();
+        boolean valid = true;
+        if (toOneRelationByName(trigger, name) == null) {
+            issues.add(subject + " " + key + " setRelationField [" + name + "] is not a manyToOne/oneToOne relation of ["
+                    + trigger.getName() + "]");
+            valid = false;
+        }
+        if (value == null || parseSeedId(String.valueOf(value)) == null) {
+            issues.add(subject + " " + key + " value [" + value + "] must be a seeded status name or an integer record id");
+            valid = false;
+        }
+        return valid ? name : null;
     }
 
     /**
@@ -9216,6 +9299,7 @@ public final class IntentParser {
             case "expire" -> Set.of("until", "then");
             case "retry" -> Set.of("count", "every");
             case "notify" -> NotificationIntent.BLOCK_KEYS;
+            case "onClaim", "onUnclaim" -> Set.of("setRelationField", "value");
             default -> null;
         };
         if (vocabulary == null) {
@@ -12612,6 +12696,43 @@ public final class IntentParser {
     }
 
     /**
+     * A user task's {@code onClaim} / {@code onUnclaim} (issue #8461) move the record between exactly
+     * two statuses - the claim from the unclaim status, the unclaim back - so the graph is asked for
+     * both edges, not for reachability: a missing one would fail every claim, or strand a claimed
+     * record.
+     */
+    private static void validateClaimAgainstLifecycle(ProcessIntent process, StepIntent step, EntityIntent trigger, EntityIntent entity,
+            RelationIntent status, Map<Integer, Set<Integer>> edges, Map<Integer, String> statuses, List<String> issues) {
+        if (!trigger.getName()
+                    .equals(entity.getName())
+                || step.getArgs() == null || !(step.getArgs()
+                                                   .get(ClaimSupport.ON_CLAIM) instanceof Map<?, ?> onClaim)
+                || !(step.getArgs()
+                         .get(ClaimSupport.ON_UNCLAIM) instanceof Map<?, ?> onUnclaim)
+                || !status.getName()
+                          .equalsIgnoreCase(String.valueOf(onClaim.get("setRelationField")))) {
+            return;
+        }
+        Integer claimed = parseSeedId(String.valueOf(onClaim.get("value")));
+        Integer unclaimed = parseSeedId(String.valueOf(onUnclaim.get("value")));
+        if (claimed == null || unclaimed == null) {
+            return; // reported by the claim's own validation
+        }
+        if (claimed.equals(unclaimed)) {
+            return; // reported by the claim's own validation
+        }
+        String subject = "process [" + process.getName() + "] step [" + step.getName() + "]";
+        for (Integer[] move : new Integer[][] {{unclaimed, claimed}, {claimed, unclaimed}}) {
+            if (!edges.getOrDefault(move[0], Set.of())
+                      .contains(move[1])) {
+                issues.add(subject + " " + (move[1].equals(claimed) ? "onClaim" : "onUnclaim") + " moves the record from ["
+                        + statusLabel(move[0], statuses) + "] to [" + statusLabel(move[1], statuses) + "], which the [" + entity.getName()
+                        + "] lifecycle does not allow - add the edge");
+            }
+        }
+    }
+
+    /**
      * A {@code transitions:} button is PRESENTATION over an edge: every one of its {@code from}
      * statuses must actually reach its {@code setStatus}, so the buttons and the graph cannot disagree.
      */
@@ -12685,6 +12806,7 @@ public final class IntentParser {
                                 + "] lifecycle reaches - add the edge or set a status the graph can enter");
                     }
                 }
+                validateClaimAgainstLifecycle(process, step, trigger, entity, status, edges, statuses, issues);
             }
         }
         for (GeneratesIntent generates : model.getGenerates()) {

@@ -25,6 +25,13 @@
             "collection": "setters"
         },
         {
+            "location": "/template-application-events-java/events/ClaimListener.java.template",
+            "action": "generate",
+            "rename": "gen/events/{{javaGenFolderName}}/{{className}}.java",
+            "engine": "velocity",
+            "collection": "claimListeners"
+        },
+        {
             "location": "/template-application-events-java/events/FieldLoader.java.template",
             "action": "generate",
             "rename": "gen/events/{{javaGenFolderName}}/{{handler}}.java",
