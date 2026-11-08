@@ -40,7 +40,8 @@ public class ReportAgingIntent {
     private String due;
     /**
      * The document's open amount: one numeric field, or numeric fields joined by {@code +} and
-     * {@code -} ({@code total - paid}). A missing value in any of them reads as zero.
+     * {@code -} ({@code total - paid}), optionally with a leading sign ({@code -total}). A missing
+     * value in any of them reads as zero.
      */
     private String amount;
     /**
@@ -128,6 +129,18 @@ public class ReportAgingIntent {
      * grammar rather than raw SQL.
      */
     public List<AmountTerm> getAmountTerms() {
+        return amountTerms(amount);
+    }
+
+    /**
+     * An amount expression split into its signed field paths, or {@code null} when it is blank or not a
+     * sum and difference of field paths - the grammar shared by {@link #amount} and a union member's
+     * {@link ReportUnionMemberIntent#getAmount() amount}.
+     *
+     * @param amount the authored expression
+     * @return the signed terms, or null
+     */
+    public static List<AmountTerm> amountTerms(String amount) {
         if (amount == null || amount.isBlank()) {
             return null;
         }
@@ -140,6 +153,13 @@ public class ReportAgingIntent {
             if (character == '+' || character == '-') {
                 String term = path.toString()
                                   .trim();
+                if (term.isEmpty() && terms.isEmpty() && i < text.length() && text.substring(0, i)
+                                                                                  .isBlank()) {
+                    // A leading sign - "-total" is the negated total (a credit note's revenue).
+                    sign = character == '-' ? -1 : 1;
+                    path.setLength(0);
+                    continue;
+                }
                 if (!isPath(term)) {
                     return null;
                 }
