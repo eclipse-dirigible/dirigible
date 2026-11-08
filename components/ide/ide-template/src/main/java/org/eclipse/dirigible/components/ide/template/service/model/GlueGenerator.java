@@ -847,7 +847,7 @@ class GlueGenerator {
      */
     private static void bindImport(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "nameLiteral", "className", "entity", "perspective", "format", "readerExpression", "valuesExpression",
-                "roles", "mapFields", "hasDuplicateKey", "duplicateKey");
+                "roles", "mapFields", "hasDuplicateKey", "duplicateKey", "hasWhere", "whereExpression");
         context.put("javaPerspective", sanitize(item, "perspective"));
         String tablePrefix = strOr(parameters, "tablePrefix", "");
         if (!tablePrefix.isEmpty() && !tablePrefix.endsWith("_")) {

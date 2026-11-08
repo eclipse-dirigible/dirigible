@@ -45,6 +45,11 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  * as a duplicate (409)#end. Every attempt is recorded in the ${table}_IMPORTS ledger. After the rows are
  * committed, every Hook bean is called with them - the place for matching rules; a failing hook is
  * logged and reported as a warning, and does not undo the import.
+#if($hasWhere)
+ *
+ * Only the records matching the import's where filter are imported; the others are skipped, and the
+ * result counts them.
+#end
  */
 @Controller
 @Component("${javaGenFolderName}_${className}Import")
@@ -112,11 +117,14 @@ public class ${className}Import {
     public ImportResult importFile(String fileName, byte[] content) {
         String checksum = ImportText.checksum(content);
         List<${entity}Entity> rows;
+        int skipped;
 #if($hasDuplicateKey)
         String duplicate;
 #end
         try {
-            rows = read(fileName, content);
+            Rows read = read(fileName, checksum, content);
+            rows = read.rows();
+            skipped = read.skipped();
 #if($hasDuplicateKey)
             duplicate = duplicateOf(rows);
 #end
@@ -153,7 +161,7 @@ public class ${className}Import {
             LOG.error("Import {}: saving the records of [{}] failed - nothing was saved", NAME, fileName, e);
             return refused(ImportResult.rejected(NAME, fileName, checksum, "saving the records failed: " + e.getMessage()));
         }
-        ImportResult result = ImportResult.imported(NAME, fileName, checksum, saved.size());
+        ImportResult result = ImportResult.imported(NAME, fileName, checksum, saved.size(), skipped);
         ImportLedger.record(TABLE, result);
         for (Hook hook : hooks) {
             try {
@@ -176,14 +184,25 @@ public class ${className}Import {
         return result;
     }
 
-    private static List<${entity}Entity> read(String fileName, byte[] content) {
+    /** The rows a file's records became, and how many records the where filter skipped. */
+    private record Rows(List<${entity}Entity> rows, int skipped) {
+    }
+
+    private static Rows read(String fileName, String checksum, byte[] content) {
         List<Map<String, String>> records = ${readerExpression};
         if (records.isEmpty()) {
             throw new IllegalArgumentException("the file holds no record");
         }
         List<${entity}Entity> rows = new ArrayList<>(records.size());
+        int skipped = 0;
         for (int index = 0; index < records.size(); index++) {
             Map<String, String> record = records.get(index);
+#if($hasWhere)
+            if (!(${whereExpression})) {
+                skipped++;
+                continue;
+            }
+#end
             ${entity}Entity row = new ${entity}Entity();
             try {
 #foreach($field in $mapFields)
@@ -194,7 +213,7 @@ public class ${className}Import {
             }
             rows.add(row);
         }
-        return rows;
+        return new Rows(rows, skipped);
     }
 #if($hasDuplicateKey)
 

@@ -189,6 +189,72 @@ class ImportSupportTest {
     }
 
     @Test
+    void a_camt_import_per_transaction_filters_booked_records_and_can_key_on_the_checksum() {
+        List<Map<String, Object>> imports = build(IntentParser.parse(ENTITIES + """
+                imports:
+                  - name: isoBatch
+                    into: StatementLine
+                    format: camt053
+                    camt053: { records: transactions }
+                    where: { status: BOOK, reversal: false, currency: [EUR, BGN] }
+                    map: { statementId: _checksum, lineNumber: transaction, amount: amount, details: counterpartyName }
+                    duplicateKey: [statementId, lineNumber]
+                  - name: plainCsv
+                    into: StatementLine
+                    format: csv
+                    where: { Status: Booked }
+                    map: { statementId: Id, lineNumber: _line }
+                """));
+
+        Map<String, Object> camt = imports.get(0);
+        assertEquals("Camt053.readTransactions(content)", camt.get("readerExpression"));
+        assertEquals(Boolean.TRUE, camt.get("hasWhere"));
+        assertEquals(
+                "\"BOOK\".equals(record.get(\"status\")) && \"false\".equals(record.get(\"reversal\"))"
+                        + " && (\"EUR\".equals(record.get(\"currency\")) || \"BGN\".equals(record.get(\"currency\")))",
+                camt.get("whereExpression"));
+        assertEquals(field("StatementId", "checksum", "text"), ((List<?>) camt.get("mapFields")).get(0));
+        assertEquals(field("LineNumber", "record.get(\"transaction\")", "integer"), ((List<?>) camt.get("mapFields")).get(1));
+
+        Map<String, Object> csv = imports.get(1);
+        assertEquals("DelimitedText.read(ImportText.decode(content, \"UTF-8\"), ',', true, 0, java.util.List.of(\"Id\", \"Status\"))",
+                csv.get("readerExpression"), "a filtered column is read like a mapped one");
+        assertEquals(Boolean.FALSE, build(IntentParser.parse(VALID)).get(0)
+                                                                    .get("hasWhere"));
+    }
+
+    @Test
+    void a_transaction_key_needs_records_per_transaction_and_a_filter_needs_a_record_key() {
+        List<String> issues = issues("""
+                imports:
+                  - name: perEntry
+                    into: StatementLine
+                    format: camt053
+                    map: { statementId: statementId, lineNumber: transaction }
+                  - name: wrongRecords
+                    into: StatementLine
+                    format: camt053
+                    camt053: { records: payments }
+                    where: { _file: x.xml, sts: BOOK, status: [] }
+                    map: { statementId: statementId, lineNumber: lineNumber }
+                  - name: swiftRules
+                    into: StatementLine
+                    format: mt940
+                    camt053: { records: transactions }
+                    where: { status: BOOK }
+                    map: { statementId: statementId, lineNumber: lineNumber }
+                """);
+
+        assertIssue(issues, "import [perEntry] map [lineNumber] reads [transaction], which only a record per transaction carries");
+        assertIssue(issues, "import [wrongRecords] camt053 records [payments]");
+        assertIssue(issues, "import [wrongRecords] where [_file] filters on _file");
+        assertIssue(issues, "import [wrongRecords] where [sts] reads [sts], which a camt053 entry does not carry");
+        assertIssue(issues, "import [wrongRecords] where [status] names no value");
+        assertIssue(issues, "import [swiftRules] declares camt053 rules, but reads format mt940");
+        assertIssue(issues, "import [swiftRules] where [status] reads [status], which an mt940 statement line does not carry");
+    }
+
+    @Test
     void an_unknown_key_in_an_import_is_reported_by_name() {
         List<String> issues = issues("""
                 imports:

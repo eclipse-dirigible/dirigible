@@ -24,6 +24,7 @@ import java.util.Set;
 import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
+import org.eclipse.dirigible.components.intent.model.ImportCamt053Intent;
 import org.eclipse.dirigible.components.intent.model.ImportCsvIntent;
 import org.eclipse.dirigible.components.intent.model.ImportIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
@@ -59,6 +60,13 @@ public final class ImportSupport {
     static final String LINE = "_line";
     /** The source key of the uploaded file's name, for any format. */
     static final String FILE = "_file";
+    /** The source key of the uploaded file's SHA-256 checksum, for any format. */
+    static final String CHECKSUM = "_checksum";
+
+    /** {@code camt053: { records: entries }} - one record per {@code Ntry}, the default. */
+    static final String ENTRIES = "entries";
+    /** {@code camt053: { records: transactions }} - one record per {@code Ntry/NtryDtls/TxDtls}. */
+    static final String TRANSACTIONS = "transactions";
 
     private static final String DEFAULT_ENCODING = "UTF-8";
     private static final String DEFAULT_SEPARATOR = ",";
@@ -121,6 +129,8 @@ public final class ImportSupport {
             }
             validateEncoding(declared, format, subject, issues);
             validateCsv(declared, format, subject, issues);
+            validateCamt053(declared, format, subject, issues);
+            validateWhere(declared, format, subject, issues);
             if (into != null) {
                 validateMap(declared, format, into, subject, issues);
                 validateDuplicateKey(declared, subject, issues);
@@ -208,6 +218,84 @@ public final class ImportSupport {
         }
     }
 
+    private static void validateCamt053(ImportIntent declared, String format, String subject, List<String> issues) {
+        ImportCamt053Intent camt053 = declared.getCamt053();
+        if (camt053 == null) {
+            return;
+        }
+        if (!CAMT053.equals(format)) {
+            issues.add(subject + " declares camt053 rules, but reads format " + format);
+            return;
+        }
+        String records = camt053.getRecords();
+        if (records != null && !ENTRIES.equals(records) && !TRANSACTIONS.equals(records)) {
+            issues.add(subject + " camt053 records [" + records + "] - use entries (one record per Ntry) or transactions (one per TxDtls)");
+        }
+    }
+
+    /**
+     * {@code where: { <source key>: <value> | [<value>, ...] }} - a record is imported only when every
+     * named key holds one of its values; the rest are skipped and counted.
+     */
+    private static void validateWhere(ImportIntent declared, String format, String subject, List<String> issues) {
+        boolean header = header(declared);
+        for (Map.Entry<String, Object> entry : declared.getWhere()
+                                                       .entrySet()) {
+            String key = entry.getKey();
+            String where = subject + " where [" + key + "]";
+            if (key == null || key.isBlank()) {
+                issues.add(subject + " where names a blank key");
+                continue;
+            }
+            if (LINE.equals(key) || FILE.equals(key) || CHECKSUM.equals(key)) {
+                issues.add(where + " filters on " + key + ", which is the same for every record or only a position - filter on a key"
+                        + " the file's records carry");
+                continue;
+            }
+            validateSource(key, declared, format, header, where, issues);
+            if (whereValues(entry.getValue()).isEmpty()) {
+                issues.add(where + " names no value - a scalar, or a list of scalars any of which the record may hold");
+            }
+        }
+    }
+
+    /**
+     * The values a {@code where:} key allows, as the record's text holds them; empty when malformed.
+     */
+    private static List<String> whereValues(Object value) {
+        List<String> values = new ArrayList<>();
+        if (value instanceof List<?> list) {
+            for (Object item : list) {
+                String text = scalar(item);
+                if (text == null) {
+                    return List.of();
+                }
+                values.add(text);
+            }
+            return values;
+        }
+        String text = scalar(value);
+        return text == null ? List.of() : List.of(text);
+    }
+
+    private static String scalar(Object value) {
+        if (value instanceof String text) {
+            return text.isEmpty() ? null : text;
+        }
+        if (value instanceof Boolean flag) {
+            return flag.toString();
+        }
+        if (value instanceof Number number) {
+            return number.doubleValue() == Math.rint(number.doubleValue()) ? Long.toString(number.longValue()) : number.toString();
+        }
+        return null;
+    }
+
+    private static boolean perTransaction(ImportIntent declared) {
+        return CAMT053.equals(declared.getFormat()) && declared.getCamt053() != null && TRANSACTIONS.equals(declared.getCamt053()
+                                                                                                                    .getRecords());
+    }
+
     private static void validatePattern(String pattern, String key, String subject, List<String> issues) {
         if (pattern == null) {
             return;
@@ -239,10 +327,14 @@ public final class ImportSupport {
             }
             String source = source(entry.getValue());
             if (source == null) {
-                issues.add(subject + " map [" + entry.getKey() + "] names no source - a column, a statement key, _line or _file");
+                issues.add(
+                        subject + " map [" + entry.getKey() + "] names no source - a column, a statement key, _line, _file or _checksum");
                 continue;
             }
-            validateSource(source, format, header, subject + " map [" + entry.getKey() + "]", issues);
+            if (LINE.equals(source) || FILE.equals(source) || CHECKSUM.equals(source)) {
+                continue;
+            }
+            validateSource(source, declared, format, header, subject + " map [" + entry.getKey() + "]", issues);
         }
         for (FieldIntent field : into.getFields()) {
             if (mustBeMapped(field) && !map.containsKey(field.getName())) {
@@ -252,10 +344,8 @@ public final class ImportSupport {
         }
     }
 
-    private static void validateSource(String source, String format, boolean header, String where, List<String> issues) {
-        if (LINE.equals(source) || FILE.equals(source)) {
-            return;
-        }
+    private static void validateSource(String source, ImportIntent declared, String format, boolean header, String where,
+            List<String> issues) {
         switch (format) {
             case CSV -> {
                 if (!header && !position(source)) {
@@ -265,13 +355,16 @@ public final class ImportSupport {
             case MT940 -> {
                 if (!Mt940.KEYS.contains(source)) {
                     issues.add(where + " reads [" + source + "], which an mt940 statement line does not carry - use one of "
-                            + sorted(Mt940.KEYS) + ", _line, _file");
+                            + sorted(Mt940.KEYS) + ", _line, _file, _checksum");
                 }
             }
             default -> {
                 if (!Camt053.KEYS.contains(source)) {
                     issues.add(where + " reads [" + source + "], which a camt053 entry does not carry - use one of " + sorted(Camt053.KEYS)
-                            + ", _line, _file");
+                            + ", _line, _file, _checksum");
+                } else if (Camt053.TRANSACTION_KEYS.contains(source) && !perTransaction(declared)) {
+                    issues.add(where + " reads [" + source + "], which only a record per transaction carries - declare camt053: { records:"
+                            + " transactions }");
                 }
             }
         }
@@ -344,6 +437,9 @@ public final class ImportSupport {
             String rolePerspective = IntentEntities.compositionPerspective(entity, compositionParents);
             entry.put("roles", rolesLiteral(gates.writeGate(projectName, rolePerspective, entity)));
             entry.put("mapFields", mapFields(declared, into));
+            String whereExpression = whereExpression(declared);
+            entry.put("hasWhere", whereExpression != null);
+            entry.put("whereExpression", whereExpression == null ? "true" : whereExpression);
             List<Map<String, Object>> keyFields = new ArrayList<>();
             for (String key : declared.getDuplicateKey()) {
                 Map<String, Object> keyField = new LinkedHashMap<>();
@@ -384,6 +480,9 @@ public final class ImportSupport {
         if (FILE.equals(source)) {
             return "fileName";
         }
+        if (CHECKSUM.equals(source)) {
+            return "checksum";
+        }
         return "record.get(" + NotificationSupport.quote(source) + ")";
     }
 
@@ -409,17 +508,19 @@ public final class ImportSupport {
         String encoding = NotificationSupport.quote(declared.getEncoding() == null ? DEFAULT_ENCODING : declared.getEncoding());
         return switch (declared.getFormat()) {
             case MT940 -> "Mt940.read(ImportText.decode(content, " + encoding + "))";
-            case CAMT053 -> "Camt053.read(content)";
+            case CAMT053 -> perTransaction(declared) ? "Camt053.readTransactions(content)" : "Camt053.read(content)";
             default -> {
                 ImportCsvIntent csv = declared.getCsv() == null ? new ImportCsvIntent() : declared.getCsv();
                 Set<String> columns = new LinkedHashSet<>();
                 for (Object value : declared.getMap()
                                             .values()) {
                     String source = source(value);
-                    if (source != null && !LINE.equals(source) && !FILE.equals(source)) {
+                    if (source != null && !LINE.equals(source) && !FILE.equals(source) && !CHECKSUM.equals(source)) {
                         columns.add(source);
                     }
                 }
+                columns.addAll(declared.getWhere()
+                                       .keySet());
                 List<String> literals = columns.stream()
                                                .map(NotificationSupport::quote)
                                                .toList();
@@ -429,6 +530,29 @@ public final class ImportSupport {
                         + "))";
             }
         };
+    }
+
+    /**
+     * The {@code where:} filter as one Java boolean expression over {@code record}, or {@code null}
+     * when the import declares none. Each key must hold one of its values; a record without the key
+     * holds none of them.
+     */
+    private static String whereExpression(ImportIntent declared) {
+        List<String> conditions = new ArrayList<>();
+        for (Map.Entry<String, Object> entry : declared.getWhere()
+                                                       .entrySet()) {
+            List<String> values = whereValues(entry.getValue());
+            if (entry.getKey() == null || values.isEmpty()) {
+                continue;
+            }
+            String read = "record.get(" + NotificationSupport.quote(entry.getKey()) + ")";
+            List<String> alternatives = new ArrayList<>();
+            for (String value : values) {
+                alternatives.add(NotificationSupport.quote(value) + ".equals(" + read + ")");
+            }
+            conditions.add(alternatives.size() == 1 ? alternatives.get(0) : "(" + String.join(" || ", alternatives) + ")");
+        }
+        return conditions.isEmpty() ? null : String.join(" && ", conditions);
     }
 
     /** The Java expression building the import's value rules. */

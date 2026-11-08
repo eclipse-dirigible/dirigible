@@ -5037,13 +5037,33 @@ imports:
     format: mt940
     map: { statementId: statementId, lineNumber: lineNumber, bookedOn: valueDate, amount: amount, details: details }
     duplicateKey: [statementId, lineNumber]
+  - name: iso
+    into: StatementLine
+    format: camt053
+    camt053: { records: transactions }   # one record per TxDtls; default entries (one per Ntry)
+    where: { status: BOOK, reversal: false }   # only these records are imported; the rest are skipped
+    map: { statementId: statementId, lineNumber: lineNumber, part: transaction, amount: amount, payer: counterpartyName }
+    duplicateKey: [statementId, lineNumber, part]
 ```
 
 An `mt940` / `camt053` file is read into one record per statement line (`:61:` / `Ntry`) with these
 keys - map from them: `statementId`, `sequence`, `account`, `currency`, `lineNumber` (counts from 1 in
 each statement), `valueDate`, `bookingDate`, `mark` (`C`/`D`), `amount` (signed: a debit is negative),
 `transactionType`, `reference`, `bankReference`, `details` (`:86:` / the remittance text);
-`mt940` adds `supplementary`, `camt053` adds `counterpartyName` and `counterpartyAccount`.
+`mt940` adds `supplementary`, `camt053` adds `counterpartyName`, `counterpartyAccount`, `status` (the
+booking status: `BOOK`, `PDNG`, `INFO`), `reversal` (`true` for a reversal of an earlier entry) and
+`transactions` (how many `TxDtls` the entry books - more than 1 is a batch).
+
+A camt.053 entry booked as a batch (several payers in one credit) is ONE record of the entry's amount
+by default. `camt053: { records: transactions }` reads one record per transaction instead: each carries
+its own `amount`, `reference`, counterparty and `details`, the entry's `lineNumber`, and its 1-based
+`transaction` position in the entry (so the duplicate key becomes `[statementId, lineNumber,
+transaction]`). A batch whose parts have no amount or do not add up to the entry is refused.
+
+`where: { <key>: <value> }` imports only the records whose key holds the value (a list allows any of
+its values; every key must match): `where: { status: BOOK }` leaves pending and informational entries
+out. The skipped records are counted in the result (`skipped`), never saved. A key is a source of the
+file (a csv column, a statement key), never `_line` / `_file` / `_checksum`.
 
 Each import generates `gen/events/<module>/<Name>Import.java`: an **upload** endpoint (`POST
 .../<Name>Import/upload`, a multipart file or the raw body with `?fileName=`), gated by the entity's
@@ -5061,7 +5081,8 @@ code, not intent; mention it as a boundary when the requirement asks for matchin
 has no required to-one relation (an import fills fields, never relations); `map` names fields only,
 never the primary key, and must cover every required field without a default; a `csv` source without
 a header is a 1-based column number; an `mt940`/`camt053` source is one of the keys above (or
-`_line`/`_file`); `duplicateKey` lists mapped fields. Declare a `unique:` over the same fields too
+`_line`/`_file`/`_checksum` - the file's SHA-256, so a key can refuse the same content uploaded under
+another name); `transaction` needs `camt053: { records: transactions }`; `duplicateKey` lists mapped fields. Declare a `unique:` over the same fields too
 when two concurrent uploads of one statement must be impossible - the check runs before the write.
 
 ### outbound - the app raises an event for another system
@@ -5641,7 +5662,9 @@ or a seeded name.
 | schedule `where` `op` | `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `like` |
 | integration `method` | `GET`, `POST`, `PUT`, `PATCH`, `DELETE` |
 | import `format` | `csv`, `mt940`, `camt053` |
-| import `map` source | `csv`: a header column (or a 1-based position with `header: false`); `mt940`/`camt053`: `statementId`, `sequence`, `account`, `currency`, `lineNumber`, `valueDate`, `bookingDate`, `mark`, `amount`, `transactionType`, `reference`, `bankReference`, `details` (+ `supplementary` for mt940; `counterpartyName`, `counterpartyAccount` for camt053); any format: `_line`, `_file` |
+| import `map` source | `csv`: a header column (or a 1-based position with `header: false`); `mt940`/`camt053`: `statementId`, `sequence`, `account`, `currency`, `lineNumber`, `valueDate`, `bookingDate`, `mark`, `amount`, `transactionType`, `reference`, `bankReference`, `details` (+ `supplementary` for mt940; `counterpartyName`, `counterpartyAccount`, `status`, `reversal`, `transactions`, and `transaction` with `records: transactions`, for camt053); any format: `_line`, `_file`, `_checksum` |
+| import `camt053.records` | `entries` (default, one per `Ntry`), `transactions` (one per `TxDtls`) |
+| import `where` | `{ <source key>: <value> or [<value>, ...] }` - every key must hold one of its values |
 | entity `function` | `Document`, `DocumentItem`, `Master`, `Detail`, `List`, `Setting`, `Calendar` (reserved-and-rejected: `Board`, `Gantt`, `Timeline`) |
 | field `function` | `DocumentTitle` |
 | relation `function` | `EntityStatus` |
