@@ -128,7 +128,7 @@
         <maven-download-plugin.version>1.13.0</maven-download-plugin.version>
         <maven-dependency-plugin.version>3.11.0</maven-dependency-plugin.version>
         <maven-jar-plugin.version>3.5.1</maven-jar-plugin.version>
-        <maven-build-helper-plugin.version>3.6.2</maven-build-helper-plugin.version>
+        <maven-build-helper-plugin.version>3.7.0</maven-build-helper-plugin.version>
 
         <!-- JDT Language Server bundled at build time.
              Served from our own mirror (dirigiblelabs/jdtls-mirror releases) because
