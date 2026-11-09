@@ -309,6 +309,9 @@ final class ModelTranslations {
         for (Map<String, Object> column : asMaps(report.get("columns"))) {
             translations.put(str(column, "tId"), column.get("label"));
         }
+        for (Map<String, Object> parameter : asMaps(report.get("parameters"))) {
+            translations.put(str(parameter, "tId"), parameter.get("label"));
+        }
         Map<String, Object> widget = asMap(report.get("widget"));
         if (widget != null && widget.get("tId") != null) {
             translations.put(str(widget, "tId"), strOr(widget, "label", str(report, "label")));
@@ -559,6 +562,42 @@ final class ModelTranslations {
                 column.put("label", column.get("alias"));
             }
         }
+    }
+
+    /**
+     * Gives every report parameter a translation id and a label, in place, so the report page's
+     * parameter inputs are named from the report's catalog like its title and columns. A parameter is
+     * authored by name only ({@code fromDate}); its label is that name spelled out ("From Date") and
+     * its id is prefixed, so a parameter never shares a catalog key with a column alias. An authored id
+     * or label is kept.
+     *
+     * @param report the report model
+     */
+    static void labelReportParameters(Map<String, Object> report) {
+        for (Map<String, Object> parameter : asMaps(report.get("parameters"))) {
+            String name = strOr(parameter, "name", "");
+            if (!parameter.containsKey("tId")) {
+                String id = translationId(name);
+                parameter.put("tId", "param" + (id.isEmpty() ? id : Character.toUpperCase(id.charAt(0)) + id.substring(1)));
+            }
+            if (!parameter.containsKey("label")) {
+                parameter.put("label", spelledOut(name));
+            }
+        }
+    }
+
+    /**
+     * Spells an identifier out as words: {@code fromDate} or {@code from_date} becomes "From Date".
+     *
+     * @param name the identifier
+     * @return the words, the first capitalized
+     */
+    private static String spelledOut(String name) {
+        String words = name.replaceAll("[_-]+", " ")
+                           .replaceAll("([a-z0-9])([A-Z])", "$1 $2")
+                           .replaceAll("\\s+", " ")
+                           .trim();
+        return words.isEmpty() ? words : Character.toUpperCase(words.charAt(0)) + words.substring(1);
     }
 
     /**

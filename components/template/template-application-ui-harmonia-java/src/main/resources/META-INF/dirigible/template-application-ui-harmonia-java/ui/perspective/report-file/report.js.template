@@ -62,7 +62,7 @@ document.addEventListener('alpine:init', () => {
     reportParams: [
 #if($parameters)
 #foreach($parameter in $parameters)
-      { name: '${parameter.name}', kind: #if($parameter.typeTypescript == "Date")'date'#elseif($parameter.typeTypescript == "number")'number'#{else}'text'#end },
+      { name: '${parameter.name}', tId: '${parameter.tId}', kind: #if($parameter.typeTypescript == "Date")'date'#elseif($parameter.typeTypescript == "number")'number'#{else}'text'#end },
 #end
 #end
     ],
@@ -239,7 +239,7 @@ document.addEventListener('alpine:init', () => {
       return show(from) + ' - ' + show(to);
     },
 
-    // "fromDate" -> "From Date" for the parameter strip labels.
+    // "fromDate" -> "From Date": a parameter's label when the report's catalog has none for it.
     paramLabel(name) {
       return String(name || '')
         .replace(/[_-]+/g, ' ').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/\s+/g, ' ').trim()

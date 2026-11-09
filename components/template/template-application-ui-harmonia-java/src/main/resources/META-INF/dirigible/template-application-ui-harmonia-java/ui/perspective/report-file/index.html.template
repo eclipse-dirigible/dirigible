@@ -217,10 +217,13 @@
 #end
         <template x-for="(p, pi) in reportParams" :key="p.name">
           <div class="vbox gap-1">
-            <label x-h-label :for="'report-param-' + pi" x-text="paramLabel(p.name)"></label>
+            <!-- The label is the report's own text, from its catalog like the title and the columns. -->
+            <label x-h-label :for="'report-param-' + pi" x-text="T('$projectName:${tprefix}.t.' + p.tId, paramLabel(p.name))"></label>
             <template x-if="p.kind === 'date'">
               <div x-h-date-picker>
-                <input type="text" :id="'report-param-' + pi" :placeholder="HarmoniaFormat.dateHint()" @keydown.enter="applyFilters()" />
+                <!-- No Enter here: Enter would run the report before the picker has taken the typed day.
+                     A date is applied with Apply, as in the Filter menu. -->
+                <input type="text" :id="'report-param-' + pi" :placeholder="HarmoniaFormat.dateHint()" />
                 <button x-h-date-picker-trigger :aria-label="T('application-core:shell.report.chooseDate', 'Choose date')"></button>
                 <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="params[p.name]"></div>
               </div>

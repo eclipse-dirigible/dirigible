@@ -4794,6 +4794,11 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(statementPage.contains("limit: 500"), "a statement page should fetch the whole line structure at once");
         assertTrue(statementPage.contains("{ key: 'Code', kind: 'text'") && statementPage.contains("{ key: 'Amount', kind: 'number'"),
                 "the statement page should carry the Code / Label / Amount column metadata");
+        // The parameter inputs are named from the report's catalog, as its title and columns are (#7390).
+        assertTrue(statementPage.contains("{ name: 'fromDate', tId: 'paramFromDate'"),
+                "a report parameter should carry the catalog key of its label");
+        assertTrue(contentOf("i18n/en-US/OrderStatement.report.json").contains("\"paramFromDate\": \"From Date\""),
+                "the report's catalog should hold each parameter's label");
     }
 
     @Test
