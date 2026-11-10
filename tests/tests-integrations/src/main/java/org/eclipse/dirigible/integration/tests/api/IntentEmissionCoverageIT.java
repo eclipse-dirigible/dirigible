@@ -9612,30 +9612,24 @@ class IntentEmissionCoverageIT extends IntegrationTest {
      */
     private static String pageSortOrder(String pageScript, String componentName, String lookups, String rows, String column,
             String direction) {
-        try (Context context = Context.newBuilder("js")
-                                      .option("engine.WarnInterpreterOnly", "false")
-                                      .build()) {
-            context.eval("js",
-                    "var pages = {}; var window = this; var localStorage = { getItem: () => null };"
-                            + " var document = { addEventListener: (event, callback) => callback() };"
-                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; } };");
-            context.eval("js", classpathResource("/META-INF/dirigible/application-core/shell/js/components/pages/basePage.js"));
-            context.eval("js", pageScript);
-            return context.eval("js",
-                    "(() => { const page = pages['" + componentName + "'](); page.lookups = " + lookups + "; page.items = " + rows + ";"
-                            + " page.sortColumn = '" + column + "'; page.sortDirection = '" + direction + "';"
-                            + " return page.sortedItems.map(row => row.Id).join(','); })()")
-                          .asString();
-        }
+        return runListPage(pageScript, componentName, lookups, rows,
+                "page.sortColumn = '" + column + "'; page.sortDirection = '" + direction + "'; return page.sortedItems");
     }
-
 
     /**
      * Type {@code term} into a generated list page's search box: the primary keys of the {@code rows}
      * {@code filteredItems} keeps, comma-joined, with {@code lookups} as the loaded relation labels.
-     * The page is evaluated over the shipped {@code basePage.js}.
      */
     private static String pageSearch(String pageScript, String componentName, String lookups, String rows, String term) {
+        return runListPage(pageScript, componentName, lookups, rows, "page.searchTerm = '" + term + "'; return page.filteredItems");
+    }
+
+    /**
+     * Evaluate a generated list page over the shipped {@code basePage.js}, load {@code lookups} and
+     * {@code rows} into it, and run {@code script}, which returns a list of rows: their primary keys,
+     * comma-joined.
+     */
+    private static String runListPage(String pageScript, String componentName, String lookups, String rows, String script) {
         try (Context context = Context.newBuilder("js")
                                       .option("engine.WarnInterpreterOnly", "false")
                                       .build()) {
@@ -9647,8 +9641,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             context.eval("js", classpathResource("/META-INF/dirigible/application-core/shell/js/components/pages/basePage.js"));
             context.eval("js", pageScript);
             return context.eval("js",
-                    "(() => { const page = pages['" + componentName + "'](); page.lookups = " + lookups + "; page.items = " + rows + ";"
-                            + " page.searchTerm = '" + term + "'; return page.filteredItems.map(row => row.Id).join(','); })()")
+                    "(() => { const page = pages['" + componentName + "'](); page.lookups = " + lookups + "; page.items = " + rows + "; "
+                            + script + ".map(row => row.Id).join(','); })()")
                           .asString();
         }
     }

@@ -418,7 +418,7 @@ class ModelGenerationIT extends IntegrationTest {
             problems.add("[" + CATALOG + "] searching 'GARD' must find the row whose Category column shows 'garden' (11), got " + byLabel);
         }
         String byKey = searchMatches(page, searchRows, "2");
-        if (!"".equals(byKey)) {
+        if (!byKey.isEmpty()) {
             problems.add("[" + CATALOG + "] searching '2' must find no row - no cell shows it, it is only Category's key and an"
                     + " unlisted Id - got " + byKey);
         }

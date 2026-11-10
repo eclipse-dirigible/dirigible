@@ -231,6 +231,9 @@ class HarmoniaHierarchyTreeTableIT extends IntegrationTest {
                         function T(key, fallback) { return fallback; }
                         function e(id, name, manager) { return { Id: id, Name: name, Title: '', Manager: manager }; }
                         """);
+        // The cells - and the search, which matches what they show (#8561) - format through the shipped
+        // format.js, as in the browser.
+        context.eval("js", read(SHELL + "services/format.js"));
         context.eval("js", read(SHELL + "components/pages/basePage.js"));
         context.eval("js", page);
         context.eval("js", "__documentListeners['alpine:init'].forEach(function (fn) { fn(); }); var page = __factory();");
