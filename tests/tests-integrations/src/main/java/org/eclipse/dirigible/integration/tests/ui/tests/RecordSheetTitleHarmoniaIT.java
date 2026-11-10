@@ -74,17 +74,10 @@ class RecordSheetTitleHarmoniaIT extends UserInterfaceIntegrationTest {
             return page.state + ';rows=' + page.items.length + ';drawer=' + page.detailsOpen;
             """;
 
-    /**
-     * The open sheet's title and body: {@code <title text>;overflows=<body scrolls>;title=<px>}, or
-     * {@code no-sheet} while the title has not rendered its text.
-     */
-    private static final String SHEET_LAYOUT = """
-            var title = document.querySelector('[x-h-sheet] h2');
-            if (!title || !title.textContent.trim()) return 'no-sheet';
-            var body = title.parentElement;
-            return title.textContent.trim() + ';overflows=' + (body.scrollHeight > body.clientHeight)
-                + ';title=' + Math.round(title.getBoundingClientRect().height);
-            """;
+    private static final String TITLE = "document.querySelector('[x-h-sheet] h2')";
+
+    /** The open sheet's title text, or {@code no-sheet} while the title has not rendered its text. */
+    private static final String SHEET_TITLE = "var title = " + TITLE + "; return title && title.textContent.trim() || 'no-sheet';";
 
     @Autowired
     private IRepository repository;
@@ -109,27 +102,28 @@ class RecordSheetTitleHarmoniaIT extends UserInterfaceIntegrationTest {
 
         // Open the product in the sheet, as a click on its row does.
         Selenide.executeJavaScript(PAGE + ".selectRow(" + PAGE + ".items[0]);");
-        String layout = pollUntilRendered();
-        assertTrue(layout.contains(";overflows=true;"),
-                "the record's properties must overflow the sheet in this window, or the test proves nothing: " + layout);
-        int titleHeight = titleHeight(layout);
-        assertTrue(titleHeight > 0, "the sheet's title must keep its height while the body scrolls: " + layout);
+        String title = pollUntilRendered();
+        assertTrue(
+                Selenide.<Boolean>executeJavaScript(
+                        "var body = " + TITLE + ".parentElement; return body.scrollHeight > body.clientHeight;"),
+                "the record's properties must overflow the sheet in this window, or the test proves nothing");
+        assertTrue(titleHeight() > 0, "the sheet's title [" + title + "] must keep its height while the body scrolls");
 
         // Control: without shrink-0 the same title collapses - the window is short enough to matter.
-        Selenide.executeJavaScript("document.querySelector('[x-h-sheet] h2').classList.remove('shrink-0');");
-        assertEquals(0, titleHeight(Selenide.executeJavaScript(SHEET_LAYOUT)),
-                "without shrink-0 the title must collapse in this window, else the assertion above guards nothing");
+        Selenide.executeJavaScript(TITLE + ".classList.remove('shrink-0');");
+        assertEquals(0, titleHeight(), "without shrink-0 the title must collapse in this window, else the assertion above guards nothing");
     }
 
-    private static int titleHeight(String layout) {
-        return Integer.parseInt(layout.substring(layout.lastIndexOf("title=") + "title=".length()));
+    private static long titleHeight() {
+        return Selenide.<Number>executeJavaScript("return Math.round(" + TITLE + ".getBoundingClientRect().height);")
+                       .longValue();
     }
 
     private String pollUntilRendered() {
         long deadline = System.currentTimeMillis() + POLL_TIMEOUT_MILLIS;
         String value;
         do {
-            value = Selenide.executeJavaScript(SHEET_LAYOUT);
+            value = Selenide.executeJavaScript(SHEET_TITLE);
             if (!"no-sheet".equals(value)) {
                 return value;
             }
