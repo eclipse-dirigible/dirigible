@@ -380,7 +380,8 @@
           <span x-h-checkbox>
             <input type="checkbox" id="f_${property.name}" x-model="form.${property.name}"#if($readonly) disabled#{else}${fixedDis}#end />
           </span>
-          <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${label}')"></span>#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end</label>
+## No required marker on a checkbox (#8563): unticked is a valid answer (false), so a NOT NULL boolean is always satisfied.
+          <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${label}')"></span></label>
         </div>
 #else
         <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${label}')"></span>#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end</label>
