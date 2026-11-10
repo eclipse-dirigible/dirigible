@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.data.store.java.repository;
 
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +22,7 @@ import java.util.Set;
 import org.eclipse.dirigible.components.base.spring.BeanProvider;
 import org.eclipse.dirigible.components.data.store.java.store.JavaEntityStore;
 import org.eclipse.dirigible.sdk.db.ConcurrentWriteException;
+import org.eclipse.dirigible.sdk.db.DeleteRefusals;
 import org.eclipse.dirigible.sdk.db.DeleteRestrictionException;
 import org.eclipse.dirigible.sdk.db.TargetAgreementRule;
 import org.eclipse.dirigible.sdk.db.TargetDeleteRule;
@@ -437,6 +439,10 @@ public abstract class JavaRepository<T> {
      * never, a reference committed between the count and the delete was not seen, and both requests
      * won.
      *
+     * <p>
+     * Every rule is counted, and the refusal names every kind of record that references the record,
+     * with its count, in the language of the request (dirigible #8569) - see {@link DeleteRefusals}.
+     *
      * @param id the primary key of the record about to be deleted
      * @throws DeleteRestrictionException while a restricting reference to it exists
      */
@@ -453,12 +459,15 @@ public abstract class JavaRepository<T> {
             store.lockForUpdate(entityClass, id);
         }
         String target = entityClass.getName();
+        List<DeleteRefusals.Reference> references = new ArrayList<>();
         for (TargetDeleteRule rule : rules) {
             int referencing = rule.countRestricting(target, id);
             if (referencing > 0) {
-                throw new DeleteRestrictionException("This " + label() + " is referenced by " + referencing + " " + rule.referencingLabel()
-                        + " record(s) and cannot be deleted");
+                references.add(new DeleteRefusals.Reference(rule.referencingLabel(), rule.referencingLabelKey(), referencing));
             }
+        }
+        if (!references.isEmpty()) {
+            throw DeleteRefusals.referenced(messageCatalog(), label(), labelCatalogKey(), references);
         }
     }
 
@@ -690,6 +699,27 @@ public abstract class JavaRepository<T> {
      */
     private static List<TargetAgreementRule> agreementRules() {
         return BeanProvider.isInitialzed() ? Extensions.find(TargetAgreementRule.class) : List.of();
+    }
+
+    /**
+     * The model catalog this entity's refusals are translated in (dirigible #8569) - a generated
+     * repository answers its model's, {@code <project>:<catalog prefix>}.
+     *
+     * @return the catalog, or {@code null} - the default - for refusals in the default language only
+     */
+    protected String messageCatalog() {
+        return null;
+    }
+
+    /**
+     * The catalog key of this entity's label, through which a refusal names it in the language of the
+     * request (dirigible #8569) - a generated repository answers
+     * {@code <project>:<catalog prefix>.t.<name>}.
+     *
+     * @return the fully qualified key, or {@code null} - the default - to name it by its class
+     */
+    protected String labelCatalogKey() {
+        return null;
     }
 
     /** This entity as a refusal names it - {@code ExpenseCategoryEntity} reads "Expense Category". */

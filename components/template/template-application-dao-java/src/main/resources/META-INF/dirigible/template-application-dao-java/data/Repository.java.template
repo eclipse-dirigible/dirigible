@@ -2399,6 +2399,20 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
     }
 #end
+
+    /**
+     * The catalog this ${name}'s delete refusals are translated in, and the key of its label there - so
+     * a refusal names it, and every record referencing it, in the reader's language (dirigible #8569).
+     */
+    @Override
+    protected String messageCatalog() {
+        return ${messageCatalogJava};
+    }
+
+    @Override
+    protected String labelCatalogKey() {
+        return ${labelCatalogKeyJava};
+    }
 #if($hasTargetDeleteRules)
 
     /**
@@ -2461,6 +2475,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     @Override
     public String referencingLabel() {
         return "${entityLabel}";
+    }
+
+    @Override
+    public String referencingLabelKey() {
+        return labelCatalogKey();
     }
 
     /**

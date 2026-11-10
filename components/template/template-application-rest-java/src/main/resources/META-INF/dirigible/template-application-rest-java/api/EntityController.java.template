@@ -636,8 +636,9 @@ public class ${name}Controller {
             // A foreign-key violation means other records still reference this one - a data-integrity
             // conflict the user can act on, not a server error.
             if (isConstraintViolation(e)) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "This ${name} is referenced by other records and cannot be deleted");
+                // Answered 409 in the reader's language (#8569), as the refusal of a counted reference is.
+                throw org.eclipse.dirigible.sdk.db.DeleteRefusals.referencedByOthers(${messageCatalogJava}, "${name}",
+                        ${labelCatalogKeyJava});
             }
             throw e;
         }

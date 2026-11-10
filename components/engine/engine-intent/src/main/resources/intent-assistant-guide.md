@@ -241,9 +241,11 @@ not as an apology.
   On a relation the FK is compared by id: `CompanyBankAccount.Currency`, `Product.Type`.
 - **`whenTargetDeleted: restrict | nullify | cascade | keep` on a plain (non-composition) `manyToOne`/
   `oneToOne` = what deleting the record it points at does to the records pointing at it** (#7547).
-  - `restrict` is the DEFAULT, also when the key is absent: the delete is refused with a 409 naming the
-    referencing records and their count ("This Employee is referenced by 2 Expense Claim record(s)
-    and cannot be deleted").
+  - `restrict` is the DEFAULT, also when the key is absent: the delete is refused with ONE 409 naming
+    every kind of referencing record with its count ("This Employee is referenced by 2 Expense Claim
+    record(s), 1 Advance record(s) and cannot be deleted"), in the reader's language: the sentence is
+    `checks.deleteReferenced` / `checks.deleteReference` of the deleted entity's model catalog, the
+    entities are named by their `t.<TABLE>` labels (#8569).
   - `nullify` deletes the target and clears this relation. It is refused on a `required` relation.
   - `cascade` deletes this record together with the target, through its own repository, so its
     events, history and own rules apply.

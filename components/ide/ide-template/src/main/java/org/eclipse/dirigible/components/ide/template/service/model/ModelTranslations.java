@@ -93,6 +93,31 @@ final class ModelTranslations {
     }
 
     /**
+     * The model's own catalog, {@code <project>:<catalog prefix>} - the root a generated repository
+     * resolves its delete refusals under (dirigible #8569).
+     *
+     * @param parameters the generation parameters (project name and model file path)
+     * @return the catalog; {@code null} without a project or a file path (a bare render)
+     */
+    static String catalog(Map<String, Object> parameters) {
+        String project = str(parameters, "projectName");
+        String filePath = str(parameters, "filePath");
+        return project == null || filePath == null ? null : project + ":" + catalogPrefix(filePath);
+    }
+
+    /**
+     * The default-language texts of a delete refusal (dirigible #8569), by their key under the
+     * catalog's {@code checks}, in catalog order: the sentence naming every kind of referencing record,
+     * the way one kind is written into it, and the sentence for references no delete rule counts. They
+     * are the ones {@code org.eclipse.dirigible.sdk.db.DeleteRefusals} falls back to, written into the
+     * en-US catalog for a translator to copy into another language's.
+     */
+    static final List<Map.Entry<String, String>> DELETE_REFUSAL_MESSAGES = List.of( //
+            Map.entry("deleteReferenced", "This {entity} is referenced by {references} and cannot be deleted"), //
+            Map.entry("deleteReference", "{count} {label} record(s)"), //
+            Map.entry("deleteReferencedByOthers", "This {entity} is referenced by other records and cannot be deleted"));
+
+    /**
      * The catalog key of a check's message (issue #7611): the one the generator recorded, or - for a
      * model written before it did - the same derivation it uses, the check's kind and position in its
      * entity's list.
@@ -396,16 +421,20 @@ final class ModelTranslations {
 
     /**
      * Collects the user-facing messages of the entities' checks, business keys, picker rules (issue
-     * #7611), fixed relations (#7903) and bounded derived totals (#8096), in the default language,
-     * keyed as the generated code resolves them - so a language catalog translates a refusal, a warning
-     * or a picker hint exactly as it translates a label.
+     * #7611), fixed relations (#7903), bounded derived totals (#8096) and delete refusals (#8569), in
+     * the default language, keyed as the generated code resolves them - so a language catalog
+     * translates a refusal, a warning or a picker hint exactly as it translates a label.
      *
      * @param model the entity model
      * @return key to default-language message, in model order
      */
     static Map<String, Object> checkMessages(Map<String, Object> model) {
         Map<String, Object> messages = new LinkedHashMap<>();
-        for (Map<String, Object> entity : asMaps(model.get("entities"))) {
+        List<Map<String, Object>> entities = asMaps(model.get("entities"));
+        if (!entities.isEmpty()) {
+            DELETE_REFUSAL_MESSAGES.forEach(message -> messages.put(message.getKey(), message.getValue()));
+        }
+        for (Map<String, Object> entity : entities) {
             int index = -1;
             for (Map<String, Object> check : asMaps(entity.get("checks"))) {
                 index++;
