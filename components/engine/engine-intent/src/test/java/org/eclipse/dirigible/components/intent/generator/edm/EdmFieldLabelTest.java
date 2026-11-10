@@ -118,6 +118,40 @@ class EdmFieldLabelTest {
         assertNull(property(INVOICING, "invoicing", "Payer").get("widgetCountryLabels"));
     }
 
+    private static final String CATALOG = """
+            name: catalog
+            entities:
+              - name: Product
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: active
+                    type: boolean
+                    labels: { true: " Active ", false: Inactive }
+                  - { name: archived, type: boolean }
+            """;
+
+    /**
+     * A boolean's own words (#8564) are two scalars on its property, so the {@code .edm} keeps them and
+     * the catalog is seeded from them.
+     */
+    @Test
+    void aBooleansWordsAreItsPropertysScalars() {
+        Map<String, Object> active = property(CATALOG, "catalog", "Active");
+
+        assertEquals("Active", active.get("widgetLabelTrue"));
+        assertEquals("Inactive", active.get("widgetLabelFalse"));
+        assertTrue(EdmIntentGenerator.buildEdmXmlForTest(IntentParser.parse(CATALOG), "catalog")
+                                     .contains("widgetLabelTrue=\"Active\""));
+    }
+
+    @Test
+    void aBooleanWithoutWordsCarriesNone() {
+        Map<String, Object> archived = property(CATALOG, "catalog", "Archived");
+
+        assertNull(archived.get("widgetLabelTrue"), "a model without labels generates as before");
+        assertNull(archived.get("widgetLabelFalse"));
+    }
+
     @SuppressWarnings("unchecked")
     private static Map<String, Object> variants(String yaml, String propertyName) {
         return (Map<String, Object>) property(yaml, propertyName).get("widgetCountryLabels");

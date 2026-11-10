@@ -27,7 +27,7 @@
         <p x-h-field-description x-show="String(form.${p.name} ?? '').length >= ${p.dataLength}" x-text="T('$projectName:${tprefix}.messages.maxLengthReached', 'Maximum {{count}} characters', { count: ${p.dataLength} })"></p>
 #end
 #end
-#macro(valueOptions $property)#if($property.widgetType == "CHECKBOX")[{ value: true, text: T('$projectName:${tprefix}.defaults.yes', 'Yes') }, { value: false, text: T('$projectName:${tprefix}.defaults.no', 'No') }]#elseif(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && $property.aggregate != "true")options${property.name}#{else}null#end#end
+#macro(valueOptions $property)#if($property.widgetType == "CHECKBOX")[{ value: true, text: T('$projectName:${tprefix}.${property.booleanTrueKey}', '${property.booleanTrueTextJs}') }, { value: false, text: T('$projectName:${tprefix}.${property.booleanFalseKey}', '${property.booleanFalseTextJs}') }]#elseif(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && $property.aggregate != "true")options${property.name}#{else}null#end#end
 ## A shown value reads the record as the server answered it (loadedRecord, #8367), never the input
 ## buffer: `form` holds a date cut to the shape its input takes (13:49:11 -> 13:49). fieldDisplay reads
 ## a date-typed property as a date whatever its widget, and gives a pattern to a float only, so an
@@ -370,7 +370,7 @@
         <template x-if="isPreview">
           <div class="vbox gap-1">
             <span x-h-text.muted class="text-xs" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${label}')"></span>
-            <div class="text-sm wrap-anywhere" x-text="#if($property.widgetType == "CHECKBOX")checkboxText(loadedRecord?.${property.name})#{else}#valueDisplay($property)#end"></div>
+            <div class="text-sm wrap-anywhere" x-text="#if($property.widgetType == "CHECKBOX")checkboxText(loadedRecord?.${property.name}, ['$projectName:${tprefix}.${property.booleanTrueKey}', '${property.booleanTrueTextJs}', '$projectName:${tprefix}.${property.booleanFalseKey}', '${property.booleanFalseTextJs}'])#{else}#valueDisplay($property)#end"></div>
           </div>
         </template>
         <template x-if="!isPreview">

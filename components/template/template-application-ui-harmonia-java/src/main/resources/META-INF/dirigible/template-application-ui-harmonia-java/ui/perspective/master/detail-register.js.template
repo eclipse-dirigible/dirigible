@@ -42,6 +42,9 @@
 ## (my) surface must drop it entirely - the personal controller nulls the value on the wire, so
 ## rendering it would only show a permanently empty column the owner is not meant to see.
 #macro(sensitiveMeta $property)#if($property.sensitiveProperty), sensitive: true#end#end
+## A boolean's words (#8564): its own intent `labels:`, else the shared Yes / No - [key, word] per value,
+## so the panel's cell, the document's line table and the line dialog read it through basePage.booleanText.
+#macro(boolMeta $property)#if($property.booleanTrueKey), bool: ['$projectName:${tprefix}.${property.booleanTrueKey}', '${property.booleanTrueTextJs}', '$projectName:${tprefix}.${property.booleanFalseKey}', '${property.booleanFalseTextJs}']#end#end
 ## The authored field default (intent `defaultValue:`) as the seed for a NEW line in the item dialog.
 ## The column already carries this value as a DB DEFAULT and as the reason its required-check is
 ## skipped; seeding the dialog is what makes it VISIBLE and editable before the row is posted, so a
@@ -134,7 +137,7 @@ App.registerDetail('${masterEntity}', {
 #elseif($property.isNumberType)
     { name: '${property.name}', label: '${clabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', number: true#sensitiveMeta($property) },
 #else
-    { name: '${property.name}', label: '${clabel}'#if($property.numberStampOnIssue), documentNumber: true#end#sensitiveMeta($property) },
+    { name: '${property.name}', label: '${clabel}'#if($property.numberStampOnIssue), documentNumber: true#end#sensitiveMeta($property)#boolMeta($property) },
 #end
 #end
 #end
@@ -161,7 +164,7 @@ App.registerDetail('${masterEntity}', {
 ## can honour it.
     { name: '${property.name}', label: '${elabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', widget: 'MULTISELECT', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, multi: true, lookup: { url: '${property.widgetDropdownControllerUrl}', key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}'#if($property.widgetDropDownDocumentNumber), documentNumber: true#end, entity: '${property.widgetOptionsEntityName}', creatable: false }#optionsFilterMeta($property)#sensitiveMeta($property) },
 #else
-    { name: '${property.name}', label: '${elabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', widget: '${property.widgetType}', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, date: #if($property.isDateType)true#{else}false#end#if($property.isNumberType), number: true#end#if($property.isFloatType), float: true, pattern: '${property.formatPattern}'#end#calcMeta($property)#dependsOnMeta($property)#patternMeta($property)#maxLengthMeta($property)#normalizeMeta($property)#sensitiveMeta($property)#defaultMeta($property) },
+    { name: '${property.name}', label: '${elabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', widget: '${property.widgetType}', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, date: #if($property.isDateType)true#{else}false#end#if($property.isNumberType), number: true#end#if($property.isFloatType), float: true, pattern: '${property.formatPattern}'#end#calcMeta($property)#dependsOnMeta($property)#patternMeta($property)#maxLengthMeta($property)#normalizeMeta($property)#sensitiveMeta($property)#defaultMeta($property)#boolMeta($property) },
 #end
 #end
 #end

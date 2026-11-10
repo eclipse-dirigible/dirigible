@@ -1254,7 +1254,7 @@ document.addEventListener('alpine:init', () => {
     },
 
     // Read-only cell: a relationship cell shows its referenced label, a date cell is formatted, a
-    // checkbox shows Yes/No, otherwise the raw value (em dash when empty).
+    // checkbox shows its words (#8564), otherwise the raw value (em dash when empty).
     cellDisplay(col, row) {
       const v = row[col.name];
       if (v === null || v === undefined || v === '') return '—';
@@ -1272,7 +1272,7 @@ document.addEventListener('alpine:init', () => {
       }
       if (col.date) return this.displayDate(v);
       if (col.float) return this.displayNumber(v, col.pattern);
-      if (col.widget === 'CHECKBOX') return v ? 'Yes' : 'No';
+      if (col.widget === 'CHECKBOX') return this.booleanText(v, col.bool);
       return v;
     },
 #set($docStatusProp = "")
@@ -1690,7 +1690,7 @@ document.addEventListener('alpine:init', () => {
 #if($property.roleRead)
       if (this.canSee('${property.name}')) {
 #end
-      parts.push(this.fieldDisplay(this.record.${property.name}, '#if($property.numberStampOnIssue)DOCUMENT_NUMBER#else$!{property.widgetType}#end', '#if($property.isFloatType)$!{property.formatPattern}#end', #if($property.widgetType == "DROPDOWN" || $property.widgetType == "MULTISELECT")this.options${property.name}#{else}null#end));
+      parts.push(this.fieldDisplay(this.record.${property.name}, '#if($property.numberStampOnIssue)DOCUMENT_NUMBER#else$!{property.widgetType}#end', '#if($property.isFloatType)$!{property.formatPattern}#end', #if($property.widgetType == "DROPDOWN" || $property.widgetType == "MULTISELECT")this.options${property.name}#elseif($property.widgetType == "CHECKBOX")[{ value: true, text: T('$projectName:${tprefix}.${property.booleanTrueKey}', '${property.booleanTrueTextJs}') }, { value: false, text: T('$projectName:${tprefix}.${property.booleanFalseKey}', '${property.booleanFalseTextJs}') }]#{else}null#end));
 #if($property.roleRead)
       }
 #end

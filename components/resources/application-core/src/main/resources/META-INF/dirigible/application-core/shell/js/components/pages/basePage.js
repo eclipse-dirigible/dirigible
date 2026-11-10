@@ -609,6 +609,21 @@ function basePage() {
     },
 
     /**
+     * The word a boolean value reads as (dirigible #8564) - a list cell, a record sheet, a filter chip,
+     * an export. `words` is the property's generated [trueKey, trueText, falseKey, falseText]: its own
+     * intent `labels:` or, without them, the module's shared defaults.yes / defaults.no - translated,
+     * with the authored word as the fallback. Empty reads as every other empty value does.
+     */
+    booleanText(value, words) {
+      if (value === null || value === undefined || value === '') return window.HarmoniaFormat.value(value);
+      const [trueKey, trueText, falseKey, falseText] = words || ['', 'Yes', '', 'No'];
+      const yes = value === true || value === 1 || String(value) === 'true';
+      const key = yes ? trueKey : falseKey;
+      const text = yes ? trueText : falseText;
+      return window.T && key ? window.T(key, text) : text;
+    },
+
+    /**
      * Ask the entity's controller which fields it withholds from this caller. Failure leaves every
      * field visible: the values are stripped server-side either way, so the worst case is an empty
      * column the user can see is empty - never a field silently hidden from someone entitled to it.

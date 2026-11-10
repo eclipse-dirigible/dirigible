@@ -172,6 +172,8 @@ function detailPanel(def, masterId, master) {
       }
       if (col.documentNumber) return String(window.HarmoniaFormat.documentNumber(v));
       if (col.float) return this.formatNumber(v, col.pattern);
+      // A boolean reads as its words, never as true / false (#8564).
+      if (col.bool) return this.booleanText(v, col.bool);
       return this.displayValue(v, col.date);
     },
 

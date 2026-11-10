@@ -451,6 +451,23 @@ final class ModelTranslations {
         return messages;
     }
 
+    /** The catalog key suffix of a boolean property's word for {@code true} (#8564). */
+    static final String BOOLEAN_TRUE_SUFFIX = "_TRUE";
+
+    /** The catalog key suffix of a boolean property's word for {@code false} (#8564). */
+    static final String BOOLEAN_FALSE_SUFFIX = "_FALSE";
+
+    /**
+     * Whether a property declares its own words for both boolean values (intent {@code labels:},
+     * #8564).
+     *
+     * @param property the property
+     * @return true when both {@code widgetLabelTrue} and {@code widgetLabelFalse} are set
+     */
+    static boolean hasBooleanLabels(Map<String, Object> property) {
+        return ModelValues.truthy(property, "widgetLabelTrue") && ModelValues.truthy(property, "widgetLabelFalse");
+    }
+
     /**
      * Collects the labels of a property list, preferring the perspective label, then the widget label,
      * then the property name.
@@ -471,6 +488,12 @@ final class ModelTranslations {
                     texts.put(dataName, property.get("widgetLabel"));
                 } else if (ModelValues.truthy(property, "name")) {
                     texts.put(dataName, property.get("name"));
+                }
+                // A boolean's own words for its two values (#8564), next to its label - only both,
+                // because the views fall back to the shared Yes / No for a property without them.
+                if (hasBooleanLabels(property)) {
+                    texts.put(dataName + BOOLEAN_TRUE_SUFFIX, property.get("widgetLabelTrue"));
+                    texts.put(dataName + BOOLEAN_FALSE_SUFFIX, property.get("widgetLabelFalse"));
                 }
             }
             collectMasterPropertyLabels(asMap(property.get("masterProperties")), texts);

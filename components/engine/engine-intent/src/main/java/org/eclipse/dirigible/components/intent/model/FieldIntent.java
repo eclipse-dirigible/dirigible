@@ -47,6 +47,12 @@ public class FieldIntent {
      * humanized name) remains the fallback for a country that declares none.
      */
     private Map<String, String> countryLabels = new LinkedHashMap<>();
+    /**
+     * Optional words a {@code boolean} field's two values read as - {@code labels: { true: Active,
+     * false: Inactive }} - in the default language, as {@link #label} is (dirigible #8564). Null when
+     * not declared, and the value then reads as the shared Yes / No.
+     */
+    private Map<String, String> labels;
     private boolean required;
     private boolean primaryKey;
     private boolean generated;
@@ -317,6 +323,14 @@ public class FieldIntent {
 
     public void setCountryLabels(Map<String, String> countryLabels) {
         this.countryLabels = countryLabels == null ? new LinkedHashMap<>() : countryLabels;
+    }
+
+    public Map<String, String> getLabels() {
+        return labels;
+    }
+
+    public void setLabels(Map<String, String> labels) {
+        this.labels = labels;
     }
 
     public boolean isRequired() {

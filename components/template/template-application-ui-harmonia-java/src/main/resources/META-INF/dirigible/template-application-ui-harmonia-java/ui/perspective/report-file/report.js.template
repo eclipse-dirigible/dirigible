@@ -417,6 +417,10 @@ document.addEventListener('alpine:init', () => {
       // hash-style DecimalFormat literal, because two hashes start a Velocity line comment and
       // swallow the rest of the line (unterminated string in the generated file).
       if (meta && meta.kind === 'number') return this.displayNumber(v, '0');
+      // A boolean column reads as Yes / No, as its chart axis does - never the raw true / false (#8564).
+      if (meta && meta.kind === 'boolean' && v != null && v !== '') {
+        return (v === true || v === 'true' || v === 1) ? T('application-core:shell.report.true', 'Yes') : T('application-core:shell.report.false', 'No');
+      }
       return v;
     },
 

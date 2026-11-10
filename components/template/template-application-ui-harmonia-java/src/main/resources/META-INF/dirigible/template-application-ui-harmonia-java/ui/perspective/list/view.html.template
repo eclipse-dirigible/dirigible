@@ -8,6 +8,9 @@
 ## unrestricted property. The redaction applied to every response stays the authoritative one; this
 ## only keeps a control that could never show or save a value off the page.
 #macro(visibleGate $property)#if($property.roleRead) x-show="canSee('${property.name}')"#end#end
+## A boolean's words (#8564): its own intent `labels:`, else the shared Yes / No - [key, word] per value,
+## resolved by the shared basePage.booleanText.
+#macro(booleanWords $property)['$projectName:${tprefix}.${property.booleanTrueKey}', '${property.booleanTrueTextJs}', '$projectName:${tprefix}.${property.booleanFalseKey}', '${property.booleanFalseTextJs}']#end
 <div x-data="${name}ListPage" class="vbox size-full" @keydown.escape.window="if (selected) closeDetails()">
 
   <div x-h-toolbar data-variant="transparent">
@@ -152,6 +155,8 @@
                   <td x-h-table-cell class="text-right"#visibleGate($property) x-text="formatNumber(row.${property.name}, '${property.formatPattern}')"></td>
 #elseif($property.numberStampOnIssue)
                   <td x-h-table-cell#visibleGate($property) x-text="window.HarmoniaFormat.documentNumber(row.${property.name})"></td>
+#elseif($property.booleanTrueKey)
+                  <td x-h-table-cell#visibleGate($property) x-text="booleanText(row.${property.name}, #booleanWords($property))"></td>
 #else
                   <td x-h-table-cell#visibleGate($property) x-text="displayValue(row.${property.name})"></td>
 #end
@@ -252,6 +257,8 @@
             <span x-text="formatNumber(selected?.${property.name}, '${property.formatPattern}')"></span>
 #elseif($property.numberStampOnIssue)
             <span x-text="window.HarmoniaFormat.documentNumber(selected?.${property.name})"></span>
+#elseif($property.booleanTrueKey)
+            <span x-text="booleanText(selected?.${property.name}, #booleanWords($property))"></span>
 #else
             <span x-text="displayValue(selected?.${property.name}, $isDate)"></span>
 #end

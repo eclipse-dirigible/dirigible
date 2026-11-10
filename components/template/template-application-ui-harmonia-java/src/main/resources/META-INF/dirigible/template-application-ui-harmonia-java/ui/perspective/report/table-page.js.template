@@ -77,7 +77,7 @@ document.addEventListener('alpine:init', () => {
     // Column metadata for printing (label + numeric alignment/format), from the report model.
     printColumns: [
 #foreach($property in $properties)
-      { key: '${property.name}', label: #if($property.widgetLabel)'${property.widgetLabelJs}'#else'${property.name}'#end#if($property.isNumberType), number: true#end#if($property.isFloatType), float: true, pattern: '${property.formatPattern}'#end },
+      { key: '${property.name}', label: #if($property.widgetLabel)'${property.widgetLabelJs}'#else'${property.name}'#end#if($property.isNumberType), number: true#end#if($property.isFloatType), float: true, pattern: '${property.formatPattern}'#end#if($property.booleanTrueKey), bool: ['$projectName:${tprefix}.${property.booleanTrueKey}', '${property.booleanTrueTextJs}', '$projectName:${tprefix}.${property.booleanFalseKey}', '${property.booleanFalseTextJs}']#end },
 #end
     ],
 
@@ -90,7 +90,8 @@ document.addEventListener('alpine:init', () => {
         const rows = Array.isArray(data) ? data : [];
         if (!rows.length) return;
         const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const cell = (col, row) => col.float ? this.displayNumber(row[col.key], col.pattern) : row[col.key];
+        const cell = (col, row) => col.float ? this.displayNumber(row[col.key], col.pattern)
+          : (col.bool ? this.booleanText(row[col.key], col.bool) : row[col.key]);
         const th = this.printColumns.map(c => '<th class="' + (c.number ? 'text-right' : '') + '">' + esc(c.label) + '</th>').join('');
         const body = rows.map(r => '<tr>' + this.printColumns.map(c => '<td class="' + (c.number ? 'text-right' : '') + '">' + esc(cell(c, r)) + '</td>').join('') + '</tr>').join('');
         // Fixed table layout + column-count font scaling so a wide table fits the page instead of

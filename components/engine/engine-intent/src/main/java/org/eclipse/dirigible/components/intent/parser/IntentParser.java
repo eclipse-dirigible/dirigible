@@ -384,6 +384,7 @@ public final class IntentParser {
         List<String> issues = new ArrayList<>();
         UnknownKeyValidator.collect(tree, issues);
         collectEmptyArrivalValues(tree, issues);
+        collectBooleanLabelWords(tree, issues);
         // Statuses may be referenced by their seeded NAME; resolve them to ids on the raw tree so the
         // typed mapping, every validator and every generator keep seeing the integers they always saw.
         StatusSymbolResolver.resolve(tree);
@@ -5211,6 +5212,9 @@ public final class IntentParser {
                                                       .isEmpty()) {
                     validateLabels("entity [" + name + "] field [" + field.getName() + "]", field, issues);
                 }
+                if (field.getLabels() != null) {
+                    validateBooleanLabels("entity [" + name + "] field [" + field.getName() + "]", field, issues);
+                }
                 if (field.getTranslatable() != null) {
                     validateTranslatable(entity, "entity [" + name + "] field [" + field.getName() + "]", field, issues);
                 }
@@ -8494,6 +8498,62 @@ public final class IntentParser {
         }
         if (!isBlank(field.getPattern())) {
             issues.add(subject + " declares both `format` and `pattern` - they set the same validation, so declare one");
+        }
+    }
+
+    /** The two values a boolean field's {@code labels} name (#8564). */
+    private static final List<String> BOOLEAN_LABEL_VALUES = List.of("true", "false");
+
+    /**
+     * A boolean field's own words for its two values (#8564): a boolean field only - the words name its
+     * {@code true} and {@code false} - and both of them, because a value without a word would read as
+     * the shared Yes / No beside a field-specific word for the other. Any other key is refused by the
+     * unknown-key walk.
+     */
+    private static void validateBooleanLabels(String subject, FieldIntent field, List<String> issues) {
+        if (!"boolean".equalsIgnoreCase(field.getType())) {
+            issues.add(subject + " declares `labels` - they name a boolean's two values, so they apply to a boolean field only - got type ["
+                    + field.getType() + "]");
+            return;
+        }
+        for (String value : BOOLEAN_LABEL_VALUES) {
+            if (isBlank(field.getLabels()
+                             .get(value))) {
+                issues.add(subject + " `labels` has no word for [" + value
+                        + "] - declare both values, e.g. `labels: { true: Active, false: Inactive }`");
+            }
+        }
+    }
+
+    /**
+     * A word in a boolean field's {@code labels} that YAML reads as a boolean itself (#8564): unquoted,
+     * {@code Yes}, {@code No}, {@code On}, {@code Off}, {@code True} and {@code False} load as
+     * {@code true} / {@code false}, and the typed mapping would turn them into the lower-case words -
+     * so the author is asked to quote them, on the raw tree, where the spelling is still known to be
+     * lost.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     * @param issues the collecting issue list
+     */
+    private static void collectBooleanLabelWords(Object tree, List<String> issues) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("entities") instanceof List<?> entities)) {
+            return;
+        }
+        for (Object entityNode : entities) {
+            if (!(entityNode instanceof Map<?, ?> entity) || !(entity.get("fields") instanceof List<?> fields)) {
+                continue;
+            }
+            for (Object fieldNode : fields) {
+                if (!(fieldNode instanceof Map<?, ?> field) || !(field.get("labels") instanceof Map<?, ?> labels)) {
+                    continue;
+                }
+                for (Map.Entry<?, ?> word : labels.entrySet()) {
+                    if (word.getValue() instanceof Boolean) {
+                        issues.add("entity [" + entity.get("name") + "] field [" + field.get("name") + "] `labels` word for ["
+                                + word.getKey() + "] reads as a YAML boolean - quote it, e.g. `" + word.getKey() + ": \"Yes\"`");
+                    }
+                }
+            }
         }
     }
 

@@ -33,7 +33,7 @@
         <p x-h-field-description x-show="String(form.${p.name} ?? '').length >= ${p.dataLength}" x-text="T('$projectName:${tprefix}.messages.maxLengthReached', 'Maximum {{count}} characters', { count: ${p.dataLength} })"></p>
 #end
 #end
-#macro(valueOptions $property)#if($property.widgetType == "CHECKBOX")[{ value: true, text: T('$projectName:${tprefix}.defaults.yes', 'Yes') }, { value: false, text: T('$projectName:${tprefix}.defaults.no', 'No') }]#elseif(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && $property.aggregate != "true")options${property.name}#{else}null#end#end
+#macro(valueOptions $property)#if($property.widgetType == "CHECKBOX")[{ value: true, text: T('$projectName:${tprefix}.${property.booleanTrueKey}', '${property.booleanTrueTextJs}') }, { value: false, text: T('$projectName:${tprefix}.${property.booleanFalseKey}', '${property.booleanFalseTextJs}') }]#elseif(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && $property.aggregate != "true")options${property.name}#{else}null#end#end
 ## A shown value reads the record as the server answered it (`record`, #8367), never the input buffer:
 ## `form` holds a date cut to the shape its input takes (13:49:11 -> 13:49). The gate only tests for
 ## emptiness, so it may read the form.

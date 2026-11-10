@@ -863,6 +863,28 @@ final class ModelParameterProcessor {
     }
 
     /**
+     * The words a boolean property's value reads as wherever a generated view shows it (#8564): the
+     * catalog key and the default-language word of each value, which the Harmonia templates pass to
+     * {@code T()} - the property's own {@code labels:} ({@code t.<COLUMN>_TRUE} / {@code _FALSE}, the
+     * authored word as the fallback) or, without them, the shared {@code defaults.yes} /
+     * {@code defaults.no}. Set on a boolean property only, so a template tests
+     * {@code $property.booleanTrueKey} to know it holds one.
+     *
+     * @param property the property, its {@code dataTypeTypescript} already derived
+     */
+    private static void resolveBooleanWords(Map<String, Object> property) {
+        if (!"boolean".equals(property.get("dataTypeTypescript")) && !"CHECKBOX".equals(str(property, "widgetType"))) {
+            return;
+        }
+        boolean own = ModelTranslations.hasBooleanLabels(property);
+        String dataName = str(property, "dataName");
+        property.put("booleanTrueKey", own ? "t." + dataName + ModelTranslations.BOOLEAN_TRUE_SUFFIX : "defaults.yes");
+        property.put("booleanTrueTextJs", own ? JsLiterals.escape(str(property, "widgetLabelTrue")) : "Yes");
+        property.put("booleanFalseKey", own ? "t." + dataName + ModelTranslations.BOOLEAN_FALSE_SUFFIX : "defaults.no");
+        property.put("booleanFalseTextJs", own ? JsLiterals.escape(str(property, "widgetLabelFalse")) : "No");
+    }
+
+    /**
      * Derives one property's parameters.
      *
      * @param property the property
@@ -933,6 +955,7 @@ final class ModelParameterProcessor {
         property.put("dataTypeJava", dataType.java());
         property.put("dataTypeTypescript", dataType.typescript());
         property.put("dataTypeJavaClass", ModelDataTypes.resolveJavaClass(dataType.javaClass(), str(property, "auditType")));
+        resolveBooleanWords(property);
 
         if (Boolean.TRUE.equals(property.get("dataPrimaryKey"))) {
             if (!(entity.get("primaryKeys") instanceof List)) {
@@ -2300,6 +2323,10 @@ final class ModelParameterProcessor {
                 column.put("float", Boolean.TRUE);
                 column.put("pattern", strOr(property, "widgetPattern", DEFAULT_FLOAT_PATTERN));
             }
+        } else if ("boolean".equals(dataType.typescript())) {
+            // Read as this application's Yes / No (#8564): the source's own words live in its catalog,
+            // which a register of another project cannot read.
+            column.put("bool", Boolean.TRUE);
         }
         if (isTrue(property, "sensitiveProperty")) {
             // Marked, not dropped: a register renders on the power surfaces, where the owning entity's

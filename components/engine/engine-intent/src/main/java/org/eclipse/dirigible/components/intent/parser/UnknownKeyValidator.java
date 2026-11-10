@@ -110,7 +110,10 @@ final class UnknownKeyValidator {
             Map.entry("GenerateChildIntent#forEach", Set.of("entity", "days", "model", "match")),
             Map.entry("ResolveIntent#event", Set.of("onCreate", "onUpdate", "when")),
             Map.entry("ResolveIntent#between", Set.of("start", "end", "value")), Map.entry("ResolveIntent#found", Set.of("setStatus")),
-            Map.entry("ResolveIntent#notFound", Set.of("setStatus")), Map.entry("ResolveIntent#ambiguous", Set.of("setStatus")));
+            Map.entry("ResolveIntent#notFound", Set.of("setStatus")), Map.entry("ResolveIntent#ambiguous", Set.of("setStatus")),
+            // A boolean field's words for its two values (#8564): YAML reads the keys as booleans, and
+            // they are compared by their text.
+            Map.entry("FieldIntent#labels", Set.of("true", "false")));
 
     private UnknownKeyValidator() {}
 
