@@ -8,7 +8,6 @@ import org.eclipse.dirigible.sdk.platform.Documentation;
 import org.eclipse.dirigible.sdk.http.Body;
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.http.Controller;
-import org.eclipse.dirigible.sdk.db.DeleteRefusals;
 import org.eclipse.dirigible.sdk.http.Delete;
 import org.eclipse.dirigible.sdk.http.Get;
 import org.eclipse.dirigible.sdk.http.PathParam;
@@ -136,8 +135,7 @@ public class InvoiceLineController {
             // conflict the user can act on, not a server error.
             if (isConstraintViolation(e)) {
                 // Answered 409 in the reader's language (#8569), as the refusal of a counted reference is.
-                throw DeleteRefusals.referencedByOthers("sample-intent-money:money-model", "InvoiceLine",
-                        "sample-intent-money:money-model.t.MONEY_INVOICE_LINE");
+                throw repository.referencedByOthers();
             }
             throw e;
         }

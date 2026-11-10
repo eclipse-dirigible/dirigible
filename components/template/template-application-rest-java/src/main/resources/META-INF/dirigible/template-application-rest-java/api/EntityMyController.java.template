@@ -58,7 +58,6 @@ import org.eclipse.dirigible.sdk.platform.Documentation;
 import org.eclipse.dirigible.sdk.http.Body;
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.http.Controller;
-import org.eclipse.dirigible.sdk.db.DeleteRefusals;
 import org.eclipse.dirigible.sdk.http.Delete;
 import org.eclipse.dirigible.sdk.http.Get;
 import org.eclipse.dirigible.sdk.http.PathParam;
@@ -426,8 +425,7 @@ public class ${name}MyController {
         } catch (RuntimeException e) {
             if (isConstraintViolation(e)) {
                 // Answered 409 in the reader's language (#8569), as the refusal of a counted reference is.
-                throw DeleteRefusals.referencedByOthers(${messageCatalogJava}, "${name}",
-                        ${labelCatalogKeyJava});
+                throw repository.referencedByOthers();
             }
             throw e;
         }

@@ -107,6 +107,20 @@ class JavaRepositoryDeleteRefusalTest {
         assertNull(refusal.getMessageKey());
     }
 
+    /**
+     * A reference no delete rule counts - the controller's foreign-key fallback - is refused through
+     * the repository's own catalog.
+     */
+    @Test
+    void aReferenceNoRuleCountsIsRefusedThroughTheRepositorysCatalog() {
+        ProductRepository repository = new ProductRepository(store, "products:products-model", "products:products-model.t.PRODUCT");
+
+        DeleteRestrictionException refusal = repository.referencedByOthers();
+
+        assertEquals("This Product is referenced by other records and cannot be deleted", refusal.getMessage());
+        assertEquals("products:products-model.checks.deleteReferencedByOthers", refusal.getMessageKey());
+    }
+
     private static TargetDeleteRule rule(String label, String labelKey, int count) {
         TargetDeleteRule rule = mock(TargetDeleteRule.class);
         when(rule.countRestricting(TARGET, 2)).thenReturn(count);

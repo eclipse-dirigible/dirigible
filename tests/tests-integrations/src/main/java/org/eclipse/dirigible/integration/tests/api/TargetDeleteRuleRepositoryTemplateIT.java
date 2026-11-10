@@ -109,9 +109,6 @@ class TargetDeleteRuleRepositoryTemplateIT {
         parameters.put("javaPerspectiveName", "expenses");
         parameters.put("pkPropertyName", "Id");
         parameters.put("dataSource", "DefaultDB");
-        // What ModelParameterProcessor hands every entity for its translated delete refusals (#8569).
-        parameters.put("messageCatalogJava", "\"expenses:expenses-model\"");
-        parameters.put("labelCatalogKeyJava", "\"expenses:expenses-model.t.EXPENSE_CLAIM\"");
         List<Object> properties = new ArrayList<>(List.of(primaryKey()));
         if (withRules) {
             properties.add(relation("Category", "restrict", CATEGORY));

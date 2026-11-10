@@ -722,6 +722,17 @@ public abstract class JavaRepository<T> {
         return null;
     }
 
+    /**
+     * The refusal of a delete the database blocked on a reference no delete rule counts (dirigible
+     * #8569): a generated controller answers such a foreign-key violation with it, in the language of
+     * the request, through this repository's own catalog.
+     *
+     * @return the refusal, to throw
+     */
+    public DeleteRestrictionException referencedByOthers() {
+        return DeleteRefusals.referencedByOthers(messageCatalog(), label(), labelCatalogKey());
+    }
+
     /** This entity as a refusal names it - {@code ExpenseCategoryEntity} reads "Expense Category". */
     private String label() {
         String name = entityClass.getSimpleName();

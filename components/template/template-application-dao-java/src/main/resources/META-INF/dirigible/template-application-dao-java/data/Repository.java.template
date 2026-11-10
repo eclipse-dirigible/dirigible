@@ -2399,6 +2399,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
     }
 #end
+#if($messageCatalogJava)
 
     /**
      * The catalog this ${name}'s delete refusals are translated in, and the key of its label there - so
@@ -2413,6 +2414,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     protected String labelCatalogKey() {
         return ${labelCatalogKeyJava};
     }
+#end
 #if($hasTargetDeleteRules)
 
     /**
