@@ -409,6 +409,23 @@ class ModelGenerationIT extends IntegrationTest {
             problems.add("[" + CATALOG + "] sorting a column of LocalDate arrays ascending must order the rows chronologically"
                     + " (2025-07-16, 2025-10-06, 2025-10-16, 2025-12-06 -> 4,2,1,3), got " + chronological);
         }
+        // The search box matches what a relation column shows, not the key behind it (dirigible #8561):
+        // the label finds its rows, case-insensitively, and a key no cell shows finds nothing.
+        String searchRows = "[{ Id: 10, Name: 'Hammer', Category: 1 }, { Id: 11, Name: 'Rake', Category: 2 },"
+                + " { Id: 12, Name: 'Atlas', Category: 3 }]";
+        String byLabel = searchMatches(page, searchRows, "GARD");
+        if (!"11".equals(byLabel)) {
+            problems.add("[" + CATALOG + "] searching 'GARD' must find the row whose Category column shows 'garden' (11), got " + byLabel);
+        }
+        String byKey = searchMatches(page, searchRows, "2");
+        if (!"".equals(byKey)) {
+            problems.add("[" + CATALOG + "] searching '2' must find no row - no cell shows it, it is only Category's key and an"
+                    + " unlisted Id - got " + byKey);
+        }
+        String byName = searchMatches(page, searchRows, "atl");
+        if (!"12".equals(byName)) {
+            problems.add("[" + CATALOG + "] searching 'atl' must still find the row whose Name shows 'Atlas' (12), got " + byName);
+        }
         return problems;
     }
 
@@ -461,6 +478,35 @@ class ModelGenerationIT extends IntegrationTest {
      * @throws IOException when the shipped basePage.js is missing
      */
     private static String sortOrder(String page, String column, String rows, String direction) throws IOException {
+        return runListPage(page, rows, "page.sortColumn = '" + column + "'; page.sortDirection = '" + direction + "';"
+                + " return page.sortedItems.map(row => row.Id).join(',');");
+    }
+
+    /**
+     * Types a search term into the rendered list page's search box, with the Category relation's labels
+     * loaded.
+     *
+     * @param page the rendered ItemListPage.js
+     * @param rows the rows, as a JavaScript array literal
+     * @param term the search term
+     * @return the ids of the rows the search keeps, comma-joined
+     * @throws IOException when the shipped basePage.js is missing
+     */
+    private static String searchMatches(String page, String rows, String term) throws IOException {
+        return runListPage(page, rows, "page.searchTerm = '" + term + "'; return page.filteredItems.map(row => row.Id).join(',');");
+    }
+
+    /**
+     * Evaluates the rendered list page over the shipped {@code basePage.js}, loads the Category
+     * relation's labels and the rows into it, and runs a script against it.
+     *
+     * @param page the rendered ItemListPage.js
+     * @param rows the rows, as a JavaScript array literal
+     * @param script the body run against {@code page}, returning a string
+     * @return what the script returns
+     * @throws IOException when the shipped basePage.js is missing
+     */
+    private static String runListPage(String page, String rows, String script) throws IOException {
         String basePage;
         try (InputStream in = ModelGenerationIT.class.getResourceAsStream(BASE_PAGE)) {
             if (in == null) {
@@ -476,14 +522,14 @@ class ModelGenerationIT extends IntegrationTest {
             context.eval("js",
                     "var pages = {}; var window = this; var localStorage = { getItem: () => null };"
                             + " var document = { addEventListener: (event, callback) => callback() };"
-                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; } };");
+                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; } };"
+                            + " window.HarmoniaFormat = { value: (v) => String(v) };");
             context.eval("js", basePage);
             context.eval("js", page);
             return context.eval("js",
                     "(() => { const page = pages['ItemListPage']();"
                             + " page.lookups = { Category: { 1: 'Tools', 2: 'garden', 3: 'Books' } };" + " page.items = " + rows + ";"
-                            + " page.sortColumn = '" + column + "'; page.sortDirection = '" + direction + "';"
-                            + " return page.sortedItems.map(row => row.Id).join(','); })()")
+                            + script + " })()")
                           .asString();
         }
     }
