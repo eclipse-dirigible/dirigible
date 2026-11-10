@@ -8,6 +8,7 @@ import org.eclipse.dirigible.sdk.platform.Documentation;
 import org.eclipse.dirigible.sdk.http.Body;
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.http.Controller;
+import org.eclipse.dirigible.sdk.db.DeleteRefusals;
 import org.eclipse.dirigible.sdk.http.Delete;
 import org.eclipse.dirigible.sdk.http.Get;
 import org.eclipse.dirigible.sdk.http.PathParam;
@@ -134,8 +135,9 @@ public class InvoiceLineController {
             // A foreign-key violation means other records still reference this one - a data-integrity
             // conflict the user can act on, not a server error.
             if (isConstraintViolation(e)) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "This InvoiceLine is referenced by other records and cannot be deleted");
+                // Answered 409 in the reader's language (#8569), as the refusal of a counted reference is.
+                throw DeleteRefusals.referencedByOthers("sample-intent-money:money-model", "InvoiceLine",
+                        "sample-intent-money:money-model.t.MONEY_INVOICE_LINE");
             }
             throw e;
         }
