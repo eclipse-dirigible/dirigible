@@ -9613,7 +9613,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     private static String pageSortOrder(String pageScript, String componentName, String lookups, String rows, String column,
             String direction) {
         return runListPage(pageScript, componentName, lookups, rows,
-                "page.sortColumn = '" + column + "'; page.sortDirection = '" + direction + "'; return page.sortedItems");
+                "page.sortColumn = '" + column + "'; page.sortDirection = '" + direction + "';", "sortedItems");
     }
 
     /**
@@ -9621,15 +9621,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
      * {@code filteredItems} keeps, comma-joined, with {@code lookups} as the loaded relation labels.
      */
     private static String pageSearch(String pageScript, String componentName, String lookups, String rows, String term) {
-        return runListPage(pageScript, componentName, lookups, rows, "page.searchTerm = '" + term + "'; return page.filteredItems");
+        return runListPage(pageScript, componentName, lookups, rows, "page.searchTerm = '" + term + "';", "filteredItems");
     }
 
     /**
      * Evaluate a generated list page over the shipped {@code basePage.js}, load {@code lookups} and
-     * {@code rows} into it, and run {@code script}, which returns a list of rows: their primary keys,
-     * comma-joined.
+     * {@code rows} into it, run {@code setup} against {@code page}, and answer the primary keys of the
+     * rows its {@code rowsGetter} returns, comma-joined.
      */
-    private static String runListPage(String pageScript, String componentName, String lookups, String rows, String script) {
+    private static String runListPage(String pageScript, String componentName, String lookups, String rows, String setup,
+            String rowsGetter) {
         try (Context context = Context.newBuilder("js")
                                       .option("engine.WarnInterpreterOnly", "false")
                                       .build()) {
@@ -9642,7 +9643,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             context.eval("js", pageScript);
             return context.eval("js",
                     "(() => { const page = pages['" + componentName + "'](); page.lookups = " + lookups + "; page.items = " + rows + "; "
-                            + script + ".map(row => row.Id).join(','); })()")
+                            + setup + " return page." + rowsGetter + ".map(row => row.Id).join(','); })()")
                           .asString();
         }
     }
