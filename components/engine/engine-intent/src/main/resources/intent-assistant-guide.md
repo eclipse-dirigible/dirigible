@@ -1997,7 +1997,12 @@ what stops an unresolvable path from minting a task nobody can see.
 **Nobody approves their own work.** A user task whose form offers `approve` cannot be claimed or
 completed by whoever completed another user task of the same process instance - the submitter gets a
 403 "You cannot approve your own <record>". Name the steps yourself with `separateFrom: submit` (or a
-list; `separateFrom: []` turns the default off). The deployment's `.settings` `access.extraRoles`
+list; `separateFrom: []` turns the default off). When the record is submitted by being created - a
+leave request, an expense claim, a timesheet with no submit task - add `separateFrom: personal` (alone
+or in the list, e.g. `[personal, review]`): it keeps the record's owner (the trigger entity's
+`personal: true` relation, as `assignee: personal` resolves it) off the task, whoever created the
+record, so an approval falling back to a group the owner is in cannot be taken by them. It needs that
+`personal: true` relation and is not part of the default. The deployment's `.settings` `access.extraRoles`
 (a multitenant app's `Owner` / `User` - every tenant member) are never a task's candidates unless the
 step says `extraRoles: true`, so route a submit task with `assignee: personal` and an approval with a
 relation walk rather than a role nobody in the tenant holds.
