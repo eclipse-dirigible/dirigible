@@ -101,6 +101,15 @@ public class BpmProviderFlowable implements BpmProvider {
      */
     public static final String COMPLETED_BY_PREFIX = "__completedBy_";
 
+    /**
+     * The reserved {@code taskSeparateFrom} name for the record's owner, kept out of a task even when
+     * no task before it was theirs (issue #8560).
+     */
+    private static final String SEPARATE_FROM_PERSONAL = "personal";
+
+    /** The process variable a trigger seeds with the identity value of the record's owner. */
+    private static final String PERSONAL_USER_VARIABLE = "__personalUser";
+
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(BpmProviderFlowable.class);
 
@@ -733,7 +742,9 @@ public class BpmProviderFlowable implements BpmProvider {
     /**
      * Why the user may not claim or complete the task, or null when they may: its user task declares
      * {@code taskSeparateFrom} - the tasks of the same instance whose completer it keeps out, so a
-     * document's submitter never approves it - and the user completed one of them (issue #8111).
+     * document's submitter never approves it - and the user completed one of them (issue #8111), or the
+     * list names {@code personal} and the user is the record's owner, as its trigger seeded them into
+     * {@code __personalUser} (issue #8560).
      *
      * @param taskId the task id
      * @param user the user about to act on it
@@ -749,13 +760,17 @@ public class BpmProviderFlowable implements BpmProvider {
         }
         Map<String, Object> completers = processEngine.getRuntimeService()
                                                       .getVariables(task.getProcessInstanceId(), separateFrom.stream()
-                                                                                                             .map(key -> COMPLETED_BY_PREFIX
-                                                                                                                     + key)
+                                                                                                             .map(BpmProviderFlowable::separatedUserVariable)
                                                                                                              .toList());
         if (!completers.containsValue(user)) {
             return null;
         }
         return property(userTask, TASK_SEPARATION_MESSAGE_PROPERTY).orElse("You cannot complete a task separated from one you completed");
+    }
+
+    /** The process variable holding the user a {@code taskSeparateFrom} entry keeps out. */
+    private static String separatedUserVariable(String separateFrom) {
+        return SEPARATE_FROM_PERSONAL.equals(separateFrom) ? PERSONAL_USER_VARIABLE : COMPLETED_BY_PREFIX + separateFrom;
     }
 
     /**

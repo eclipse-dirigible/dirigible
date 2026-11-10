@@ -46,6 +46,7 @@ class BpmServiceCompleteTaskTest {
     private static final String DECLARING_PROCESS = "declaring";
     private static final String HAND_AUTHORED_PROCESS = "hand-authored";
     private static final String SEPARATED_PROCESS = "separated";
+    private static final String OWNER_SEPARATED_PROCESS = "owner-separated";
 
     /** The user {@code UserFacade} names outside a request - who every completion here is made by. */
     private static final String USER = "guest";
@@ -67,6 +68,26 @@ class BpmServiceCompleteTaskTest {
                         <endEvent id="end"></endEvent>
                         <sequenceFlow id="flow_start_submit" sourceRef="start" targetRef="submit"></sequenceFlow>
                         <sequenceFlow id="flow_submit_approve" sourceRef="submit" targetRef="approve"></sequenceFlow>
+                        <sequenceFlow id="flow_approve_end" sourceRef="approve" targetRef="end"></sequenceFlow>
+                      </process>
+                    </definitions>
+                    """;
+
+    /** An approval its record's owner may not give, with no submit task before it (issue #8560). */
+    private static final String OWNER_SEPARATED_PROCESS_XML =
+            """
+                    <?xml version="1.0" encoding="UTF-8"?>
+                    <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flowable="http://flowable.org/bpmn" targetNamespace="http://www.flowable.org/processdef">
+                      <process id="owner-separated" name="Owner Separated" isExecutable="true">
+                        <startEvent id="start"></startEvent>
+                        <userTask id="approve" name="Approve" flowable:candidateGroups="manager">
+                          <extensionElements>
+                            <flowable:property name="taskSeparateFrom" value="personal"></flowable:property>
+                            <flowable:property name="taskSeparationMessage" value="You cannot approve your own leave request"></flowable:property>
+                          </extensionElements>
+                        </userTask>
+                        <endEvent id="end"></endEvent>
+                        <sequenceFlow id="flow_start_approve" sourceRef="start" targetRef="approve"></sequenceFlow>
                         <sequenceFlow id="flow_approve_end" sourceRef="approve" targetRef="end"></sequenceFlow>
                       </process>
                     </definitions>
@@ -128,6 +149,7 @@ class BpmServiceCompleteTaskTest {
         deploy(DECLARING_PROCESS, DECLARING_PROCESS_XML);
         deploy(HAND_AUTHORED_PROCESS, HAND_AUTHORED_PROCESS_XML);
         deploy(SEPARATED_PROCESS, SEPARATED_PROCESS_XML);
+        deploy(OWNER_SEPARATED_PROCESS, OWNER_SEPARATED_PROCESS_XML);
 
         BpmProviderFlowable bpmProvider =
                 new BpmProviderFlowable(mock(IRepository.class), tenantContext(), mock(FlowableArtefactsValidator.class), engine);
@@ -212,6 +234,44 @@ class BpmServiceCompleteTaskTest {
         ProcessInstance instance = start(SEPARATED_PROCESS, Map.of());
         engine.getTaskService()
               .complete(taskOf(instance), Map.of("__completedBy_submit", "requester"));
+
+        bpmService.completeTask(taskOf(instance), null);
+
+        assertEquals(0, engine.getRuntimeService()
+                              .createProcessInstanceQuery()
+                              .processInstanceId(instance.getId())
+                              .count());
+    }
+
+    @Test
+    void theRecordsOwnerMayNeitherClaimNorCompleteAnApprovalSeparatedFromPersonal() {
+        ProcessInstance instance = start(OWNER_SEPARATED_PROCESS, Map.of("__personalUser", USER));
+        String approve = taskOf(instance);
+
+        ResponseStatusException claim = assertThrows(ResponseStatusException.class, () -> bpmService.claimTask(approve, USER));
+        ResponseStatusException completion = assertThrows(ResponseStatusException.class, () -> bpmService.completeTask(approve, null));
+
+        assertEquals(HttpStatus.FORBIDDEN, claim.getStatusCode());
+        assertEquals("You cannot approve your own leave request", claim.getReason());
+        assertEquals(HttpStatus.FORBIDDEN, completion.getStatusCode());
+        assertEquals(approve, taskOf(instance), "the approval stays open for another member of the group");
+    }
+
+    @Test
+    void anApprovalSeparatedFromPersonalIsOpenToAnyoneButTheOwner() {
+        ProcessInstance instance = start(OWNER_SEPARATED_PROCESS, Map.of("__personalUser", "requester"));
+
+        bpmService.completeTask(taskOf(instance), null);
+
+        assertEquals(0, engine.getRuntimeService()
+                              .createProcessInstanceQuery()
+                              .processInstanceId(instance.getId())
+                              .count());
+    }
+
+    @Test
+    void anApprovalSeparatedFromAnOwnerWithoutIdentityRefusesNobody() {
+        ProcessInstance instance = start(OWNER_SEPARATED_PROCESS, Map.of());
 
         bpmService.completeTask(taskOf(instance), null);
 

@@ -256,6 +256,8 @@ public final class IntentParser {
     private static final Set<String> NOTIFY_ATTACHMENTS = Set.of("print", "recordprint");
     /** The {@code attach} value that attaches the fan-out's anchor record rather than the row. */
     private static final String ATTACH_RECORD_PRINT = "recordPrint";
+    /** The reserved {@code separateFrom} name for the trigger record's personal owner (issue #8560). */
+    private static final String SEPARATE_FROM_PERSONAL = "personal";
     /**
      * The reserved placeholder scope that addresses a fan-out's <b>anchor record</b>. Inside a fan-out
      * a bare path resolves against the ROW (unchanged); {@code {record.<field>}} is the only way to
@@ -9104,7 +9106,7 @@ public final class IntentParser {
             validateParallelSteps(process, issues);
             validateTaskFormActions(process, model, issues);
             validateTaskAssigneePaths(process, triggerEntity, byName, model, issues);
-            validateTaskSeparation(process, issues);
+            validateTaskSeparation(process, model, issues);
         }
     }
 
@@ -9112,9 +9114,12 @@ public final class IntentParser {
      * A user task's {@code separateFrom} names the user tasks of the same process whose completer may
      * not complete it (a name or a list, {@code []} for none), and {@code extraRoles: true} lets the
      * deployment's {@code access.extraRoles} take it (issue #8111). A name that is not another user
-     * task would separate the task from nothing, so it is refused rather than dropped.
+     * task would separate the task from nothing, so it is refused rather than dropped. The reserved
+     * name {@code personal} is the record's owner, resolved as for {@code assignee: personal} - who the
+     * record is for, kept off its approval when no task before it was theirs (issue #8560) - and is
+     * refused when the trigger entity has no personal relation to resolve that owner from.
      */
-    private static void validateTaskSeparation(ProcessIntent process, List<String> issues) {
+    private static void validateTaskSeparation(ProcessIntent process, IntentModel model, List<String> issues) {
         Set<String> userTasks = new HashSet<>();
         for (StepIntent step : process.getSteps()) {
             if ((step.getKind() == null || "userTask".equals(step.getKind())) && step.getName() != null) {
@@ -9137,11 +9142,25 @@ public final class IntentParser {
             for (Object name : names) {
                 String other = String.valueOf(name)
                                      .trim();
-                if (other.equals(step.getName()) || !userTasks.contains(other)) {
+                if (SEPARATE_FROM_PERSONAL.equals(other)) {
+                    if (!triggerHasPersonalOwner(process, model)) {
+                        issues.add(subject + " separateFrom names [" + SEPARATE_FROM_PERSONAL
+                                + "] but the trigger entity has no personal relation to resolve the owner from");
+                    }
+                } else if (other.equals(step.getName()) || !userTasks.contains(other)) {
                     issues.add(subject + " separateFrom names [" + other + "], which is not another user task of the process");
                 }
             }
         }
+    }
+
+    /** Whether the process's trigger entity has a {@code personal: true} relation naming its owner. */
+    private static boolean triggerHasPersonalOwner(ProcessIntent process, IntentModel model) {
+        String triggerEntity = triggerEntityName(process);
+        EntityIntent target = triggerEntity == null ? null : entityByNameInsensitive(model, triggerEntity);
+        return target != null && target.getRelations() != null && target.getRelations()
+                                                                        .stream()
+                                                                        .anyMatch(RelationIntent::isPersonal);
     }
 
     /**
@@ -9462,12 +9481,7 @@ public final class IntentParser {
             if ("personal".equals(assignee)) {
                 // The per-user assignment resolves through the trigger entity's personal owner - the
                 // trigger listener seeds __personalUser from the identity mapping at start time.
-                String triggerEntity = triggerEntityName(process);
-                EntityIntent target = triggerEntity == null ? null : entityByNameInsensitive(model, triggerEntity);
-                boolean hasPersonal = target != null && target.getRelations() != null && target.getRelations()
-                                                                                               .stream()
-                                                                                               .anyMatch(RelationIntent::isPersonal);
-                if (!hasPersonal) {
+                if (!triggerHasPersonalOwner(process, model)) {
                     issues.add("process [" + process.getName() + "] step [" + step.getName()
                             + "] declares assignee: personal but the trigger entity has no personal relation to resolve the owner from");
                 }
