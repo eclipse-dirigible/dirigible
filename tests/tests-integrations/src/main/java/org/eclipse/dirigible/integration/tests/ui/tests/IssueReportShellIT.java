@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
+import static com.codeborne.selenide.Condition.attribute;
 import static com.codeborne.selenide.Condition.text;
 import static com.codeborne.selenide.Condition.visible;
 import static com.codeborne.selenide.Selenide.$;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.openqa.selenium.By;
 
 import com.codeborne.selenide.Selenide;
+import com.codeborne.selenide.SelenideElement;
 
 /**
  * "Report an issue" in a real browser (#7948): a failed request's id reaches the report dialog of
@@ -30,6 +32,10 @@ import com.codeborne.selenide.Selenide;
  * <p>
  * Only a browser catches the failure mode of the shared fragments: a binding that throws inside the
  * dialog mounted with x-html aborts Alpine's walk with no server-side symptom.
+ * <p>
+ * An attachment of the issue is a link the browser fetches itself (#8580): the shell's router takes
+ * a click on any same-origin link for a navigation unless the link says otherwise, and the
+ * {@code download} attribute does not, so the click used to open "Page not found" on both pages.
  * <p>
  * A distribution may ship without the issues engine (#7991). The branding script states whether it
  * is deployed, and a shell told it is not leaves out the Issues entry and "Report an issue", and
@@ -42,6 +48,8 @@ class IssueReportShellIT extends UserInterfaceIntegrationTest {
     private static final String MONITORING_SHELL = "/services/web/monitoring/index.html";
 
     private static final String SUBJECT = "Saving fails with a reference";
+
+    private static final String ATTACHMENT = "screenshot.txt";
 
     private static final Duration RENDER = Duration.ofSeconds(30);
 
@@ -93,12 +101,30 @@ class IssueReportShellIT extends UserInterfaceIntegrationTest {
                                                                                               .click();
         $(By.id("issues-page-detail")).shouldHave(text(SUBJECT), RENDER);
 
+        // a file the reporter attaches is downloaded by the browser, not routed by the shell
+        Selenide.executeJavaScript(
+                "Alpine.store('issues').attach(new File(['a screenshot'], '" + ATTACHMENT + "', { type: 'text/plain' }));");
+        assertAttachmentLinkIsLeftToTheBrowser("issues-page-detail");
+
         // the operator of the instance finds it on the support desk
         ide.openPath(MONITORING_SHELL);
         browser.clickOnElementById("monitoring-nav-issues");
         $(By.xpath("//*[@id='monitoring-issues-page']//span[normalize-space(text())='" + SUBJECT + "']")).shouldBe(visible, RENDER)
                                                                                                          .click();
         $(By.id("monitoring-issues-detail")).shouldHave(text(requestId), RENDER);
+        assertAttachmentLinkIsLeftToTheBrowser("monitoring-issues-detail");
+    }
+
+    /** Clicks the attachment's link in the given detail pane: the shell's route must not change. */
+    private static void assertAttachmentLinkIsLeftToTheBrowser(String detailId) {
+        SelenideElement link =
+                $(By.xpath("//*[@id='" + detailId + "']//a[@download][.//span[normalize-space(text())='" + ATTACHMENT + "']]")).shouldBe(
+                        visible, RENDER);
+        String route = Selenide.executeJavaScript("return window.location.hash;");
+        link.click();
+        assertEquals(route, Selenide.executeJavaScript("return window.location.hash;"), "the shell routed the click on an attachment");
+        $(By.xpath("//*[normalize-space(text())='Page not found']")).shouldNotBe(visible);
+        link.shouldHave(attribute("data-native"));
     }
 
     @Test
