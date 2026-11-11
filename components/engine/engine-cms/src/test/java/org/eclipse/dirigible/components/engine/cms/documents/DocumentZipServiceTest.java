@@ -75,6 +75,7 @@ class DocumentZipServiceTest {
             documents = zipService.packTree("/", "files/", path -> path.equals("/__EXPORTS") || path.startsWith("/__EXPORTS/"), zip);
             // the archive is the caller's: it can still add entries of its own
             zip.putNextEntry(new ZipEntry("manifest.json"));
+            zip.write("{}".getBytes(StandardCharsets.UTF_8));
             zip.closeEntry();
         }
 

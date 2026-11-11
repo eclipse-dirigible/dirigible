@@ -192,7 +192,7 @@ class TenantExportIT extends IntegrationTest {
                           .asLong();
         JsonNode completed = awaitCompleted(owner, ann, alphaExport);
         String archiveName = completed.get("archiveName")
-                                      .asText();
+                                      .asString();
         assertTrue(archiveName.startsWith("tenant-" + alpha.getId() + "-data-export-") && archiveName.endsWith(".zip"), archiveName);
         assertNotNull(completed.get("expiresAt"));
 
@@ -238,7 +238,7 @@ class TenantExportIT extends IntegrationTest {
 
         JsonNode manifest = json.readTree(entries.get("manifest.json"));
         assertEquals(alpha.getId(), manifest.get("tenantId")
-                                            .asText());
+                                            .asString());
         assertEquals(1, manifest.get("files")
                                 .asInt());
         assertEquals(1, manifest.get("tables")
@@ -424,7 +424,7 @@ class TenantExportIT extends IntegrationTest {
                   .pollInterval(Duration.ofSeconds(1))
                   .until(() -> {
                       String status = export(session, person, id).get("status")
-                                                                 .asText();
+                                                                 .asString();
                       if ("FAILED".equals(status)) {
                           throw new AssertionError("export [" + id + "] failed: " + export(session, person, id));
                       }

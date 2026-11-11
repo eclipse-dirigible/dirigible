@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -186,7 +187,9 @@ class TenantExportArchives {
     Stored pack(long exportId, String tenantId, Instant requestedAt) throws IOException {
         CmisSession session = CmisSessionFactory.getSession();
         String name = archiveName(tenantId, requestedAt);
-        File temp = File.createTempFile("tenant-export-" + exportId + "-", ".zip");
+        // readable by this process's user only: the archive is the tenant's whole data
+        File temp = Files.createTempFile("tenant-export-" + exportId + "-", ".zip")
+                         .toFile();
         try {
             try (OutputStream out = new BufferedOutputStream(new FileOutputStream(temp))) {
                 write(out, tenantId, Instant.now(), workFiles(folder(session, workFolder(exportId))));

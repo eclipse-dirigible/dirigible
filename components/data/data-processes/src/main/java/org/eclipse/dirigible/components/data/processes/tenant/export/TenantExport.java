@@ -28,7 +28,7 @@ import jakarta.persistence.Table;
  */
 @Entity
 @Table(name = "DIRIGIBLE_TENANT_EXPORTS",
-        indexes = {@Index(name = "IDX_DIRIGIBLE_TENANT_EXPORTS_TENANT", columnList = "TENEXPORT_TENANT_ID")})
+        indexes = {@Index(name = "IX_DIRIGIBLE_TENANT_EXPORTS_TENEXPORT_TENANT_ID", columnList = "TENEXPORT_TENANT_ID")})
 public class TenantExport {
 
     /** The longest error kept. */
