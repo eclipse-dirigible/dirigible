@@ -89,7 +89,7 @@
           <p class="text-sm whitespace-pre-wrap wrap-anywhere" x-show="$store.issues.selected?.description" x-text="$store.issues.selected?.description || ''"></p>
           <div class="hbox gap-2 flex-wrap" x-show="$store.issues.attachmentsOf(null).length">
             <template x-for="file in $store.issues.attachmentsOf(null)" :key="file.id">
-              <a x-h-button data-variant="outline" data-size="sm" :href="$store.issues.downloadUrl(file)" download>
+              <a x-h-button data-variant="outline" data-size="sm" :href="$store.issues.downloadUrl(file)" download data-native>
                 <svg role="presentation" x-h-lucide data-lucide="paperclip"></svg><span x-text="file.fileName"></span>
               </a>
             </template>
