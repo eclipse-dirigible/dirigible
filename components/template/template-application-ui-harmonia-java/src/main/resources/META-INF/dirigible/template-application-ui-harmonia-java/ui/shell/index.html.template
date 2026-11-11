@@ -179,7 +179,7 @@
 #if($hasSettings)
                 <li x-h-sidebar-menu-item>
 #else
-                <li x-h-sidebar-menu-item x-show="($store.tenantUsers && $store.tenantUsers.visible) || ($store.printTemplates && $store.printTemplates.visible)" x-cloak>
+                <li x-h-sidebar-menu-item x-show="($store.tenantUsers && $store.tenantUsers.visible) || ($store.printTemplates && $store.printTemplates.visible) || ($store.tenantExport && $store.tenantExport.visible)" x-cloak>
 #end
                   <button x-h-sidebar-menu-nav :data-active="isActive('/settings')" @click="navigate('/settings')">
                     <svg role="presentation" x-h-lucide data-lucide="settings"></svg><span x-text="T('application-core:shell.nav.settings', 'Settings')"></span>
@@ -689,6 +689,7 @@
     <script src="/services/web/application-core/shell/js/stores/about.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/tenantUsers.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/printTemplates.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/tenantExport.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/notifications.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/theme.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/locale.js" defer></script>

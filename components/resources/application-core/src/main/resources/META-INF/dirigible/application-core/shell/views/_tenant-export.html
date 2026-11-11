@@ -1,0 +1,130 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!--
+  Settings > Data export - the ONE copy of the section, mounted through x-html on the shared
+  tenantExport store (shell/js/stores/tenantExport.js) by the application shell's Settings and by
+  every generated application shell. Every binding goes through $store.tenantExport. Stable ids and
+  attributes for the browser tests: tenant-export-page, tenant-export-start, tenant-export-table (rows
+  tr[data-export][data-status], [data-running], [data-failure], a[data-action="download"],
+  button[data-action="delete"]), tenant-export-delete-dialog, tenant-export-delete-confirm.
+-->
+<div id="tenant-export-page" class="vbox gap-4 p-4">
+  <div class="hbox items-center gap-2">
+    <div class="vbox gap-1 flex-1 min-w-0">
+      <span class="text-lg font-medium" x-text="$store.tenantExport.t('shell.tenantExport.title', 'Data export')"></span>
+      <span x-h-text.muted class="text-sm" x-text="$store.tenantExport.t('shell.tenantExport.description', 'Download everything this tenant holds as one archive: the application\'s data and every stored document.')"></span>
+    </div>
+    <button x-h-button data-variant="outline" data-size="icon-sm" type="button" @click="$store.tenantExport.load()"
+            :aria-label="$store.tenantExport.t('shell.tenantExport.refresh', 'Refresh')">
+      <svg role="presentation" x-h-lucide data-lucide="refresh-cw"></svg>
+    </button>
+    <button x-h-button data-variant="primary" type="button" id="tenant-export-start" @click="$store.tenantExport.start()"
+            :disabled="$store.tenantExport.busy || $store.tenantExport.running || $store.tenantExport.atLimit">
+      <svg role="presentation" x-h-lucide data-lucide="archive"></svg>
+      <span x-text="$store.tenantExport.t('shell.tenantExport.start', 'Export all data')"></span>
+    </button>
+  </div>
+
+  <div x-show="$store.tenantExport.loaded && $store.tenantExport.atLimit" x-cloak x-h-alert data-variant="warning" data-limit>
+    <div x-h-alert-description x-text="$store.tenantExport.limitMessage()"></div>
+  </div>
+
+  <div x-show="$store.tenantExport.error" x-cloak x-h-alert data-variant="warning" role="alert">
+    <div x-h-alert-description x-text="$store.tenantExport.error"></div>
+  </div>
+
+  <div x-show="$store.tenantExport.loaded && $store.tenantExport.items.length === 0" x-cloak x-h-info-page>
+    <div x-h-info-page-header>
+      <div x-h-info-page-media.icon><svg role="presentation" x-h-lucide data-lucide="archive"></svg></div>
+      <div x-h-info-page-title x-text="$store.tenantExport.t('shell.tenantExport.empty', 'Nothing has been exported yet')"></div>
+      <div x-h-info-page-description x-text="$store.tenantExport.t('shell.tenantExport.emptyHint', 'Use Export all data to make the first archive.')"></div>
+    </div>
+  </div>
+
+  <div x-show="$store.tenantExport.items.length > 0" x-h-table-container.scroll>
+    <table id="tenant-export-table" x-h-table data-borders="rows">
+      <thead x-h-table-header>
+        <tr x-h-table-row>
+          <th x-h-table-head scope="col" x-text="$store.tenantExport.t('shell.tenantExport.requestedColumn', 'Requested')"></th>
+          <th x-h-table-head scope="col" x-text="$store.tenantExport.t('shell.tenantExport.statusColumn', 'Status')"></th>
+          <th x-h-table-head scope="col" x-text="$store.tenantExport.t('shell.tenantExport.sizeColumn', 'Size')"></th>
+          <th x-h-table-head scope="col" x-text="$store.tenantExport.t('shell.tenantExport.expiresColumn', 'Expires')"></th>
+          <th x-h-table-head scope="col" :aria-label="$store.tenantExport.t('shell.tenantExport.actions', 'Actions')"></th>
+        </tr>
+      </thead>
+      <tbody x-h-table-body>
+        <template x-for="item in $store.tenantExport.items" :key="item.id">
+          <tr x-h-table-row :data-export="item.id" :data-status="item.status">
+            <td x-h-table-cell>
+              <div class="vbox gap-1">
+                <span class="text-sm" x-text="item.requestedBy || ''"></span>
+                <span x-h-text.muted class="text-xs" x-text="$store.tenantExport.time(item.requestedAt)"></span>
+              </div>
+            </td>
+            <td x-h-table-cell>
+              <div class="vbox gap-1">
+                <template x-if="$store.tenantExport.isRunning(item)">
+                  <div class="hbox items-center gap-2" data-running>
+                    <span x-h-spinner></span>
+                    <span x-h-text.muted class="text-sm" x-text="$store.tenantExport.statusLabel(item)"></span>
+                  </div>
+                </template>
+                <template x-if="!$store.tenantExport.isRunning(item)">
+                  <span x-h-badge :data-variant="$store.tenantExport.statusVariant(item)" x-text="$store.tenantExport.statusLabel(item)"></span>
+                </template>
+                <template x-if="$store.tenantExport.isFailed(item) && item.error">
+                  <span x-h-text.muted class="text-xs" data-failure x-text="item.error"></span>
+                </template>
+              </div>
+            </td>
+            <td x-h-table-cell class="text-sm whitespace-nowrap" x-text="$store.tenantExport.size(item.sizeBytes)"></td>
+            <td x-h-table-cell class="text-sm" x-text="$store.tenantExport.time(item.expiresAt)"></td>
+            <td x-h-table-cell>
+              <div class="hbox items-center justify-end gap-2">
+                <a x-show="$store.tenantExport.isCompleted(item)" x-h-button data-variant="outline" data-size="sm" data-action="download"
+                   :href="$store.tenantExport.downloadUrl(item)" :download="item.archiveName || true" data-native>
+                  <svg role="presentation" x-h-lucide data-lucide="download"></svg>
+                  <span x-text="$store.tenantExport.t('shell.tenantExport.download', 'Download')"></span>
+                </a>
+                <button x-h-button data-variant="transparent" data-size="icon-sm" type="button" data-action="delete"
+                        :disabled="$store.tenantExport.busy || $store.tenantExport.isRunning(item)" @click="$store.tenantExport.askRemove(item)"
+                        :aria-label="$store.tenantExport.t('shell.tenantExport.delete', 'Delete')"
+                        :title="$store.tenantExport.t('shell.tenantExport.delete', 'Delete')">
+                  <svg role="presentation" x-h-lucide data-lucide="trash-2"></svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+
+  <div x-h-dialog-overlay :data-open="!!$store.tenantExport.removeTarget" @click.self="$store.tenantExport.closeRemove()"
+       @keydown.escape.window="$store.tenantExport.removeTarget && $store.tenantExport.closeRemove()">
+    <div x-h-dialog id="tenant-export-delete-dialog">
+      <div x-h-dialog-header>
+        <h2 x-h-dialog-title x-text="$store.tenantExport.t('shell.tenantExport.deleteTitle', 'Delete export')"></h2>
+        <p x-h-dialog-description
+           x-text="$store.tenantExport.t('shell.tenantExport.deleteQuestion', 'Delete the export from {{at}}? Its archive can no longer be downloaded.', { at: $store.tenantExport.removeTarget ? $store.tenantExport.time($store.tenantExport.removeTarget.requestedAt) : '' })"></p>
+      </div>
+      <div x-h-dialog-footer>
+        <button x-h-button data-variant="outline" type="button" @click="$store.tenantExport.closeRemove()"
+                x-text="$store.tenantExport.t('shell.tenantExport.cancel', 'Cancel')"></button>
+        <button x-h-button data-variant="negative" type="button" id="tenant-export-delete-confirm" :disabled="$store.tenantExport.busy"
+                @click="$store.tenantExport.remove()" x-text="$store.tenantExport.t('shell.tenantExport.delete', 'Delete')"></button>
+      </div>
+    </div>
+  </div>
+</div>

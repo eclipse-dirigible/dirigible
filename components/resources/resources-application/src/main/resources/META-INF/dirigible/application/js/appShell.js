@@ -613,6 +613,7 @@ document.addEventListener('alpine:init', () => {
               if (item.id === 'print-templates') this.loadPrintTemplates();
               if (item.id === 'document-numbering') this.loadNumbering();
               if (item.id === 'tenant-users') this.loadTenantUsers();
+              if (item.id === 'tenant-export') this.loadTenantExport();
             }
           }
         } else {
@@ -752,6 +753,12 @@ document.addEventListener('alpine:init', () => {
       if (store) store.load();
     },
 
+    /** Reads the Data export section's rows - the store may be absent on a page that predates it. */
+    loadTenantExport() {
+      const store = window.Alpine && Alpine.store('tenantExport');
+      if (store) store.load();
+    },
+
     /** Reads the Print Templates section's catalogue - the store may be absent on a page that predates it. */
     loadPrintTemplates() {
       const store = window.Alpine && Alpine.store('printTemplates');
@@ -784,6 +791,7 @@ document.addEventListener('alpine:init', () => {
         if (item.id === 'print-templates') this.loadPrintTemplates();
         if (item.id === 'document-numbering') this.loadNumbering();
         if (item.id === 'tenant-users') this.loadTenantUsers();
+        if (item.id === 'tenant-export') this.loadTenantExport();
       }
     },
 
@@ -797,6 +805,7 @@ document.addEventListener('alpine:init', () => {
       if (id === 'print-templates') return { id: 'print-templates' };
       if (id === 'document-numbering') return { id: 'document-numbering' };
       if (id === 'tenant-users') return { id: 'tenant-users' };
+      if (id === 'tenant-export') return { id: 'tenant-export' };
       return (this.settingsItems || []).find(i => i.id === id) || null;
     },
 

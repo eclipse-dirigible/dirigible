@@ -244,6 +244,7 @@
       "tenantUsers": "Users",
       "tenant": "Tenant",
       "printTemplates": "Print Templates",
+      "tenantExport": "Data export",
       "numberingHint": "Each document series' prefix, total width and next value for this tenant. A number is the prefix plus the sequence zero-padded to the total width; sequences run continuously - to restart numbering (e.g. each January), set the prefix and the next value here.",
       "numberingForbidden": "You do not have permission to view or change document numbering.",
       "numberingFailed": "Something went wrong. Please try again.",
@@ -352,6 +353,40 @@
         "NO_CHANGE": "This person already has exactly these roles.",
         "LAST_OWNER": "This person is the only owner of the tenant. Make someone else an owner first.",
         "USER_NOT_FOUND": "This person is no longer in the list. Reload it."
+      }
+    },
+    "tenantExport": {
+      "title": "Data export",
+      "description": "Download everything this tenant holds as one archive: the application's data and every stored document.",
+      "limit": "This tenant keeps up to {{count}} exports. Delete one to make a new one.",
+      "deleteTitle": "Delete export",
+      "deleteQuestion": "Delete the export from {{at}}? Its archive can no longer be downloaded.",
+      "cancel": "Cancel",
+      "refresh": "Refresh",
+      "start": "Export all data",
+      "started": "The export has started",
+      "empty": "Nothing has been exported yet",
+      "emptyHint": "Use Export all data to make the first archive.",
+      "requestedColumn": "Requested",
+      "statusColumn": "Status",
+      "sizeColumn": "Size",
+      "expiresColumn": "Expires",
+      "actions": "Actions",
+      "download": "Download",
+      "delete": "Delete",
+      "status": {
+        "REQUESTED": "Requested",
+        "RUNNING": "Running",
+        "COMPLETED": "Ready",
+        "FAILED": "Failed"
+      },
+      "error": {
+        "RUNNING": "An export is still running. Wait for it to finish.",
+        "EXPIRED": "This export has expired. Start a new one.",
+        "GONE": "This export is no longer in the list. Reload it.",
+        "FORBIDDEN": "Only an owner of this tenant can export its data.",
+        "SESSION": "Your session has expired. Reload the page to sign in again.",
+        "FAILED": "Something went wrong. Please try again."
       }
     },
     "printTemplates": {

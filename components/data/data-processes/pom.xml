@@ -40,6 +40,16 @@
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-engine-cms</artifactId>
         </dependency>
+        <!-- The tenant export: who asks, as the signed-in person's token names them -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-core-tenants</artifactId>
+        </dependency>
+        <!-- The tenant export: which tables the applications declare -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-data-structures</artifactId>
+        </dependency>
     </dependencies>
 
     <properties>

@@ -27,6 +27,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
+import org.eclipse.dirigible.components.base.tenant.TenantUserForgetParticipant;
 import org.eclipse.dirigible.components.tenants.domain.Tenant;
 import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
 import org.eclipse.dirigible.components.tenants.service.TenantService;
@@ -48,6 +49,7 @@ class TenantUserReplicaServiceTest {
     private TenantUserRepository users;
     private TenantService tenants;
     private UserService platformUsers;
+    private TenantUserForgetParticipant forgetParticipant;
     private TenantUserReplicaService service;
 
     @BeforeEach
@@ -62,7 +64,9 @@ class TenantUserReplicaServiceTest {
         when(defaultTenant.getId()).thenReturn(DEFAULT_TENANT);
         when(tenants.findById(DEFAULT_TENANT)).thenReturn(Optional.of(mock(Tenant.class)));
         // A mock manager runs every TransactionTemplate callback inline.
-        service = new TenantUserReplicaService(users, tenants, platformUsers, defaultTenant, mock(PlatformTransactionManager.class));
+        forgetParticipant = mock(TenantUserForgetParticipant.class);
+        service = new TenantUserReplicaService(users, tenants, platformUsers, List.of(forgetParticipant), defaultTenant,
+                mock(PlatformTransactionManager.class));
     }
 
     @Test
@@ -276,6 +280,13 @@ class TenantUserReplicaServiceTest {
         // the role rows go through the entity's cascade, which TenantUserSnapshotApiIT asserts on the table
         verify(users).deleteByTenantIdAndEmail(TENANT, "ann@example.com");
         verify(platformUsers).deleteUsersByTenantIdAndUsernameIgnoreCase(TENANT, "ann@example.com");
+    }
+
+    @Test
+    void forgetTellsEveryParticipantTheNormalizedEmail() {
+        service.forget(TENANT, " Ann@Example.com ");
+
+        verify(forgetParticipant).forget(TENANT, "ann@example.com");
     }
 
     @Test

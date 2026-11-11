@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 
 import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
 import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
+import org.eclipse.dirigible.components.base.tenant.TenantUserForgetParticipant;
 import org.eclipse.dirigible.components.tenants.domain.Tenant;
 import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
 import org.eclipse.dirigible.components.tenants.service.TenantService;
@@ -66,6 +67,9 @@ class TenantUserReplicaService {
     /** The tenants' platform users, which an erasure deletes with the replica row. */
     private final UserService platformUsers;
 
+    /** What other modules keep about a person, which an erasure removes with the replica row. */
+    private final List<TenantUserForgetParticipant> forgetParticipants;
+
     /** The default tenant's id, which has no replica. */
     private final String defaultTenantId;
 
@@ -81,15 +85,18 @@ class TenantUserReplicaService {
      * @param users the replica
      * @param tenants the tenants
      * @param platformUsers the tenants' platform users
+     * @param forgetParticipants what other modules keep about a person
      * @param defaultTenant the default tenant
      * @param transactionManager the SystemDB transaction manager
      */
     TenantUserReplicaService(TenantUserRepository users, TenantService tenants, UserService platformUsers,
+            List<TenantUserForgetParticipant> forgetParticipants,
             @DefaultTenant org.eclipse.dirigible.components.base.tenant.Tenant defaultTenant,
             @Qualifier("transactionManager") PlatformTransactionManager transactionManager) {
         this.users = users;
         this.tenants = tenants;
         this.platformUsers = platformUsers;
+        this.forgetParticipants = forgetParticipants;
         this.defaultTenantId = defaultTenant.getId();
         this.writes = new TransactionTemplate(transactionManager);
         this.writes.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -130,8 +137,10 @@ class TenantUserReplicaService {
      * Makes a tenant forget one person for good - the provisioning system's erasure, after it erased
      * the person on its side. In one transaction it deletes the replica row of that email, live or
      * tombstone, with its roles, and the tenant's platform users whose username is that email, ignoring
-     * case. No tombstone is left, so nothing guards this person's ordering any more: no later snapshot
-     * is expected to name them. Finding nothing is success, and the tenant's revision is untouched.
+     * case, and lets every {@link TenantUserForgetParticipant} remove what its module keeps about the
+     * person. No tombstone is left, so nothing guards this person's ordering any more: no later
+     * snapshot is expected to name them. Finding nothing is success, and the tenant's revision is
+     * untouched.
      *
      * @param tenantId the tenant id
      * @param email the email
@@ -148,6 +157,7 @@ class TenantUserReplicaService {
         writes.executeWithoutResult(status -> {
             long replicaRows = users.deleteByTenantIdAndEmail(tenantId, normalized);
             int platformRows = platformUsers.deleteUsersByTenantIdAndUsernameIgnoreCase(tenantId, normalized);
+            forgetParticipants.forEach(participant -> participant.forget(tenantId, normalized));
             logger.info("Tenant [{}] forgot [{}]: deleted [{}] replica user(s) and [{}] platform user(s)", LogSanitizer.sanitize(tenantId),
                     LogSanitizer.sanitize(normalized), replicaRows, platformRows);
         });
