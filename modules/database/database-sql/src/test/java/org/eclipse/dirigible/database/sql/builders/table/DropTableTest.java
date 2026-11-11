@@ -47,4 +47,20 @@ public class DropTableTest {
         assertNotNull(sql);
         assertEquals("DROP TABLE \"CUSTOMERS\"", sql);
     }
+
+    /**
+     * The drop builder takes its schema as part of the table name, already quoted, and keeps a schema
+     * name with a hyphen as one identifier.
+     */
+    @Test
+    public void dropTableInSchemaWithHyphen() {
+        String sql = SqlFactory.getDefault()
+                               .drop()
+                               .table("\"my-schema\".\"CUSTOMERS\"")
+                               .build();
+
+        assertNotNull(sql);
+        assertEquals("DROP TABLE \"my-schema\".\"CUSTOMERS\"", sql);
+    }
+
 }

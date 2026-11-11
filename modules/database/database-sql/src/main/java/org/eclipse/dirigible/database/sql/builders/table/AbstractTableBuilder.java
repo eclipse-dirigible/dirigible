@@ -1954,7 +1954,7 @@ public abstract class AbstractTableBuilder<TABLE_BUILDER extends AbstractTableBu
         if (schemaOpt.isEmpty()) {
             return "";
         }
-        String encapsulatedSchema = encapsulate(schemaOpt.get());
+        String encapsulatedSchema = encapsulate(schemaOpt.get(), true);
         return encapsulatedSchema + DOT;
     }
 
