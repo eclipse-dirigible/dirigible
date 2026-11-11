@@ -38,7 +38,6 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -150,10 +149,10 @@ class TenantExportIT extends IntegrationTest {
         if (alpha != null) {
             return;
         }
-        // ids without a hyphen: the tenant's schema is named by its id, and the schema import that the
-        // restore runs builds its statements for a schema name that needs no quoting
-        DirigibleTestTenant first = tenant("exportalpha");
-        DirigibleTestTenant second = tenant("exportbeta");
+        // generated ids, as a real tenant has: the tenant's schema is named by its id, so the restore
+        // imports into a schema whose name has hyphens (#8581)
+        DirigibleTestTenant first = new DirigibleTestTenant("exportalpha");
+        DirigibleTestTenant second = new DirigibleTestTenant("exportbeta");
         createTenants(first, second);
         waitForTenantsProvisioning(List.of(first, second));
 
@@ -513,11 +512,6 @@ class TenantExportIT extends IntegrationTest {
                           return statement.executeUpdate() == 1;
                       }
                   });
-    }
-
-    private static DirigibleTestTenant tenant(String id) {
-        return new DirigibleTestTenant(false, id, id, id, id + "-user", UUID.randomUUID()
-                                                                            .toString());
     }
 
     private Connection tenantConnection(DirigibleTestTenant tenant) throws SQLException {

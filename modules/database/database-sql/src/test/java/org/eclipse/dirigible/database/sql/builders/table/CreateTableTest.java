@@ -270,4 +270,52 @@ public class CreateTableTest {
                 sql);
     }
 
+    /**
+     * A schema name that is not a plain identifier is quoted as one identifier, not word by word.
+     */
+    @Test
+    public void createTableInSchemaWithHyphen() {
+        String sql = SqlFactory.getDefault()
+                               .create()
+                               .table("CUSTOMERS")
+                               .schema("my-schema")
+                               .column("ID", DataType.INTEGER)
+                               .build();
+
+        assertNotNull(sql);
+        assertEquals("CREATE TABLE \"my-schema\".\"CUSTOMERS\" ( \"ID\" INTEGER )", sql);
+    }
+
+    /**
+     * A plain schema name renders as before.
+     */
+    @Test
+    public void createTableInPlainSchema() {
+        String sql = SqlFactory.getDefault()
+                               .create()
+                               .table("CUSTOMERS")
+                               .schema("SALES")
+                               .column("ID", DataType.INTEGER)
+                               .build();
+
+        assertNotNull(sql);
+        assertEquals("CREATE TABLE \"SALES\".\"CUSTOMERS\" ( \"ID\" INTEGER )", sql);
+    }
+
+    /**
+     * An already quoted schema name is not quoted again.
+     */
+    @Test
+    public void createTableInQuotedSchema() {
+        String sql = SqlFactory.getDefault()
+                               .create()
+                               .table("CUSTOMERS")
+                               .schema("\"my-schema\"")
+                               .column("ID", DataType.INTEGER)
+                               .build();
+
+        assertNotNull(sql);
+        assertEquals("CREATE TABLE \"my-schema\".\"CUSTOMERS\" ( \"ID\" INTEGER )", sql);
+    }
+
 }
