@@ -280,6 +280,28 @@ public enum DirigibleConfig {
      */
     TENANT_USERS_CHANGE_QUEUE("DIRIGIBLE_TENANT_USERS_CHANGE_QUEUE", null),
 
+    /**
+     * Whether the owners of a tenant may export it from the application shell's Settings: one archive
+     * with the application's tables of the tenant's database and every document the tenant stored,
+     * built in the background and downloaded when it is ready, under
+     * {@code /services/data/tenant-export/**}. Off by default, and then none of the beans behind it
+     * exist.
+     */
+    TENANT_EXPORT_ENABLED("DIRIGIBLE_TENANT_EXPORT_ENABLED", Boolean.FALSE.toString()),
+
+    /**
+     * How many days a tenant export's archive is kept before it is deleted. Used when
+     * {@link #TENANT_EXPORT_ENABLED} is on.
+     */
+    TENANT_EXPORT_RETENTION_DAYS("DIRIGIBLE_TENANT_EXPORT_RETENTION_DAYS", "7"),
+
+    /**
+     * How many archives a tenant may keep at a time; a further export is refused until one is deleted
+     * or expires, so that a tenant cannot fill the storage with exports. Used when
+     * {@link #TENANT_EXPORT_ENABLED} is on.
+     */
+    TENANT_EXPORT_MAX_ARCHIVES("DIRIGIBLE_TENANT_EXPORT_MAX_ARCHIVES", "3"),
+
     SNOWFLAKE_ADMIN_USERNAME("DIRIGIBLE_SNOWFLAKE_ADMIN_USERNAME", null),
 
     /** The basic admin username. */

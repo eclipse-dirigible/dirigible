@@ -30,11 +30,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
 
 /**
- * Every generated application shell carries the platform's Users section (#7498) and its Print
- * Templates section (#7755): it loads the tenantUsers and printTemplates stores, routes Settings
- * whether or not the model declares a SETTING entity, and offers both entries and their panes in
- * Settings. Without a SETTING entity the Settings footer shows only while one of the two sections
- * is offered - before #7498 such a shell had no Settings at all.
+ * Every generated application shell carries the platform's Users section (#7498), its Print
+ * Templates section (#7755) and its Data export section (#8566): it loads the tenantUsers,
+ * printTemplates and tenantExport stores, routes Settings whether or not the model declares a
+ * SETTING entity, and offers the entries and their panes in Settings. Without a SETTING entity the
+ * Settings footer shows only while one of the sections is offered - before #7498 such a shell had
+ * no Settings at all.
  *
  * <p>
  * Rendered, not published: the rendered pages are what a regenerated application carries, and the
@@ -46,7 +47,8 @@ class GeneratedShellTenantUsersIT extends IntegrationTest {
     private static final String TEMPLATE = "template-application-ui-harmonia-java/template/template.js";
     private static final String PROJECT = "tenant-users-shell";
     private static final String GUARD =
-            "x-show=\"($store.tenantUsers && $store.tenantUsers.visible) || ($store.printTemplates && $store.printTemplates.visible)\"";
+            "x-show=\"($store.tenantUsers && $store.tenantUsers.visible) || ($store.printTemplates && $store.printTemplates.visible)"
+                    + " || ($store.tenantExport && $store.tenantExport.visible)\"";
 
     @Autowired
     private WorkspaceService workspaceService;
@@ -68,6 +70,9 @@ class GeneratedShellTenantUsersIT extends IntegrationTest {
         assertTrue(settings.contains("$store.tenantUsers.markup"), "Settings must render the Users fragment");
         assertTrue(settings.contains("select('printTemplates'"), "Settings must offer the Print Templates entry");
         assertTrue(settings.contains("$store.printTemplates.markup"), "Settings must render the Print Templates fragment");
+        assertTrue(index.contains("stores/tenantExport.js"), "the shell must load the tenantExport store");
+        assertTrue(settings.contains("select('tenantExport'"), "Settings must offer the Data export entry");
+        assertTrue(settings.contains("$store.tenantExport.markup"), "Settings must render the Data export fragment");
         assertFalse(index.contains("$dollar"), "no unrendered Velocity reference may reach the page");
     }
 
@@ -82,6 +87,7 @@ class GeneratedShellTenantUsersIT extends IntegrationTest {
         assertTrue(settings.contains("select('tenantUsers'"), "Settings must offer the Users entry beside the setting entities");
         assertTrue(settings.contains("select('printTemplates'"),
                 "Settings must offer the Print Templates entry beside the setting entities");
+        assertTrue(settings.contains("select('tenantExport'"), "Settings must offer the Data export entry beside the setting entities");
         assertTrue(settings.contains("shell.settings.configuration"), "the setting entities must still be listed");
     }
 

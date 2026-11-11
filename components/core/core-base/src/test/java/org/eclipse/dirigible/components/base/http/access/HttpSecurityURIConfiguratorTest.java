@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.base.http.access;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Arrays;
@@ -88,6 +89,28 @@ class HttpSecurityURIConfiguratorTest {
     void theDataTransferWebsocketIsGated() {
         assertEquals(OPERATIONS_ROLES, requiredRoles("/websockets/data/transfer"),
                 "the data transfer websocket has no method-level check - this gate is all there is");
+    }
+
+    /**
+     * The tenant data export is for a tenant's owner, who holds none of the operations roles: its
+     * routes are let through to the endpoint's own {@code @RolesAllowed} ahead of the data gate - and
+     * only they are, so nothing else under the prefix loses its gate.
+     */
+    @Test
+    void theTenantExportIsTheOnlyDataFamilyOutsideTheOperationsGate() {
+        for (String uri : List.of("/services/data/tenant-export", "/services/data/tenant-export/context", "/services/data/tenant-export/7",
+                "/services/data/tenant-export/7/archive")) {
+            assertTrue(matchesTenantExport(uri), "an owner must reach " + uri);
+        }
+        for (String uri : List.of("/services/data", "/services/data/export/DefaultDB", "/services/data/export-async/DefaultDB",
+                "/services/data/schema/exportProcesses", "/services/data/tenant-exports", "/services/data/import")) {
+            assertFalse(matchesTenantExport(uri), "the operations gate must still decide " + uri);
+        }
+    }
+
+    private static boolean matchesTenantExport(String uri) {
+        return Arrays.stream(HttpSecurityURIConfigurator.TENANT_EXPORT_PATTERNS)
+                     .anyMatch(pattern -> MATCHER.match(pattern, uri));
     }
 
     /**

@@ -9,15 +9,8 @@
  */
 package org.eclipse.dirigible.components.engine.bpm.flowable.init;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.Set;
-import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.base.ApplicationListenersOrder.ApplicationReadyEventListeners;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
-import org.eclipse.dirigible.components.engine.bpm.SystemBpmProcess;
-import org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -25,6 +18,10 @@ import org.springframework.context.ApplicationListener;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
+/**
+ * Deploys the system processes for every tenant this instance maintains, once it is ready. A tenant
+ * provisioned later gets them from {@link SystemProcessesTenantPostProvisioningStep}.
+ */
 @Order(ApplicationReadyEventListeners.PROCESSES_INITIALIZER)
 @Component
 class FlowableProcessesInitializer implements ApplicationListener<ApplicationReadyEvent> {
@@ -32,53 +29,24 @@ class FlowableProcessesInitializer implements ApplicationListener<ApplicationRea
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(FlowableProcessesInitializer.class);
 
-    private final Set<SystemBpmProcess> systemBpmProcesses;
-    private final BpmService bpmService;
+    private final SystemProcessesDeployer deployer;
     private final TenantContext tenantContext;
 
-    FlowableProcessesInitializer(Set<SystemBpmProcess> systemBpmProcesses, BpmService bpmService, TenantContext tenantContext) {
-        this.systemBpmProcesses = systemBpmProcesses;
-        this.bpmService = bpmService;
+    FlowableProcessesInitializer(SystemProcessesDeployer deployer, TenantContext tenantContext) {
+        this.deployer = deployer;
         this.tenantContext = tenantContext;
     }
 
-    /**
-     * On application event.
-     *
-     * @param event the event
-     */
     @Override
     public void onApplicationEvent(ApplicationReadyEvent event) {
-        LOGGER.info("Deploying [{}] system processes: {}", systemBpmProcesses.size(), systemBpmProcesses);
+        LOGGER.info("Deploying the system processes for every tenant...");
 
-        systemBpmProcesses.forEach(this::deployProcess);
-
-        LOGGER.info("Completed.");
-    }
-
-    private void deployProcess(SystemBpmProcess systemBpmProcess) {
-        LOGGER.info("Deploying system BPM process {}", systemBpmProcess);
-        String deploymentKey = systemBpmProcess.getDeploymentKey();
-        String resourceName = systemBpmProcess.getResourcePath();
-        byte[] content = getResourceFileContent(systemBpmProcess.getResourcePath());
-
-        // deploy for each tenant?
         tenantContext.executeForEachMaintainedTenant(() -> {
-            bpmService.deployProcess(deploymentKey, resourceName, new String(content, StandardCharsets.UTF_8));
+            deployer.deployForCurrentTenant();
             return null;
         });
-    }
 
-    private byte[] getResourceFileContent(String resourcePath) {
-        try (InputStream inputStream = FlowableProcessesInitializer.class.getResourceAsStream(resourcePath)) {
-            if (null == inputStream) {
-                throw new IllegalStateException("Missing process with resource path " + resourcePath);
-            }
-
-            return IOUtils.toByteArray(inputStream);
-        } catch (IOException ex) {
-            throw new IllegalStateException("Failed to process with path " + resourcePath, ex);
-        }
+        LOGGER.info("Completed.");
     }
 
 }
