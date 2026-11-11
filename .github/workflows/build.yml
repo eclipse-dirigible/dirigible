@@ -316,13 +316,8 @@ jobs:
       - name: Install TypeScript and esbuild
         run: npm install -g typescript@5.9.3 esbuild
 
-      - name: Install ttyd (prebuilt)
-        run: |
-          sudo apt update
-          sudo apt install -y ttyd
-
-      - name: Verify ttyd installation
-        run: ttyd --version
+      - name: Install ttyd
+        uses: ./.github/actions/install-ttyd
 
       - name: Integration tests
         run: mvn clean install -P integration-tests -Dit.groups='${{ matrix.shard.groups }}' -Dit.partition='${{ matrix.shard.partition }}'
@@ -436,13 +431,8 @@ jobs:
       - name: Install TypeScript and esbuild
         run: npm install -g typescript@5.9.3 esbuild
 
-      - name: Install ttyd (prebuilt)
-        run: |
-          sudo apt update
-          sudo apt install -y ttyd
-
-      - name: Verify ttyd installation
-        run: ttyd --version
+      - name: Install ttyd
+        uses: ./.github/actions/install-ttyd
 
       - name: Create the SystemDB database
         run: PGPASSWORD=${{ env.POSTGRES_PASS }} psql -h localhost -U ${{ env.POSTGRES_USER }} -d ${{ env.POSTGRES_DB }} -c 'CREATE DATABASE ${{ env.POSTGRES_SYSTEM_DB }}'
