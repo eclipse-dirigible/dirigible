@@ -223,7 +223,7 @@
         <qldbsession.version>2.37.1</qldbsession.version>
 
         <!-- jETCD -->
-        <jetcd.core.version>0.8.7</jetcd.core.version>
+        <jetcd.core.version>0.8.8</jetcd.core.version>
 
         <!-- Various -->
         <c3p0.version>0.14.2</c3p0.version>
