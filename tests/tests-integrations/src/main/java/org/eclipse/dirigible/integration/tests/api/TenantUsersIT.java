@@ -356,7 +356,7 @@ class TenantUsersIT extends IntegrationTest {
                                .content("{\"email\":\"seat@example.com\",\"roles\":[\"User\"]}"))
            .andExpect(status().isAccepted());
         assertEquals("seat@example.com", receive(QUEUE, 10_000).get("email")
-                                                               .asText());
+                                                               .asString());
     }
 
     @Test
