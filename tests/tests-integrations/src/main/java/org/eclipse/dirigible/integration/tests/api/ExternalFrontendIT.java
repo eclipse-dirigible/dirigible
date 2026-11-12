@@ -358,15 +358,38 @@ class ExternalFrontendIT extends IntegrationTest {
         return Stream.of(
                 Named.of("issued for another client",
                         identityProvider.idToken("jane", DEVELOPER_GROUPS, claims -> claims.audience("another-client"))),
-                Named.of("issued by another realm",
-                        identityProvider.idToken("jane", DEVELOPER_GROUPS,
-                                claims -> claims.issuer("https://elsewhere.example.org/realms/it"))),
                 Named.of("expired", identityProvider.idToken("jane", DEVELOPER_GROUPS,
                         claims -> claims.expirationTime(Date.from(Instant.now()
                                                                          .minusSeconds(120))))),
                 Named.of("without the user name",
                         identityProvider.idToken("jane", DEVELOPER_GROUPS, claims -> claims.claim("preferred_username", null))),
-                Named.of("a refresh token", identityProvider.idToken("jane", DEVELOPER_GROUPS, claims -> claims.claim("typ", "Refresh"))),
+                Named.of("a refresh token", identityProvider.idToken("jane", DEVELOPER_GROUPS, claims -> claims.claim("typ", "Refresh"))));
+    }
+
+    /**
+     * A token the provider did not issue is not a credential of the platform at all (#8592): it is left
+     * to the application, so a protected path answers it as it answers a request without one - the
+     * plain challenge, no {@code invalid_token}.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("tokensOfOthers")
+    void aTokenTheProviderDidNotIssueAuthenticatesNoOne(String token) {
+        api().auth()
+             .oauth2(token)
+             .when()
+             .get(WHOAMI)
+             .then()
+             .statusCode(401)
+             .header("WWW-Authenticate", equalTo("Bearer"))
+             .contentType(ContentType.JSON)
+             .body("status", equalTo(401));
+    }
+
+    static Stream<Named<String>> tokensOfOthers() {
+        return Stream.of(
+                Named.of("issued by another realm",
+                        identityProvider.idToken("jane", DEVELOPER_GROUPS,
+                                claims -> claims.issuer("https://elsewhere.example.org/realms/it"))),
                 Named.of("not a token at all", "not-a-token"));
     }
 
