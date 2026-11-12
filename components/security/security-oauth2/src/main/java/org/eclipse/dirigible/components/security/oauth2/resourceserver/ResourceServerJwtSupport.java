@@ -44,10 +44,12 @@ import org.springframework.security.oauth2.core.OAuth2ErrorCodes;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
+import org.springframework.security.oauth2.jwt.BadJwtException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtClaimNames;
 import org.springframework.security.oauth2.jwt.JwtClaimValidator;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
@@ -55,10 +57,12 @@ import org.springframework.security.oauth2.server.resource.authentication.Bearer
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationProvider;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
 import org.springframework.util.StringUtils;
 
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.jwk.source.JWKSourceBuilder;
+import com.nimbusds.jose.jwk.source.RateLimitReachedException;
 import com.nimbusds.jose.proc.SecurityContext;
 import com.nimbusds.jose.util.DefaultResourceRetriever;
 
@@ -104,6 +108,14 @@ import com.nimbusds.jose.util.DefaultResourceRetriever;
  * - a burst of tokens carrying unknown key ids costs one call to the provider, not one per token,
  * while a genuine key rotation is picked up within that interval. Every asymmetric signature
  * algorithm is accepted, a token being verified only against a key the provider publishes for it.
+ *
+ * <p>
+ * Only a token naming the provider as its issuer is looked up in the key set (#8592). On the HTTP
+ * chain any other bearer token is not resolved at all - the request goes on with its session or
+ * anonymously, so an application can accept a bearer token of its own - and presented here directly
+ * it is refused before any key is looked up. A token of the provider's naming a key it does not
+ * publish, while the refresh is rate limited, is refused as the invalid token it is, not reported
+ * as a failure of the server.
  */
 public class ResourceServerJwtSupport implements BearerTokenAuthenticator {
 
@@ -142,7 +154,9 @@ public class ResourceServerJwtSupport implements BearerTokenAuthenticator {
      * The access token audience check of the deployment's own clients, null when none is configured.
      */
     private final AudienceValidator ownClients;
-    private final NimbusJwtDecoder decoder;
+    private final NimbusJwtDecoder providerDecoder;
+    private final JwtDecoder decoder;
+    private final BearerTokenResolver bearerTokenResolver;
     private final Converter<Jwt, AbstractAuthenticationToken> authenticationConverter;
     private final JwtAuthenticationProvider authenticationProvider;
 
@@ -179,10 +193,12 @@ public class ResourceServerJwtSupport implements BearerTokenAuthenticator {
         this.settings = settings;
         this.integrationClients = integrationClients;
         this.ownClients = ownClientsOf(settings);
-        this.decoder = NimbusJwtDecoder.withJwkSource(jwkSource(settings.jwkSetUri()))
-                                       .jwsAlgorithms(algorithms -> algorithms.addAll(ASYMMETRIC_ALGORITHMS))
-                                       .build();
-        this.decoder.setJwtValidator(kindAwareValidator());
+        this.providerDecoder = NimbusJwtDecoder.withJwkSource(jwkSource(settings.jwkSetUri()))
+                                               .jwsAlgorithms(algorithms -> algorithms.addAll(ASYMMETRIC_ALGORITHMS))
+                                               .build();
+        this.providerDecoder.setJwtValidator(kindAwareValidator());
+        this.decoder = this::decode;
+        this.bearerTokenResolver = new ProviderIssuedBearerTokenResolver(settings.issuer());
         this.authenticationConverter = new KindAwareAuthenticationConverter(scopeAuthoritiesConverter, groupAuthoritiesMapper);
         this.authenticationProvider = new JwtAuthenticationProvider(this.decoder);
         this.authenticationProvider.setJwtAuthenticationConverter(this.authenticationConverter);
@@ -204,6 +220,17 @@ public class ResourceServerJwtSupport implements BearerTokenAuthenticator {
      */
     public JwtDecoder decoder() {
         return decoder;
+    }
+
+    /**
+     * Gets the resolver the HTTP chain takes the bearer token of a request with: the token of the
+     * {@code Authorization} header when it names the provider as its issuer, none otherwise - a request
+     * carrying another bearer token is left to its session, or to the application, as an anonymous one.
+     *
+     * @return the bearer token resolver
+     */
+    public BearerTokenResolver bearerTokenResolver() {
+        return bearerTokenResolver;
     }
 
     /**
@@ -232,6 +259,39 @@ public class ResourceServerJwtSupport implements BearerTokenAuthenticator {
                                                                                                                   .getExpiresAt()
                 : null;
         return new AuthenticatedBearerToken(authentication, expiresAt);
+    }
+
+    /**
+     * Decodes and validates a token. A token that does not name the provider as its issuer is refused
+     * before any key is looked up, so it costs the provider no call. A token naming a key the provider
+     * does not publish, once the refresh of the key set is rate limited, is refused as an invalid
+     * token: Spring reports the exhausted limit as a failure of the decoder, which the chain rethrows
+     * as a 500. A key set that cannot be fetched or parsed stays such a failure - that is the
+     * provider's fault, not the token's.
+     */
+    private Jwt decode(String token) {
+        if (!ProviderIssuedBearerTokenResolver.namesIssuer(token, settings.issuer())) {
+            throw new BadJwtException("The token is not issued by [" + settings.issuer() + "]");
+        }
+        try {
+            return providerDecoder.decode(token);
+        } catch (JwtException ex) {
+            if (!isRateLimited(ex)) {
+                throw ex;
+            }
+            LOGGER.debug("Refusing a bearer token of [{}] naming a key the cached key set does not hold, refreshed too recently to"
+                    + " look again", settings.provider(), ex);
+            throw new BadJwtException("No key of [" + settings.issuer() + "] matches the token", ex);
+        }
+    }
+
+    private static boolean isRateLimited(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof RateLimitReachedException) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
