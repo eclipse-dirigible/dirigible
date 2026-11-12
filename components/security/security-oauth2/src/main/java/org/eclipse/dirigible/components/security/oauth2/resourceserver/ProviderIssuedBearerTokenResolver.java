@@ -56,8 +56,8 @@ final class ProviderIssuedBearerTokenResolver implements BearerTokenResolver {
         if (token == null || namesIssuer(token, issuer)) {
             return token;
         }
-        LOGGER.debug("The bearer token of a request to [{}] is not issued by [{}], so it is left to the application",
-                request.getRequestURI(), issuer);
+        // the request URI is the caller's text, so it stays out of the log
+        LOGGER.debug("A bearer token not issued by [{}] is left to the application", issuer);
         return null;
     }
 
