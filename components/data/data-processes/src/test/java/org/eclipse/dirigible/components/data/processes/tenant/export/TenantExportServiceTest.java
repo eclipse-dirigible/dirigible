@@ -13,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -24,7 +25,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -39,6 +42,7 @@ import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.base.tenant.TenantNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.web.server.ResponseStatusException;
@@ -52,6 +56,7 @@ class TenantExportServiceTest {
     private static final String ACME = "acme";
     private static final String GLOBEX = "globex";
     private static final Instant NOW = Instant.parse("2026-11-11T10:00:00Z");
+    private static final String ARCHIVE = "/__EXPORTS/tenant-exports/1/acme.zip";
 
     /** The rows, by id - what the mocked repository reads and writes. */
     private final Map<Long, TenantExport> rows = new LinkedHashMap<>();
@@ -360,8 +365,55 @@ class TenantExportServiceTest {
         assertThrows(IllegalStateException.class, () -> service.markRunning(99));
     }
 
-    private static HttpStatus refusal(Runnable call) {
-        ResponseStatusException refused = assertThrows(ResponseStatusException.class, call::run);
+    @Test
+    void aStoredArchiveIsOpened() throws IOException {
+        long id = service.request(ACME, "ann@example.com")
+                         .id();
+        service.complete(id, ARCHIVE, 3);
+        InputStream content = new ByteArrayInputStream(new byte[] {1, 2, 3});
+        when(archives.open(ARCHIVE)).thenReturn(Optional.of(content));
+
+        assertSame(content, service.openArchive(service.downloadable(ACME, id)));
+        assertEquals(NOW.plus(Duration.ofDays(7)), rows.get(id)
+                                                       .getExpiresAt());
+    }
+
+    @Test
+    void anExportWhoseArchiveIsMissingIsGoneAndExpiredForTheHousekeeping() throws IOException {
+        long id = service.request(ACME, "ann@example.com")
+                         .id();
+        service.complete(id, ARCHIVE, 3);
+        when(archives.open(ARCHIVE)).thenReturn(Optional.empty());
+        now = NOW.plus(Duration.ofHours(1));
+        TenantExport export = service.downloadable(ACME, id);
+
+        assertEquals(HttpStatus.GONE, refusal(() -> service.openArchive(export)));
+        assertEquals(now, rows.get(id)
+                              .getExpiresAt(),
+                "the request that found the archive missing expires the export");
+        assertEquals(HttpStatus.GONE, refusal(() -> service.downloadable(ACME, id)), "it is no longer offered");
+
+        now = now.plusSeconds(1);
+        service.expire();
+        assertFalse(rows.containsKey(id), "the housekeeping removes it on its next pass");
+    }
+
+    @Test
+    void anArchiveTheStorageCannotReadIsAFailureNotGone() throws IOException {
+        long id = service.request(ACME, "ann@example.com")
+                         .id();
+        service.complete(id, ARCHIVE, 3);
+        when(archives.open(ARCHIVE)).thenThrow(new IOException("the CMS is away"));
+        TenantExport export = service.downloadable(ACME, id);
+
+        assertThrows(IOException.class, () -> service.openArchive(export));
+        assertEquals(NOW.plus(Duration.ofDays(7)), rows.get(id)
+                                                       .getExpiresAt(),
+                "a read failure does not expire the export");
+    }
+
+    private static HttpStatus refusal(Executable call) {
+        ResponseStatusException refused = assertThrows(ResponseStatusException.class, call);
         return HttpStatus.resolve(refused.getStatusCode()
                                          .value());
     }

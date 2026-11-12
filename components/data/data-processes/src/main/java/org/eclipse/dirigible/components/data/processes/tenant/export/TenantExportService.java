@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.data.processes.tenant.export;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -181,6 +182,32 @@ class TenantExportService {
             throw new ResponseStatusException(HttpStatus.GONE, "The export has expired");
         }
         return export;
+    }
+
+    /**
+     * Opens the archive of a downloadable export. The row and the archive can part - the CMS storage of
+     * a replaced instance, a restore from an older backup, a file removed by hand - and an archive that
+     * is gone is the caller's answer, not a server fault: the export is expired now, so it is no longer
+     * offered and the housekeeping removes it.
+     *
+     * @param export the export, as {@link #downloadable} returned it
+     * @return the archive's content
+     * @throws IOException when the CMS cannot be read
+     */
+    InputStream openArchive(TenantExport export) throws IOException {
+        Optional<InputStream> content = archives.open(export.getArchivePath());
+        if (content.isPresent()) {
+            return content.get();
+        }
+        Instant now = clock.get();
+        writes.executeWithoutResult(status -> exports.findById(export.getId())
+                                                     .ifPresent(missing -> {
+                                                         missing.setExpiresAt(now);
+                                                         exports.save(missing);
+                                                     }));
+        LOGGER.warn("The archive [{}] of export [{}] of tenant [{}] is no longer in the CMS - the export is expired",
+                export.getArchivePath(), export.getId(), LogSanitizer.sanitize(export.getTenantId()));
+        throw new ResponseStatusException(HttpStatus.GONE, "The export's archive is no longer available");
     }
 
     /**

@@ -50,6 +50,13 @@
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-data-structures</artifactId>
         </dependency>
+        <!-- The CMIS folder contract names an OpenCMIS enum, so the mocked CMS of TenantExportArchiveTest needs it -->
+        <dependency>
+            <groupId>org.apache.chemistry.opencmis</groupId>
+            <artifactId>chemistry-opencmis-commons-api</artifactId>
+            <version>${chemistry.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <properties>

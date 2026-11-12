@@ -60,12 +60,10 @@ import jakarta.servlet.http.HttpServletResponse;
 class TenantExportEndpoint extends BaseEndpoint {
 
     private final TenantExportService service;
-    private final TenantExportArchives archives;
     private final TenantContext tenantContext;
 
-    TenantExportEndpoint(TenantExportService service, TenantExportArchives archives, TenantContext tenantContext) {
+    TenantExportEndpoint(TenantExportService service, TenantContext tenantContext) {
         this.service = service;
-        this.archives = archives;
         this.tenantContext = tenantContext;
     }
 
@@ -113,7 +111,9 @@ class TenantExportEndpoint extends BaseEndpoint {
     }
 
     /**
-     * Streams an export's archive - from the CMS to the response, never through memory.
+     * Streams an export's archive - from the CMS to the response, never through memory. The archive is
+     * opened before anything is written, so an archive that is no longer stored answers 410 and not a
+     * started download.
      *
      * @param id the export
      * @param response the response the archive is written to
@@ -123,7 +123,7 @@ class TenantExportEndpoint extends BaseEndpoint {
     void archive(@PathVariable("id") long id, HttpServletResponse response) throws IOException {
         TenantExport export = service.downloadable(tenantId(), id);
         String path = export.getArchivePath();
-        try (InputStream content = archives.open(path)) {
+        try (InputStream content = service.openArchive(export)) {
             response.setStatus(HttpStatus.OK.value());
             response.setContentType("application/zip");
             response.setHeader(HttpHeaders.CONTENT_DISPOSITION,
