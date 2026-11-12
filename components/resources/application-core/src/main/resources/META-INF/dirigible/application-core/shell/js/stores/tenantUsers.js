@@ -36,7 +36,7 @@ document.addEventListener('alpine:init', () => {
   const SLOW_AFTER_MS = 2 * 60 * 1000;
 
   Alpine.store('tenantUsers', {
-    /** What the platform says: { enabled, tenantId, canManage, canRead, ownerRole, roles, caller, seatLimit, seatsUrl }; null until loaded. */
+    /** What the platform says: { enabled, tenantId, canManage, canRead, ownerRole, roles, caller, seatLimit }; null until loaded. */
     context: null,
     /** The live users of the tenant, as the provisioning system last reported them. */
     items: [],
@@ -44,8 +44,6 @@ document.addEventListener('alpine:init', () => {
     busy: false,
     /** The last refusal, in the user's words; empty when there is none. */
     error: '',
-    /** The endpoint's reason for that refusal - SEAT_LIMIT shows where more seats are got. */
-    errorReason: '',
     /** The invitation being typed, in the invite dialog. */
     invite: { email: '', roles: [] },
     /** Whether the invite dialog is open. */
@@ -84,11 +82,6 @@ document.addEventListener('alpine:init', () => {
       return (this.context && this.context.seatLimit) || null;
     },
 
-    /** Where an owner gets more seats; null when none is configured. */
-    get seatsUrl() {
-      return (this.context && this.context.seatsUrl) || null;
-    },
-
     /** The seats taken: the users pending, invited or assigned, and the invitations this page sent that the list does not show yet. */
     get seatsTaken() {
       return this.items.filter((user) => user.status === 'PENDING' || this.isMember(user)).length + this.sendingInvites.length;
@@ -98,11 +91,6 @@ document.addEventListener('alpine:init', () => {
     get seatsText() {
       if (!this.seatLimit) return '';
       return this.t('shell.tenantUsers.seats', 'Seats: {{taken}} of {{limit}}', { taken: this.seatsTaken, limit: this.seatLimit });
-    },
-
-    /** Whether the refusal on screen is the seat limit and there is somewhere to get more seats. */
-    get showSeatsLink() {
-      return !!(this.error && this.errorReason === 'SEAT_LIMIT' && this.seatsUrl);
     },
 
     init() {
@@ -524,7 +512,6 @@ document.addEventListener('alpine:init', () => {
     /** The words for a refusal - from the endpoint's reason, never its raw text. */
     messageFor(status, refusal) {
       const reason = refusal && refusal.reason;
-      this.errorReason = reason || '';
       const known = {
         INVALID_EMAIL: 'Enter a valid email address.',
         INVALID_ROLE: 'Choose one of the offered roles.',
@@ -538,7 +525,7 @@ document.addEventListener('alpine:init', () => {
         STALE_REVISION: 'This person changed since the list was loaded. Reload and try again.',
         NO_CHANGE: 'This person already has exactly these roles.',
         LAST_OWNER: 'This person is the only owner of the tenant. Make someone else an owner first.',
-        SEAT_LIMIT: 'Every seat of this tenant is taken. Remove someone first, or get more seats.',
+        SEAT_LIMIT: 'Every seat of this tenant is taken. Remove someone to free a seat, or ask your administrator for more seats.',
         USER_NOT_FOUND: 'This person is no longer in the list. Reload it.',
       };
       if (reason && known[reason]) return this.t('shell.tenantUsers.error.' + reason, known[reason]);

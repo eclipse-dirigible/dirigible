@@ -274,7 +274,6 @@
     "tenantUsers": {
       "title": "Users",
       "description": "The people of this tenant and where each one stands. Invite a person with one or more roles, change a member's roles, or remove a member.",
-      "getMoreSeats": "Get more seats",
       "seats": "Seats: {{taken}} of {{limit}}",
       "refresh": "Refresh",
       "email": "Email",
@@ -356,7 +355,7 @@
         "NO_CHANGE": "This person already has exactly these roles.",
         "LAST_OWNER": "This person is the only owner of the tenant. Make someone else an owner first.",
         "USER_NOT_FOUND": "This person is no longer in the list. Reload it.",
-        "SEAT_LIMIT": "Every seat of this tenant is taken. Remove someone first, or get more seats."
+        "SEAT_LIMIT": "Every seat of this tenant is taken. Remove someone to free a seat, or ask your administrator for more seats."
       }
     },
     "tenantExport": {

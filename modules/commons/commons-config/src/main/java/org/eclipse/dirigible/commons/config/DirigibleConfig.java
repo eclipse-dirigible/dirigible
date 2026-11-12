@@ -281,14 +281,6 @@ public enum DirigibleConfig {
     TENANT_USERS_CHANGE_QUEUE("DIRIGIBLE_TENANT_USERS_CHANGE_QUEUE", null),
 
     /**
-     * Where a tenant's Owner gets more seats, e.g. {@code https://shop.example.com/seats} - linked from
-     * Settings → Users next to the seats taken, and from the refusal of an invitation beyond them, when
-     * the provisioning system gives the tenant a seat limit. Optional: unset, no link is shown. The
-     * platform does not interpret the URL.
-     */
-    TENANT_USERS_SEATS_URL("DIRIGIBLE_TENANT_USERS_SEATS_URL", null),
-
-    /**
      * Whether the owners of a tenant may export it from the application shell's Settings: one archive
      * with the application's tables of the tenant's database and every document the tenant stored,
      * built in the background and downloaded when it is ready, under

@@ -224,8 +224,8 @@ class TenantUserCommands {
                             .filter(TenantUserCommands::takesSeat)
                             .count();
         if (taken >= seatLimit) {
-            throw conflict("SEAT_LIMIT", "This tenant has " + seatLimit + (seatLimit == 1 ? " seat" : " seats")
-                    + ", and every one is taken - remove someone first, or get more seats");
+            throw conflict("SEAT_LIMIT",
+                    "Every seat of this tenant is taken. Remove someone to free a seat, or ask your administrator for more seats.");
         }
     }
 

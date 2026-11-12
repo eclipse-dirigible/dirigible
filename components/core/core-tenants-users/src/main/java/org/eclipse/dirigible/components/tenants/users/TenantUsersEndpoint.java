@@ -84,7 +84,7 @@ class TenantUsersEndpoint extends BaseEndpoint {
         String tenantId = canRead ? access.requireTenant() : null;
         Integer seatLimit = tenantId == null ? null : replica.seatLimit(tenantId);
         return ResponseEntity.ok(new TenantUsersContext(true, tenantId, canManage, canRead, ApplicationRoles.OWNER, ApplicationRoles.ALL,
-                access.requestedBy(), seatLimit, TenantUsersSettings.seatsUrl()));
+                access.requestedBy(), seatLimit));
     }
 
     /**
