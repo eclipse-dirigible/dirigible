@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.tenants.users;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -49,6 +50,7 @@ final class TenantUserSyncValidation {
         } else if (body.revision() < 0) {
             problems.add("revision: must not be negative");
         }
+        checkSeatLimit(problems, body.seatLimit());
         if (body.users() == null) {
             problems.add("users: is required");
             return problems;
@@ -95,6 +97,26 @@ final class TenantUserSyncValidation {
             checkLastError(problems, at, user.lastError());
         }
         return problems;
+    }
+
+    /** A seat limit is a whole number of at least 1 - the tenant's Owner takes a seat - or absent. */
+    private static void checkSeatLimit(List<String> problems, Number seatLimit) {
+        if (seatLimit == null) {
+            return;
+        }
+        // by its value, not its class: whichever reader parsed the body, a fraction is refused, never
+        // truncated
+        BigDecimal value;
+        try {
+            value = new BigDecimal(seatLimit.toString());
+        } catch (NumberFormatException ex) {
+            value = null;
+        }
+        if (value == null || value.stripTrailingZeros()
+                                  .scale() > 0
+                || value.compareTo(BigDecimal.ONE) < 0 || value.compareTo(BigDecimal.valueOf(Integer.MAX_VALUE)) > 0) {
+            problems.add("seatLimit: must be a whole number of at least 1, or null for no limit");
+        }
     }
 
     private static void checkRoles(List<String> problems, String at, List<TenantUserSync.RoleState> roles) {

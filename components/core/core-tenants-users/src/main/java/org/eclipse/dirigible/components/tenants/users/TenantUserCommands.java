@@ -29,10 +29,10 @@ import org.springframework.stereotype.Service;
  *
  * <p>
  * The input shape is checked here for real. The business rules - already a member, a change in
- * flight, a stale screen, no change, the last owner - are checked against the replica only to
- * answer the Owner at once: the provisioning system decides them again, so a check passed here is
- * no promise. Nothing is written here; the replica changes when the provisioning system reports
- * what it did.
+ * flight, a stale screen, no change, the last owner, no free seat - are checked against the replica
+ * only to answer the Owner at once: the provisioning system decides them again, so a check passed
+ * here is no promise. Nothing is written here; the replica changes when the provisioning system
+ * reports what it did.
  */
 @Service
 @Conditional(TenantUsersEnabledCondition.class)
@@ -79,6 +79,7 @@ class TenantUserCommands {
                        throw conflict("REQUEST_PENDING", "A change for [" + email + "] is still in progress");
                    }
                });
+        requireFreeSeat(tenantId, email);
         return publish(tenantId, TenantUserChangeRequest.Action.INVITE, email, roles, null);
     }
 
@@ -204,6 +205,35 @@ class TenantUserCommands {
         if (!another) {
             throw conflict("LAST_OWNER", "[" + user.email() + "] is the only owner of this tenant - make someone else an owner first");
         }
+    }
+
+    /**
+     * Refuses an invitation while every seat of the tenant is taken (#8593): its users {@code PENDING},
+     * {@code INVITED} or {@code ASSIGNED}, the invitee left out, at or above the seat limit the
+     * provisioning system set. Only an invitation takes a seat - a role change or a removal is never
+     * refused for seats, and a limit lowered below the users removes nobody.
+     */
+    private void requireFreeSeat(String tenantId, String email) {
+        Integer seatLimit = replica.seatLimit(tenantId);
+        if (seatLimit == null) {
+            return;
+        }
+        long taken = replica.list(tenantId, false)
+                            .stream()
+                            .filter(user -> !email.equals(user.email()))
+                            .filter(TenantUserCommands::takesSeat)
+                            .count();
+        if (taken >= seatLimit) {
+            throw conflict("SEAT_LIMIT", "This tenant has " + seatLimit + (seatLimit == 1 ? " seat" : " seats")
+                    + ", and every one is taken - remove someone first, or get more seats");
+        }
+    }
+
+    /** A user takes a seat while they hold or are being given roles - pending, invited or assigned. */
+    static boolean takesSeat(TenantUserView user) {
+        return TenantUserStatus.PENDING.name()
+                                       .equals(user.status())
+                || isMember(user);
     }
 
     private static boolean isMember(TenantUserView user) {

@@ -18,13 +18,19 @@
   browser tests: tenant-users-page, tenant-users-invite-open, tenant-users-invite-dialog, tenant-users-email,
   tenant-users-roles (tiles: tenant-users-invite-role-<role>), tenant-users-invite-button, tenant-users-table (rows tr[data-user], badges [data-role][data-state],
   [data-pending], [data-failure]), tenant-users-edit-dialog (tiles: tenant-users-edit-role-<role>), tenant-users-edit-save,
-  tenant-users-remove-dialog, tenant-users-remove-confirm.
+  tenant-users-remove-dialog, tenant-users-remove-confirm, tenant-users-seats (with data-taken / data-limit),
+  tenant-users-seats-link, tenant-users-invite-seats-link.
 -->
 <div id="tenant-users-page" class="vbox gap-4 p-4">
   <div class="hbox items-center gap-2">
     <div class="vbox gap-1 flex-1 min-w-0">
       <span class="text-lg font-medium" x-text="$store.tenantUsers.t('shell.tenantUsers.title', 'Users')"></span>
       <span x-h-text.muted class="text-sm" x-text="$store.tenantUsers.t('shell.tenantUsers.description', 'The people of this tenant and where each one stands. Invite a person with one or more roles, change a member\'s roles, or remove a member.')"></span>
+      <div x-show="$store.tenantUsers.seatLimit" x-cloak id="tenant-users-seats" class="hbox items-center gap-2 text-sm">
+        <span :data-taken="$store.tenantUsers.seatsTaken" :data-limit="$store.tenantUsers.seatLimit" x-text="$store.tenantUsers.seatsText"></span>
+        <a x-show="$store.tenantUsers.seatsUrl" x-h-button data-variant="link" data-size="sm" id="tenant-users-seats-link" target="_blank"
+           rel="noopener" :href="$store.tenantUsers.seatsUrl" x-text="$store.tenantUsers.t('shell.tenantUsers.getMoreSeats', 'Get more seats')"></a>
+      </div>
     </div>
     <button x-h-button data-variant="outline" data-size="icon-sm" type="button" @click="$store.tenantUsers.load()"
             :aria-label="$store.tenantUsers.t('shell.tenantUsers.refresh', 'Refresh')">
@@ -38,6 +44,10 @@
 
   <div x-show="$store.tenantUsers.error" x-cloak x-h-alert data-variant="warning" role="alert">
     <div x-h-alert-description x-text="$store.tenantUsers.error"></div>
+    <div x-show="$store.tenantUsers.showSeatsLink" x-cloak x-h-alert-description>
+      <a :href="$store.tenantUsers.seatsUrl" target="_blank" rel="noopener" class="underline"
+         x-text="$store.tenantUsers.t('shell.tenantUsers.getMoreSeats', 'Get more seats')"></a>
+    </div>
   </div>
 
   <div x-show="$store.tenantUsers.loaded && $store.tenantUsers.items.length === 0 && $store.tenantUsers.sendingInvites.length === 0" x-cloak x-h-info-page>
@@ -193,6 +203,10 @@
         </div>
         <div x-show="$store.tenantUsers.error" x-cloak x-h-alert data-variant="warning" role="alert">
           <div x-h-alert-description x-text="$store.tenantUsers.error"></div>
+          <div x-show="$store.tenantUsers.showSeatsLink" x-cloak x-h-alert-description>
+            <a :href="$store.tenantUsers.seatsUrl" target="_blank" rel="noopener" class="underline" id="tenant-users-invite-seats-link"
+               x-text="$store.tenantUsers.t('shell.tenantUsers.getMoreSeats', 'Get more seats')"></a>
+          </div>
         </div>
       </div>
       <div x-h-dialog-footer>

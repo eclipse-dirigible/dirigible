@@ -13291,6 +13291,52 @@
           }
         ]
       }
+    },
+    {
+      "changeSet": {
+        "id": "create-DIRIGIBLE_TENANT_PROPERTIES",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_TENANT_PROPERTIES"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "createTable": {
+              "columns": [
+                {
+                  "column": {
+                    "name": "TENANTPROP_TENANT_ID",
+                    "type": "VARCHAR(255)",
+                    "constraints": {
+                      "nullable": false,
+                      "primaryKey": true,
+                      "primaryKeyName": "PK_DIRIGIBLE_TENANT_PROPERTIES"
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENANTPROP_SEAT_LIMIT",
+                    "type": "INTEGER"
+                  }
+                }
+              ],
+              "tableName": "DIRIGIBLE_TENANT_PROPERTIES"
+            }
+          }
+        ]
+      }
     }
   ]
 }

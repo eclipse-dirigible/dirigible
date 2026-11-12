@@ -27,4 +27,14 @@ final class TenantUsersSettings {
         return DirigibleConfig.TENANT_USERS_CHANGE_QUEUE.getStringValue();
     }
 
+    /**
+     * Where a tenant's Owner gets more seats.
+     *
+     * @return the URL, or null when none is configured
+     */
+    static String seatsUrl() {
+        String url = DirigibleConfig.TENANT_USERS_SEATS_URL.getStringValue();
+        return url == null || url.isBlank() ? null : url.trim();
+    }
+
 }

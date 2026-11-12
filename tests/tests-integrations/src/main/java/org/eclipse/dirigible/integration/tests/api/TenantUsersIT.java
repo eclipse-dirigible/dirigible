@@ -317,6 +317,48 @@ class TenantUsersIT extends IntegrationTest {
            .andExpect(jsonPath("$.reason").value("DEFAULT_TENANT"));
     }
 
+    /**
+     * The seat limit the provisioning system set (#8593): the context shows it, an invitation beyond it
+     * is refused before anything is published, and without a limit the same invitation goes out. The
+     * tenant holds one live user here - the owner - after the removal above.
+     */
+    @Test
+    @Order(10)
+    void anInvitationBeyondTheSeatLimitIsRefusedBeforeItIsPublished() throws Exception {
+        pushSnapshot(mvc, tenant.getId(), 5, 1, TenantUsersTestSupport.user(OWNER)
+                                                                      .revision(5)
+                                                                      .role("Owner", "GRANTED"));
+        MockHttpSession owner = enter(OWNER, "Owner");
+        mvc.perform(get(USERS + "/context").session(owner)
+                                           .with(authentication(person(OWNER, "Owner"))))
+           .andExpect(status().isOk())
+           .andExpect(jsonPath("$.seatLimit").value(1));
+
+        drainQueue(QUEUE);
+        mvc.perform(post(USERS).session(owner)
+                               .with(authentication(person(OWNER, "Owner")))
+                               .contentType(MediaType.APPLICATION_JSON)
+                               .content("{\"email\":\"seat@example.com\",\"roles\":[\"User\"]}"))
+           .andExpect(status().isConflict())
+           .andExpect(jsonPath("$.reason").value("SEAT_LIMIT"));
+        assertThrows(TimeoutException.class, () -> MessagingFacade.receiveFromQueue(QUEUE, 500), "nothing is published");
+
+        // a body without the limit clears it, and the same invitation goes out
+        pushSnapshot(mvc, tenant.getId(), 6, TenantUsersTestSupport.user(OWNER)
+                                                                   .revision(6)
+                                                                   .role("Owner", "GRANTED"));
+        mvc.perform(get(USERS + "/context").session(owner)
+                                           .with(authentication(person(OWNER, "Owner"))))
+           .andExpect(jsonPath("$.seatLimit").doesNotExist());
+        mvc.perform(post(USERS).session(owner)
+                               .with(authentication(person(OWNER, "Owner")))
+                               .contentType(MediaType.APPLICATION_JSON)
+                               .content("{\"email\":\"seat@example.com\",\"roles\":[\"User\"]}"))
+           .andExpect(status().isAccepted());
+        assertEquals("seat@example.com", receive(QUEUE, 10_000).get("email")
+                                                               .asText());
+    }
+
     @Test
     @Order(9)
     void enteringTheTenantStampsAnExistingRowOnly() throws Exception {
