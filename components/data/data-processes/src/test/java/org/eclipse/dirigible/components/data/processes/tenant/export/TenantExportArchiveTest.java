@@ -11,30 +11,42 @@ package org.eclipse.dirigible.components.data.processes.tenant.export;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
+import org.eclipse.dirigible.components.engine.cms.CmisContentStream;
+import org.eclipse.dirigible.components.engine.cms.CmisDocument;
+import org.eclipse.dirigible.components.engine.cms.CmisFolder;
+import org.eclipse.dirigible.components.engine.cms.CmisObject;
+import org.eclipse.dirigible.components.engine.cms.CmisSession;
+import org.eclipse.dirigible.components.engine.cms.CmisSessionFactory;
 import org.eclipse.dirigible.components.engine.cms.documents.DocumentZipService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.MockedStatic;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -47,6 +59,8 @@ import com.google.gson.JsonParser;
 class TenantExportArchiveTest {
 
     private static final Instant CREATED_AT = Instant.parse("2026-11-11T10:15:30Z");
+    private static final String ARCHIVE_NAME = "tenant-acme-data-export-20261111-101530.zip";
+    private static final String ARCHIVE = "/__EXPORTS/tenant-exports/7/" + ARCHIVE_NAME;
 
     private DocumentZipService zipService;
     private TenantExportArchives archives;
@@ -162,6 +176,68 @@ class TenantExportArchiveTest {
         assertEquals(3, records("A,B\r\n1,2\r\n3,4\r\n"));
         assertEquals(2, records("A\n\"x\ny\"\"z\n\"\n"));
         assertEquals(2, records("A\n1\n\n"));
+    }
+
+    @Test
+    void aStoredArchiveIsOpened() throws IOException {
+        CmisFolder root =
+                cmisFolder("", cmisFolder("__EXPORTS", cmisFolder("tenant-exports", cmisFolder("7", cmisDocument(ARCHIVE_NAME)))));
+
+        Optional<InputStream> content = open(root, ARCHIVE);
+
+        assertTrue(content.isPresent());
+        assertEquals(ARCHIVE_NAME, new String(content.get()
+                                                     .readAllBytes(),
+                StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void anArchiveThatIsNotStoredIsMissingNotAFailure() throws IOException {
+        CmisFolder withoutTheFolder = cmisFolder("", cmisFolder("__EXPORTS", cmisFolder("tenant-exports")));
+        CmisFolder withoutTheFile = cmisFolder("", cmisFolder("__EXPORTS", cmisFolder("tenant-exports", cmisFolder("7"))));
+        CmisFolder withAFolderOfItsName =
+                cmisFolder("", cmisFolder("__EXPORTS", cmisFolder("tenant-exports", cmisFolder("7", cmisFolder(ARCHIVE_NAME)))));
+
+        assertEquals(Optional.empty(), open(withoutTheFolder, ARCHIVE));
+        assertEquals(Optional.empty(), open(withoutTheFile, ARCHIVE));
+        assertEquals(Optional.empty(), open(withAFolderOfItsName, ARCHIVE));
+    }
+
+    @Test
+    void aStorageThatCannotBeReadIsAFailure() throws IOException {
+        CmisFolder exportFolder = cmisFolder("7");
+        when(exportFolder.getChildren()).thenThrow(new IOException("the CMS is away"));
+        CmisFolder root = cmisFolder("", cmisFolder("__EXPORTS", cmisFolder("tenant-exports", exportFolder)));
+
+        assertThrows(IOException.class, () -> open(root, ARCHIVE));
+    }
+
+    private Optional<InputStream> open(CmisFolder root, String path) throws IOException {
+        CmisSession session = mock(CmisSession.class);
+        when(session.getRootFolder()).thenReturn(root);
+        try (MockedStatic<CmisSessionFactory> factory = mockStatic(CmisSessionFactory.class)) {
+            factory.when(CmisSessionFactory::getSession)
+                   .thenReturn(session);
+            return archives.open(path);
+        }
+    }
+
+    private static CmisFolder cmisFolder(String name, CmisObject... children) throws IOException {
+        CmisFolder folder = mock(CmisFolder.class);
+        when(folder.getName()).thenReturn(name);
+        doReturn(List.of(children)).when(folder)
+                                   .getChildren();
+        return folder;
+    }
+
+    /** A document whose content is its own name. */
+    private static CmisDocument cmisDocument(String name) throws IOException {
+        CmisDocument document = mock(CmisDocument.class);
+        when(document.getName()).thenReturn(name);
+        CmisContentStream content = mock(CmisContentStream.class);
+        when(content.getInputStream()).thenReturn(new ByteArrayInputStream(name.getBytes(StandardCharsets.UTF_8)));
+        when(document.getContentStream()).thenReturn(content);
+        return document;
     }
 
     private static long records(String csv) throws IOException {

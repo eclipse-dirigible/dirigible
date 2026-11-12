@@ -47,6 +47,7 @@ import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourceInitializer;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.engine.cms.CmisSessionFactory;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
@@ -388,6 +389,38 @@ class TenantExportIT extends IntegrationTest {
 
     @Test
     @Order(6)
+    void anExportWhoseArchiveIsNoLongerStoredIsGoneAndCanBeDeleted() throws Exception {
+        MockHttpSession owner = enter(alpha, ALPHA_OWNER, "Owner");
+        Authentication ann = person(alpha, ALPHA_OWNER, "Owner");
+        long parted = start(owner, ann);
+        String archive = "/__EXPORTS/tenant-exports/" + parted + "/" + awaitCompleted(owner, ann, parted).get("archiveName")
+                                                                                                         .asString();
+        // the row stays, its archive goes: an instance replaced without its CMS storage
+        tenantContext.execute(alpha.getId(), () -> {
+            CmisSessionFactory.getSession()
+                              .getObjectByPath(archive)
+                              .delete();
+            return null;
+        });
+
+        mvc.perform(get(EXPORTS + "/" + parted + "/archive").session(owner)
+                                                            .with(authentication(ann)))
+           .andExpect(status().isGone())
+           .andExpect(status().reason("The export's archive is no longer available"));
+        Instant expiresAt = Instant.parse(export(owner, ann, parted).get("expiresAt")
+                                                                    .asString());
+        assertFalse(expiresAt.isAfter(Instant.now()), "the download that found the archive missing expired the export: " + expiresAt);
+
+        mvc.perform(delete(EXPORTS + "/" + parted).session(owner)
+                                                  .with(authentication(ann)))
+           .andExpect(status().isNoContent());
+        mvc.perform(get(EXPORTS + "/" + parted).session(owner)
+                                               .with(authentication(ann)))
+           .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Order(7)
     void anExpiredArchiveIsGone() throws Exception {
         try (Connection connection = dataSourcesManager.getSystemDataSource()
                                                        .getConnection();

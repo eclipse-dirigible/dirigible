@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -323,20 +324,28 @@ class TenantExportArchives {
     }
 
     /**
-     * Opens a stored archive.
+     * Opens a stored archive. It is looked up folder by folder rather than by its path, because every
+     * CMS answers a path that names nothing with the same {@link IOException} as a storage it cannot
+     * read: walking the folders tells an archive that is not there from one that cannot be read.
      *
      * @param archivePath where it is
-     * @return its content
-     * @throws IOException when it cannot be read
+     * @return its content, or empty when there is no archive at that path
+     * @throws IOException when the CMS cannot be read
      */
-    InputStream open(String archivePath) throws IOException {
-        CmisObject object = CmisSessionFactory.getSession()
-                                              .getObjectByPath(archivePath);
-        if (!(object instanceof CmisDocument document)) {
-            throw new IOException("There is no archive at [" + archivePath + "]");
+    Optional<InputStream> open(String archivePath) throws IOException {
+        int nameStart = archivePath.lastIndexOf('/') + 1;
+        CmisFolder folder = folder(CmisSessionFactory.getSession(), archivePath.substring(0, nameStart));
+        if (folder == null) {
+            return Optional.empty();
         }
-        return document.getContentStream()
-                       .getInputStream();
+        String name = archivePath.substring(nameStart);
+        for (CmisObject child : folder.getChildren()) {
+            if (child instanceof CmisDocument document && name.equals(child.getName())) {
+                return Optional.of(document.getContentStream()
+                                           .getInputStream());
+            }
+        }
+        return Optional.empty();
     }
 
     /**
