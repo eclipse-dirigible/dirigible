@@ -204,6 +204,11 @@ public class EntityIntent {
      */
     private RefreshIntent refresh;
     /**
+     * Optional {@code share:} (issue #8613): the entity's issued copy may be handed to an external
+     * reader through a link a user creates on the record. Absent, no link can exist for the entity.
+     */
+    private ShareIntent share;
+    /**
      * Optional append-only marker: {@code immutable: true} makes every record READ-ONLY for user writes
      * from the moment it is created (audit trails, ledger lines, event logs) - REST update and delete
      * always return 409. System writes through the repository stay possible. Mutually exclusive with
@@ -626,6 +631,14 @@ public class EntityIntent {
 
     public void setRefresh(RefreshIntent refresh) {
         this.refresh = refresh;
+    }
+
+    public ShareIntent getShare() {
+        return share;
+    }
+
+    public void setShare(ShareIntent share) {
+        this.share = share;
     }
 
     public void setImmutableWhen(String immutableWhen) {

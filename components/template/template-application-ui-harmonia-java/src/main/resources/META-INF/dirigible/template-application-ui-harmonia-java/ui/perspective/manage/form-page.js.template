@@ -203,6 +203,14 @@ document.addEventListener('alpine:init', () => {
     // Controller path for ${name}, relative to App.config.restBase
     // (the default base api.* prepends): <restBase>/<perspective>/<Entity>Controller.
     apiPath: '/${javaPerspectiveName}/${name}Controller',
+#if($share)
+
+    // Share links (intent `share:`, #8613): the rail's shareLinksPanel reports here whether the caller
+    // may see the record's links, so the rail shows for that section alone; `shareWhen` are the terms
+    // (basePage.visibleWhenHolds) the record satisfies while a link may be created.
+    shareLinksShown: false,
+    shareWhen: #if($share.whenTermsJs)${share.whenTermsJs}#{else}[]#end,
+#end
 #if($history == "true")
 
     // Change history (intent `history: true`): the record's field-level trail, read from the
@@ -1283,9 +1291,9 @@ document.addEventListener('alpine:init', () => {
     // The rail itself is only worth its rule and its column when something inside it renders.
     get hasRailContent() {
 #if($history == "true")
-      return this.hasDetailValues || (this.history || []).length > 0;
+      return this.hasDetailValues || (this.history || []).length > 0#if($share) || this.shareLinksShown#end;
 #else
-      return this.hasDetailValues;
+      return this.hasDetailValues#if($share) || this.shareLinksShown#end;
 #end
     },
 

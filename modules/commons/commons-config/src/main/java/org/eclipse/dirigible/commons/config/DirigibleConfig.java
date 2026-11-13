@@ -179,6 +179,35 @@ public enum DirigibleConfig {
      */
     DOCUMENTS_CONTENT_TYPE_MS_ENABLED("DIRIGIBLE_DOCUMENTS_EXT_CONTENT_TYPE_MS_ENABLED", "false", meta().tenant(10)),
 
+    /**
+     * Whether the documents of an entity that declares the intent's {@code share:} can be handed out
+     * through a public link ({@code /public/share/<token>}, #8613). Per tenant, and a switch OFF only:
+     * off, no link is created and every existing one answers 404; on, still only the declared entities
+     * can be shared. Read per call.
+     */
+    DOCUMENTS_SHARE_ENABLED("DIRIGIBLE_DOCUMENTS_SHARE_ENABLED", Boolean.TRUE.toString(), meta().type(ConfigType.BOOLEAN)
+                                                                                                .tenant(15)),
+
+    /**
+     * The longest life, in days, a share link may be created with - {@code 0} leaves the entity's
+     * declared {@code expiresAfterDays} as it is. Per tenant, and it only ever shortens: a declaration
+     * of a permanent or longer-lived link is capped to this many days. Read when a link is created.
+     */
+    DOCUMENTS_SHARE_MAX_EXPIRY_DAYS("DIRIGIBLE_DOCUMENTS_SHARE_MAX_EXPIRY_DAYS", "0", meta().type(ConfigType.INT)
+                                                                                            .tenant(16)),
+
+    /**
+     * How many requests a minute the public share route answers per remote address, and per link - the
+     * rest are answered 429 until the minute ends.
+     */
+    DOCUMENTS_SHARE_RATE_LIMIT_PER_MINUTE("DIRIGIBLE_DOCUMENTS_SHARE_RATE_LIMIT_PER_MINUTE", "60"),
+
+    /**
+     * How many unknown, expired or revoked links one remote address may ask the public share route for
+     * within ten minutes before it is answered 429 for the rest of them.
+     */
+    DOCUMENTS_SHARE_MISS_LIMIT("DIRIGIBLE_DOCUMENTS_SHARE_MISS_LIMIT", "10"),
+
     /** The default data source name. */
     DEFAULT_DATA_SOURCE_NAME("DIRIGIBLE_DATABASE_DATASOURCE_NAME_DEFAULT", "DefaultDB"),
 

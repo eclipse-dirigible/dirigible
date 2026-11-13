@@ -114,7 +114,8 @@ import ch.qos.logback.classic.Level;
  * event-driven {@code generates} (posting the source mints the whole document with nobody clicking,
  * and a click afterwards returns that same document - the at-most-once back-reference guard), and
  * the personal (my) surface ({@code identity}/{@code personal}/{@code sensitive}: scoped reads,
- * forced owner, stripped fields).
+ * forced owner, stripped fields), and {@code share:} (the share subject, the three link endpoints
+ * behind the declared roles, the links section of the page - and none of it without the block).
  */
 @Tag("slow")
 class IntentEmissionCoverageIT extends IntegrationTest {
@@ -1320,8 +1321,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     // declared neither. Its own readOnly columns are written through updateProperties by jobs,
     // notifications and task write-backs, which never reach save().
     private static final String INTENT_YAML_FILES = """
+              # share: (#8613) - the issued copy may be handed out through a link while the condition
+              # holds, by the one role the fixture declares.
               - name: Archive
                 function: Document
+                share: { when: "title != Draft", copy: ArchiveCopy, roles: [Payroll] }
                 fields:
                   - { name: id,    type: integer, primaryKey: true, generated: true }
                   - { name: title, type: string, length: 60, required: true, function: DocumentTitle }
@@ -2749,6 +2753,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertFieldEmptyTextEmission();
         assertRecordHeaderEmission();
         assertBannerEmission();
+        assertShareEmission();
 
         publishProject();
         synchronizationProcessor.forceProcessSynchronizers();
@@ -2793,6 +2798,37 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String plain = contentOf("gen/emission/js/components/pages/Team/TeamFormPage.js");
         String plainSubtitle = plain.substring(plain.indexOf("subtitleParts() {"), plain.indexOf("summaryLine() {"));
         assertFalse(plainSubtitle.contains("this.loadedRecord."), "an entity without subtitle: has no subtitle line: " + plainSubtitle);
+    }
+
+    /**
+     * {@code share:} (#8613): the repository answers whether a record is still shareable with the
+     * declared condition, the controller carries the three link endpoints behind the declared roles and
+     * serves the stored copy only, the document page mounts the links section - and an entity that does
+     * not declare it gets none of it.
+     */
+    private void assertShareEmission() {
+        String repositoryCode = contentOf("gen/emission/data/archive/ArchiveRepository.java");
+        assertTrue(
+                repositoryCode.contains("org.eclipse.dirigible.components.engine.share.ShareSubject")
+                        && repositoryCode.contains("public static final String SHARE_SUBJECT = \"")
+                        && repositoryCode.contains("return entity != null && !java.util.Objects.equals(entity.Title, \"Draft\");"),
+                "the repository must contribute the share subject with the declared condition: " + repositoryCode);
+        String controller = contentOf("gen/emission/api/archive/ArchiveController.java");
+        assertTrue(controller.contains("@Get(\"/{id}/share-links\")") && controller.contains("@Post(\"/{id}/share-links\")")
+                && controller.contains("@Delete(\"/{id}/share-links/{linkId}\")") && controller.contains("if (!isInAnyRole(\"Payroll\")) {")
+                && controller.contains("ArchiveCopyRepository().findAll(") && controller.contains("issued.StoragePath, issued.FileName,"),
+                "the controller must gate the link endpoints by the declared role and serve the stored copy: " + controller);
+        String page = contentOf("gen/emission/js/components/pages/Archive/ArchiveDocumentPage.js");
+        assertTrue(page.contains("shareWhen: [{ property: 'Title', equal: false, value: 'Draft' }],"),
+                "the page must carry the condition the Create link button shows by: " + page);
+        String view = contentOf("gen/emission/views/Archive/Archive-document.html");
+        assertTrue(view.contains("x-data=\"shareLinksPanel(apiPath, id)\""), "the document page must mount the links section: " + view);
+        assertTrue(contentOf("gen/emission/index.html").contains("/shell/js/components/shareLinksPanel.js"),
+                "the shell must load the links panel");
+        String plainController = contentOf("gen/emission/api/team/TeamController.java");
+        assertFalse(plainController.contains("share-links"), "an entity without share: has no link route: " + plainController);
+        assertFalse(contentOf("gen/emission/data/team/TeamRepository.java").contains("ShareSubject"),
+                "an entity without share: contributes no share subject");
     }
 
     /**
