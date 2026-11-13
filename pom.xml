@@ -255,7 +255,7 @@
         <alpinejs.version>3.17.4</alpinejs.version>
         <harmonia.version>3.7.1</harmonia.version>
         <opensans.version>5.3.0</opensans.version>
-        <lucide.version>1.48.0</lucide.version>
+        <lucide.version>1.66.0</lucide.version>
         <pinecone-router.version>7.6.0</pinecone-router.version>
         <!-- Tests -->
         <testcontainers.version>2.0.5</testcontainers.version>
