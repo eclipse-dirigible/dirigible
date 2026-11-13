@@ -22,7 +22,7 @@ import java.util.List;
  * tags registered at runtime.
  */
 public sealed interface Node permits DocumentNode, PageNode, HeaderNode, FooterNode, SectionNode, RowNode, ColumnNode, StackNode, TextNode,
-        FieldNode, TableNode, ImageNode, LineNode, SpaceNode, TotalNode, IfNode, ForNode, CustomNode {
+        FieldNode, TableNode, ImageNode, QrCodeNode, LineNode, SpaceNode, TotalNode, IfNode, ForNode, CustomNode {
 
     /**
      * The tag name, e.g. {@code "table"}.

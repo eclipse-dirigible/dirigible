@@ -9,12 +9,19 @@
  */
 package org.eclipse.dirigible.components.engine.document;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.awt.image.BufferedImage;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.rendering.PDFRenderer;
 import org.eclipse.dirigible.parsers.document.renderer.ImageResolver;
 import org.junit.jupiter.api.Test;
 
@@ -160,6 +167,83 @@ class PrintRendererTest {
                 </page>
             </document>
             """;
+
+    /**
+     * The payment QR code of an invoice (EPC069-12, "SEPA credit transfer") through the whole pipeline
+     * down to the PDF: the page is rasterized as a printer would and the code scanned off it. All
+     * twelve lines come back - the empty ones and the Cyrillic beneficiary included.
+     */
+    @Test
+    void aPaymentQrCodeScansBackFromTheRenderedPdf() throws Exception {
+        byte[] pdf = PrintRenderer.renderPdf(QR_CODE_TEMPLATE, "bg", qrCodeData("BG80BNBG96611020345678"), ImageResolver.PASS_THROUGH);
+
+        try (PDDocument document = Loader.loadPDF(pdf)) {
+            BufferedImage page = new PDFRenderer(document).renderImageWithDPI(0, 200);
+            String scanned = QrCodeScanner.scan(page);
+
+            assertEquals(PrintQrCodeEncoderTest.EPC_PAYLOAD, scanned);
+            assertEquals(12, scanned.split("\n", -1).length, "an EPC payment code is twelve lines");
+        }
+    }
+
+    @Test
+    void theQrCodeInTheStylesheetIsTheBoundPayloadAtTheAuthoredSize() throws Exception {
+        String fo = PrintRenderer.renderFo(QR_CODE_TEMPLATE, "bg", qrCodeData("BG80BNBG96611020345678"), ImageResolver.PASS_THROUGH);
+
+        Matcher graphic = QR_CODE_GRAPHIC.matcher(fo);
+        assertTrue(graphic.find(), "the QR code should be emitted as an inline image of 90 by 90 points");
+        assertEquals(PrintQrCodeEncoderTest.EPC_PAYLOAD, QrCodeScanner.scan(PrintQrCodeEncoderTest.image(graphic.group(1))));
+        assertTrue(fo.contains("Pay by scanning"), "the text beside it in the row still renders");
+    }
+
+    /**
+     * No bank account on the document: the {@code <if>} around the code drops it, the invoice prints.
+     */
+    @Test
+    void theQrCodeIsDroppedWithItsConditionAndTheDocumentStillPrints() {
+        String fo = PrintRenderer.renderFo(QR_CODE_TEMPLATE, "bg", qrCodeData(""), ImageResolver.PASS_THROUGH);
+
+        assertFalse(fo.contains("external-graphic"), "no QR code without an IBAN to pay to");
+        assertFalse(fo.contains("Pay by scanning"), "the whole conditional block is dropped");
+        assertTrue(fo.contains("SI-42"), "the rest of the document still renders");
+    }
+
+    private static final Pattern QR_CODE_GRAPHIC = Pattern.compile(
+            "<fo:block text-align=\"right\"><fo:external-graphic src=\"(data:image/png;base64,[A-Za-z0-9+/=]+)\" content-width=\"90pt\" content-height=\"90pt\"/>");
+
+    private static final String QR_CODE_TEMPLATE = """
+            <document id="sales-invoice">
+                <page>
+                    <field label="Number">{{document.Number}}</field>
+                    <if source="document.BankAccount.Iban">
+                        <row>
+                            <stack width="*">
+                                <text>Pay by scanning</text>
+                            </stack>
+                            <qrcode width="100" size="90" level="M" align="right">
+                                BCD
+                                002
+                                1
+                                SCT
+                                {{document.BankAccount.Bic}}
+                                {{document.Company.LegalName}}
+                                {{document.BankAccount.Iban}}
+                                EUR{{document.Balance:0.00}}
+                                {{document.Purpose}}
+                                {{document.Reference}}
+                                Фактура {{document.Number}} / Invoice {{document.Number}}
+                                {{document.Note}}
+                            </qrcode>
+                        </row>
+                    </if>
+                </page>
+            </document>
+            """;
+
+    private static Map<String, Object> qrCodeData(String iban) {
+        return Map.of("document", Map.of("Number", "SI-42", "Balance", 1250.5, "Note", "Благодарим!", "Company",
+                Map.of("LegalName", "Метафор ООД"), "BankAccount", Map.of("Bic", "UNCRBGSF", "Iban", iban)));
+    }
 
     private static String renderFo(String template, Map<String, Object> data) {
         return PrintRenderer.renderFo(template, "en", data, ImageResolver.PASS_THROUGH);

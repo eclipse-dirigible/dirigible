@@ -38,11 +38,24 @@
 			<artifactId>dirigible-parsers-document</artifactId>
 		</dependency>
 
+		<!-- The <qrcode> element of a .print template; the version api-utils (QRCodeFacade) ships -->
+		<dependency>
+			<groupId>com.google.zxing</groupId>
+			<artifactId>core</artifactId>
+			<version>3.5.4</version>
+		</dependency>
 		<!-- The CMIS folder contract names an OpenCMIS enum, so the fake CMS of CmsStoreTest needs it -->
 		<dependency>
 			<groupId>org.apache.chemistry.opencmis</groupId>
 			<artifactId>chemistry-opencmis-commons-api</artifactId>
 			<version>${chemistry.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<!-- Reads a rendered PDF back, so a test can scan the QR code it carries; the FOP line's fontbox version -->
+		<dependency>
+			<groupId>org.apache.pdfbox</groupId>
+			<artifactId>pdfbox</artifactId>
+			<version>3.0.3</version>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>

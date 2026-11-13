@@ -30,6 +30,9 @@ final class PrintRenderer {
      */
     private static final String EMPTY_DATA_SOURCE = "<data/>";
 
+    /** Stateless, so one encoder draws the {@code <qrcode>} of every render. */
+    private static final PrintQrCodeEncoder QR_CODE_ENCODER = new PrintQrCodeEncoder();
+
     private PrintRenderer() {}
 
     /**
@@ -44,7 +47,7 @@ final class PrintRenderer {
      */
     static String renderFo(String templateSource, String language, Map<String, Object> data, ImageResolver imageResolver) {
         Node bound = new DataBinder(language).bind(new DocumentParser().parse(templateSource), data);
-        return new XslFoRenderer(imageResolver).renderBound(bound);
+        return new XslFoRenderer(imageResolver, QR_CODE_ENCODER).renderBound(bound);
     }
 
     /**

@@ -66,12 +66,13 @@ switch (node) {
 ## Built-in tags
 
 `document`, `page`, `header`, `footer`, `section`, `row`, `column`, `stack`, `text`,
-`field`, `table`, `image`, `line`, `space`, `total`, `if`, `for`
+`field`, `table`, `image`, `qrcode`, `line`, `space`, `total`, `if`, `for`
 
 ## Attributes
 
 `id`, `width`, `height`, `flex`, `align`, `style`, `gap`, `padding`, `margin`, `label`,
-`source`, `src`, `filter`, `match`, `fontSize`, `repeatHeader`, `pageBreak` — all stored as plain strings.
+`source`, `src`, `filter`, `match`, `groupBy`, `fontSize`, `value`, `size`, `level`, `repeatHeader`, `pageBreak` — all
+stored as plain strings.
 
 - **Alignment** (`align`): `left`, `center`, `right`, `justify`.
 - **Widths/heights**: `100` (px), `100px`, `50%`, `*` (fraction weight 1), `2*`, `3*`;
@@ -85,10 +86,15 @@ fast rather than silently drop content. Extending the DSL is one line, no parser
 
 ```java
 TagRegistry registry = TagRegistry.builtIn();
-registry.register("qrcode");                       // parses to CustomNode
+registry.register("stamp");                        // parses to CustomNode
 registry.register("barcode", BarcodeNode::new);    // or a CustomNode subclass
 Node root = new DocumentParser(registry).parse(source);
 ```
+
+A tag whose content is line-oriented by nature registers as **line-preserving**
+(`registry.registerLinePreserving("address", AddressNode::new)`): its text keeps its line breaks
+instead of collapsing to one line - the rule the built-in `qrcode` uses, spelled out under
+[QR codes](#qr-codes-qrcode-rendererqrcodeencoder).
 
 ## Grammar (EBNF)
 
@@ -136,8 +142,9 @@ hostile:
 - Tag names are case-sensitive lowercase.
 - Duplicate attributes on one element are an error (determinism).
 - A literal `<` in text must be written `&lt;`.
-- Text whitespace is normalized: runs collapse to a single space, ends are trimmed.
-  There is no preformatted-text escape hatch (yet).
+- Text whitespace is normalized: runs collapse to a single space, ends are trimmed. The one
+  exception is a line-preserving tag - the built-in `qrcode` - whose text keeps its lines (see
+  [QR codes](#qr-codes-qrcode-rendererqrcodeencoder)). There is no preformatted *text* (yet).
 
 Every syntax error reports its exact 1-based line and column; an unclosed element points
 at its **opening** tag.
@@ -306,6 +313,72 @@ absent or blank `src` never reaches the resolver.
 
 FOP reads a `data:` URI natively (`InternalResourceResolver`), so an inlined image needs no
 configuration; `PDFFacadeTest.generatePdfWithInlineImageTest` pins that contract.
+
+## QR codes (`<qrcode>`, `renderer.QrCodeEncoder`)
+
+`<qrcode>` prints a QR code of a text payload - the payment code of an invoice (EPC069-12, "SEPA
+credit transfer": scanned in a banking app, the IBAN, amount and remittance text are prefilled), a
+link to the document, a verification code:
+
+```xml
+<if source="document.BankAccount.Iban">
+    <qrcode size="90" level="M" align="right">
+        BCD
+        002
+        1
+        SCT
+        {{document.BankAccount.Bic}}
+        {{document.Company.LegalName}}
+        {{document.BankAccount.Iban}}
+        EUR{{document.Balance:0.00}}
+
+
+        Invoice {{document.Number}}
+    </qrcode>
+</if>
+
+<qrcode value="https://example.com/invoices/{{document.Number}}"/>
+```
+
+| attribute | meaning |
+| --- | --- |
+| `value` | the payload on one line - the short form; when it is not blank it wins over the text |
+| `size` | the side of the printed square in points, quiet zone included (`90`, `90pt`, `90px`); default `90` (about 32 mm). Anything but a positive number is a layout error |
+| `level` | error correction: `L` (7%), `M` (15%, the default and what EPC069-12 prescribes), `Q` (25%), `H` (30%), case-insensitive. Anything else is a layout error |
+| `align` | `left` / `center` / `right` within the space the element has |
+| `width` | the element's column inside a `row`, as for any other row child - `size` is the symbol, not the column |
+
+**The payload is the element's text with its line breaks kept** - placeholders, alternative
+operands and format specifiers resolve exactly as in `<text>`. Line-oriented payloads count their
+lines (the remittance text of a payment code is line 11, whatever lines 9 and 10 hold), so the text
+is normalized only as far as the template's own formatting goes:
+
+- line endings (`\r\n`, `\r`) become a line feed;
+- every line loses its leading and trailing spaces and tabs - the indentation of the template;
+  spaces inside a line stay;
+- the first line is dropped when it is blank, and so is the last one: the line break after
+  `<qrcode ...>` and the indentation before `</qrcode>`. Exactly one at each end - a second blank
+  line there is yours and is kept;
+- every other line stays, **the empty ones included**.
+
+This happens when the template is parsed, before any data is merged, so a line that holds only a
+placeholder is a line whatever the placeholder resolves to - `{{document.Missing}}` leaves an empty
+line, it does not swallow one. A resolved value is inserted as it is: one that itself carries a line
+break adds a line. The five entities are decoded as everywhere else, so a `<` in a payload is
+`&lt;`.
+
+**Fail-soft, like `<image>`.** A payload that is blank after binding - a `value` whose placeholders
+resolved empty, an element with no text - renders **nothing**: no block, no placeholder. So does a
+payload too long for a QR code at the requested level. A payment code is never blank as a whole
+(its fixed lines are always there), so the "no bank account / not in EUR / nothing left to pay"
+cases are an `<if>` around it, as above. It prints wherever an `<image>` does - in the flow, in a
+`row`, a `stack`, the `header` or `footer` - but not inside a `table` cell, which is text.
+
+**The encoding is the host's.** The library carries no dependency, so it models the element,
+keeps the lines and lays the square out, and hands the payload to a `QrCodeEncoder`
+(`new XslFoRenderer(imageResolver, qrCodeEncoder)`), which returns the image to embed - a `data:`
+URI - or `null` for nothing. The default, `QrCodeEncoder.NONE`, renders no QR code;
+`engine-document` supplies the real one (`PrintQrCodeEncoder`, UTF-8, so Cyrillic names scan back).
 
 ## Example templates
 
