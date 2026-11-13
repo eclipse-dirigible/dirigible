@@ -65,6 +65,12 @@ import org.eclipse.dirigible.components.intent.model.UsesIntent;
  * <i>through</i> a same-model relation (depth 2 already) is not expanded - that is the depth bound.
  *
  * <p>
+ * <b>Audit columns:</b> an {@code audit: true} document carries its four injected columns
+ * ({@code CreatedAt}, {@code CreatedBy}, {@code UpdatedAt}, {@code UpdatedBy}) on {@code document}
+ * (dirigible #8609) - they are not authored fields, so they are appended to the root's scalars
+ * here.
+ *
+ * <p>
  * The plan is <b>flattened</b> into an ordered node list (parent before child), each node carrying
  * its parent's entity/map variable, so the Velocity template renders it with a single pass and no
  * recursion.
@@ -74,7 +80,22 @@ final class PrintFeederSupport {
     /** Maximum relation depth walked from the document master (root = 0). */
     private static final int MAX_DEPTH = 2;
 
+    /**
+     * The audit columns of an {@code audit: true} entity as the generated entity declares them
+     * ({@code EdmIntentGenerator.auditProperties}), mapped to whether the column is a timestamp.
+     */
+    private static final Map<String, Boolean> AUDIT_SCALARS = auditScalars();
+
     private PrintFeederSupport() {}
+
+    private static Map<String, Boolean> auditScalars() {
+        Map<String, Boolean> audit = new LinkedHashMap<>();
+        audit.put("CreatedAt", true);
+        audit.put("CreatedBy", false);
+        audit.put("UpdatedAt", true);
+        audit.put("UpdatedBy", false);
+        return java.util.Collections.unmodifiableMap(audit);
+    }
 
     /**
      * One feeder descriptor per document master in the model.
@@ -119,7 +140,7 @@ final class PrintFeederSupport {
         feeder.put("className", master.getName());
         feeder.put("entity", master.getName());
         feeder.put("perspective", IntentEntities.resolvePerspective(master.getName(), compositionParents, model));
-        feeder.put("rootScalars", scalarDescriptors(master));
+        feeder.put("rootScalars", rootScalarDescriptors(master));
 
         feeder.put("itemsEntity", items.getName());
         feeder.put("itemsPerspective", IntentEntities.resolvePerspective(items.getName(), compositionParents, model));
@@ -273,6 +294,31 @@ final class PrintFeederSupport {
                 if (!field.isPrimaryKey() && field.getName() != null) {
                     scalars.add(scalar(IntentNaming.pascalCase(field.getName()), isDateType(field.getType())));
                 }
+            }
+        }
+        return scalars;
+    }
+
+    /**
+     * The document's own scalars, plus the four audit columns an {@code audit: true} entity is given by
+     * the EDM generator (dirigible #8609). Those are not authored fields, so
+     * {@link #scalarDescriptors(EntityIntent)} does not see them - and without them a print could not
+     * name who compiled the document. The names and types are {@link #AUDIT_SCALARS}, the generated
+     * entity's own; an authored field of the same name wins (the parser refuses that on an audited
+     * entity, so this only keeps the descriptor list free of duplicates).
+     */
+    private static List<Map<String, Object>> rootScalarDescriptors(EntityIntent master) {
+        List<Map<String, Object>> scalars = scalarDescriptors(master);
+        if (!master.isAudited()) {
+            return scalars;
+        }
+        Set<String> names = new LinkedHashSet<>();
+        for (Map<String, Object> scalar : scalars) {
+            names.add((String) scalar.get("name"));
+        }
+        for (Map.Entry<String, Boolean> audit : AUDIT_SCALARS.entrySet()) {
+            if (names.add(audit.getKey())) {
+                scalars.add(scalar(audit.getKey(), audit.getValue()));
             }
         }
         return scalars;

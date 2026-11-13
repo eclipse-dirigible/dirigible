@@ -309,6 +309,61 @@ class PrintFeederSupportTest {
     }
 
     /**
+     * dirigible #8609: an {@code audit: true} document prints who compiled it. The four columns are
+     * injected by the EDM generator, not authored, so the feeder has to add them itself - under the
+     * names the generated entity declares, the two timestamps flagged so they print as ISO strings.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void anAuditedDocumentCarriesItsAuditColumns() {
+        Map<String, Boolean> audited = rootScalarsOf(true);
+        assertEquals(Boolean.TRUE, audited.get("CreatedAt"));
+        assertEquals(Boolean.FALSE, audited.get("CreatedBy"));
+        assertEquals(Boolean.TRUE, audited.get("UpdatedAt"));
+        assertEquals(Boolean.FALSE, audited.get("UpdatedBy"));
+        assertEquals(List.of("Number", "CreatedAt", "CreatedBy", "UpdatedAt", "UpdatedBy"), List.copyOf(audited.keySet()),
+                "after the document's own fields, each once");
+    }
+
+    @Test
+    void aDocumentThatIsNotAuditedIsUnchanged() {
+        assertEquals(List.of("Number"), List.copyOf(rootScalarsOf(false).keySet()));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Boolean> rootScalarsOf(boolean audit) {
+        IntentModel bills = IntentParser.parse("""
+                name: bills
+                entities:
+                  - name: Bill
+                %s
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, documentTitle: true }
+                  - name: BillItem
+                    audit: true
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal, required: true }
+                    relations:
+                      - { name: Bill, kind: manyToOne, to: Bill, composition: true, required: true }
+                """.formatted(audit ? "    audit: true" : ""));
+        Map<String, Object> feeder = PrintFeederSupport
+                                                       .buildPrintFeeders(bills, IntentEntities.byName(bills),
+                                                               IntentEntities.compositionParents(bills), null, TestContexts.context(bills))
+                                                       .get(0);
+        Map<String, Boolean> scalars = new java.util.LinkedHashMap<>();
+        for (Map<String, Object> scalar : (List<Map<String, Object>>) feeder.get("rootScalars")) {
+            scalars.put((String) scalar.get("name"), (Boolean) scalar.get("date"));
+        }
+        List<String> itemScalars = ((List<Map<String, Object>>) feeder.get("itemScalars")).stream()
+                                                                                          .map(scalar -> (String) scalar.get("name"))
+                                                                                          .toList();
+        assertEquals(List.of("Quantity"), itemScalars, "the audit columns are the document's - a line item stays as it was");
+        return scalars;
+    }
+
+    /**
      * Without grants the endpoint demands the document's convention read gate, which its writers pass
      * too (#7921).
      */

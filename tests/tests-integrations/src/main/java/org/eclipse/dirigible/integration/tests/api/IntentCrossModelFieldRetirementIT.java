@@ -65,7 +65,8 @@ import org.springframework.beans.factory.annotation.Autowired;
  * The same fixture carries the hop past the owner's record (#7752): the owner's Invoice references
  * a City, and the consumer's payload reaches {@code document.Invoice.City.Name} although its feeder
  * names neither the relation nor the City - the owner's generated entity declares the reference and
- * the feeder follows it at runtime.
+ * the feeder follows it at runtime. And the consumer's document is {@code audit: true}, so its
+ * payload names who created it (#8609).
  */
 class IntentCrossModelFieldRetirementIT extends IntegrationTest {
 
@@ -118,6 +119,7 @@ class IntentCrossModelFieldRetirementIT extends IntegrationTest {
 
             entities:
               - name: JournalEntry
+                audit: true
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: number, type: string,  required: true, length: 100 }
@@ -183,6 +185,14 @@ class IntentCrossModelFieldRetirementIT extends IntegrationTest {
                 ownerEntity.contains("@org.eclipse.dirigible.sdk.db.Reference(repository = \"gen." + OWNER_MODEL
                         + ".data.city.CityRepository\", label = \"Name\")"),
                 "the OWNER declares where its reference is read from; entity was:\n" + ownerEntity);
+
+        // An audit: true document carries its audit columns (#8609).
+        assertTrue(
+                feeder.contains("document.put(\"CreatedBy\", root.CreatedBy)")
+                        && feeder.contains("document.put(\"CreatedAt\", root.CreatedAt == null ? null : root.CreatedAt.toString())")
+                        && feeder.contains("document.put(\"UpdatedBy\", root.UpdatedBy)")
+                        && feeder.contains("document.put(\"UpdatedAt\", root.UpdatedAt == null ? null : root.UpdatedAt.toString())"),
+                "the audit columns of the document are fed; feeder was:\n" + feeder);
 
         // The same-model half is unchanged: this project's own fields ARE named, line by line.
         assertTrue(feeder.contains("document.put(\"Number\", root.Number)"), "the document's own fields stay explicit (the audit trail)");
@@ -263,6 +273,9 @@ class IntentCrossModelFieldRetirementIT extends IntegrationTest {
                 "a relation of the cross-model record is reachable; payload: " + payload.get());
         assertEquals("Sofia", document.getString("document.Invoice.City.__label"), "and a bare {{document.Invoice.City}} prints its label");
 
+        // #8609: who compiled the document, and when.
+        assertEquals("admin", document.getString("document.CreatedBy"), "the creating user; payload: " + payload.get());
+        assertNotNull(document.getString("document.CreatedAt"), "and when; payload: " + payload.get());
         assertFalse(payload.get()
                            .contains("CustomerEmail"),
                 "the retired field is simply absent - it did not have to break anything to disappear; payload: " + payload.get());
