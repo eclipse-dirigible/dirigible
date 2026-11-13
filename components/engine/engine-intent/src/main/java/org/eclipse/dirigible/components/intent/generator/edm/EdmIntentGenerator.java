@@ -1792,6 +1792,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             p.put("widgetLabel", field.getLabel()
                                       .trim());
         }
+        // The text an empty value reads as (#8605): a scalar, so it rides both the `.model` and the
+        // `.edm` twin; emitted only when authored, so a model without it is byte-identical.
+        if (notBlank(field.getEmptyText())) {
+            p.put("widgetEmptyText", field.getEmptyText()
+                                          .trim());
+        }
         // Country-scoped label variants (#6424). A Map, so it lives only in the `.model` twin (the
         // scalar-only `.edm` XML skips it via the Iterable guard); the UI generation turns it into the
         // application's country overlay, which the shared i18n runtime prefers over the language
@@ -4249,7 +4255,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     private static final List<String> RELATED_COLUMN_KEYS = List.of("name", "widgetLabel", "dataName", "dataType", "dataScale",
             "widgetType", "widgetPattern", "widgetDropDownKey", "widgetDropDownValue", "relationshipEntityName",
             "relationshipEntityPerspectiveName", "widgetOptionsEntityName", "widgetOptionsEntityPerspectiveName", "sensitiveProperty",
-            "referencedModel", "numberStampOnIssue", "widgetDropDownDocumentNumber", "collectionColumn");
+            "referencedModel", "numberStampOnIssue", "widgetDropDownDocumentNumber", "collectionColumn", "widgetEmptyText");
 
     /**
      * Emits each entity's {@code related:} declarations as the {@code relatedEntities} model attribute

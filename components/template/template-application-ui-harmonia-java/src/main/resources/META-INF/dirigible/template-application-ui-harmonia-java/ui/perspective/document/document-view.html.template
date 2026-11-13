@@ -38,8 +38,12 @@
 ## `form` holds a date cut to the shape its input takes (13:49:11 -> 13:49). The gate only tests for
 ## emptiness, so it may read the form.
 #macro(displayArgs $property)'#if($property.numberStampOnIssue)DOCUMENT_NUMBER#else$!{property.widgetType}#end', '#if($property.isFloatType)$!{property.formatPattern}#end', #valueOptions($property)#end
-#macro(valueDisplay $property)fieldDisplay(record.${property.name}, #displayArgs($property))#end
-#macro(valueGate $property)x-show="#if($property.roleRead)canSee('${property.name}') && #end#if($property.visibleWhenJs)${property.visibleWhenJs} && #{end}fieldDisplay(form.${property.name}, #displayArgs($property)) !== ''"#end
+## intent `emptyText:` (#8605): the text an empty value reads as, translated through t.<DATA_NAME>_empty;
+## also the placeholder of a text-like or number input. Nothing is emitted for a property without it.
+#macro(emptyTextArgs $p)'$projectName:${tprefix}.t.${p.dataName}_empty', '${p.widgetEmptyTextJs}'#end
+#macro(emptyPlaceholder $p)#if($p.widgetEmptyText) :placeholder="T(#emptyTextArgs($p))"#end#end
+#macro(valueDisplay $property)#if($property.widgetEmptyText)orEmptyText(record.${property.name}, fieldDisplay(record.${property.name}, #displayArgs($property)), #emptyTextArgs($property))#{else}fieldDisplay(record.${property.name}, #displayArgs($property))#end#end
+#macro(valueGate $property)#if($property.widgetEmptyText)#if($property.roleRead || $property.visibleWhenJs)x-show="#if($property.roleRead)canSee('${property.name}')#if($property.visibleWhenJs) && #end#end$!{property.visibleWhenJs}"#end#{else}x-show="#if($property.roleRead)canSee('${property.name}') && #end#if($property.visibleWhenJs)${property.visibleWhenJs} && #{end}fieldDisplay(form.${property.name}, #displayArgs($property)) !== ''"#end#end
 <div x-data="${name}DocumentPage" class="vbox w-full">
 ## Document roles: the DOCUMENT_NUMBER field shows in the title (e.g. "SALES INVOICE 00001231"); the
 ## DOCUMENT_STATUS FK shows as a read-only coloured pill (statusText/statusVariant resolve + colour it).
@@ -375,9 +379,9 @@
         </div>
 #elseif($property.widgetType == "NUMBER")
         <!-- step="any": without it the browser default step=1 rejects fractional input on DECIMAL fields. -->
-        <div x-h-input-number><input type="number" step="any" id="f_${property.name}" x-model.number="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#{else}${fixedRo}#end /></div>
+        <div x-h-input-number><input type="number" step="any" id="f_${property.name}" x-model.number="form.${property.name}"#emptyPlaceholder($property) :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#{else}${fixedRo}#end /></div>
 #elseif($property.widgetType == "TEXTAREA")
-        <textarea x-h-textarea id="f_${property.name}" rows="3" x-model="form.${property.name}"#maxLength($property) :aria-invalid="!!errors.${property.name}"#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end#if($readonly) readonly#{else}${fixedRo}#end></textarea>
+        <textarea x-h-textarea id="f_${property.name}" rows="3" x-model="form.${property.name}"#emptyPlaceholder($property)#maxLength($property) :aria-invalid="!!errors.${property.name}"#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end#if($readonly) readonly#{else}${fixedRo}#end></textarea>
 #elseif($property.widgetType == "DATE")
         <!-- Harmonia date picker: model is YYYY-MM-DD (same as the native date input it replaces). -->
         <div x-h-date-picker>
@@ -411,9 +415,9 @@
           <div x-h-week-picker-popup x-model="form.${property.name}"></div>
         </div>
 #elseif($property.widgetType == "EMAIL")
-        <input x-h-input type="email" id="f_${property.name}" x-model="form.${property.name}"#maxLength($property) :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#{else}${fixedRo}#end#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
+        <input x-h-input type="email" id="f_${property.name}" x-model="form.${property.name}"#emptyPlaceholder($property)#maxLength($property) :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#{else}${fixedRo}#end#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
 #else
-        <input x-h-input type="text" id="f_${property.name}" x-model="form.${property.name}"#maxLength($property) :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#{else}${fixedRo}#end#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
+        <input x-h-input type="text" id="f_${property.name}" x-model="form.${property.name}"#emptyPlaceholder($property)#maxLength($property) :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#{else}${fixedRo}#end#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
 #end
 #end
         <p x-h-field-error x-show="errors.${property.name}" x-text="errors.${property.name}"></p>

@@ -890,6 +890,12 @@ final class ModelParameterProcessor {
         // class). Escaped once here, the same way widgetPatternJs is, so every template can write
         // '${property.widgetLabelJs}' instead of '${property.widgetLabel}' without re-deriving it.
         property.put("widgetLabelJs", JsLiterals.escape(str(property, "widgetLabel")));
+        // The text an empty value reads as (#8605) prints inside single-quoted JS literals and T()
+        // arguments, so it is escaped for the same reason as the label (an apostrophe in "Doesn't
+        // expire" must not close the literal). Only when authored: a model without it is unchanged.
+        if (truthy(property, "widgetEmptyText")) {
+            property.put("widgetEmptyTextJs", JsLiterals.escape(str(property, "widgetEmptyText")));
+        }
         // A picker rule naming its message's catalog key (#7611) gets the fully qualified key the
         // shared runtime's T() resolves - the namespace is this project and the catalog prefix this
         // model file's, neither of which the model itself may embed.
@@ -2310,6 +2316,11 @@ final class ModelParameterProcessor {
             // A number: { stampOn: issue } column holds a UUID placeholder until its document is
             // issued; the register shows the draft marker instead (issue #7722).
             column.put("documentNumber", Boolean.TRUE);
+        }
+        if (truthy(property, "widgetEmptyText")) {
+            // The text an empty cell reads as (#8605), in place of the em dash.
+            column.put("emptyText", str(property, "widgetEmptyText"));
+            column.put("emptyTextJs", JsLiterals.escape(str(property, "widgetEmptyText")));
         }
         return column;
     }

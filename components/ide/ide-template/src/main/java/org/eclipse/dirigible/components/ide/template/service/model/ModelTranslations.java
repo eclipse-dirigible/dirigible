@@ -472,6 +472,10 @@ final class ModelTranslations {
                 } else if (ModelValues.truthy(property, "name")) {
                     texts.put(dataName, property.get("name"));
                 }
+                if (ModelValues.truthy(property, "widgetEmptyText")) {
+                    // The text an empty value reads as (#8605), beside the label - translated the same way.
+                    texts.put(dataName + "_empty", property.get("widgetEmptyText"));
+                }
             }
             collectMasterPropertyLabels(asMap(property.get("masterProperties")), texts);
         }

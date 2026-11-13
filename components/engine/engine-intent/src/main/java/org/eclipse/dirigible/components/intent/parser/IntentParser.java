@@ -5211,6 +5211,9 @@ public final class IntentParser {
                                                       .isEmpty()) {
                     validateLabels("entity [" + name + "] field [" + field.getName() + "]", field, issues);
                 }
+                if (field.getEmptyText() != null) {
+                    validateEmptyText("entity [" + name + "] field [" + field.getName() + "]", field, issues);
+                }
                 if (field.getTranslatable() != null) {
                     validateTranslatable(entity, "entity [" + name + "] field [" + field.getName() + "]", field, issues);
                 }
@@ -8507,6 +8510,54 @@ public final class IntentParser {
      */
     private static void validateLabels(String subject, FieldIntent field, List<String> issues) {
         validateLabels(subject, field.getLabel(), field.getCountryLabels(), issues);
+    }
+
+    /**
+     * A field's {@code emptyText} (#8605): the text every generated surface prints in place of an empty
+     * value. Refused where it could never show, or where it would show in place of something else: a
+     * blank text; a boolean (a checkbox reads Yes or No, it is never empty); a uuid (the server issues
+     * it on create); the primary key; a required field (the controllers refuse an empty value); a
+     * document number (an unstamped one reads as the draft marker); a hidden field (shown nowhere); an
+     * aggregate (the totals footer is not a surface the key covers); and the document title or a chat
+     * message body (they print as the heading or a bubble, not as a field value).
+     */
+    private static void validateEmptyText(String subject, FieldIntent field, List<String> issues) {
+        String head = subject + " emptyText";
+        if (field.getEmptyText()
+                 .isBlank()) {
+            issues.add(head + " is blank - remove it to keep the em dash");
+            return;
+        }
+        String type = field.getType() == null ? "string"
+                : field.getType()
+                       .toLowerCase(Locale.ROOT);
+        if ("boolean".equals(type)) {
+            issues.add(head + " is not allowed on a boolean - a checkbox is never empty, it reads Yes or No");
+        }
+        if ("uuid".equals(type)) {
+            issues.add(head + " is not allowed on a uuid - the server issues it on create, so it is never empty");
+        }
+        if (field.isPrimaryKey()) {
+            issues.add(head + " is not allowed on the primary key - it is never empty");
+        }
+        if (field.isRequired()) {
+            issues.add(head + " is not allowed on a required field - the controllers refuse an empty value, so the text could never show");
+        }
+        if (field.getNumber() != null) {
+            issues.add(head + " is not allowed on a document number - an unstamped number reads as the draft marker");
+        }
+        if (field.isPlacement("hidden")) {
+            issues.add(head + " is not allowed with placement: hidden - the field is shown nowhere");
+        }
+        if (field.isAggregate()) {
+            issues.add(head + " is not allowed on an aggregate - the document totals footer is not a surface emptyText covers");
+        }
+        if (field.isDocumentTitle() || "DocumentTitle".equalsIgnoreCase(field.getFunction())) {
+            issues.add(head + " is not allowed on the document title - it prints as the document's heading, not as a field value");
+        }
+        if (field.isMessageBody()) {
+            issues.add(head + " is not allowed on a chat message body - it prints as a chat bubble, not as a field value");
+        }
     }
 
     /**

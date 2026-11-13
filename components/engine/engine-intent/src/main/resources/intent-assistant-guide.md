@@ -720,6 +720,21 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   `uuid`), and together with `major: true`, `visibleWhen:`, the entity's `list:` or a `related:`
   register's `show:`. Unlike `visibleTo:`, which also strips the value from REST, `hidden` only keeps
   it off the pages.
+- `emptyText: <text>` (on a **field**) - **what an empty value reads as** when "empty" means
+  something: `{ name: maxLoans, type: integer, readOnly: true, label: Loan limit, emptyText: No limit }`,
+  `{ name: expiresOn, type: date, emptyText: Never }`, `{ name: nickname, type: string, emptyText: Not set }`.
+  Every generated surface that prints the value - record and document pages (main column and Details
+  rail, preview and edit), my/partner pages, the manage and plain lists with their preview sheet,
+  the my/partner lists, composition panels, `related:` registers, the `subtitle:` line and the
+  document's summary line - prints the text in place of a null, blank or empty value instead of the
+  em dash, and a Details rail row of the field is always shown instead of hidden. It is also the
+  placeholder of the field's text, email, url, tel, number or textarea input on the create and edit
+  forms (not the date-family pickers). Translatable: it seeds `t.<DATA_NAME>_empty` beside the label.
+  Nothing is stored - data, REST answers, CSV export and print are unchanged. Prefer it to a sentinel
+  value (`-1`, `9999-12-31`) that every rule, check and report would then have to know about.
+  Refused: blank, on a `boolean` or `uuid`, the primary key, a `required` field, a `number:`, with
+  `placement: hidden`, on an `aggregate`, the document title and a chat `messageBody`; on a relation
+  it is an unknown key.
 - `hierarchy: <RelationName>` (entity-level) - **tree entities**: names the entity's own optional
   to-one SELF-relation forming the tree edge (`hierarchy: Parent` with
   `- { name: Parent, kind: manyToOne, to: <SameEntity> }`). The generated list renders as a

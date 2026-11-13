@@ -2494,6 +2494,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: title,     type: string, length: 100 }
                   - { name: digest,    type: text, readOnly: true, placement: main }
                   - { name: syncToken, type: string, length: 64, readOnly: true, placement: hidden }
+                  # What an empty value reads as (#8605): the rail shows "Not scheduled", not a hidden row.
+                  - { name: reviewBy,  type: date, readOnly: true, emptyText: Not scheduled }
                 relations:
                   - { name: Team, kind: manyToOne, to: Team, composition: true }
               # The record page is titled with the record's label and declares the line under it
@@ -2744,6 +2746,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         assertEmission();
         assertFieldPlacementEmission();
+        assertFieldEmptyTextEmission();
         assertRecordHeaderEmission();
         assertBannerEmission();
 
@@ -2764,6 +2767,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertEarlyWaitEventRuntime();
         assertCollectionColumnsRuntime();
         assertFieldPlacementRuntime();
+        assertFieldEmptyTextRuntime();
         assertRecordHeaderRuntime();
     }
 
@@ -2857,7 +2861,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                .findFirst()
                                .map(this::contentOf)
                                .orElseThrow(() -> new AssertionError("no TeamNote record page among " + views));
-        // Its only read-only fields are placed elsewhere, so the page has no Details rail at all.
+        // The main-column field stays out of the Details rail (the rail itself holds the emptyText field).
         int rail = noteForm.indexOf(".defaults.details', 'Details')");
         String main = rail > 0 ? noteForm.substring(0, rail) : noteForm;
         assertTrue(
@@ -2867,6 +2871,57 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertFalse(rail > 0 && noteForm.substring(rail)
                                         .contains("Digest"),
                 "a placement: main field must leave the Details rail: " + noteForm);
+    }
+
+    /**
+     * {@code emptyText:} (#8605) in the generated pages: the record page prints the field's text in
+     * place of an empty value and always shows its rail row, its other surfaces name the same catalog
+     * key, the en-US catalog seeds it, and no page of a field without the key carries any of it.
+     */
+    private void assertFieldEmptyTextEmission() {
+        List<String> views = new ArrayList<>();
+        collectGenerated(PROJECT_PATH + "/gen/emission", views);
+        String noteForm = views.stream()
+                               .filter(v -> v.endsWith("/TeamNote-form.html"))
+                               .findFirst()
+                               .map(this::contentOf)
+                               .orElseThrow(() -> new AssertionError("no TeamNote record page among " + views));
+        String key = ".t.TEAM_NOTE_REVIEW_BY_empty', 'Not scheduled'";
+        assertTrue(noteForm.contains("orEmptyText(loadedRecord?.ReviewBy, fieldText(loadedRecord?.ReviewBy, ") && noteForm.contains(key),
+                "the record page must print the emptyText in place of an empty ReviewBy: " + noteForm);
+        assertFalse(noteForm.contains("fieldDisplay(form.ReviewBy"),
+                "a field declaring emptyText keeps its rail row - no emptiness gate: " + noteForm);
+        List<String> elsewhere = views.stream()
+                                      .filter(v -> !v.endsWith("/TeamNote-form.html"))
+                                      .filter(v -> contentOf(v).contains("TEAM_NOTE_REVIEW_BY_empty"))
+                                      .toList();
+        assertFalse(elsewhere.isEmpty(), "the list / panel surfaces must name the emptyText key too");
+        // Absent, nothing changes: every page carrying emptyText code is one that shows ReviewBy.
+        List<String> stray = views.stream()
+                                  .filter(v -> {
+                                      String content = contentOf(v);
+                                      return (content.contains("orEmptyText(") || content.contains("_empty'"))
+                                              && !content.contains("ReviewBy") && !content.contains("REVIEW_BY");
+                                  })
+                                  .toList();
+        assertEquals(List.of(), stray, "a page with no emptyText field must carry no emptyText code");
+        ICollection catalogs = repository.getCollection(PROJECT_PATH + "/i18n/en-US");
+        assertTrue(catalogs.exists() && catalogs.getResources()
+                                                .stream()
+                                                .map(r -> new String(r.getContent(), StandardCharsets.UTF_8))
+                                                .anyMatch(
+                                                        c -> c.matches("(?s).*\"TEAM_NOTE_REVIEW_BY_empty\"\\s*:\\s*\"Not scheduled\".*")),
+                "the model catalog seeds the emptyText under t.<DATA_NAME>_empty");
+    }
+
+    /**
+     * {@code emptyText:} (#8605) changes no data: a record created without the field reads it back as
+     * null.
+     */
+    private void assertFieldEmptyTextRuntime() {
+        int team = createRecord("/team/TeamController", "{\"Name\":\"EmptyText\"}");
+        int note = createRecord("/team/TeamNoteController", "{\"Team\":" + team + ",\"Title\":\"Unscheduled\"}");
+        assertNull(readRecord("/team/TeamNoteController", note).get("ReviewBy"), "the emptyText is never stored");
     }
 
     /**
