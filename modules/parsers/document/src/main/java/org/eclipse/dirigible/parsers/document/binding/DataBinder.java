@@ -62,6 +62,13 @@ import org.eclipse.dirigible.parsers.document.parser.TagRegistry;
  * aggregates take formats and alternatives like any other operand.
  *
  * <p>
+ * Every row knows its <b>ordinal</b>: the reserved {@code __index} reads the 1-based position of
+ * the row among the rows actually rendered - counted after the row filter, and with {@code groupBy}
+ * the position of the group - so the "No." column of an items table is
+ * {@code &#123;&#123;__index&#125;&#125;}. It is a number like any other (it takes a format), reads
+ * the innermost row where loops nest, and renders empty outside a row.
+ *
+ * <p>
  * The context is plain {@code Map<String, Object>} / {@code List<Object>} data (e.g. a JSON-decoded
  * entity). Paths walk nested maps ({@code customer.name}); inside a row scope a bare path
  * ({@code quantity}) resolves against the row first, then the enclosing document context. An
@@ -113,6 +120,12 @@ public final class DataBinder {
 
     /** The {@code count()} aggregate of a grouped {@code table}/{@code for}. */
     private static final String COUNT = "count()";
+
+    /**
+     * The reserved name of a row's 1-based ordinal in a {@code table}/{@code for} - double underscore
+     * like {@code __label}, the other name the binder reserves, so it cannot collide with a field.
+     */
+    private static final String ROW_INDEX = "__index";
 
     private final TagRegistry registry;
 
@@ -224,7 +237,9 @@ public final class DataBinder {
     /**
      * The row scopes a {@code table}/{@code for} node expands into: one per {@code source} element the
      * row filter keeps, or - with {@code groupBy="<path>"} - one per distinct value of that path over
-     * the kept elements (see {@link #groups}).
+     * the kept elements (see {@link #groups}). The scopes are numbered in the order they render, from
+     * 1, which is what {@code __index} reads: the filter has already dropped its rows, and a group
+     * counts once.
      */
     private static List<Scope> rowScopes(Node node, Scope scope) {
         List<Scope> rows = new ArrayList<>();
@@ -237,7 +252,15 @@ public final class DataBinder {
         }
         String groupBy = node.attributes()
                              .get("groupBy");
-        return groupBy == null || groupBy.isBlank() ? rows : groups(rows, groupBy.trim(), scope);
+        return numbered(groupBy == null || groupBy.isBlank() ? rows : groups(rows, groupBy.trim(), scope));
+    }
+
+    private static List<Scope> numbered(List<Scope> rows) {
+        List<Scope> numbered = new ArrayList<>(rows.size());
+        for (Scope row : rows) {
+            numbered.add(row.withOrdinal(numbered.size() + 1));
+        }
+        return numbered;
     }
 
     /**
@@ -570,12 +593,22 @@ public final class DataBinder {
 
     /**
      * A row scope resolving against its own data first, then the enclosing scope. A group scope
-     * ({@code groupBy}) reads its first row and carries every row of the group for the aggregates.
+     * ({@code groupBy}) reads its first row and carries every row of the group for the aggregates. A
+     * rendered row carries its 1-based ordinal; {@code 0} marks a scope that is not one - the document
+     * context, and a row not (yet) numbered: one the filter is still judging, or a member of a group.
      */
-    private record Scope(Map<String, Object> data, Scope parent, List<Scope> group) {
+    private record Scope(Map<String, Object> data, Scope parent, List<Scope> group, int ordinal) {
 
         Scope(Map<String, Object> data, Scope parent) {
-            this(data, parent, null);
+            this(data, parent, null, 0);
+        }
+
+        Scope(Map<String, Object> data, Scope parent, List<Scope> group) {
+            this(data, parent, group, 0);
+        }
+
+        Scope withOrdinal(int position) {
+            return new Scope(data, parent, group, position);
         }
 
         /** The rows of the nearest enclosing group, {@code null} outside any group. */
@@ -594,8 +627,15 @@ public final class DataBinder {
             return resolved == null && parent != null ? parent.resolve(path) : resolved;
         }
 
-        /** The path read from this scope's own data only, without the enclosing-scope fallback. */
+        /**
+         * The path read from this scope's own data only, without the enclosing-scope fallback. The reserved
+         * {@code __index} is the ordinal of a rendered row and nothing in any other scope, so the lookup
+         * goes on to the enclosing row.
+         */
         Object resolveOwn(String path) {
+            if (ROW_INDEX.equals(path)) {
+                return ordinal > 0 ? ordinal : null;
+            }
             Object current = data;
             for (String segment : path.split("\\.")) {
                 if (!(current instanceof Map<?, ?> map)) {

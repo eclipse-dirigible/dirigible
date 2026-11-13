@@ -248,6 +248,26 @@ several VAT rates - a legal requirement wherever rates are mixed - needs nothing
 The VAT of each rate is the sum of its lines' VAT, so per-line rounding carries through to the
 cent.
 
+**Row ordinal** - inside a `table`/`for` the reserved `{{__index}}` is the row's 1-based position
+among the rows **actually rendered**: it counts after the row filter, so a filtered table numbers
+the rows it kept 1, 2, 3 with no gaps, and with `groupBy` it is the ordinal of the group. The "№"
+column every invoice items table starts with is one cell:
+
+```xml
+<table source="items">
+    <column width="24" label="№">{{__index}}</column>
+    <column width="4*" label="Item">{{Name}}</column>
+    <column width="*" label="Amount" align="right">{{Amount}}</column>
+</table>
+<!-- 1 | Widget | 100.00
+     2 | Gadget |  23.45 -->
+```
+
+It is a number like any other, so it takes a format (`{{__index:00}}`) and composes with text
+(`{{__index}}.`). Where loops nest it reads the innermost row, and each `table`/`for` counts from 1
+again - also once per pass of an enclosing loop. Outside a row it renders empty. The name is
+reserved, double underscore like `__label`: a row field called `__index` is not reachable.
+
 **Floating-point values** (`Double`/`Float`/`BigDecimal`) print in the generated forms' money
 pattern `### ### ### ##0.00` (space-grouped thousands, two decimals, locale-independent);
 integral numbers print unformatted.
