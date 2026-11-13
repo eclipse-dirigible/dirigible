@@ -183,7 +183,8 @@ public final class DocumentParser {
                 if (!closeTag.equals(tag)) {
                     throw scanner.errorAt("Mismatched closing tag: expected </" + tag + ">, found </" + closeTag + ">", closePosition);
                 }
-                return factory.create(tag, start, Attributes.of(attributes), children, normalize(text));
+                String content = registry.preservesLines(tag) ? normalizeLines(text) : normalize(text);
+                return factory.create(tag, start, Attributes.of(attributes), children, content);
             } else if (scanner.peek() == '<') {
                 children.add(parseElement(scanner));
             } else if (scanner.peek() == '&') {
@@ -303,5 +304,45 @@ public final class DocumentParser {
             }
         }
         return normalized.toString();
+    }
+
+    /**
+     * The text of a line-preserving tag ({@link TagRegistry#registerLinePreserving}): line endings
+     * unified to a line feed, every line trimmed of the template's indentation, and the blank first and
+     * last line the template's formatting adds around the content dropped. Every other line stays - an
+     * empty line in the middle is content.
+     */
+    private static String normalizeLines(StringBuilder text) {
+        List<String> lines = new ArrayList<>();
+        for (String line : text.toString()
+                               .split("\\r\\n|\\r|\\n", -1)) {
+            lines.add(trimIndentation(line));
+        }
+        if (lines.size() > 1 && lines.get(0)
+                                     .isEmpty()) {
+            lines.remove(0);
+        }
+        if (lines.size() > 1 && lines.get(lines.size() - 1)
+                                     .isEmpty()) {
+            lines.remove(lines.size() - 1);
+        }
+        return String.join("\n", lines);
+    }
+
+    /** One line without its leading and trailing spaces and tabs. */
+    private static String trimIndentation(String line) {
+        int start = 0;
+        int end = line.length();
+        while (start < end && isIndentation(line.charAt(start))) {
+            start++;
+        }
+        while (end > start && isIndentation(line.charAt(end - 1))) {
+            end--;
+        }
+        return line.substring(start, end);
+    }
+
+    private static boolean isIndentation(char c) {
+        return c == ' ' || c == '\t';
     }
 }

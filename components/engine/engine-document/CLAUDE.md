@@ -260,6 +260,31 @@ Points worth keeping:
   wherever the print feeder carries that relation (same-model to-one graph, depth 2). No modeling
   construct was added for this - a relation to the attachment row is an ordinary to-one.
 
+## QR codes in a template (`PrintQrCodeEncoder`, #8608)
+
+`<qrcode>` is a built-in tag of the DSL (syntax, attributes and the line-keeping rule of its text:
+the parser module's README, "QR codes"). The split is the same as for images: the parser library
+models the element, keeps the payload's line breaks through parse and bind and lays the square out;
+the encoding happens **here**, in `PrintQrCodeEncoder` (handed to `XslFoRenderer` by `PrintRenderer`),
+with ZXing `core` - the library `api-utils`' `QRCodeFacade` already ships. Points worth keeping:
+
+- **UTF-8 bytes, no ECI header.** The payload's UTF-8 bytes are written as a plain byte-mode
+  segment (the encoder is fed one `char` per byte and no character-set hint, which is what makes
+  ZXing omit the ECI). An EPC069-12 payment code names its character set in its own third line and
+  the specification asks for no ECI, and scanners auto-detect UTF-8 for any other text. Switching to
+  `EncodeHintType.CHARACTER_SET` would add the ECI header - a different symbol on paper for every
+  non-ASCII payload - so do it only with a reason and a scan test against real banking apps.
+  `QRCodeFacade.generateQRCode` is NOT reused for the same reason in reverse - it encodes ISO-8859-1,
+  so a Cyrillic name comes out as `?`.
+- **The image is exact**: one 8x8 pixel block per module plus the four-module quiet zone, 1-bit PNG,
+  inlined as a `data:` URI; `size` scales it. No resampling happens before FOP.
+- **Soft failures only**: a blank payload never reaches the encoder (the renderer skips it), and a
+  payload that does not fit a QR code at the requested level returns `null` with a WARN - the
+  document prints without the code.
+- **Proven by scanning, not by looking**: `PrintQrCodeEncoderTest` scans the PNG back at every
+  level, and `PrintRendererTest.aPaymentQrCodeScansBackFromTheRenderedPdf` renders the PDF,
+  rasterizes the page (PDFBox, test scope) and scans the twelve-line Cyrillic payment code off it.
+
 ## Renderer v1 limits (documented in `XslFoRenderer`, deliberate)
 
 Header/footer render once in-flow (not repeated `fo:static-content` regions); `repeatHeader` and
