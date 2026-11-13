@@ -145,6 +145,7 @@ final class ModelParameterProcessor {
         splitChecks(entity, parameters);
         resolveUniqueConstraintLiterals(entity, parameters);
         resolveFixedProperties(entity, parameters);
+        resolveRefusalCatalog(entity, parameters);
         for (Map<String, Object> flag : asMaps(entity.get("singleFlags"))) {
             // A refusing single flag's conflict message (#8101), resolved for the reader's language.
             resolveMessageCatalog(flag, ModelTranslations.singleFlagMessageKey(entity, flag), parameters);
@@ -589,6 +590,24 @@ final class ModelParameterProcessor {
                 constraint.put("nameJavaLiteral", JavaLiterals.escape(name));
             }
         }
+    }
+
+    /**
+     * Hands the entity's repository and controllers what a delete refusal is translated through
+     * (dirigible #8569), as Java expressions: {@code messageCatalogJava}, the model's catalog the
+     * refusal's sentence is looked up in, and {@code labelCatalogKeyJava}, the catalog key of the
+     * entity's label - the key the en-US catalog writes the label under. A bare render, with no project
+     * or file path, has no catalog: both are {@code null}, and the refusal keeps its default text.
+     *
+     * @param entity the entity
+     * @param parameters the generation parameters (project name and model file path)
+     */
+    private static void resolveRefusalCatalog(Map<String, Object> entity, Map<String, Object> parameters) {
+        String catalog = ModelTranslations.catalog(parameters);
+        String dataName = str(entity, "dataName");
+        entity.put("messageCatalogJava", catalog == null ? "null" : "\"" + JavaLiterals.escape(catalog) + "\"");
+        entity.put("labelCatalogKeyJava",
+                catalog == null || dataName == null ? "null" : "\"" + JavaLiterals.escape(catalog + ".t." + dataName) + "\"");
     }
 
     /**

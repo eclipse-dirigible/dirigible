@@ -309,4 +309,18 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
         super.deleteById(id, "sample-intent-money-InvoiceLine-InvoiceLine-deleted");
     }
 
+    /**
+     * The catalog this InvoiceLine's delete refusals are translated in, and the key of its label there - so
+     * a refusal names it, and every record referencing it, in the reader's language (dirigible #8569).
+     */
+    @Override
+    protected String messageCatalog() {
+        return "sample-intent-money:money-model";
+    }
+
+    @Override
+    protected String labelCatalogKey() {
+        return "sample-intent-money:money-model.t.MONEY_INVOICE_LINE";
+    }
+
 }

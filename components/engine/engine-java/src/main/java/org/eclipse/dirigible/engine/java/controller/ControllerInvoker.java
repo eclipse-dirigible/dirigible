@@ -355,6 +355,10 @@ public class ControllerInvoker {
             // resolved for the request's language, so a client can render the message again in another.
             body.put("messageKey", validation.getMessageKey());
             body.put("messageParams", validation.getMessageParams());
+        } else if (e.getCause() instanceof DeleteRestrictionException restriction && restriction.getMessageKey() != null) {
+            // A translated delete refusal (#8569), carried the same way.
+            body.put("messageKey", restriction.getMessageKey());
+            body.put("messageParams", restriction.getMessageParams());
         }
         try {
             // Same channel as writeResponse: the output stream, written and flushed here rather than

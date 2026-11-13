@@ -18,11 +18,11 @@ package org.eclipse.dirigible.sdk.db;
  * reference it, generated later or by another team - so the REFERENCING side contributes: its
  * generated repository implements this interface, and every repository asks all contributions when
  * it deletes. First every contribution is asked whether it restricts the delete, before anything is
- * written; a restricting reference refuses it with {@link DeleteRestrictionException}. Only then,
- * in the delete's own transaction, does each contribution release its references - clearing the
- * foreign key or deleting the referencing record - and the record itself is deleted. A contribution
- * is a {@code @Component} bean like any other extension, found through
- * {@link org.eclipse.dirigible.sdk.extensions.Extensions#find(Class)}.
+ * written; the restricting references refuse it with ONE {@link DeleteRestrictionException} naming
+ * all of them (see {@link DeleteRefusals}). Only then, in the delete's own transaction, does each
+ * contribution release its references - clearing the foreign key or deleting the referencing record
+ * - and the record itself is deleted. A contribution is a {@code @Component} bean like any other
+ * extension, found through {@link org.eclipse.dirigible.sdk.extensions.Extensions#find(Class)}.
  */
 public interface TargetDeleteRule {
 
@@ -75,4 +75,19 @@ public interface TargetDeleteRule {
      * @return the referencing entity's label, e.g. {@code Expense Claim}
      */
     String referencingLabel();
+
+    /**
+     * The catalog key of the referencing entity's label, through which a refusal names the referencing
+     * records in the language of the request (dirigible #8569).
+     *
+     * <p>
+     * The default answers {@code null}, so a contribution generated before this method existed is named
+     * by {@link #referencingLabel()} in every language.
+     *
+     * @return the fully qualified key ({@code <project>:<catalog prefix>.t.<name>}), or {@code null}
+     *         when the label is not translated
+     */
+    default String referencingLabelKey() {
+        return null;
+    }
 }
