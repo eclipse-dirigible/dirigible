@@ -128,6 +128,8 @@ function harmoniaCalcEval(expr, vars, scale) {
 ## number: { stampOn: issue } one as a document number, and a float - only a float - through its pattern.
 #macro(displayWidget $p)#if($p.numberStampOnIssue)DOCUMENT_NUMBER#elseif($p.isDateType && $p.widgetType == "DATE")DATE#elseif($p.isDateType)DATETIME-LOCAL#else$!{p.widgetType}#end#end
 #macro(displayPattern $p)#if($p.isFloatType)$!{p.formatPattern}#end#end
+## intent `emptyText:` (#8605): the catalog key and authored text an empty value reads as.
+#macro(emptyTextArgs $p)'$projectName:${tprefix}.t.${p.dataName}_empty', '${p.widgetEmptyTextJs}'#end
 ## What a delete confirmation calls the record (#8134): its Name, else its document Number, else none -
 ## the page then names it by id.
 #set($recordLabelProperty = "")
@@ -1263,7 +1265,13 @@ document.addEventListener('alpine:init', () => {
       return [
 #foreach($property in $properties)
 #if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty && $property.widgetPlacement != "MAIN")
+#if($property.widgetEmptyText)
+## A field declaring emptyText (#8605) always shows its row, so it counts whenever the caller may see it.
+#if($property.roleRead)#set($emptyTextShown = "this.canSee('${property.name}') || null")#{else}#set($emptyTextShown = "true")#end
+        ${emptyTextShown},
+#else
         this.form.${property.name},
+#end
 #end
 #end
       ].some(v => v !== null && v !== undefined && v !== '');
@@ -1325,7 +1333,12 @@ document.addEventListener('alpine:init', () => {
 #if($property.roleRead)
       if (this.canSee('${property.name}')) {
 #end
+#if($property.widgetEmptyText)
+## An empty value reads as the field's emptyText (#8605) instead of being skipped.
+      parts.push({ text: this.orEmptyText(this.loadedRecord.${property.name}, this.fieldText(this.loadedRecord.${property.name}, '#displayWidget($property)', '#displayPattern($property)', #if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT")this.options${property.name}#{else}null#end), #emptyTextArgs($property)), title: T('$projectName:${tprefix}.t.${property.dataName}', '${slabel}') });
+#else
       this.pushSummary(parts, this.loadedRecord.${property.name}, '#displayWidget($property)', '#displayPattern($property)', #if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT")this.options${property.name}#{else}null#end, T('$projectName:${tprefix}.t.${property.dataName}', '${slabel}'));
+#end
 #if($property.roleRead)
       }
 #end

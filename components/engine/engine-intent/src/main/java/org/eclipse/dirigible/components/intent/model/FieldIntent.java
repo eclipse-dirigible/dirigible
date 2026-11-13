@@ -210,6 +210,19 @@ public class FieldIntent {
     private String placement;
 
     /**
+     * Optional text an empty value reads as ({@code emptyText: No limit}, dirigible #8605): every
+     * generated surface that prints the field's value - the record and document pages (main column and
+     * Details rail), the personal and partner pages, the lists, composition panels, {@code related:}
+     * registers and the subtitle / summary line - prints it in place of a null, blank or empty value,
+     * instead of the em dash, and a Details rail row of the field is shown even when empty. It is also
+     * the placeholder of the field's text-like or number input on the create and edit forms. It seeds
+     * the en-US catalog entry {@code t.<DATA_NAME>_empty}, so it is translated like a label. Nothing is
+     * stored: data, REST answers, exports and prints are unchanged. Trimmed; refused blank and on a
+     * field that is never empty or never shown as a value.
+     */
+    private String emptyText;
+
+    /**
      * Optional named input format for a {@code string} field - a preset over {@link #pattern}. Today
      * the only value is {@code email}, which selects the EMAIL widget in the generated UI (so the input
      * is a {@code type="email"} control) and supplies the canonical address regex, giving the same
@@ -629,6 +642,14 @@ public class FieldIntent {
     public boolean isPlacement(String value) {
         return placement != null && placement.trim()
                                              .equalsIgnoreCase(value);
+    }
+
+    public String getEmptyText() {
+        return emptyText;
+    }
+
+    public void setEmptyText(String emptyText) {
+        this.emptyText = emptyText;
     }
 
     public Integer getSize() {

@@ -609,6 +609,19 @@ function basePage() {
     },
 
     /**
+     * The field's emptyText (intent `emptyText:`, dirigible #8605) in place of an empty value - null,
+     * undefined, '' or an empty list - else what the caller formatted (`shown`). The text is
+     * translated through its own catalog key when the caller names one, so a language catalog
+     * replaces it like any label; a `related:` register over another project passes no key and prints
+     * the authored text.
+     */
+    orEmptyText(value, shown, tkey, text) {
+      const empty = value === null || value === undefined || value === '' || (Array.isArray(value) && !value.length);
+      if (!empty) return shown;
+      return tkey && window.T ? window.T(tkey, text) : text;
+    },
+
+    /**
      * Ask the entity's controller which fields it withholds from this caller. Failure leaves every
      * field visible: the values are stripped server-side either way, so the worst case is an empty
      * column the user can see is empty - never a field silently hidden from someone entitled to it.
