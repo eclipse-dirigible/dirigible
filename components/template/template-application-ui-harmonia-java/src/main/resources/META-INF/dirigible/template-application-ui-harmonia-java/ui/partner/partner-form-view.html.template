@@ -142,7 +142,8 @@
              absorbs the stretch, and the layout is then the power form's. -->
         <div class="hbox items-center gap-3">
           <span x-h-checkbox><input type="checkbox" id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="fieldError === '${property.name}'"${fixedDis} /></span>
-          <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end')"></span>#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end</label>
+## No required marker on a checkbox (#8563): unticked is a valid answer (false), so a NOT NULL boolean is always satisfied.
+          <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end')"></span></label>
         </div>
 #elseif($property.widgetType == "DATE")
         <!-- Harmonia date picker: model is YYYY-MM-DD (same as the native date input it replaces),

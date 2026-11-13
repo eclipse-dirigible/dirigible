@@ -322,7 +322,8 @@
 #if($property.widgetType == "CHECKBOX")
         <div class="hbox items-center gap-3">
           <span x-h-checkbox><input type="checkbox" id="f_${property.name}" x-model="form.${property.name}"#if($readonly) disabled#{else}${fixedDis}#end /></span>
-          <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${label}')"></span>#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end</label>
+## No required marker on a checkbox (#8563): unticked is a valid answer (false), so a NOT NULL boolean is always satisfied.
+          <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${label}')"></span></label>
         </div>
 #else
         <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${label}')"></span>#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end</label>
@@ -983,10 +984,11 @@
                  which is what Harmonia colours the label and the border from - the same marking the
                  header form's fields use. -->
             <div x-h-field :style="['NUMBER','CHECKBOX','DATE','DATETIME-LOCAL'].includes(col.widget) ? '' : 'grid-column: 1 / -1'" :data-invalid="draftFieldError === col.name">
-              <!-- A required line column carries the same marker as the header form: the dialog is
+              <!-- A required line column carries the same marker as the header form (never a checkbox,
+                   #8563: unticked is a valid false): the dialog is
                    where the value is entered, so hiding which ones are mandatory only defers the
                    rejection to the server. -->
-              <label x-h-label><span x-text="T(col.tkey, col.label)"></span><span x-show="col.required &amp;&amp; !col.readonly" class="text-negative"> *</span></label>
+              <label x-h-label><span x-text="T(col.tkey, col.label)"></span><span x-show="col.required &amp;&amp; !col.readonly &amp;&amp; col.widget !== 'CHECKBOX'" class="text-negative"> *</span></label>
               <template x-if="!col.readonly && col.widget === 'DROPDOWN'">
                 <div>
                   <div x-h-select>
