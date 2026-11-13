@@ -618,7 +618,7 @@
 
         <div class="vbox min-h-0 flex-1 gap-4 overflow-auto p-4">
           <!-- What kind of thing this is, over its properties - the key itself is in the header. -->
-          <h2 x-h-text.h4 class="truncate" x-text="sheetTitle()"></h2>
+          <h2 x-h-text.h4 class="truncate shrink-0" x-text="sheetTitle()"></h2>
 
         <!-- Every property of the selected record (the table above shows only the major ones),
              unframed: the sheet IS the frame, and a card inside it only draws a second border around
