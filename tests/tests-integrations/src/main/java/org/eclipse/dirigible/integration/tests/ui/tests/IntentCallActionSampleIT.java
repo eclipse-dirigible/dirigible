@@ -13,6 +13,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -102,6 +103,7 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                         fields:
                           - { name: id, type: integer, primaryKey: true, generated: true }
                           - { name: name, type: string }
+                          - { name: capacity, type: integer }
                         relations:
                           - { name: members, kind: oneToMany, to: TeamMember }
                       - name: Skill
@@ -223,10 +225,20 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                           path: /services/java/helpdesk/custom/api/TicketApi/members/{id}/skills
                           body: { skills: "{skills}" }
                         success: Skills changed
+                      - name: SetCapacity
+                        forEntity: Team
+                        label: Set capacity
+                        can: Team:setCapacity
+                        prompt:
+                          - { name: capacity, type: integer, label: Capacity, default: "{capacity}" }
+                        call:
+                          path: /services/java/helpdesk/custom/api/TicketApi/teams/{id}/capacity
+                          body: { capacity: "{capacity}" }
+                        success: Capacity set
                     permissions:
                       - role: SupportLead
                         can: [Ticket:read, Ticket:escalate, Ticket:purge, Ticket:assign, Escalation:read, Escalation:retry, Watcher:read, Watcher:mute, Team:read, Team:invite,
-                              TeamMember:read, TeamMember:changeSkills]
+                              Team:setCapacity, TeamMember:read, TeamMember:changeSkills]
                       - role: Agent
                         can: [Ticket:read, Escalation:read, Watcher:read, Team:read, TeamMember:read]
                     seeds:
@@ -254,7 +266,7 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                       - name: teams
                         entity: Team
                         rows:
-                          - { id: 1, name: Platform }
+                          - { id: 1, name: Platform, capacity: 5 }
                       - name: skills
                         entity: Skill
                         rows:
@@ -361,6 +373,12 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                     Response.getNative().setStatus(202);
                 }
 
+                @Post("/teams/{id}/capacity")
+                public void setCapacity(@PathParam("id") Integer id, @Body Map<String, Object> body) {
+                    received.add(Map.of("call", "capacity " + id, "body", body));
+                    Response.getNative().setStatus(202);
+                }
+
                 @Post("/members/{id}/skills")
                 public void changeSkills(@PathParam("id") Integer id, @Body Map<String, Object> body) {
                     received.add(Map.of("call", "skills " + id, "body", body));
@@ -394,9 +412,9 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
         // whose role lists neither token - receives neither.
         securityUtil.createUserInDefaultTenant("lead", PASSWORD, "SupportLead");
         securityUtil.createUserInDefaultTenant("agent", PASSWORD, "Agent");
-        assertEquals(List.of("helpdesk-Escalation-RetryEscalation", "helpdesk-Team-InviteMember", "helpdesk-TeamMember-ChangeSkills",
-                "helpdesk-Ticket-AssignTicket", "helpdesk-Ticket-EscalateTicket", "helpdesk-Ticket-PurgeTicket",
-                "helpdesk-Watcher-MuteWatcher"), actionIds("lead"));
+        assertEquals(List.of("helpdesk-Escalation-RetryEscalation", "helpdesk-Team-InviteMember", "helpdesk-Team-SetCapacity",
+                "helpdesk-TeamMember-ChangeSkills", "helpdesk-Ticket-AssignTicket", "helpdesk-Ticket-EscalateTicket",
+                "helpdesk-Ticket-PurgeTicket", "helpdesk-Watcher-MuteWatcher"), actionIds("lead"));
         assertEquals(List.of(), actionIds("agent"));
 
         // The administrator escalates the OPEN ticket through the dialog.
@@ -754,6 +772,73 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
         assertEquals("assign 1", assignment.get("call"));
         assertEquals(Map.of("teamId", 1, "email", "jane@example.com", "priority", "Low"), assignment.get("body"),
                 "the team's key as a number, the address trimmed, the chosen priority");
+    }
+
+    /**
+     * A record default that arrives after the user changed its input leaves the input as the user left
+     * it (#8598): Set capacity's input, emptied while the team's capacity is still being read, stays
+     * empty and is sent as null. Left alone, it shows the team's capacity once the read arrives.
+     */
+    @Test
+    void aLateRecordDefaultSparesAnInputTheUserEmptied() {
+        deploy();
+        ide.openHomePage();
+        browser.openPath("/services/web/" + PROJECT + "/gen/helpdesk/index.html#/Team");
+        Selenide.refresh();
+        String loaded = "return Alpine.store('customActions').actions.some(a => a.label === 'Set capacity');";
+        for (int i = 0; i < 40 && !Boolean.TRUE.equals(Selenide.executeJavaScript(loaded)); i++) {
+            Selenide.sleep(250);
+        }
+        // Every record read the store starts is held until released: the dialog opens before its
+        // record default arrives, as it does for a person faster than the read.
+        Selenide.executeJavaScript("var s = Alpine.store('customActions'); var read = s.recordValue; window.__held = [];"
+                + " s.recordValue = function (action, record, name) { var self = this, release;"
+                + "   var held = new Promise(function (resolve) {"
+                + "     release = function () { resolve(read.call(self, action, record, name)); return held; }; });"
+                + "   window.__held.push(release); return held; };");
+
+        clickRowMenuItem("Platform", "Set capacity");
+        SelenideElement dialog = Selenide.$("[data-prompt-dialog]")
+                                         .shouldBe(Condition.visible);
+        SelenideElement capacity = dialog.$("[data-prompt-field='capacity']")
+                                         .shouldHave(Condition.exactValue(""));
+        capacity.sendKeys("7");
+        capacity.sendKeys(Keys.BACK_SPACE);
+        capacity.shouldHave(Condition.exactValue(""));
+        assertEquals(1L, releaseRecordReads(), "the capacity read was held");
+        capacity.shouldHave(Condition.exactValue(""));
+        assertEquals(Boolean.TRUE,
+                Selenide.executeJavaScript("var s = Alpine.store('customActions'); return s.isEmptyInput(s.promptValues.capacity);"),
+                "the input the user emptied stays empty");
+        dialog.$$("button")
+              .findBy(Condition.exactText("Run"))
+              .click();
+        awaitAnnouncement("Capacity set");
+        List<Map<String, Object>> received = received();
+        Map<String, Object> setting = received.get(received.size() - 1);
+        assertEquals("capacity 1", setting.get("call"));
+        assertNull(((Map<?, ?>) setting.get("body")).get("capacity"),
+                "the emptied input is sent as null, not the team's capacity: " + setting);
+
+        // Left alone, the input receives the record's value, however late it arrives.
+        clickRowMenuItem("Platform", "Set capacity");
+        capacity = Selenide.$("[data-prompt-dialog]")
+                           .shouldBe(Condition.visible)
+                           .$("[data-prompt-field='capacity']")
+                           .shouldHave(Condition.exactValue(""));
+        assertEquals(1L, releaseRecordReads(), "the capacity read was held");
+        capacity.shouldHave(Condition.exactValue("5"));
+    }
+
+    /**
+     * Releases the record reads held since the dialog opened, once the dialog has applied them, and
+     * answers how many there were.
+     */
+    private static long releaseRecordReads() {
+        Number released = Selenide.executeAsyncJavaScript("var done = arguments[arguments.length - 1];"
+                + " var held = window.__held.splice(0); Promise.all(held.map(function (release) { return release(); }))"
+                + "   .then(function () { setTimeout(function () { done(held.length); }, 0); });");
+        return released.longValue();
     }
 
     private void deploy() {
