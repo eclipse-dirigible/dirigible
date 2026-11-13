@@ -2053,13 +2053,29 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         // check walking the same relation - four checks over Customer.* cost one lookup, not four.
         java.util.Map<String, Object> loadedHops = new java.util.HashMap<>();
 #end
+#set($duplicateWarnings = false)
+#foreach($check in $warningChecks)
+#if($check.kind == "duplicate")
+#set($duplicateWarnings = true)
+#end
+#end
+#if($duplicateWarnings)
+        // The row as stored, read without the translation overlay: a duplicate already there is asked
+        // about again only when an update changes one of the fields the check compares (#8568).
+        ${name}Entity duplicateStored = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
+#end
         java.util.List<org.eclipse.dirigible.sdk.db.Warning> warnings = new java.util.ArrayList<>();
 #foreach($check in $warningChecks)
 #if($check.kind == "duplicate")
         // Another record carrying the same values (intent `checks: duplicate`): legitimate - two companies
         // may share a registered name - so asked, not refused. An unset value repeats nothing, and a text
-        // value repeats whatever differs from it only in case or surrounding spaces.
-        if (#foreach($field in $check.fields)entity.${field} != null#if($foreach.hasNext) && #end#end) {
+        // value repeats whatever differs from it only in case or surrounding spaces. A create is always
+        // asked; an update only when it changes one of the fields, compared as the lookup compares them,
+        // so a duplicate confirmed once is not asked again on every later save of the record (#8568).
+        if (#foreach($field in $check.fields)entity.${field} != null && #end(duplicateStored == null#foreach($field in $check.fields)
+#if($check.normalizedFields && $check.normalizedFields.contains($field))
+                || duplicateStored.${field} == null || !entity.${field}.trim().equalsIgnoreCase(duplicateStored.${field}.trim())#else
+                || !java.util.Objects.equals(entity.${field}, duplicateStored.${field})#end#end)) {
             for (${name}Entity other : findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()#foreach($field in $check.fields)
 #if($check.normalizedFields && $check.normalizedFields.contains($field))
                                                                                                                          .eqNormalized("${field}", entity.${field})#else
