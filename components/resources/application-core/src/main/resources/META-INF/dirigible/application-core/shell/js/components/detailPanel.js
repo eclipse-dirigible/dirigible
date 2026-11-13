@@ -136,7 +136,15 @@ function detailPanel(def, masterId, master) {
     // - a `multi` column resolves EACH key of its list
     // - a `list` column joins the texts its rows carry
     // - a date column is formatted.
+    // A column whose field declares `emptyText:` (#8605) prints that text for an empty value instead
+    // of the em dash; a `via` column shows another row's field and keeps the dash.
     cellValue(col, row) {
+      const shown = this.baseCellValue(col, row);
+      if (col.emptyText && !col.via) return this.orEmptyText(row[col.name], shown, col.emptyTkey, col.emptyText);
+      return shown;
+    },
+
+    baseCellValue(col, row) {
       // A `via` column reads a field off another (lookup) column's referenced row.
       if (col.via) {
         const src = this.lookups[col.via.column];

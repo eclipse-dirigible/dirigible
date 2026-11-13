@@ -38,8 +38,12 @@
 ## `form` holds a date cut to the shape its input takes (13:49:11 -> 13:49). The gate only tests for
 ## emptiness, so it may read the form.
 #macro(displayArgs $property)'#if($property.numberStampOnIssue)DOCUMENT_NUMBER#else$!{property.widgetType}#end', '#if($property.isFloatType)$!{property.formatPattern}#end', #valueOptions($property)#end
-#macro(valueDisplay $property)fieldDisplay(record.${property.name}, #displayArgs($property))#end
-#macro(valueGate $property)x-show="#if($property.roleRead)canSee('${property.name}') && #end#if($property.visibleWhenJs)${property.visibleWhenJs} && #{end}fieldDisplay(form.${property.name}, #displayArgs($property)) !== ''"#end
+## intent `emptyText:` (#8605): the text an empty value reads as, translated through t.<DATA_NAME>_empty;
+## also the placeholder of a text-like or number input. Nothing is emitted for a property without it.
+#macro(emptyTextArgs $p)'$projectName:${tprefix}.t.${p.dataName}_empty', '${p.widgetEmptyTextJs}'#end
+#macro(emptyPlaceholder $p)#if($p.widgetEmptyText) :placeholder="T(#emptyTextArgs($p))"#end#end
+#macro(valueDisplay $property)#if($property.widgetEmptyText)orEmptyText(record.${property.name}, fieldDisplay(record.${property.name}, #displayArgs($property)), #emptyTextArgs($property))#{else}fieldDisplay(record.${property.name}, #displayArgs($property))#end#end
+#macro(valueGate $property)#if($property.widgetEmptyText)#if($property.roleRead || $property.visibleWhenJs)x-show="#if($property.roleRead)canSee('${property.name}')#if($property.visibleWhenJs) && #end#end$!{property.visibleWhenJs}"#end#{else}x-show="#if($property.roleRead)canSee('${property.name}') && #end#if($property.visibleWhenJs)${property.visibleWhenJs} && #{end}fieldDisplay(form.${property.name}, #displayArgs($property)) !== ''"#end#end
 <div x-data="${name}DocumentPage" class="vbox w-full">
 ## Document roles: the DOCUMENT_NUMBER field shows in the title (e.g. "SALES INVOICE 00001231"); the
 ## DOCUMENT_STATUS FK shows as a read-only coloured pill (statusText/statusVariant resolve + colour it).
@@ -318,7 +322,8 @@
 #if($property.widgetType == "CHECKBOX")
         <div class="hbox items-center gap-3">
           <span x-h-checkbox><input type="checkbox" id="f_${property.name}" x-model="form.${property.name}"#if($readonly) disabled#{else}${fixedDis}#end /></span>
-          <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${label}')"></span>#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end</label>
+## No required marker on a checkbox (#8563): unticked is a valid answer (false), so a NOT NULL boolean is always satisfied.
+          <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${label}')"></span></label>
         </div>
 #else
         <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${label}')"></span>#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end</label>
@@ -375,9 +380,9 @@
         </div>
 #elseif($property.widgetType == "NUMBER")
         <!-- step="any": without it the browser default step=1 rejects fractional input on DECIMAL fields. -->
-        <div x-h-input-number><input type="number" step="any" id="f_${property.name}" x-model.number="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#{else}${fixedRo}#end /></div>
+        <div x-h-input-number><input type="number" step="any" id="f_${property.name}" x-model.number="form.${property.name}"#emptyPlaceholder($property) :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#{else}${fixedRo}#end /></div>
 #elseif($property.widgetType == "TEXTAREA")
-        <textarea x-h-textarea id="f_${property.name}" rows="3" x-model="form.${property.name}"#maxLength($property) :aria-invalid="!!errors.${property.name}"#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end#if($readonly) readonly#{else}${fixedRo}#end></textarea>
+        <textarea x-h-textarea id="f_${property.name}" rows="3" x-model="form.${property.name}"#emptyPlaceholder($property)#maxLength($property) :aria-invalid="!!errors.${property.name}"#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end#if($readonly) readonly#{else}${fixedRo}#end></textarea>
 #elseif($property.widgetType == "DATE")
         <!-- Harmonia date picker: model is YYYY-MM-DD (same as the native date input it replaces). -->
         <div x-h-date-picker>
@@ -411,9 +416,9 @@
           <div x-h-week-picker-popup x-model="form.${property.name}"></div>
         </div>
 #elseif($property.widgetType == "EMAIL")
-        <input x-h-input type="email" id="f_${property.name}" x-model="form.${property.name}"#maxLength($property) :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#{else}${fixedRo}#end#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
+        <input x-h-input type="email" id="f_${property.name}" x-model="form.${property.name}"#emptyPlaceholder($property)#maxLength($property) :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#{else}${fixedRo}#end#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
 #else
-        <input x-h-input type="text" id="f_${property.name}" x-model="form.${property.name}"#maxLength($property) :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#{else}${fixedRo}#end#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
+        <input x-h-input type="text" id="f_${property.name}" x-model="form.${property.name}"#emptyPlaceholder($property)#maxLength($property) :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#{else}${fixedRo}#end#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
 #end
 #end
         <p x-h-field-error x-show="errors.${property.name}" x-text="errors.${property.name}"></p>
@@ -812,7 +817,7 @@
 #foreach($property in $properties)
 #if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty && $property.widgetPlacement != "MAIN")#set($hasReadOnly = true)#end
 #end
-#if($hasReadOnly || $docStatusProp != "" || $history == "true")
+#if($hasReadOnly || $docStatusProp != "" || $history == "true" || $share)
     <div class="vbox gap-6" x-show="(isEdit || isPreview) &amp;&amp; hasRailContent"
          :class="isWide ? 'w-2xs shrink-0 border-l pl-6' : 'w-full border-t pt-6'">
 #if($hasReadOnly)
@@ -886,6 +891,76 @@
         </div>
       </div>
 #end
+#if($share)
+      <!-- Share links (intent `share:`, #8613): the public links to this record's issued copy. The
+           section is the shared shareLinksPanel; it stays hidden for a caller the controller refuses
+           the list to. Mounted once the record's id is known. -->
+      <template x-if="(isEdit || isPreview) &amp;&amp; id">
+        <div class="vbox gap-3" x-data="shareLinksPanel(apiPath, id)" x-effect="shareLinksShown = allowed" x-show="allowed" data-share-links>
+          <!-- Only a rule BETWEEN two sections. -->
+          <div x-h-separator data-orientation="horizontal" x-show="hasDetailValues#if($docStatusProp != "") || !!statusText()#end#if($history == "true") || history.length &gt; 0#end"></div>
+          <h3 x-h-text.h4 x-text="t('title', 'Share links')"></h3>
+          <div x-show="error" x-h-alert data-variant="negative" role="alert">
+            <div x-h-alert-description x-text="error"></div>
+          </div>
+          <!-- The link just created: its URL holds the secret and is never answered again. -->
+          <div class="vbox gap-2" x-show="created">
+            <input x-h-input type="text" readonly :value="created ? created.url : ''" :aria-label="t('url', 'Link')" @focus="$event.target.select()" />
+            <div class="hbox items-center gap-2">
+              <button type="button" x-h-button data-variant="outline" data-size="sm" @click="copy()">
+                <svg x-h-lucide role="presentation" data-lucide="copy"></svg><span x-text="copied ? t('copied', 'Copied') : t('copy', 'Copy')"></span>
+              </button>
+            </div>
+            <span class="text-xs text-muted-foreground" x-text="t('shownOnce', 'This link is shown only once. Anyone who has it can open the document without signing in.')"></span>
+          </div>
+          <span class="text-sm text-muted-foreground" x-show="state === 'default' &amp;&amp; !links.length" x-text="t('empty', 'No links yet.')"></span>
+          <div class="vbox gap-3" x-show="links.length">
+            <template x-for="link in links" :key="link.id">
+              <div class="vbox">
+                <div class="hbox items-center gap-2">
+                  <span x-h-badge :data-variant="linkVariant(link)" x-text="linkStatus(link)"></span>
+                  <span class="text-xs font-medium wrap-anywhere" x-text="link.fileName"></span>
+                </div>
+                <span class="text-xs text-muted-foreground wrap-anywhere" x-text="createdText(link)"></span>
+                <span class="text-sm" x-text="expiryText(link)"></span>
+                <span class="text-xs text-muted-foreground" x-text="openedText(link)"></span>
+                <span class="text-xs text-muted-foreground wrap-anywhere" x-show="revokedText(link)" x-text="revokedText(link)"></span>
+                <div class="hbox items-center gap-2" x-show="link.status === 'ACTIVE'">
+                  <button type="button" x-h-button data-variant="outline" data-size="sm" @click="askRevoke(link)" x-text="t('revoke', 'Revoke')"></button>
+                </div>
+              </div>
+            </template>
+          </div>
+          <!-- Offered only while the record satisfies the entity's `share.when`; the server decides. -->
+          <div class="hbox items-center gap-2" x-show="visibleWhenHolds(shareWhen, form)">
+            <button type="button" x-h-button data-variant="outline" data-size="sm" :disabled="creating" @click="create()">
+              <span x-show="creating" x-h-spinner></span>
+              <svg x-h-lucide role="presentation" data-lucide="link" x-show="!creating"></svg><span x-text="t('create', 'Create link')"></span>
+            </button>
+          </div>
+
+          <!-- Revoke confirmation -->
+          <div x-h-dialog-overlay :data-open="revokeOpen">
+            <div x-h-dialog>
+              <div x-h-dialog-header>
+                <h2 x-h-dialog-title x-text="t('revokeTitle', 'Revoke link')"></h2>
+                <button type="button" x-h-dialog-close @click="revokeOpen = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
+              </div>
+              <div x-h-dialog-content>
+                <p x-text="t('revokeConfirm', 'Are you sure you want to revoke this link? Whoever has it will no longer be able to open the document. This action cannot be undone.')"></p>
+                <div x-show="revokeError" x-h-alert data-variant="negative" role="alert" class="mt-2">
+                  <div x-h-alert-description x-text="revokeError"></div>
+                </div>
+              </div>
+              <div x-h-dialog-footer>
+                <button type="button" x-h-button data-variant="outline" @click="revokeOpen = false" :disabled="revokeBusy" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
+                <button type="button" x-h-button data-variant="negative" @click="confirmRevoke()" :disabled="revokeBusy"><span x-show="revokeBusy" x-h-spinner></span><span x-text="t('revoke', 'Revoke')"></span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+#end
     </div>
 #end
 
@@ -909,10 +984,11 @@
                  which is what Harmonia colours the label and the border from - the same marking the
                  header form's fields use. -->
             <div x-h-field :style="['NUMBER','CHECKBOX','DATE','DATETIME-LOCAL'].includes(col.widget) ? '' : 'grid-column: 1 / -1'" :data-invalid="draftFieldError === col.name">
-              <!-- A required line column carries the same marker as the header form: the dialog is
+              <!-- A required line column carries the same marker as the header form (never a checkbox,
+                   #8563: unticked is a valid false): the dialog is
                    where the value is entered, so hiding which ones are mandatory only defers the
                    rejection to the server. -->
-              <label x-h-label><span x-text="T(col.tkey, col.label)"></span><span x-show="col.required &amp;&amp; !col.readonly" class="text-negative"> *</span></label>
+              <label x-h-label><span x-text="T(col.tkey, col.label)"></span><span x-show="col.required &amp;&amp; !col.readonly &amp;&amp; col.widget !== 'CHECKBOX'" class="text-negative"> *</span></label>
               <template x-if="!col.readonly && col.widget === 'DROPDOWN'">
                 <div>
                   <div x-h-select>

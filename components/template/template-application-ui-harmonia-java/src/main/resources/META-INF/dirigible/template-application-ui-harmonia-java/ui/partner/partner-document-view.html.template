@@ -38,8 +38,12 @@
 ## `form` holds a date cut to the shape its input takes (13:49:11 -> 13:49). The gate only tests for
 ## emptiness, so it may read the form.
 #macro(displayArgs $property)'#if($property.numberStampOnIssue)DOCUMENT_NUMBER#else$!{property.widgetType}#end', '#if($property.isFloatType)$!{property.formatPattern}#end', #valueOptions($property)#end
-#macro(valueDisplay $property)fieldDisplay(record.${property.name}, #displayArgs($property))#end
-#macro(valueGate $property)x-show="#if($property.roleRead)canSee('${property.name}') && #end#if($property.visibleWhenJs)${property.visibleWhenJs} && #{end}fieldDisplay(form.${property.name}, #displayArgs($property)) !== ''"#end
+## intent `emptyText:` (#8605): the text an empty value reads as, translated through t.<DATA_NAME>_empty;
+## also the placeholder of a text-like or number input. Nothing is emitted for a property without it.
+#macro(emptyTextArgs $p)'$projectName:${tprefix}.t.${p.dataName}_empty', '${p.widgetEmptyTextJs}'#end
+#macro(emptyPlaceholder $p)#if($p.widgetEmptyText) :placeholder="T(#emptyTextArgs($p))"#end#end
+#macro(valueDisplay $property)#if($property.widgetEmptyText)orEmptyText(record.${property.name}, fieldDisplay(record.${property.name}, #displayArgs($property)), #emptyTextArgs($property))#{else}fieldDisplay(record.${property.name}, #displayArgs($property))#end#end
+#macro(valueGate $property)#if($property.widgetEmptyText)#if($property.roleRead || $property.visibleWhenJs)x-show="#if($property.roleRead)canSee('${property.name}')#if($property.visibleWhenJs) && #end#end$!{property.visibleWhenJs}"#end#{else}x-show="#if($property.roleRead)canSee('${property.name}') && #end#if($property.visibleWhenJs)${property.visibleWhenJs} && #{end}fieldDisplay(form.${property.name}, #displayArgs($property)) !== ''"#end#end
 <div x-data="${name}PartnerDocumentPage" class="vbox w-full">
 
   <!-- Sticky action bar (issue #7434): the Harmonia `clear` toolbar paints the page background so the
@@ -128,7 +132,7 @@
           </div>
         </div>
 #elseif($property.widgetType == "NUMBER")
-        <div x-h-input-number><input type="number" step="any" x-model.number="form.${property.name}" :aria-invalid="fieldError === '${property.name}'"${fixedRo} /></div>
+        <div x-h-input-number><input type="number" step="any" x-model.number="form.${property.name}"#emptyPlaceholder($property) :aria-invalid="fieldError === '${property.name}'"${fixedRo} /></div>
 #elseif($property.widgetType == "CHECKBOX")
         <!-- The checkbox goes beside its label, inside a plain box: x-h-field stretches every
              direct child to full width, which turns the checkbox's own square into a full-width
@@ -136,7 +140,8 @@
              absorbs the stretch, and the layout is then the power form's. -->
         <div class="hbox items-center gap-3">
           <span x-h-checkbox><input type="checkbox" id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="fieldError === '${property.name}'"${fixedDis} /></span>
-          <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end')"></span>#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end</label>
+## No required marker on a checkbox (#8563): unticked is a valid answer (false), so a NOT NULL boolean is always satisfied.
+          <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end')"></span></label>
         </div>
 #elseif($property.widgetType == "DATE")
         <div x-h-date-picker>
@@ -170,7 +175,7 @@
           <div x-h-week-picker-popup x-model="form.${property.name}"></div>
         </div>
 #else
-        <input x-h-input type="text" x-model="form.${property.name}"#maxLength($property) :aria-invalid="fieldError === '${property.name}'"${fixedRo}#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
+        <input x-h-input type="text" x-model="form.${property.name}"#emptyPlaceholder($property)#maxLength($property) :aria-invalid="fieldError === '${property.name}'"${fixedRo}#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
 #end
 #maxLengthHint($property)
       </div>
@@ -301,10 +306,11 @@
                  which is what Harmonia colours the label and the border from - the same marking the
                  header form's fields use. -->
             <div x-h-field :class="col.kind === 'text' ? 'col-span-2' : ''" :data-invalid="itemFieldError === col.name">
-              <!-- A required line column carries the same marker as the header form: the dialog is
+              <!-- A required line column carries the same marker as the header form (never a checkbox,
+                   #8563: unticked is a valid false): the dialog is
                    where the value is entered, so hiding which ones are mandatory only defers the
                    rejection to the server. -->
-              <label x-h-label><span x-text="T(col.tkey, col.label)"></span><span x-show="col.required &amp;&amp; !col.readonly" class="text-negative"> *</span></label>
+              <label x-h-label><span x-text="T(col.tkey, col.label)"></span><span x-show="col.required &amp;&amp; !col.readonly &amp;&amp; col.widget !== 'CHECKBOX'" class="text-negative"> *</span></label>
               <template x-if="!col.readonly && col.lookup">
                 <div x-h-select>
                   <input x-h-select-input x-model="draft[col.name]" :aria-invalid="itemFieldError === col.name" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select {{name}}...', { name: T(col.tkey, col.label) })" />

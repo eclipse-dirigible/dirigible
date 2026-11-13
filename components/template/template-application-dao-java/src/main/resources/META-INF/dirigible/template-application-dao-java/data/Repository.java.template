@@ -485,7 +485,7 @@ ${importsCode}
 
 @Repository
 @Component("${javaGenFolderName}_${name}Repository")
-public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTargetDeleteRules || $hasTargetAgreementRules) implements #if($hasTargetDeleteRules)org.eclipse.dirigible.sdk.db.TargetDeleteRule#if($hasTargetAgreementRules), #end#end#if($hasTargetAgreementRules)org.eclipse.dirigible.sdk.db.TargetAgreementRule#end#end {
+public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTargetDeleteRules || $hasTargetAgreementRules || $share) implements #if($hasTargetDeleteRules)org.eclipse.dirigible.sdk.db.TargetDeleteRule#if($hasTargetAgreementRules || $share), #end#end#if($hasTargetAgreementRules)org.eclipse.dirigible.sdk.db.TargetAgreementRule#if($share), #end#end#if($share)org.eclipse.dirigible.components.engine.share.ShareSubject#end#end {
 
 #if($reportedOnUpdate.size() > 0 || ($guardChecks && $guardChecks.size() > 0))
     /**
@@ -511,6 +511,37 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     public ${name}Repository() {
         super(${name}Entity.class);
     }
+#if($share)
+
+    /** The name ${name}'s share links are stored under (intent {@code share:}, #8613). */
+    public static final String SHARE_SUBJECT = "${tablePrefix}${dataName}";
+
+    @Override
+    public String shareSubject() {
+        return SHARE_SUBJECT;
+    }
+
+    /**
+     * Whether a ${name} may, right now, be read through a share link - asked by the public route on
+     * every open, so a record that left the declared state stops answering whoever moved it. The
+     * stored row is read, untranslated: the condition compares keys and codes, never display text.
+     */
+    @Override
+    public boolean isShareable(String recordId) {
+        return isShareable(super.findById(#foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end.valueOf(recordId)));
+    }
+
+    /**
+     * The intent's {@code share: when:} over one ${name} - the single reading of it, used by the public
+     * route and by the endpoint that creates a link.
+     *
+     * @param entity the record, may be null
+     * @return whether a link to the record's issued copy can exist
+     */
+    public static boolean isShareable(${name}Entity entity) {
+        return entity != null && ${share.whenJavaExpression};
+    }
+#end
 
     @Override
     public ${name}Entity save(${name}Entity entity) {
@@ -2022,13 +2053,29 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         // check walking the same relation - four checks over Customer.* cost one lookup, not four.
         java.util.Map<String, Object> loadedHops = new java.util.HashMap<>();
 #end
+#set($duplicateWarnings = false)
+#foreach($check in $warningChecks)
+#if($check.kind == "duplicate")
+#set($duplicateWarnings = true)
+#end
+#end
+#if($duplicateWarnings)
+        // The row as stored, read without the translation overlay: a duplicate already there is asked
+        // about again only when an update changes one of the fields the check compares (#8568).
+        ${name}Entity duplicateStored = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
+#end
         java.util.List<org.eclipse.dirigible.sdk.db.Warning> warnings = new java.util.ArrayList<>();
 #foreach($check in $warningChecks)
 #if($check.kind == "duplicate")
         // Another record carrying the same values (intent `checks: duplicate`): legitimate - two companies
         // may share a registered name - so asked, not refused. An unset value repeats nothing, and a text
-        // value repeats whatever differs from it only in case or surrounding spaces.
-        if (#foreach($field in $check.fields)entity.${field} != null#if($foreach.hasNext) && #end#end) {
+        // value repeats whatever differs from it only in case or surrounding spaces. A create is always
+        // asked; an update only when it changes one of the fields, compared as the lookup compares them,
+        // so a duplicate confirmed once is not asked again on every later save of the record (#8568).
+        if (#foreach($field in $check.fields)entity.${field} != null && #end(duplicateStored == null#foreach($field in $check.fields)
+#if($check.normalizedFields && $check.normalizedFields.contains($field))
+                || duplicateStored.${field} == null || !entity.${field}.trim().equalsIgnoreCase(duplicateStored.${field}.trim())#else
+                || !java.util.Objects.equals(entity.${field}, duplicateStored.${field})#end#end)) {
             for (${name}Entity other : findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()#foreach($field in $check.fields)
 #if($check.normalizedFields && $check.normalizedFields.contains($field))
                                                                                                                          .eqNormalized("${field}", entity.${field})#else
@@ -2399,6 +2446,22 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
     }
 #end
+#if($messageCatalogJava)
+
+    /**
+     * The catalog this ${name}'s delete refusals are translated in, and the key of its label there - so
+     * a refusal names it, and every record referencing it, in the reader's language (dirigible #8569).
+     */
+    @Override
+    protected String messageCatalog() {
+        return ${messageCatalogJava};
+    }
+
+    @Override
+    protected String labelCatalogKey() {
+        return ${labelCatalogKeyJava};
+    }
+#end
 #if($hasTargetDeleteRules)
 
     /**
@@ -2461,6 +2524,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     @Override
     public String referencingLabel() {
         return "${entityLabel}";
+    }
+
+    @Override
+    public String referencingLabelKey() {
+        return labelCatalogKey();
     }
 
     /**

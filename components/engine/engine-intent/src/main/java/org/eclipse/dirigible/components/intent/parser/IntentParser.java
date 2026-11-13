@@ -103,6 +103,7 @@ import org.eclipse.dirigible.components.intent.model.RelatedIntent;
 import org.eclipse.dirigible.components.intent.model.RefreshIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.ResolveIntent;
+import org.eclipse.dirigible.components.intent.model.ShareIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
 import org.eclipse.dirigible.components.intent.generator.report.ReportMoments;
@@ -5215,6 +5216,9 @@ public final class IntentParser {
                 if (field.getLabels() != null) {
                     validateBooleanLabels("entity [" + name + "] field [" + field.getName() + "]", field, issues);
                 }
+                if (field.getEmptyText() != null) {
+                    validateEmptyText("entity [" + name + "] field [" + field.getName() + "]", field, issues);
+                }
                 if (field.getTranslatable() != null) {
                     validateTranslatable(entity, "entity [" + name + "] field [" + field.getName() + "]", field, issues);
                 }
@@ -5449,6 +5453,9 @@ public final class IntentParser {
             }
             if (entity.getRefresh() != null) {
                 validateRefresh(model, entity, issues);
+            }
+            if (entity.getShare() != null) {
+                validateShare(model, entity, byName, issues);
             }
             if (entity.getImmutableInPeriod() != null) {
                 validateImmutableInPeriod(entity, byName, issues);
@@ -5864,6 +5871,125 @@ public final class IntentParser {
                 issues.add(subject + " show references [" + token + "] which is not a field or relation of [" + related.getEntity() + "]");
             }
         }
+    }
+
+    /**
+     * An entity's {@code share:} (#8613) lets an anonymous reader open a document, so everything that
+     * decides WHAT is served and WHO may hand it out has to be declared, and is refused when it is not:
+     *
+     * <ul>
+     * <li>{@code when:} - the state a record can get a link in. Without it a draft would be as
+     * shareable as an issued document.</li>
+     * <li>{@code copy:} - a {@code function: Snapshot} child of this entity, on a document the platform
+     * can print. A link serves that stored file and nothing else, so what the reader sees is what was
+     * issued; an entity nobody mints a copy for could never get a link.</li>
+     * <li>{@code roles:} - who may create and revoke links, each declared under {@code permissions}.
+     * The key is required and an empty list is legal: it admits nobody, exactly like an empty print
+     * feeder gate. Left out, the gate would have to be guessed.</li>
+     * <li>no personal scope - a link is a bearer credential, so a record that belongs to the signed-in
+     * person (its own {@code personal: true} relation, or one on a composition ancestor) stays behind
+     * sign-in.</li>
+     * </ul>
+     */
+    private static void validateShare(IntentModel model, EntityIntent entity, Map<String, EntityIntent> byName, List<String> issues) {
+        ShareIntent share = entity.getShare();
+        String subject = "entity [" + entity.getName() + "] share";
+        if (share.getWhen() == null) {
+            issues.add(subject + " needs a when - only a record in a declared state can get a link, e.g. `when: \"Status == ISSUED\"`");
+        } else {
+            validateVisibleWhenTerms(entity, byName, share.getWhen(), subject + " when", issues);
+        }
+        validateShareCopy(model, entity, share, byName, subject, issues);
+        if (share.getRoles() == null) {
+            issues.add(subject + " needs roles - who may create and revoke links, e.g. `roles: [" + entity.getName()
+                    + "Share]`; an empty list admits nobody");
+        } else {
+            Set<String> declaredRoles = declaredRoles(model);
+            for (String role : share.getRoles()) {
+                if (role == null || role.isBlank()) {
+                    issues.add(subject + " roles lists a blank role");
+                } else if (!declaredRoles.contains(role)) {
+                    List<String> known = new ArrayList<>(declaredRoles);
+                    known.sort(null);
+                    issues.add(subject + " roles names role [" + role + "], which the intent does not declare - add it to `permissions`"
+                            + (known.isEmpty() ? " (the intent declares no roles at all)"
+                                    : " (declared: " + String.join(", ", known) + ")"));
+                }
+            }
+        }
+        Integer days = share.expiresAfterDaysOrNull();
+        if (days == null || days < 0 || days > ShareIntent.MAX_EXPIRES_AFTER_DAYS) {
+            issues.add(subject + " expiresAfterDays [" + share.getExpiresAfterDays()
+                    + "] must be a whole number of days from 0 (permanent) to " + ShareIntent.MAX_EXPIRES_AFTER_DAYS);
+        }
+        String personal = personalScope(entity, byName);
+        if (personal != null) {
+            issues.add(subject + " is not allowed on a personal entity - " + personal + ", and a link is a bearer credential: whoever holds"
+                    + " it reads the document. A personal document stays behind sign-in; a notification may carry {recordUrl}");
+        }
+    }
+
+    /** The {@code copy:} of a {@code share:} - see {@link #validateShare}. */
+    private static void validateShareCopy(IntentModel model, EntityIntent entity, ShareIntent share, Map<String, EntityIntent> byName,
+            String subject, List<String> issues) {
+        if (share.getCopy() == null || share.getCopy()
+                                            .isBlank()) {
+            issues.add(subject + " needs a copy - the `function: Snapshot` child whose stored file a link serves; a link never renders"
+                    + " the live record");
+            return;
+        }
+        EntityIntent copy = byName.get(share.getCopy());
+        if (copy == null) {
+            issues.add(subject + " copy [" + share.getCopy() + "] is not an entity of this model");
+            return;
+        }
+        if (!copy.isSnapshot()) {
+            issues.add(subject + " copy [" + share.getCopy() + "] is not a `function: Snapshot` entity - a link serves only an immutable"
+                    + " stored copy, never an attachment or a record");
+            return;
+        }
+        boolean ofThisEntity = false;
+        for (RelationIntent relation : copy.getRelations()) {
+            boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+            if (toOne && relation.isComposition() && entity.getName()
+                                                           .equals(relation.getTo())) {
+                ofThisEntity = true;
+            }
+        }
+        if (!ofThisEntity) {
+            issues.add(subject + " copy [" + share.getCopy() + "] is not a composition child of [" + entity.getName()
+                    + "] - a link serves the copy of the record it is created on");
+            return;
+        }
+        if (!isPrintableDocument(model, entity.getName())) {
+            issues.add(subject + " copy [" + share.getCopy() + "] is never minted - [" + entity.getName()
+                    + "] is not a printable document (a master with a `function: DocumentItem` child), so no copy would ever exist to share");
+        }
+    }
+
+    /**
+     * Why an entity's records belong to the signed-in person: its own {@code personal: true} relation,
+     * or one on a composition ancestor (a child inherits the scope).
+     *
+     * @return the reason, or {@code null} when the entity is not personal
+     */
+    private static String personalScope(EntityIntent entity, Map<String, EntityIntent> byName) {
+        Set<String> seen = new HashSet<>();
+        EntityIntent current = entity;
+        while (current != null && current.getName() != null && seen.add(current.getName())) {
+            EntityIntent parent = null;
+            for (RelationIntent relation : current.getRelations()) {
+                if (relation.isPersonal()) {
+                    return "[" + current.getName() + "] belongs to the signed-in person through its relation [" + relation.getName() + "]";
+                }
+                boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+                if (toOne && relation.isComposition() && parent == null) {
+                    parent = byName.get(relation.getTo());
+                }
+            }
+            current = parent;
+        }
+        return null;
     }
 
     /** The shortest poll interval a {@code refresh: every:} may declare (#8375). */
@@ -8567,6 +8693,54 @@ public final class IntentParser {
      */
     private static void validateLabels(String subject, FieldIntent field, List<String> issues) {
         validateLabels(subject, field.getLabel(), field.getCountryLabels(), issues);
+    }
+
+    /**
+     * A field's {@code emptyText} (#8605): the text every generated surface prints in place of an empty
+     * value. Refused where it could never show, or where it would show in place of something else: a
+     * blank text; a boolean (a checkbox reads Yes or No, it is never empty); a uuid (the server issues
+     * it on create); the primary key; a required field (the controllers refuse an empty value); a
+     * document number (an unstamped one reads as the draft marker); a hidden field (shown nowhere); an
+     * aggregate (the totals footer is not a surface the key covers); and the document title or a chat
+     * message body (they print as the heading or a bubble, not as a field value).
+     */
+    private static void validateEmptyText(String subject, FieldIntent field, List<String> issues) {
+        String head = subject + " emptyText";
+        if (field.getEmptyText()
+                 .isBlank()) {
+            issues.add(head + " is blank - remove it to keep the em dash");
+            return;
+        }
+        String type = field.getType() == null ? "string"
+                : field.getType()
+                       .toLowerCase(Locale.ROOT);
+        if ("boolean".equals(type)) {
+            issues.add(head + " is not allowed on a boolean - a checkbox is never empty, it reads Yes or No");
+        }
+        if ("uuid".equals(type)) {
+            issues.add(head + " is not allowed on a uuid - the server issues it on create, so it is never empty");
+        }
+        if (field.isPrimaryKey()) {
+            issues.add(head + " is not allowed on the primary key - it is never empty");
+        }
+        if (field.isRequired()) {
+            issues.add(head + " is not allowed on a required field - the controllers refuse an empty value, so the text could never show");
+        }
+        if (field.getNumber() != null) {
+            issues.add(head + " is not allowed on a document number - an unstamped number reads as the draft marker");
+        }
+        if (field.isPlacement("hidden")) {
+            issues.add(head + " is not allowed with placement: hidden - the field is shown nowhere");
+        }
+        if (field.isAggregate()) {
+            issues.add(head + " is not allowed on an aggregate - the document totals footer is not a surface emptyText covers");
+        }
+        if (field.isDocumentTitle() || "DocumentTitle".equalsIgnoreCase(field.getFunction())) {
+            issues.add(head + " is not allowed on the document title - it prints as the document's heading, not as a field value");
+        }
+        if (field.isMessageBody()) {
+            issues.add(head + " is not allowed on a chat message body - it prints as a chat bubble, not as a field value");
+        }
     }
 
     /**

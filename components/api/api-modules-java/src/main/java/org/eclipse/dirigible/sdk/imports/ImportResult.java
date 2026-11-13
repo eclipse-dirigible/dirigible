@@ -34,6 +34,7 @@ public final class ImportResult {
     private final Status status;
     private final int records;
     private final String message;
+    private int skipped;
     private final List<String> warnings = new ArrayList<>();
 
     private ImportResult(String importName, String fileName, String checksum, Status status, int records, String message) {
@@ -82,6 +83,22 @@ public final class ImportResult {
      */
     public static ImportResult rejected(String importName, String fileName, String checksum, String message) {
         return new ImportResult(importName, fileName, checksum, Status.REJECTED, 0, message);
+    }
+
+    /**
+     * A file whose records were all saved, but for the ones the import's {@code where:} filter skipped.
+     *
+     * @param importName the declared import
+     * @param fileName the file's name
+     * @param checksum the file's checksum
+     * @param records how many records were saved
+     * @param skipped how many records of the file the filter skipped
+     * @return the result
+     */
+    public static ImportResult imported(String importName, String fileName, String checksum, int records, int skipped) {
+        ImportResult result = new ImportResult(importName, fileName, checksum, Status.IMPORTED, records, null);
+        result.skipped = skipped;
+        return result;
     }
 
     /**
@@ -137,6 +154,16 @@ public final class ImportResult {
      */
     public int getRecords() {
         return records;
+    }
+
+    /**
+     * Returns how many records of the file the import's {@code where:} filter skipped - 0 unless
+     * {@link Status#IMPORTED}.
+     *
+     * @return how many records of the file the import's {@code where:} filter skipped
+     */
+    public int getSkipped() {
+        return skipped;
     }
 
     /**

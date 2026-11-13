@@ -10,9 +10,11 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -83,6 +85,32 @@ class CustomActionsCallIT {
 
     private static final String TEAM = "{ Id: 4, Name: 'Platform', Lead: 7 }";
 
+    /** The "Set level" dialog of #8598: an optional number whose default is the record's own. */
+    private static final String SET_LEVEL = """
+            { label: 'Set level',
+              call: { method: 'PUT', path: '/services/java/helpdesk/custom/api/TicketApi/tickets/{id}/level', body: { level: '{level}' } },
+              prompt: [ { name: 'level', required: false } ],
+              promptColumns: [ { name: 'level', label: 'Level', widget: 'NUMBER', default: '{level}' } ],
+              recordFields: { level: { property: 'Level' } } }""";
+
+    /**
+     * Holds every record read the store starts until {@code __release()}: the dialog is open and its
+     * record defaults have not arrived.
+     */
+    private static final String HOLD_RECORD_READS =
+            """
+                    var __held = [];
+                    var __recordValue = store.recordValue;
+                    store.recordValue = function (action, record, name) {
+                      var self = this;
+                      return new Promise(function (resolve) { __held.push(function () { resolve(__recordValue.call(self, action, record, name)); }); });
+                    };
+                    var __release = function () { __held.splice(0).forEach(function (release) { release(); }); };
+                    """;
+
+    /** The per-input wrapper of a prompt dialog: the element the x-for over the inputs renders. */
+    private static final Pattern PROMPT_FIELD = Pattern.compile("x-for=\"col in s\\.promptCols\"[^>]*>\\s*(<div x-h-field[^>]*>)");
+
     private static final String EN_US = "/META-INF/dirigible/application-core/i18n/en-US/shell.json";
 
     /** The shells whose confirm dialog renders the store's sentence (issue #8390). */
@@ -141,6 +169,50 @@ class CustomActionsCallIT {
                     "POST /services/java/teams/custom/api/TeamApi/teams/4/invitations "
                             + "{\"email\":\"ann@example.com\",\"roles\":[\"Member\",\"Lead\"],\"summary\":\"as Member,Lead\"}",
                     sent(context));
+        }
+    }
+
+    /**
+     * A record default arrives after the dialog opened, and the user's change - not the input's value -
+     * decides whether it may fill the input (#8598): one the user emptied before it arrived stays empty
+     * and is sent as null, one the user left alone still receives it, however late.
+     */
+    @Test
+    void aLateRecordDefaultSparesAnInputTheUserChanged() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", HOLD_RECORD_READS + " store.trigger(" + SET_LEVEL + ", 1, { Id: 1, Level: 3 });");
+            context.eval("js", "store.promptValues.level = 7; store.promptEdit(store.promptCols[0]); store.promptValues.level = '';");
+            context.eval("js", "__release();");
+
+            assertEquals("", context.eval("js", "String(store.promptValues.level)")
+                                    .asString(),
+                    "the input the user emptied stays empty");
+
+            context.eval("js", "store.promptRun();");
+            assertEquals("PUT /services/java/helpdesk/custom/api/TicketApi/tickets/1/level {\"level\":null}", sent(context));
+
+            context.eval("js", "store.trigger(" + SET_LEVEL + ", 1, { Id: 1, Level: 3 });");
+            context.eval("js", "__release();");
+
+            assertEquals(3, context.eval("js", "store.promptValues.level")
+                                   .asInt(),
+                    "reopened and left alone, the input receives the record's value");
+        }
+    }
+
+    /** Every shell's prompt input tells the store the user changed it (#8598). */
+    @Test
+    void everyShellReportsAChangedPromptInput() throws Exception {
+        List<String> shells = new ArrayList<>(SHELLS);
+        shells.add(VINTAGE_SHELL);
+        for (String shell : shells) {
+            Matcher matcher = PROMPT_FIELD.matcher(read(shell));
+            if (!matcher.find()) {
+                throw new IllegalStateException("No prompt input wrapper in " + shell);
+            }
+            String field = matcher.group(1);
+            assertTrue(field.contains("@input=\"s.promptEdit(col)\"") && field.contains("@change=\"s.promptEdit(col)\""),
+                    shell + ": " + field);
         }
     }
 

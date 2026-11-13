@@ -33,8 +33,9 @@
 
           <!-- The platform's own tenant sections, the same fragments the application shell's Settings
                renders, each offered only while its store says so: Users (#7498) for the owners of the current
-               tenant, Print Templates (#7755) for whoever may select the layout a document type prints with. -->
-          <li x-h-list-header x-show="($store.tenantUsers && $store.tenantUsers.visible) || ($store.printTemplates && $store.printTemplates.visible)" x-cloak
+               tenant, Print Templates (#7755) for whoever may select the layout a document type prints with,
+               Data export (#8566) for the owners of the current tenant. -->
+          <li x-h-list-header x-show="($store.tenantUsers && $store.tenantUsers.visible) || ($store.printTemplates && $store.printTemplates.visible) || ($store.tenantExport && $store.tenantExport.visible)" x-cloak
               x-text="T('application-core:shell.settings.tenant', 'Tenant')"></li>
           <li x-h-list-item x-show="$store.tenantUsers && $store.tenantUsers.visible" x-cloak>
             <button x-h-list-item-button class="gap-3 px-4 py-3" :aria-current="selected === 'tenantUsers'"
@@ -48,6 +49,13 @@
                     @click="select('printTemplates', null, T('application-core:shell.settings.printTemplates', 'Print Templates'))">
               <svg role="presentation" x-h-lucide data-lucide="printer"></svg>
               <span class="flex-1 truncate text-left" x-text="T('application-core:shell.settings.printTemplates', 'Print Templates')"></span>
+            </button>
+          </li>
+          <li x-h-list-item x-show="$store.tenantExport && $store.tenantExport.visible" x-cloak>
+            <button x-h-list-item-button class="gap-3 px-4 py-3" :aria-current="selected === 'tenantExport'"
+                    @click="select('tenantExport', null, T('application-core:shell.settings.tenantExport', 'Data export'))">
+              <svg role="presentation" x-h-lucide data-lucide="archive"></svg>
+              <span class="flex-1 truncate text-left" x-text="T('application-core:shell.settings.tenantExport', 'Data export')"></span>
             </button>
           </li>
 
@@ -171,6 +179,10 @@
         <!-- Print Templates: the shared fragment of the printTemplates store. -->
         <div class="size-full overflow-auto" x-show="selected === 'printTemplates'" x-cloak
              x-html="$store.printTemplates ? $store.printTemplates.markup : ''"></div>
+
+        <!-- Data export: the shared fragment of the tenantExport store. -->
+        <div class="size-full overflow-auto" x-show="selected === 'tenantExport'" x-cloak
+             x-html="$store.tenantExport ? $store.tenantExport.markup : ''"></div>
 
         <!-- A setting entity's own generated CRUD list. The host carries x-h-include: Harmonia
              fetches the fragment and initializes Alpine on it (binding its <Entity>ManageListPage

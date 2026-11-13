@@ -138,6 +138,8 @@ function harmoniaCalcEval(expr, vars, scale) {
 ## placeholder (#7722): labelOf reads one row's label, labelRows hands a helper rows already marked.
 #macro(labelOf $dnProp $dnRow)#if($dnProp.widgetDropDownDocumentNumber)window.HarmoniaFormat.documentNumber(${dnRow}.${dnProp.widgetDropDownValue})#else${dnRow}.${dnProp.widgetDropDownValue}#end#end
 #macro(labelRows $dnProp $dnRows)#if($dnProp.widgetDropDownDocumentNumber)this.documentNumberLabels(${dnRows}, '${dnProp.widgetDropDownValue}')#else${dnRows}#end#end
+## intent `emptyText:` (#8605): the catalog key and authored text an empty value reads as.
+#macro(emptyTextArgs $p)'$projectName:${tprefix}.t.${p.dataName}_empty', '${p.widgetEmptyTextJs}'#end
 document.addEventListener('alpine:init', () => {
   Alpine.data('${name}DocumentPage', () => ({
     ...baseFormPage(),
@@ -223,6 +225,14 @@ document.addEventListener('alpine:init', () => {
     isWide: true,
 
     apiPath: '/${javaPerspectiveName}/${name}Controller',
+#if($share)
+
+    // Share links (intent `share:`, #8613): the rail's shareLinksPanel reports here whether the caller
+    // may see the record's links, so the rail shows for that section alone; `shareWhen` are the terms
+    // (basePage.visibleWhenHolds) the record satisfies while a link may be created.
+    shareLinksShown: false,
+    shareWhen: #if($share.whenTermsJs)${share.whenTermsJs}#{else}[]#end,
+#end
 #if($history == "true")
 
     // Change history (intent `history: true`): the document's field-level trail, read from the
@@ -1654,7 +1664,13 @@ document.addEventListener('alpine:init', () => {
       return [
 #foreach($property in $properties)
 #if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty && $property.widgetPlacement != "MAIN")
+#if($property.widgetEmptyText)
+## A field declaring emptyText (#8605) always shows its row, so it counts whenever the caller may see it.
+#if($property.roleRead)#set($emptyTextShown = "this.canSee('${property.name}') || null")#{else}#set($emptyTextShown = "true")#end
+        ${emptyTextShown},
+#else
         this.form.${property.name},
+#end
 #end
 #end
       ].some(v => v !== null && v !== undefined && v !== '');
@@ -1665,7 +1681,7 @@ document.addEventListener('alpine:init', () => {
 
     // The rail is only worth its rule and its column when something inside it renders.
     get hasRailContent() {
-      return this.hasDetailValues#if($docStatusProp != "") || !!this.statusText()#end#if($history == "true") || (this.history || []).length > 0#end;
+      return this.hasDetailValues#if($docStatusProp != "") || !!this.statusText()#end#if($history == "true") || (this.history || []).length > 0#end#if($share) || this.shareLinksShown#end;
     },
 
     // The title of a document without a number field: the entity name in preview, else what the
@@ -1690,7 +1706,12 @@ document.addEventListener('alpine:init', () => {
 #if($property.roleRead)
       if (this.canSee('${property.name}')) {
 #end
+#if($property.widgetEmptyText)
+## An empty value reads as the field's emptyText (#8605) instead of being left out.
+      parts.push(this.orEmptyText(this.record.${property.name}, this.fieldDisplay(this.record.${property.name}, '#if($property.numberStampOnIssue)DOCUMENT_NUMBER#else$!{property.widgetType}#end', '#if($property.isFloatType)$!{property.formatPattern}#end', #if($property.widgetType == "DROPDOWN" || $property.widgetType == "MULTISELECT")this.options${property.name}#elseif($property.widgetType == "CHECKBOX")[{ value: true, text: T('$projectName:${tprefix}.${property.booleanTrueKey}', '${property.booleanTrueTextJs}') }, { value: false, text: T('$projectName:${tprefix}.${property.booleanFalseKey}', '${property.booleanFalseTextJs}') }]#{else}null#end), #emptyTextArgs($property)));
+#else
       parts.push(this.fieldDisplay(this.record.${property.name}, '#if($property.numberStampOnIssue)DOCUMENT_NUMBER#else$!{property.widgetType}#end', '#if($property.isFloatType)$!{property.formatPattern}#end', #if($property.widgetType == "DROPDOWN" || $property.widgetType == "MULTISELECT")this.options${property.name}#elseif($property.widgetType == "CHECKBOX")[{ value: true, text: T('$projectName:${tprefix}.${property.booleanTrueKey}', '${property.booleanTrueTextJs}') }, { value: false, text: T('$projectName:${tprefix}.${property.booleanFalseKey}', '${property.booleanFalseTextJs}') }]#{else}null#end));
+#end
 #if($property.roleRead)
       }
 #end

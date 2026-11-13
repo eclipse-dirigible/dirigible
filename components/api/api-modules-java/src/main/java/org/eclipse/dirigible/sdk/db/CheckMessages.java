@@ -184,7 +184,7 @@ public final class CheckMessages {
      * The request language - the thread-bound override, else the request's {@code Accept-Language};
      * {@code null} outside a request.
      */
-    private static String language() {
+    static String language() {
         try {
             // Outside a request (a process step, a job) nobody reads the message in a language of
             // their own; asking would only log the facade's no-request error on every refusal.

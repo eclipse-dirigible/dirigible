@@ -22,8 +22,20 @@ import com.fasterxml.jackson.annotation.JsonInclude;
  * @param revision the tenant's revision sequence as the provisioning system read it - the resync's
  *        watermark
  * @param users the users
+ * @param seatLimit the most users the tenant may hold at once - absent or null for no limit, which
+ *        clears a stored one. A {@link Number}, so that a fraction reaches the validation instead
+ *        of being truncated by the reader; see {@link #seatLimitValue()}
  */
-record TenantUserSync(Boolean complete, Long revision, List<Snapshot> users) {
+record TenantUserSync(Boolean complete, Long revision, List<Snapshot> users, Number seatLimit) {
+
+    /**
+     * The seat limit, once the validation passed it.
+     *
+     * @return the limit, or null for no limit
+     */
+    Integer seatLimitValue() {
+        return seatLimit == null ? null : seatLimit.intValue();
+    }
 
     /**
      * Whether the body is the tenant's full list.

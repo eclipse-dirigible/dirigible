@@ -72,6 +72,8 @@ class IntentStatementImportIT extends IntegrationTest {
     private static final String CSV_UPLOAD = EVENTS + "/BankCsvImport/upload";
     private static final String MT940_UPLOAD = EVENTS + "/SwiftImport/upload";
     private static final String LINES = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api/statementline/StatementLineController";
+    private static final String CAMT_UPLOAD = EVENTS + "/IsoBatchImport/upload";
+    private static final String PARTS = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api/batchline/BatchLineController";
     private static final String LEDGER = "BANKIMPORT_STATEMENT_LINE_IMPORTS";
 
     private static final String INTENT_YAML = """
@@ -88,6 +90,16 @@ class IntentStatementImportIT extends IntegrationTest {
                   - { name: amount,      type: decimal, precision: 18, scale: 2 }
                   - { name: details,     type: string,  length: 500 }
                   - { name: matched,     type: boolean, defaultValue: "false" }
+              - name: BatchLine
+                fields:
+                  - { name: id,            type: integer, primaryKey: true, generated: true }
+                  - { name: statementId,   type: string,  length: 100, required: true }
+                  - { name: lineNumber,    type: integer, required: true }
+                  - { name: transactionNo, type: integer, required: true }
+                  - { name: amount,        type: decimal, precision: 18, scale: 2 }
+                  - { name: payer,         type: string,  length: 200 }
+                  - { name: entryStatus,   type: string,  length: 10 }
+                  - { name: fileChecksum,  type: string,  length: 64 }
 
             imports:
               - name: bankCsv
@@ -107,6 +119,20 @@ class IntentStatementImportIT extends IntegrationTest {
                 format: mt940
                 map: { statementId: statementId, lineNumber: lineNumber, bookedOn: valueDate, amount: amount, details: details }
                 duplicateKey: [statementId, lineNumber]
+              - name: isoBatch
+                into: BatchLine
+                format: camt053
+                camt053: { records: transactions }
+                where: { status: BOOK, reversal: false }
+                map:
+                  statementId:   statementId
+                  lineNumber:    lineNumber
+                  transactionNo: transaction
+                  amount:        amount
+                  payer:         counterpartyName
+                  entryStatus:   status
+                  fileChecksum:  _checksum
+                duplicateKey: [statementId, lineNumber, transactionNo]
             """;
 
     /** A matching rule: the post-import hook marks every row of a CSV import as matched. */
@@ -251,6 +277,60 @@ class IntentStatementImportIT extends IntegrationTest {
         assertEquals(1, imported, "exactly one concurrent upload imports the file: " + statuses);
         assertEquals(attempts - 1, duplicate, "every other concurrent upload is a duplicate: " + statuses);
         assertEquals(3, lines("bank-statement-bg.csv").size(), "the file's lines are stored exactly once");
+    }
+
+    /**
+     * A camt.053 import reading one record per transaction (#8460): the batch-booked entry of three
+     * payers becomes three rows of 100 / 120 / 80, each with its own payer, while the pending entry and
+     * the reversal are skipped by the {@code where:} filter and counted.
+     */
+    @Test
+    void a_camt_batch_entry_imports_one_row_per_transaction_and_pending_entries_are_skipped() {
+        deployBankimport();
+
+        byte[] camt = fixture("statement-batch.camt053.xml");
+        restAssuredExecutor.execute(() -> given().multiPart("file", "statement-batch.camt053.xml", camt, "application/xml")
+                                                 .when()
+                                                 .post(CAMT_UPLOAD)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("status", equalTo("IMPORTED"))
+                                                 .body("records", equalTo(3))
+                                                 .body("skipped", equalTo(2)),
+                90);
+
+        AtomicReference<List<Map<String, Object>>> rows = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> rows.set(given().when()
+                                                          .get(PARTS)
+                                                          .then()
+                                                          .statusCode(200)
+                                                          .extract()
+                                                          .jsonPath()
+                                                          .using(new JsonPathConfig(NumberReturnType.BIG_DECIMAL))
+                                                          .getList("$")));
+        List<Map<String, Object>> parts = new ArrayList<>(rows.get());
+        parts.sort(Comparator.comparingInt(row -> ((Number) row.get("TransactionNo")).intValue()));
+        assertEquals(3, parts.size(), "only the booked batch entry is imported, one row per transaction: " + parts);
+        String[][] expected = {{"100.00", "Alpha Ltd"}, {"120.00", "Beta GmbH"}, {"80.00", "Gamma SA"}};
+        for (int i = 0; i < expected.length; i++) {
+            Map<String, Object> part = parts.get(i);
+            assertEquals("CAMT-2026-11", part.get("StatementId"));
+            assertEquals(1, ((Number) part.get("LineNumber")).intValue(), "every part keeps its entry's line: " + part);
+            assertEquals(i + 1, ((Number) part.get("TransactionNo")).intValue());
+            assertEquals(0, new BigDecimal(expected[i][0]).compareTo(new BigDecimal(String.valueOf(part.get("Amount")))), part.toString());
+            assertEquals(expected[i][1], part.get("Payer"));
+            assertEquals("BOOK", part.get("EntryStatus"));
+            assertEquals(64, String.valueOf(part.get("FileChecksum"))
+                                   .length(),
+                    "the file's checksum is a map source: " + part);
+        }
+
+        restAssuredExecutor.execute(() -> given().multiPart("file", "renamed.xml", camt, "application/xml")
+                                                 .when()
+                                                 .post(CAMT_UPLOAD)
+                                                 .then()
+                                                 .statusCode(409)
+                                                 .body("message", containsString("transactionNo [1]")));
     }
 
     /** Releases {@code attempts} uploads of the same file together and collects their status codes. */

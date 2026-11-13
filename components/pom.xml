@@ -92,6 +92,7 @@
         <module>engine/engine-issues</module>
         <module>engine/engine-document</module>
         <module>engine/engine-numbering</module>
+        <module>engine/engine-share</module>
         <module>engine/engine-open-telemetry</module>
         <module>engine/engine-camel</module>
         <module>engine/engine-ftp</module>

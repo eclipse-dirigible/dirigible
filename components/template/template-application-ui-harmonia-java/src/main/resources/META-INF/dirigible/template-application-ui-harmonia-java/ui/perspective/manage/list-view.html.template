@@ -11,6 +11,11 @@
 ## A boolean's words (#8564): its own intent `labels:`, else the shared Yes / No - [key, word] per value,
 ## resolved by the shared basePage.booleanText.
 #macro(booleanWords $property)['$projectName:${tprefix}.${property.booleanTrueKey}', '${property.booleanTrueTextJs}', '$projectName:${tprefix}.${property.booleanFalseKey}', '${property.booleanFalseTextJs}']#end
+## intent `emptyText:` (#8605): a cell of a field declaring it prints the field's text for an empty value
+## instead of the em dash - #emptyOpen($p, "<value>")<formatted>#emptyClose($p). Nothing for any other field.
+#macro(emptyTextArgs $p)'$projectName:${tprefix}.t.${p.dataName}_empty', '${p.widgetEmptyTextJs}'#end
+#macro(emptyOpen $p $v)#if($p.widgetEmptyText)orEmptyText(${v}, #end#end
+#macro(emptyClose $p)#if($p.widgetEmptyText), #emptyTextArgs($p))#end#end
 ## The editor for one column's filter value, emitted in the Filter menu's second step and again in
 ## every chip's own popover - the same control either place, over the same filterDraft. $dismiss is
 ## what the host needs done before the value is applied: the Filter menu closes itself through
@@ -397,15 +402,15 @@
 #elseif($property.widgetType == "MULTISELECT")
                       <span class="truncate" x-text="multiLookupText('${property.name}', row.${property.name})"></span>
 #elseif($property.isDateType)
-                      <span class="truncate" x-text="displayValue(row.${property.name}, true)"></span>
+                      <span class="truncate" x-text="#emptyOpen($property, "row.${property.name}")displayValue(row.${property.name}, true)#emptyClose($property)"></span>
 #elseif($property.isFloatType)
-                      <span class="truncate" x-text="formatNumber(row.${property.name}, '${property.formatPattern}')"></span>
+                      <span class="truncate" x-text="#emptyOpen($property, "row.${property.name}")formatNumber(row.${property.name}, '${property.formatPattern}')#emptyClose($property)"></span>
 #elseif($property.numberStampOnIssue)
                       <span class="truncate" x-text="window.HarmoniaFormat.documentNumber(row.${property.name})"></span>
 #elseif($property.booleanTrueKey)
                       <span class="truncate" x-text="booleanText(row.${property.name}, #booleanWords($property))"></span>
 #else
-                      <span class="truncate" x-text="displayValue(row.${property.name})"></span>
+                      <span class="truncate" x-text="#emptyOpen($property, "row.${property.name}")displayValue(row.${property.name})#emptyClose($property)"></span>
 #end
                     </div>
                   </td>
@@ -421,17 +426,17 @@
 #elseif($property.widgetType == "MULTISELECT")
                   <td x-h-table-cell#visibleGate($property) x-text="multiLookupText('${property.name}', row.${property.name})"></td>
 #elseif($property.isDateType)
-                  <td x-h-table-cell#visibleGate($property) x-text="displayValue(row.${property.name}, true)"></td>
+                  <td x-h-table-cell#visibleGate($property) x-text="#emptyOpen($property, "row.${property.name}")displayValue(row.${property.name}, true)#emptyClose($property)"></td>
 #elseif($property.isFloatType)
-                  <td x-h-table-cell class="text-right"#visibleGate($property) x-text="formatNumber(row.${property.name}, '${property.formatPattern}')"></td>
+                  <td x-h-table-cell class="text-right"#visibleGate($property) x-text="#emptyOpen($property, "row.${property.name}")formatNumber(row.${property.name}, '${property.formatPattern}')#emptyClose($property)"></td>
 #elseif($property.isNumberType)
-                  <td x-h-table-cell class="text-right"#visibleGate($property) x-text="displayValue(row.${property.name})"></td>
+                  <td x-h-table-cell class="text-right"#visibleGate($property) x-text="#emptyOpen($property, "row.${property.name}")displayValue(row.${property.name})#emptyClose($property)"></td>
 #elseif($property.numberStampOnIssue)
                   <td x-h-table-cell#visibleGate($property) x-text="window.HarmoniaFormat.documentNumber(row.${property.name})"></td>
 #elseif($property.booleanTrueKey)
                   <td x-h-table-cell#visibleGate($property) x-text="booleanText(row.${property.name}, #booleanWords($property))"></td>
 #else
-                  <td x-h-table-cell#visibleGate($property) x-text="displayValue(row.${property.name})"></td>
+                  <td x-h-table-cell#visibleGate($property) x-text="#emptyOpen($property, "row.${property.name}")displayValue(row.${property.name})#emptyClose($property)"></td>
 #end
 #end
 #end
@@ -620,7 +625,7 @@
 
         <div class="vbox min-h-0 flex-1 gap-4 overflow-auto p-4">
           <!-- What kind of thing this is, over its properties - the key itself is in the header. -->
-          <h2 x-h-text.h4 class="truncate" x-text="sheetTitle()"></h2>
+          <h2 x-h-text.h4 class="truncate shrink-0" x-text="sheetTitle()"></h2>
 
         <!-- Every property of the selected record (the table above shows only the major ones),
              unframed: the sheet IS the frame, and a card inside it only draws a second border around
@@ -644,13 +649,13 @@
 #elseif($property.widgetType == "MULTISELECT")
             <span x-text="multiLookupText('${property.name}', selected?.${property.name})"></span>
 #elseif($property.isFloatType)
-            <span x-text="formatNumber(selected?.${property.name}, '${property.formatPattern}')"></span>
+            <span x-text="#emptyOpen($property, "selected?.${property.name}")formatNumber(selected?.${property.name}, '${property.formatPattern}')#emptyClose($property)"></span>
 #elseif($property.numberStampOnIssue)
             <span x-text="window.HarmoniaFormat.documentNumber(selected?.${property.name})"></span>
 #elseif($property.booleanTrueKey)
             <span x-text="booleanText(selected?.${property.name}, #booleanWords($property))"></span>
 #else
-            <span x-text="displayValue(selected?.${property.name}, $isDate)"></span>
+            <span x-text="#emptyOpen($property, "selected?.${property.name}")displayValue(selected?.${property.name}, $isDate)#emptyClose($property)"></span>
 #end
           </div>
 #end

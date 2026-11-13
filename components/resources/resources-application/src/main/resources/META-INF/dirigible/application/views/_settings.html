@@ -62,6 +62,16 @@
             <span x-text="T('application-core:shell.settings.printTemplates', 'Print Templates')"></span>
           </button>
         </li>
+        <!-- Data export: a built-in entry for the owners of the current tenant (#8566) - one archive of
+             everything the tenant holds, the application's tables and every stored document. Offered only
+             when the platform enables it and answers the caller; the section is the shared fragment the
+             tenantExport store fetches. -->
+        <li x-h-list-item x-show="$store.tenantExport && $store.tenantExport.visible" x-cloak>
+          <button x-h-list-item-button :aria-current="isSettingActive({ id: 'tenant-export' })" @click="selectSetting({ id: 'tenant-export' })">
+            <svg role="presentation" x-h-lucide data-lucide="archive"></svg>
+            <span x-text="T('application-core:shell.settings.tenantExport', 'Data export')"></span>
+          </button>
+        </li>
         <template x-for="item in visibleSettingsItems()" :key="item.id">
           <li x-h-list-item>
             <button x-h-list-item-button :aria-current="isSettingActive(item)" @click="selectSetting(item)">
@@ -74,7 +84,7 @@
     </div>
   </div>
   <div x-h-split-panel data-size="75%" style="position: relative;">
-    <div x-show="!settingsUrl && settingsSelected !== 'region-language' && settingsSelected !== 'tenant-configuration' && settingsSelected !== 'document-numbering' && settingsSelected !== 'tenant-users' && settingsSelected !== 'print-templates'" x-h-info-page class="p-4">
+    <div x-show="!settingsUrl && settingsSelected !== 'region-language' && settingsSelected !== 'tenant-configuration' && settingsSelected !== 'document-numbering' && settingsSelected !== 'tenant-users' && settingsSelected !== 'print-templates' && settingsSelected !== 'tenant-export'" x-h-info-page class="p-4">
       <div x-h-info-page-header>
         <div x-h-info-page-media.icon><svg x-h-icon data-icon="circle-info" role="img" aria-label="info"></svg></div>
         <div x-h-info-page-title x-text="T('application-core:shell.settings.selectSetting', 'Select a setting')"></div>
@@ -277,6 +287,8 @@
     <div x-show="settingsSelected === 'tenant-users'" class="size-full overflow-auto" x-html="$store.tenantUsers ? $store.tenantUsers.markup : ''"></div>
     <!-- Print Templates detail: the shared fragment of the printTemplates store (application-core/shell/views/_print-templates.html). -->
     <div x-show="settingsSelected === 'print-templates'" class="size-full overflow-auto" x-html="$store.printTemplates ? $store.printTemplates.markup : ''"></div>
+    <!-- Data export detail: the shared fragment of the tenantExport store (application-core/shell/views/_tenant-export.html). -->
+    <div x-show="settingsSelected === 'tenant-export'" class="size-full overflow-auto" x-html="$store.tenantExport ? $store.tenantExport.markup : ''"></div>
     <iframe x-show="settingsUrl" :src="settingsUrl" title="Settings"
             style="position:absolute; inset:0; width:100%; height:100%; border:0;"></iframe>
   </div>

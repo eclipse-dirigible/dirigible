@@ -28,7 +28,8 @@ import org.junit.jupiter.api.Test;
 /**
  * The statement readers over real sample files (#7856): a windows-1251 bank CSV with a {@code ;}
  * separator and {@code 1.234,56} amounts, an MT940 file with two statements in their SWIFT
- * envelopes, and a camt.053.001.08 statement.
+ * envelopes, a camt.053.001.08 statement, and a camt.053.001.02 statement with a batch-booked, a
+ * pending and a reversal entry.
  */
 class StatementFilesTest {
 
@@ -187,6 +188,96 @@ class StatementFilesTest {
         assertEquals("Такса обслужване", debit.get("details"));
         assertEquals("Bank", debit.get("counterpartyName"), "the creditor is the other side of a debit");
         assertTrue(Camt053.KEYS.containsAll(credit.keySet()));
+    }
+
+    @Test
+    void a_camt_053_entry_carries_its_status_its_reversal_flag_and_how_many_transactions_it_books() {
+        List<Map<String, String>> current = Camt053.read(sample("statement.camt053.xml"));
+        assertEquals("BOOK", current.get(0)
+                                    .get("status"),
+                "Sts/Cd of camt.053.001.08");
+        assertEquals("false", current.get(0)
+                                     .get("reversal"),
+                "no RvslInd is no reversal");
+        assertEquals("1", current.get(0)
+                                 .get("transactions"));
+
+        List<Map<String, String>> records = Camt053.read(sample("statement-batch.camt053.xml"));
+        assertEquals(3, records.size(), "one record per entry, a batch included");
+        Map<String, String> batch = records.get(0);
+        assertEquals("BOOK", batch.get("status"), "the text of Sts up to camt.053.001.07");
+        assertEquals("300.00", batch.get("amount"), "the entry amount");
+        assertEquals("3", batch.get("transactions"), "a hook can tell a batch entry apart");
+        assertEquals("INV-2001", batch.get("reference"));
+        assertFalse(batch.containsKey("transaction"), "only a record per transaction has a position");
+
+        assertEquals("PDNG", records.get(1)
+                                    .get("status"));
+        Map<String, String> reversal = records.get(2);
+        assertEquals("true", reversal.get("reversal"));
+        assertEquals("-40.00", reversal.get("amount"));
+        assertEquals("0", reversal.get("transactions"), "an entry without details books no named transaction");
+        assertEquals("Return of credit", reversal.get("details"));
+    }
+
+    @Test
+    void a_batch_entry_read_per_transaction_yields_one_record_per_payer() {
+        List<Map<String, String>> records = Camt053.readTransactions(sample("statement-batch.camt053.xml"));
+
+        assertEquals(5, records.size(), "three transactions of the batch, then the pending entry and the reversal");
+        String[][] expected = {{"100.00", "INV-2001", "Alpha Ltd", "DE89370400440532013000", "Invoice 2001"},
+                {"120.00", "INV-2002", "Beta GmbH", "DE44500105175407324931", "Invoice 2002"},
+                {"80.00", "BATCH-1", "Gamma SA", null, "Payment without invoice number"}};
+        for (int i = 0; i < expected.length; i++) {
+            Map<String, String> part = records.get(i);
+            assertEquals("1", part.get("lineNumber"), "every part keeps its entry's line");
+            assertEquals(Integer.toString(i + 1), part.get("transaction"));
+            assertEquals("3", part.get("transactions"));
+            assertEquals(expected[i][0], part.get("amount"));
+            assertEquals(expected[i][1], part.get("reference"), "NOTPROVIDED falls back to the entry reference");
+            assertEquals(expected[i][2], part.get("counterpartyName"));
+            assertEquals(expected[i][3], part.get("counterpartyAccount"));
+            assertEquals(expected[i][4], part.get("details"));
+            assertEquals("C", part.get("mark"));
+            assertEquals("BOOK", part.get("status"));
+            assertTrue(Camt053.KEYS.containsAll(part.keySet()), part.keySet()
+                                                                    .toString());
+        }
+        assertEquals("BANK-BATCH-1-1", records.get(0)
+                                              .get("bankReference"),
+                "a transaction's own servicer reference");
+        assertEquals("BANK-BATCH-1", records.get(1)
+                                            .get("bankReference"));
+
+        Map<String, String> pending = records.get(3);
+        assertEquals("2", pending.get("lineNumber"));
+        assertEquals("1", pending.get("transaction"));
+        assertEquals("55.00", pending.get("amount"), "a single transaction keeps the entry amount");
+        assertEquals("Delta Inc", pending.get("counterpartyName"));
+        assertEquals("1", records.get(4)
+                                 .get("transaction"),
+                "an entry without details is still one record");
+    }
+
+    @Test
+    void a_batch_whose_parts_do_not_add_up_or_lack_an_amount_is_refused() {
+        String batch = new String(sample("statement-batch.camt053.xml"), StandardCharsets.UTF_8);
+        byte[] wrongSum = batch.replace("<Amt Ccy=\"EUR\">80.00</Amt>", "<Amt Ccy=\"EUR\">81.00</Amt>")
+                               .getBytes(StandardCharsets.UTF_8);
+        IllegalArgumentException mismatch = assertThrows(IllegalArgumentException.class, () -> Camt053.readTransactions(wrongSum));
+        assertTrue(mismatch.getMessage()
+                           .contains("add up to 301.00"),
+                mismatch.getMessage());
+        assertEquals(3, Camt053.read(wrongSum)
+                               .size(),
+                "per entry, the parts are not read");
+
+        byte[] noAmount = batch.replace("<AmtDtls><TxAmt><Amt Ccy=\"EUR\">120.00</Amt></TxAmt></AmtDtls>", "")
+                               .getBytes(StandardCharsets.UTF_8);
+        IllegalArgumentException missing = assertThrows(IllegalArgumentException.class, () -> Camt053.readTransactions(noAmount));
+        assertTrue(missing.getMessage()
+                          .contains("entry 1 transaction 2 has no amount"),
+                missing.getMessage());
     }
 
     @Test

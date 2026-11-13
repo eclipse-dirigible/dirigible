@@ -27,12 +27,16 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
+import org.eclipse.dirigible.components.base.tenant.TenantUserForgetParticipant;
 import org.eclipse.dirigible.components.tenants.domain.Tenant;
+import org.eclipse.dirigible.components.tenants.domain.TenantProperties;
 import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
+import org.eclipse.dirigible.components.tenants.service.TenantPropertiesService;
 import org.eclipse.dirigible.components.tenants.service.TenantService;
 import org.eclipse.dirigible.components.tenants.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -47,7 +51,9 @@ class TenantUserReplicaServiceTest {
 
     private TenantUserRepository users;
     private TenantService tenants;
+    private TenantPropertiesService properties;
     private UserService platformUsers;
+    private TenantUserForgetParticipant forgetParticipant;
     private TenantUserReplicaService service;
 
     @BeforeEach
@@ -57,12 +63,72 @@ class TenantUserReplicaServiceTest {
         when(tenants.findById(TENANT)).thenReturn(Optional.of(mock(Tenant.class)));
         when(users.findForUpdateByTenantIdAndEmail(any(), any())).thenReturn(Optional.empty());
         when(users.findByTenantIdAndStatusNotOrderByEmail(TENANT, TenantUserStatus.REMOVED)).thenReturn(List.of());
+        properties = mock(TenantPropertiesService.class);
+        when(properties.find(any())).thenReturn(Optional.empty());
         platformUsers = mock(UserService.class);
         org.eclipse.dirigible.components.base.tenant.Tenant defaultTenant = mock(org.eclipse.dirigible.components.base.tenant.Tenant.class);
         when(defaultTenant.getId()).thenReturn(DEFAULT_TENANT);
         when(tenants.findById(DEFAULT_TENANT)).thenReturn(Optional.of(mock(Tenant.class)));
         // A mock manager runs every TransactionTemplate callback inline.
-        service = new TenantUserReplicaService(users, tenants, platformUsers, defaultTenant, mock(PlatformTransactionManager.class));
+        forgetParticipant = mock(TenantUserForgetParticipant.class);
+        service = new TenantUserReplicaService(users, tenants, properties, platformUsers, List.of(forgetParticipant), defaultTenant,
+                mock(PlatformTransactionManager.class));
+    }
+
+    @Test
+    void aSnapshotStoresItsSeatLimitEvenWhenEveryUserIsIgnored() {
+        stored("ann@example.com", 5, TenantUserStatus.ASSIGNED);
+
+        TenantUserSync.Result result =
+                service.apply(TENANT, new TenantUserSync(false, 4L, List.of(user("ann@example.com", 4, "INVITED")), 10));
+
+        assertEquals(1, result.ignored());
+        ArgumentCaptor<TenantProperties> saved = ArgumentCaptor.forClass(TenantProperties.class);
+        verify(properties).save(saved.capture());
+        assertEquals(TENANT, saved.getValue()
+                                  .getTenantId());
+        assertEquals(10, saved.getValue()
+                              .getSeatLimit());
+    }
+
+    @Test
+    void aSnapshotWithoutASeatLimitClearsTheStoredOne() {
+        TenantProperties stored = new TenantProperties(TENANT);
+        stored.setSeatLimit(10);
+        when(properties.find(TENANT)).thenReturn(Optional.of(stored));
+
+        service.apply(TENANT, changed(user("ann@example.com", 6, "ASSIGNED")));
+
+        verify(properties).save(stored);
+        assertNull(stored.getSeatLimit());
+    }
+
+    @Test
+    void aSnapshotWithoutASeatLimitWritesNoPropertiesForATenantThatHasNone() {
+        service.apply(TENANT, changed(user("ann@example.com", 6, "ASSIGNED")));
+
+        verify(properties, never()).save(any());
+    }
+
+    @Test
+    void anUnchangedSeatLimitIsNotWrittenAgain() {
+        TenantProperties stored = new TenantProperties(TENANT);
+        stored.setSeatLimit(10);
+        when(properties.find(TENANT)).thenReturn(Optional.of(stored));
+
+        service.apply(TENANT, new TenantUserSync(false, 6L, List.of(user("ann@example.com", 6, "ASSIGNED")), 10));
+
+        verify(properties, never()).save(any());
+        assertEquals(10, service.seatLimit(TENANT));
+    }
+
+    @Test
+    void anInvalidSeatLimitIsRefusedBeforeAnythingIsWritten() {
+        ResponseStatusException refused = assertThrows(ResponseStatusException.class,
+                () -> service.apply(TENANT, new TenantUserSync(false, 6L, List.of(user("ann@example.com", 6, "ASSIGNED")), 0)));
+
+        assertEquals(HttpStatus.BAD_REQUEST, refused.getStatusCode());
+        verify(properties, never()).save(any());
     }
 
     @Test
@@ -178,7 +244,7 @@ class TenantUserReplicaServiceTest {
         when(users.findByTenantIdAndStatusNotOrderByEmail(TENANT, TenantUserStatus.REMOVED)).thenReturn(List.of(above, below, named));
 
         TenantUserSync.Result result =
-                service.apply(TENANT, new TenantUserSync(true, 10L, List.of(user("named@example.com", 10, "ASSIGNED"))));
+                service.apply(TENANT, new TenantUserSync(true, 10L, List.of(user("named@example.com", 10, "ASSIGNED")), null));
 
         assertEquals(1, result.removed());
         assertEquals(TenantUserStatus.REMOVED, below.getStatus());
@@ -193,7 +259,7 @@ class TenantUserReplicaServiceTest {
     @Test
     void aResyncLeavesAnAbsentTombstoneUntouchedAndUncounted() {
         // The live-rows query does not return tombstones, so an absent one is never visited.
-        TenantUserSync.Result result = service.apply(TENANT, new TenantUserSync(true, 10L, List.of()));
+        TenantUserSync.Result result = service.apply(TENANT, new TenantUserSync(true, 10L, List.of(), null));
 
         assertEquals(0, result.removed());
         verify(users, never()).findForUpdateByTenantIdAndEmail(any(), any());
@@ -279,6 +345,13 @@ class TenantUserReplicaServiceTest {
     }
 
     @Test
+    void forgetTellsEveryParticipantTheNormalizedEmail() {
+        service.forget(TENANT, " Ann@Example.com ");
+
+        verify(forgetParticipant).forget(TENANT, "ann@example.com");
+    }
+
+    @Test
     void forgetDeletesATombstone() {
         when(users.deleteByTenantIdAndEmail(TENANT, "ben@example.com")).thenReturn(1L);
 
@@ -341,7 +414,7 @@ class TenantUserReplicaServiceTest {
     }
 
     private static TenantUserSync changed(TenantUserSync.Snapshot... snapshots) {
-        return new TenantUserSync(false, 1L, Arrays.asList(snapshots));
+        return new TenantUserSync(false, 1L, Arrays.asList(snapshots), null);
     }
 
     private static TenantUserSync.Snapshot user(String email, long revision, String status) {

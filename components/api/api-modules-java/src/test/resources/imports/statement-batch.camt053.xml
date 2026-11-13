@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">
+  <BkToCstmrStmt>
+    <GrpHdr><MsgId>MSG-2</MsgId><CreDtTm>2026-11-02T08:00:00</CreDtTm></GrpHdr>
+    <Stmt>
+      <Id>CAMT-2026-11</Id>
+      <ElctrncSeqNb>7</ElctrncSeqNb>
+      <Acct><Id><IBAN>BG80BNBG96611020345678</IBAN></Id><Ccy>EUR</Ccy></Acct>
+      <Ntry>
+        <NtryRef>BATCH-1</NtryRef>
+        <Amt Ccy="EUR">300.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-11-01</Dt></BookgDt>
+        <ValDt><Dt>2026-11-01</Dt></ValDt>
+        <AcctSvcrRef>BANK-BATCH-1</AcctSvcrRef>
+        <BkTxCd><Domn><Cd>PMNT</Cd><Fmly><Cd>RCDT</Cd><SubFmlyCd>ESCT</SubFmlyCd></Fmly></Domn></BkTxCd>
+        <NtryDtls>
+          <Btch><NbOfTxs>3</NbOfTxs></Btch>
+          <TxDtls>
+            <Refs><AcctSvcrRef>BANK-BATCH-1-1</AcctSvcrRef><EndToEndId>INV-2001</EndToEndId></Refs>
+            <AmtDtls><TxAmt><Amt Ccy="EUR">100.00</Amt></TxAmt></AmtDtls>
+            <RltdPties>
+              <Dbtr><Nm>Alpha Ltd</Nm></Dbtr>
+              <DbtrAcct><Id><IBAN>DE89370400440532013000</IBAN></Id></DbtrAcct>
+            </RltdPties>
+            <RmtInf><Ustrd>Invoice 2001</Ustrd></RmtInf>
+          </TxDtls>
+          <TxDtls>
+            <Refs><EndToEndId>INV-2002</EndToEndId></Refs>
+            <AmtDtls><TxAmt><Amt Ccy="EUR">120.00</Amt></TxAmt></AmtDtls>
+            <RltdPties>
+              <Dbtr><Nm>Beta GmbH</Nm></Dbtr>
+              <DbtrAcct><Id><IBAN>DE44500105175407324931</IBAN></Id></DbtrAcct>
+            </RltdPties>
+            <RmtInf><Ustrd>Invoice 2002</Ustrd></RmtInf>
+          </TxDtls>
+          <TxDtls>
+            <Refs><EndToEndId>NOTPROVIDED</EndToEndId></Refs>
+            <AmtDtls><TxAmt><Amt Ccy="EUR">80.00</Amt></TxAmt></AmtDtls>
+            <RltdPties><Dbtr><Nm>Gamma SA</Nm></Dbtr></RltdPties>
+            <AddtlTxInf>Payment without invoice number</AddtlTxInf>
+          </TxDtls>
+        </NtryDtls>
+      </Ntry>
+      <Ntry>
+        <NtryRef>PEND-1</NtryRef>
+        <Amt Ccy="EUR">55.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Sts>PDNG</Sts>
+        <BookgDt><Dt>2026-11-02</Dt></BookgDt>
+        <NtryDtls><TxDtls>
+          <Refs><EndToEndId>INV-2003</EndToEndId></Refs>
+          <RltdPties><Dbtr><Nm>Delta Inc</Nm></Dbtr></RltdPties>
+        </TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <NtryRef>RVSL-1</NtryRef>
+        <Amt Ccy="EUR">40.00</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <RvslInd>true</RvslInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-11-02</Dt></BookgDt>
+        <AddtlNtryInf>Return of credit</AddtlNtryInf>
+      </Ntry>
+    </Stmt>
+  </BkToCstmrStmt>
+</Document>

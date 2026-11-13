@@ -25,6 +25,7 @@ import org.eclipse.dirigible.parsers.document.ImageNode;
 import org.eclipse.dirigible.parsers.document.LineNode;
 import org.eclipse.dirigible.parsers.document.Node;
 import org.eclipse.dirigible.parsers.document.PageNode;
+import org.eclipse.dirigible.parsers.document.QrCodeNode;
 import org.eclipse.dirigible.parsers.document.RowNode;
 import org.eclipse.dirigible.parsers.document.SectionNode;
 import org.eclipse.dirigible.parsers.document.SpaceNode;
@@ -56,9 +57,17 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
     private static final double DEFAULT_PAGE_HEIGHT = 842;
     private static final double DEFAULT_PAGE_PADDING = 40;
     private static final String FONT_SIZE = "fontSize";
+    private static final String SIZE = "size";
+    private static final String LEVEL = "level";
+
+    /** The side of a {@code <qrcode>} that sets no {@code size}, in points - about 32 mm. */
+    private static final double DEFAULT_QR_CODE_SIZE = 90;
 
     /** Resolves an {@code <image>} source into something FOP can read. */
     private final ImageResolver imageResolver;
+
+    /** Encodes a {@code <qrcode>} payload into an image FOP can read. */
+    private final QrCodeEncoder qrCodeEncoder;
 
     /**
      * Creates a renderer that emits every {@code <image>} source unchanged; instances are stateless and
@@ -76,7 +85,19 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
      * @param imageResolver the image source resolver, never {@code null}
      */
     public XslFoRenderer(ImageResolver imageResolver) {
+        this(imageResolver, QrCodeEncoder.NONE);
+    }
+
+    /**
+     * Creates a renderer that also prints {@code <qrcode>} elements, encoded by the given encoder - the
+     * library itself carries no QR implementation. Instances are stateless and reusable.
+     *
+     * @param imageResolver the image source resolver; {@code null} emits every source unchanged
+     * @param qrCodeEncoder the QR code encoder; {@code null} renders no QR code
+     */
+    public XslFoRenderer(ImageResolver imageResolver, QrCodeEncoder qrCodeEncoder) {
         this.imageResolver = imageResolver == null ? ImageResolver.PASS_THROUGH : imageResolver;
+        this.qrCodeEncoder = qrCodeEncoder == null ? QrCodeEncoder.NONE : qrCodeEncoder;
     }
 
     @Override
@@ -158,6 +179,7 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
             case RowNode ignored -> appendRow(fo, node);
             case TableNode ignored -> appendTable(fo, node, width);
             case ImageNode image -> appendImage(fo, node, image);
+            case QrCodeNode qrCode -> appendQrCode(fo, node, qrCode);
             case LineNode ignored -> fo.append(
                     "<fo:block space-before=\"4pt\" space-after=\"4pt\"><fo:leader leader-pattern=\"rule\" leader-length=\"100%\" rule-thickness=\"0.5pt\" color=\"#999999\"/></fo:block>\n");
             case SpaceNode ignored -> fo.append("<fo:block space-after=\"")
@@ -344,7 +366,15 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
                                            .toList();
             return TableFontSizer.fit(width, widths, labels, cells);
         }
-        String raw = attributes.get(FONT_SIZE);
+        return positivePoints(attributes, FONT_SIZE);
+    }
+
+    /**
+     * An attribute holding a positive number of points ({@code 9}, {@code 9pt} and {@code 9px} are the
+     * same); anything else is a layout error at the attribute's position.
+     */
+    private static double positivePoints(Attributes attributes, String name) {
+        String raw = attributes.get(name);
         String amount = raw.trim();
         if (amount.endsWith("pt")) {
             amount = amount.substring(0, amount.length() - 2);
@@ -353,17 +383,17 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
         try {
             size = Measurement.parse(amount);
         } catch (IllegalArgumentException e) {
-            throw invalidFontSize(raw, attributes);
+            throw invalidPoints(name, raw, attributes);
         }
         if (size.type() != Measurement.Type.ABSOLUTE_PX || size.value() <= 0) {
-            throw invalidFontSize(raw, attributes);
+            throw invalidPoints(name, raw, attributes);
         }
         return size.value();
     }
 
-    private static LayoutException invalidFontSize(String raw, Attributes attributes) {
-        return new LayoutException("Invalid fontSize: '" + raw + "' (expected a positive number of points)",
-                attributes.positionOf(FONT_SIZE));
+    private static LayoutException invalidPoints(String name, String raw, Attributes attributes) {
+        return new LayoutException("Invalid " + name + ": '" + raw + "' (expected a positive number of points)",
+                attributes.positionOf(name));
     }
 
     private void appendColumnDefinitions(StringBuilder fo, List<Measurement> widths) {
@@ -403,6 +433,47 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
         appendContentDimension(fo, "content-width", node.width());
         appendContentDimension(fo, "content-height", node.height());
         fo.append("/></fo:block>\n");
+    }
+
+    /**
+     * Renders one QR code as a square of {@code size} points. A blank payload - a {@code value} or text
+     * whose placeholders all resolved empty - and a payload the encoder declines render <b>nothing</b>,
+     * exactly as an unreadable image does. {@code size} and {@code level} are the template author's own
+     * words, so a wrong one is a layout error rather than a silently missing code.
+     */
+    private void appendQrCode(StringBuilder fo, LayoutNode node, QrCodeNode qrCode) {
+        String side = points(qrCodeSize(qrCode.attributes()));
+        QrCodeLevel level = qrCodeLevel(qrCode.attributes());
+        String payload = qrCode.payload();
+        if (payload.isBlank()) {
+            return;
+        }
+        String encoded = qrCodeEncoder.encode(payload, level);
+        if (encoded == null || encoded.isBlank()) {
+            return;
+        }
+        fo.append("<fo:block")
+          .append(alignAttribute(node))
+          .append("><fo:external-graphic src=\"")
+          .append(escape(encoded))
+          .append("\" content-width=\"")
+          .append(side)
+          .append("\" content-height=\"")
+          .append(side)
+          .append("\"/></fo:block>\n");
+    }
+
+    private static double qrCodeSize(Attributes attributes) {
+        return attributes.getOrDefault(SIZE, "")
+                         .isBlank() ? DEFAULT_QR_CODE_SIZE : positivePoints(attributes, SIZE);
+    }
+
+    private static QrCodeLevel qrCodeLevel(Attributes attributes) {
+        try {
+            return QrCodeLevel.parse(attributes.get(LEVEL));
+        } catch (IllegalArgumentException e) {
+            throw new LayoutException(e.getMessage(), attributes.positionOf(LEVEL));
+        }
     }
 
     private static void appendContentDimension(StringBuilder fo, String attribute, Measurement measurement) {

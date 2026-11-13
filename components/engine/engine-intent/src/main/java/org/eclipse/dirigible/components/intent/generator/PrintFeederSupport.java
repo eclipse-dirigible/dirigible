@@ -53,10 +53,22 @@ import org.eclipse.dirigible.components.intent.model.UsesIntent;
  * names the repository it loads and the key it hangs the record under.
  *
  * <p>
- * <b>Depth:</b> same-model relations recurse to depth 2 (cycle-guarded by entity name); a
- * cross-model relation is resolved to depth 1 (the target's own fields) — descending <i>into</i> a
- * cross-model entity's own relations needs the target's relation graph, which
- * {@link CrossModelSupport} does not expose yet (documented follow-up).
+ * <b>Depth:</b> same-model relations recurse to depth 2 (cycle-guarded by entity name). A
+ * cross-model relation of the document or of a line item reaches the same depth 2, but <b>not from
+ * here</b> (dirigible #7752): this generator emits the depth-1 node only and flags it
+ * {@code expandReferences}, and the template then asks the SDK
+ * ({@code org.eclipse.dirigible.sdk.print.PrintRecords}) to follow the loaded record's own to-one
+ * references - which the OWNER's generated entity declares on its fields
+ * ({@code @org.eclipse.dirigible.sdk.db.Reference}). Reading the owner's relation graph out of its
+ * {@code .model} here and emitting a node per relation would have named the owner's relations in
+ * this model's source: the very snapshot the paragraph above rules out. A cross-model node reached
+ * <i>through</i> a same-model relation (depth 2 already) is not expanded - that is the depth bound.
+ *
+ * <p>
+ * <b>Audit columns:</b> an {@code audit: true} document carries its four injected columns
+ * ({@code CreatedAt}, {@code CreatedBy}, {@code UpdatedAt}, {@code UpdatedBy}) on {@code document}
+ * (dirigible #8609) - they are not authored fields, so they are appended to the root's scalars
+ * here.
  *
  * <p>
  * The plan is <b>flattened</b> into an ordered node list (parent before child), each node carrying
@@ -68,7 +80,22 @@ final class PrintFeederSupport {
     /** Maximum relation depth walked from the document master (root = 0). */
     private static final int MAX_DEPTH = 2;
 
+    /**
+     * The audit columns of an {@code audit: true} entity as the generated entity declares them
+     * ({@code EdmIntentGenerator.auditProperties}), mapped to whether the column is a timestamp.
+     */
+    private static final Map<String, Boolean> AUDIT_SCALARS = auditScalars();
+
     private PrintFeederSupport() {}
+
+    private static Map<String, Boolean> auditScalars() {
+        Map<String, Boolean> audit = new LinkedHashMap<>();
+        audit.put("CreatedAt", true);
+        audit.put("CreatedBy", false);
+        audit.put("UpdatedAt", true);
+        audit.put("UpdatedBy", false);
+        return java.util.Collections.unmodifiableMap(audit);
+    }
 
     /**
      * One feeder descriptor per document master in the model.
@@ -113,7 +140,7 @@ final class PrintFeederSupport {
         feeder.put("className", master.getName());
         feeder.put("entity", master.getName());
         feeder.put("perspective", IntentEntities.resolvePerspective(master.getName(), compositionParents, model));
-        feeder.put("rootScalars", scalarDescriptors(master));
+        feeder.put("rootScalars", rootScalarDescriptors(master));
 
         feeder.put("itemsEntity", items.getName());
         feeder.put("itemsPerspective", IntentEntities.resolvePerspective(items.getName(), compositionParents, model));
@@ -139,7 +166,8 @@ final class PrintFeederSupport {
      * master excluded - that is the document itself), so an items-table column can render the
      * relation's label ({@code {{Unit}}} - "1 month") or descend into its fields
      * ({@code {{Unit.Name}}}), exactly as the header relations resolve. Depth 1: an item relation feeds
-     * its target's own record, not the target's further graph.
+     * its target's own record, not the target's further graph - except that a cross-model target's own
+     * to-one references are followed at runtime, as for a header relation (see the class note).
      */
     private static List<Map<String, Object>> buildItemNodes(EntityIntent items, EntityIntent master, IntentModel model,
             Map<String, EntityIntent> byName, Map<String, String> compositionParents, IntentGenerationContext context,
@@ -172,12 +200,14 @@ final class PrintFeederSupport {
                 node.put("labelField", target != null ? target.labelField() : "Name");
                 // No `scalars`: the template copies the owner's fields reflectively (see the class note).
                 node.put("scalars", List.of());
+                node.put("expandReferences", true);
             } else {
                 EntityIntent target = byName.get(relation.getTo());
                 node.put("model", "");
                 node.put("perspective", IntentEntities.resolvePerspective(relation.getTo(), compositionParents, model));
                 node.put("labelField", nameField(target));
                 node.put("scalars", scalarDescriptors(target));
+                node.put("expandReferences", false);
             }
             itemNodes.add(node);
         }
@@ -228,14 +258,18 @@ final class PrintFeederSupport {
             // the label is looked up on the copied map, so even a retired label field is a null, not a
             // compile error.
             node.put("scalars", List.of());
+            // One hop further - the owner's own to-one relations - is followed at runtime from what the
+            // owner's entity declares, never named here (see the class note). Only for a relation of the
+            // document itself: a cross-model record met at depth 2 is the end of the walk.
+            node.put("expandReferences", depth == 1);
             nodes.add(node);
-            // Depth-2 into a cross-model entity's own relations is a documented follow-up.
         } else {
             EntityIntent target = byName.get(relation.getTo());
             node.put("model", "");
             node.put("perspective", IntentEntities.resolvePerspective(relation.getTo(), compositionParents, model));
             node.put("labelField", nameField(target));
             node.put("scalars", scalarDescriptors(target));
+            node.put("expandReferences", false);
             nodes.add(node);
             if (depth < MAX_DEPTH && target != null && visited.add(target.getName())) {
                 for (RelationIntent childRelation : target.getRelations()) {
@@ -260,6 +294,31 @@ final class PrintFeederSupport {
                 if (!field.isPrimaryKey() && field.getName() != null) {
                     scalars.add(scalar(IntentNaming.pascalCase(field.getName()), isDateType(field.getType())));
                 }
+            }
+        }
+        return scalars;
+    }
+
+    /**
+     * The document's own scalars, plus the four audit columns an {@code audit: true} entity is given by
+     * the EDM generator (dirigible #8609). Those are not authored fields, so
+     * {@link #scalarDescriptors(EntityIntent)} does not see them - and without them a print could not
+     * name who compiled the document. The names and types are {@link #AUDIT_SCALARS}, the generated
+     * entity's own; an authored field of the same name wins (the parser refuses that on an audited
+     * entity, so this only keeps the descriptor list free of duplicates).
+     */
+    private static List<Map<String, Object>> rootScalarDescriptors(EntityIntent master) {
+        List<Map<String, Object>> scalars = scalarDescriptors(master);
+        if (!master.isAudited()) {
+            return scalars;
+        }
+        Set<String> names = new LinkedHashSet<>();
+        for (Map<String, Object> scalar : scalars) {
+            names.add((String) scalar.get("name"));
+        }
+        for (Map.Entry<String, Boolean> audit : AUDIT_SCALARS.entrySet()) {
+            if (names.add(audit.getKey())) {
+                scalars.add(scalar(audit.getKey(), audit.getValue()));
             }
         }
         return scalars;

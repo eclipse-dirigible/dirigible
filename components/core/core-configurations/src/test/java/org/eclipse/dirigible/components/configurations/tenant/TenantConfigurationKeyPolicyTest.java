@@ -43,6 +43,9 @@ class TenantConfigurationKeyPolicyTest {
         // The sender and reply-to of an application's own mail, so each tenant mails in its own name.
         assertTrue(policy.isInjectable("DIRIGIBLE_MAIL_SENDER"));
         assertTrue(policy.isInjectable("DIRIGIBLE_MAIL_REPLY_TO"));
+        // Sharing a declared document through a public link can be switched off, and its expiry shortened.
+        assertTrue(policy.isInjectable("DIRIGIBLE_DOCUMENTS_SHARE_ENABLED"));
+        assertTrue(policy.isInjectable("DIRIGIBLE_DOCUMENTS_SHARE_MAX_EXPIRY_DAYS"));
     }
 
     @Test
@@ -104,7 +107,7 @@ class TenantConfigurationKeyPolicyTest {
     @Test
     void allowedKeysAreTheTenantOverridableCatalogueEntriesInOrder() {
         assertEquals(DirigibleConfig.tenantOverridableKeys(), policy.allowedKeys());
-        assertEquals(15, policy.allowedKeys()
+        assertEquals(17, policy.allowedKeys()
                                .size());
         assertEquals("DIRIGIBLE_BRANDING_NAME", policy.allowedKeys()
                                                       .get(0));

@@ -62,7 +62,7 @@ document.addEventListener('alpine:init', () => {
     reportParams: [
 #if($parameters)
 #foreach($parameter in $parameters)
-      { name: '${parameter.name}', kind: #if($parameter.typeTypescript == "Date")'date'#elseif($parameter.typeTypescript == "number")'number'#{else}'text'#end },
+      { name: '${parameter.name}', tId: '${parameter.tId}', kind: #if($parameter.typeTypescript == "Date")'date'#elseif($parameter.typeTypescript == "number")'number'#{else}'text'#end },
 #end
 #end
     ],
@@ -86,8 +86,17 @@ document.addEventListener('alpine:init', () => {
       ],
     },
 #end
-    showFilters: false,
     filters: {},        // column key -> { from, to, min, max, contains, equals } (per kind)
+    // The Filter menu, the manage list's (#7390): step one picks a column, step two edits a copy of
+    // its filter, and Apply writes the copy into `filters`. A chip edits the same copy.
+    filterOpen: false,
+    // Which step the menu shows. The menu's own: a chip sets filterEditing but never this, and any
+    // open or close of the menu resets it, so the menu always opens on its column list.
+    filterMenuEditing: false,
+    filterEditing: null, // the key of the column being edited, from the menu or a chip
+    // Always an object: every open editor (the menu's and each chip's) binds its fields, and Alpine
+    // re-reads those bindings while a closing editor is still on the page.
+    filterDraft: {},
     state: 'loading',   // loading | error | empty | no-results | default
     error: null,
     // An Export or Print that failed. Kept apart from `error`, which replaces the rows: those are
@@ -129,7 +138,7 @@ document.addEventListener('alpine:init', () => {
       } catch (e) { /* no location */ }
       if (this.preview) this.limit = 5;
       for (const col of this.reportColumns) {
-        this.filters[col.key] = { from: '', to: '', min: null, max: null, contains: '', equals: '' };
+        this.filters[col.key] = this.blankFilter();
       }
       for (const p of this.reportParams) {
         this.params[p.name] = '';
@@ -145,6 +154,8 @@ document.addEventListener('alpine:init', () => {
         });
       }
       try { document.title = this.displayName; } catch (e) { /* no document */ }
+      // Closing the Filter menu - however it closes - resets it to its column list.
+      this.$watch('filterOpen', () => { this.filterMenuEditing = false; });
       this.load();
     },
 
@@ -228,7 +239,7 @@ document.addEventListener('alpine:init', () => {
       return show(from) + ' - ' + show(to);
     },
 
-    // "fromDate" -> "From Date" for the parameter strip labels.
+    // "fromDate" -> "From Date": a parameter's label when the report's catalog has none for it.
     paramLabel(name) {
       return String(name || '')
         .replace(/[_-]+/g, ' ').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/\s+/g, ' ').trim()
@@ -246,8 +257,8 @@ document.addEventListener('alpine:init', () => {
           if (f.from) conditions.push({ column: col.key, operator: 'GTE', value: f.from });
           if (f.to) conditions.push({ column: col.key, operator: 'LTE', value: f.to });
         } else if (col.kind === 'number') {
-          if (f.min !== null && f.min !== '') conditions.push({ column: col.key, operator: 'GTE', value: f.min });
-          if (f.max !== null && f.max !== '') conditions.push({ column: col.key, operator: 'LTE', value: f.max });
+          if (this.isBound(f.min)) conditions.push({ column: col.key, operator: 'GTE', value: f.min });
+          if (this.isBound(f.max)) conditions.push({ column: col.key, operator: 'LTE', value: f.max });
         } else if (col.kind === 'boolean') {
           if (f.equals !== '') conditions.push({ column: col.key, operator: 'EQ', value: f.equals === 'true' });
         } else if (f.contains) {
@@ -263,10 +274,114 @@ document.addEventListener('alpine:init', () => {
 
     clearFilters() {
       for (const col of this.reportColumns) {
-        this.filters[col.key] = { from: '', to: '', min: null, max: null, contains: '', equals: '' };
+        this.filters[col.key] = this.blankFilter();
       }
       this.page = 1;
       this.load();
+    },
+
+    blankFilter() { return { from: '', to: '', min: null, max: null, contains: '', equals: '' }; },
+
+    // A number bound is set once something was typed: an emptied number input reads ''.
+    isBound(v) { return v !== null && v !== undefined && v !== ''; },
+
+    // ----- The Filter menu and its chips (presentation over `filters` and conditions()) -----------
+    // Whether a column's filter narrows anything: a range needs at least one of its ends.
+    filterHasValue(col) {
+      const f = this.filters[col.key];
+      if (!f) return false;
+      if (col.kind === 'date') return !!(f.from || f.to);
+      if (col.kind === 'number') return this.isBound(f.min) || this.isBound(f.max);
+      if (col.kind === 'boolean') return f.equals !== '';
+      return !!f.contains;
+    },
+
+    // The filters in force, as chips.
+    get activeFilterChips() {
+      return this.reportColumns.filter(c => this.filterHasValue(c))
+        .map(c => ({ key: c.key, text: this.filterValueText(c) }));
+    },
+
+    // A filter's value as its chip prints it: "01.10.2026 - 31.10.2026", "From 01.10.2026",
+    // "100 - 500", "At least 100", Yes / No, or the text. Empty for a column without a filter, since
+    // the menu's first step evaluates it for every column.
+    filterValueText(col) {
+      if (!this.filterHasValue(col)) return '';
+      const f = this.filters[col.key];
+      if (col.kind === 'date') {
+        const from = f.from ? HarmoniaFormat.date(f.from) : '';
+        const to = f.to ? HarmoniaFormat.date(f.to) : '';
+        if (from && to) return from + ' - ' + to;
+        return from ? T('application-core:shell.list.dateFromValue', 'From {{date}}', { date: from })
+                    : T('application-core:shell.list.dateToValue', 'To {{date}}', { date: to });
+      }
+      if (col.kind === 'number') {
+        const min = this.isBound(f.min) ? this.filterNumber(col, f.min) : '';
+        const max = this.isBound(f.max) ? this.filterNumber(col, f.max) : '';
+        if (min && max) return min + ' - ' + max;
+        return min ? T('application-core:shell.report.atLeast', 'At least {{value}}', { value: min })
+                   : T('application-core:shell.report.atMost', 'At most {{value}}', { value: max });
+      }
+      if (col.kind === 'boolean') {
+        return f.equals === 'true' ? T('application-core:shell.report.true', 'Yes') : T('application-core:shell.report.false', 'No');
+      }
+      return f.contains;
+    },
+
+    // A number bound printed the way its column prints: with the column's pattern when it has one.
+    filterNumber(col, v) { return col.pattern ? this.displayNumber(v, col.pattern) : String(v); },
+
+    // Open the editor for one column on a copy of its filter, so Cancel leaves the one in force untouched.
+    openFilterEditor(key) {
+      this.filterEditing = key;
+      this.filterDraft = { ...(this.filters[key] || this.blankFilter()) };
+    },
+    backToFilterMenu() { this.filterMenuEditing = false; this.filterEditing = null; this.filterDraft = {}; },
+    closeFilterMenu() { this.filterOpen = false; this.filterEditing = null; this.filterDraft = {}; },
+    get editedFilterColumn() { return this.reportColumns.find(c => c.key === this.filterEditing) || null; },
+
+    // Apply writes the draft into `filters` and runs the one query it implies. A range entered back
+    // to front is meant the right way round.
+    applyFilterDraft() {
+      if (!this.filterEditing) return;
+      const draft = { ...this.filterDraft };
+      if (draft.from && draft.to && draft.from > draft.to) [draft.from, draft.to] = [draft.to, draft.from];
+      if (this.isBound(draft.min) && this.isBound(draft.max) && Number(draft.min) > Number(draft.max)) [draft.min, draft.max] = [draft.max, draft.min];
+      this.filters[this.filterEditing] = draft;
+      this.closeFilterMenu();
+      this.applyFilters();
+    },
+
+    // Drop one filter (a chip's x). The rest stay in force.
+    removeFilter(key) {
+      this.filters[key] = this.blankFilter();
+      this.applyFilters();
+    },
+
+    // The quick periods of a date filter, the list's (#8131); each fills From and To, and Apply runs
+    // the query as for a typed range. A week starts on Monday. Days are local YYYY-MM-DD.
+    datePresets: [
+      { key: 'today',     label: 'Today' },
+      { key: 'thisWeek',  label: 'This week' },
+      { key: 'thisMonth', label: 'This month' },
+      { key: 'lastMonth', label: 'Last month' },
+      { key: 'thisYear',  label: 'This year' },
+    ],
+    applyDatePreset(key) {
+      const now = new Date();
+      const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+      const monday = d - ((now.getDay() + 6) % 7);
+      const range = {
+        today:     [new Date(y, m, d), new Date(y, m, d)],
+        thisWeek:  [new Date(y, m, monday), new Date(y, m, monday + 6)],
+        thisMonth: [new Date(y, m, 1), new Date(y, m + 1, 0)],
+        lastMonth: [new Date(y, m - 1, 1), new Date(y, m, 0)],
+        thisYear:  [new Date(y, 0, 1), new Date(y, 11, 31)],
+      }[key];
+      this.filterDraft = { ...this.filterDraft, from: this.toDay(range[0]), to: this.toDay(range[1]) };
+    },
+    toDay(date) {
+      return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
     },
 
     // Re-read under the parameters, filters and page in force, keeping the rows on screen meanwhile.
@@ -365,10 +480,7 @@ document.addEventListener('alpine:init', () => {
     // month(date) buckets are YYYYMM integers (e.g. 202607) - render them as "2026-07"; a boolean
     // dimension reads as Yes/No, never as the raw true/false.
     axisLabel(v, meta) {
-      if (typeof v === 'boolean' || (meta && meta.kind === 'boolean' && v != null && v !== '')) {
-        const yes = v === true || v === 'true' || v === 1;
-        return yes ? T('application-core:shell.report.true', 'Yes') : T('application-core:shell.report.false', 'No');
-      }
+      if (typeof v === 'boolean' || (meta && meta.kind === 'boolean' && v != null && v !== '')) return this.yesNo(v);
       const n = Number(v);
       if (Number.isInteger(n) && n >= 190001 && n <= 999912 && (n % 100) >= 1 && (n % 100) <= 12) {
         return Math.floor(n / 100) + '-' + String(n % 100).padStart(2, '0');
@@ -417,11 +529,15 @@ document.addEventListener('alpine:init', () => {
       // hash-style DecimalFormat literal, because two hashes start a Velocity line comment and
       // swallow the rest of the line (unterminated string in the generated file).
       if (meta && meta.kind === 'number') return this.displayNumber(v, '0');
-      // A boolean column reads as Yes / No, as its chart axis does - never the raw true / false (#8564).
-      if (meta && meta.kind === 'boolean' && v != null && v !== '') {
-        return (v === true || v === 'true' || v === 1) ? T('application-core:shell.report.true', 'Yes') : T('application-core:shell.report.false', 'No');
-      }
+      if (meta && meta.kind === 'boolean' && v != null && v !== '') return this.yesNo(v);
       return v;
+    },
+
+    // A boolean as the page prints it - Yes / No, never the raw true/false - in a cell, an axis label
+    // or a legend entry. Some databases answer a boolean column as 1 / 0.
+    yesNo(v) {
+      const yes = v === true || v === 'true' || v === 1 || v === '1';
+      return yes ? T('application-core:shell.report.true', 'Yes') : T('application-core:shell.report.false', 'No');
     },
 
     // The stamp's time, in the instance's date-time format - the Inbox's and the lists' stamp.

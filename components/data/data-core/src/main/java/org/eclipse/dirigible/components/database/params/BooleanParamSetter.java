@@ -77,6 +77,14 @@ class BooleanParamSetter extends BaseParamSetter {
     @Override
     public void setParam(JsonElement sourceParam, String paramName, ParameterizedByName preparedStatement) throws SQLException {
         if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
+                                                        .isBoolean()) {
+            boolean value = sourceParam.getAsJsonPrimitive()
+                                       .getAsBoolean();
+            preparedStatement.setBoolean(paramName, value);
+            return;
+        }
+
+        if (sourceParam.isJsonPrimitive() && sourceParam.getAsJsonPrimitive()
                                                         .isNumber()) {
             boolean value = sourceParam.getAsJsonPrimitive()
                                        .getAsBoolean();

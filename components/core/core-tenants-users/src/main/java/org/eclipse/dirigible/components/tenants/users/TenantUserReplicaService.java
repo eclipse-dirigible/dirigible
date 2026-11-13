@@ -10,14 +10,18 @@
 package org.eclipse.dirigible.components.tenants.users;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
 import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
+import org.eclipse.dirigible.components.base.tenant.TenantUserForgetParticipant;
 import org.eclipse.dirigible.components.tenants.domain.Tenant;
+import org.eclipse.dirigible.components.tenants.domain.TenantProperties;
 import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
+import org.eclipse.dirigible.components.tenants.service.TenantPropertiesService;
 import org.eclipse.dirigible.components.tenants.service.TenantService;
 import org.eclipse.dirigible.components.tenants.service.UserService;
 import org.slf4j.Logger;
@@ -63,8 +67,14 @@ class TenantUserReplicaService {
     /** The tenants. */
     private final TenantService tenants;
 
+    /** The tenants' properties - the seat limit a snapshot carries (#8593). */
+    private final TenantPropertiesService properties;
+
     /** The tenants' platform users, which an erasure deletes with the replica row. */
     private final UserService platformUsers;
+
+    /** What other modules keep about a person, which an erasure removes with the replica row. */
+    private final List<TenantUserForgetParticipant> forgetParticipants;
 
     /** The default tenant's id, which has no replica. */
     private final String defaultTenantId;
@@ -80,16 +90,21 @@ class TenantUserReplicaService {
      *
      * @param users the replica
      * @param tenants the tenants
+     * @param properties the tenants' properties
      * @param platformUsers the tenants' platform users
+     * @param forgetParticipants what other modules keep about a person
      * @param defaultTenant the default tenant
      * @param transactionManager the SystemDB transaction manager
      */
-    TenantUserReplicaService(TenantUserRepository users, TenantService tenants, UserService platformUsers,
+    TenantUserReplicaService(TenantUserRepository users, TenantService tenants, TenantPropertiesService properties,
+            UserService platformUsers, List<TenantUserForgetParticipant> forgetParticipants,
             @DefaultTenant org.eclipse.dirigible.components.base.tenant.Tenant defaultTenant,
             @Qualifier("transactionManager") PlatformTransactionManager transactionManager) {
         this.users = users;
         this.tenants = tenants;
+        this.properties = properties;
         this.platformUsers = platformUsers;
+        this.forgetParticipants = forgetParticipants;
         this.defaultTenantId = defaultTenant.getId();
         this.writes = new TransactionTemplate(transactionManager);
         this.writes.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -110,6 +125,7 @@ class TenantUserReplicaService {
         if (!problems.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, String.join("; ", problems));
         }
+        writes.executeWithoutResult(status -> storeSeatLimit(tenantId, body.seatLimitValue()));
         int applied = 0;
         int ignored = 0;
         for (TenantUserSync.Snapshot snapshot : body.users()) {
@@ -130,8 +146,10 @@ class TenantUserReplicaService {
      * Makes a tenant forget one person for good - the provisioning system's erasure, after it erased
      * the person on its side. In one transaction it deletes the replica row of that email, live or
      * tombstone, with its roles, and the tenant's platform users whose username is that email, ignoring
-     * case. No tombstone is left, so nothing guards this person's ordering any more: no later snapshot
-     * is expected to name them. Finding nothing is success, and the tenant's revision is untouched.
+     * case, and lets every {@link TenantUserForgetParticipant} remove what its module keeps about the
+     * person. No tombstone is left, so nothing guards this person's ordering any more: no later
+     * snapshot is expected to name them. Finding nothing is success, and the tenant's revision is
+     * untouched.
      *
      * @param tenantId the tenant id
      * @param email the email
@@ -148,9 +166,40 @@ class TenantUserReplicaService {
         writes.executeWithoutResult(status -> {
             long replicaRows = users.deleteByTenantIdAndEmail(tenantId, normalized);
             int platformRows = platformUsers.deleteUsersByTenantIdAndUsernameIgnoreCase(tenantId, normalized);
+            forgetParticipants.forEach(participant -> participant.forget(tenantId, normalized));
             logger.info("Tenant [{}] forgot [{}]: deleted [{}] replica user(s) and [{}] platform user(s)", LogSanitizer.sanitize(tenantId),
                     LogSanitizer.sanitize(normalized), replicaRows, platformRows);
         });
+    }
+
+    /**
+     * The tenant's seat limit, as the latest snapshot carried it.
+     *
+     * @param tenantId the tenant id
+     * @return the most users the tenant may hold at once, or null for no limit
+     */
+    Integer seatLimit(String tenantId) {
+        return properties.find(tenantId)
+                         .map(TenantProperties::getSeatLimit)
+                         .orElse(null);
+    }
+
+    /**
+     * Stores the seat limit a snapshot carried, whatever its users' revisions: the latest body wins,
+     * and an absent one clears the limit. A seat change draws no revision, so a late body may carry an
+     * older limit until the next one - the provisioning system resends regularly.
+     */
+    private void storeSeatLimit(String tenantId, Integer seatLimit) {
+        Optional<TenantProperties> stored = properties.find(tenantId);
+        if (stored.isEmpty() && seatLimit == null) {
+            return;
+        }
+        TenantProperties tenantProperties = stored.orElseGet(() -> new TenantProperties(tenantId));
+        if (!Objects.equals(tenantProperties.getSeatLimit(), seatLimit)) {
+            tenantProperties.setSeatLimit(seatLimit);
+            properties.save(tenantProperties);
+            logger.info("Tenant [{}]: seat limit [{}]", LogSanitizer.sanitize(tenantId), seatLimit);
+        }
     }
 
     /**

@@ -134,8 +134,8 @@ public class InvoiceLineController {
             // A foreign-key violation means other records still reference this one - a data-integrity
             // conflict the user can act on, not a server error.
             if (isConstraintViolation(e)) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "This InvoiceLine is referenced by other records and cannot be deleted");
+                // Answered 409 in the reader's language (#8569), as the refusal of a counted reference is.
+                throw repository.referencedByOthers();
             }
             throw e;
         }

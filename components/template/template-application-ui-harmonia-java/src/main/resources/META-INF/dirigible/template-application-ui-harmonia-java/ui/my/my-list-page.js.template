@@ -107,7 +107,16 @@ document.addEventListener('alpine:init', () => {
 
     display(row, col) {
       const v = row[col.name];
+#set($listEmptyText = false)
+#foreach($property in $listProperties)
+#if($property.widgetEmptyText)#set($listEmptyText = true)#end
+#end
+#if($listEmptyText)
+      // A column whose field declares `emptyText:` (#8605) prints that text instead of the em dash.
+      if (v == null || v === '') return col.emptyText ? T(col.emptyTkey, col.emptyText) : '—';
+#else
       if (v == null || v === '') return '—';
+#end
       // A number: { stampOn: issue } column shows its draft marker until the number is stamped (#7722).
       if (col.documentNumber) return String(window.HarmoniaFormat.documentNumber(v));
       if (col.bool) return this.booleanText(v, col.bool);
@@ -160,7 +169,7 @@ document.addEventListener('alpine:init', () => {
     columns: [
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && !$property.collectionColumn && !$property.sensitiveProperty && $property.name != "$!{personalProperty}" && $property.name != "ProcessId" && !$property.isHiddenProperty && (!$property.auditType || $property.auditType == "NONE") && $property.widgetIsMajor != "false")
-      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "DOCUMENT_STATUS"), status: true#elseif($property.widgetType == "MULTISELECT"), multi: true#elseif($property.widgetType == "DROPDOWN"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end#if($property.numberStampOnIssue), documentNumber: true#end#if($property.booleanTrueKey), bool: #booleanWords($property)#end },
+      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "DOCUMENT_STATUS"), status: true#elseif($property.widgetType == "MULTISELECT"), multi: true#elseif($property.widgetType == "DROPDOWN"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end#if($property.numberStampOnIssue), documentNumber: true#end#if($property.booleanTrueKey), bool: #booleanWords($property)#end#if($property.widgetEmptyText), emptyText: '${property.widgetEmptyTextJs}', emptyTkey: '$projectName:${tprefix}.t.${property.dataName}_empty'#end },
 #end
 #end
     ],

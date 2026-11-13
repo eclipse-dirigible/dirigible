@@ -31,8 +31,12 @@ public class DynamicClientRegistrationRepository
         implements ClientRegistrationRepository, Iterable<org.springframework.security.oauth2.client.registration.ClientRegistration> {
 
     private static final Logger logger = LoggerFactory.getLogger(DynamicClientRegistrationRepository.class);
-    private static final Map<String, org.springframework.security.oauth2.client.registration.ClientRegistration> REGISTRATIONS =
-            new HashMap<>();
+    /**
+     * The registrations of this application context. Held per instance, never statically: a static map
+     * outlived its context and handed the next context in the same JVM the registrations of the last
+     * one (#8592).
+     */
+    private final Map<String, org.springframework.security.oauth2.client.registration.ClientRegistration> registrations = new HashMap<>();
 
     private final ClientRegistrationService service;
     private final List<ClientRegistration> clientRegistrations = new ArrayList<>();;
@@ -92,20 +96,20 @@ public class DynamicClientRegistrationRepository
         service.getAll()
                .stream()
                .map((ClientRegistration registration) -> toClientRegistration(registration))
-               .forEach(e -> REGISTRATIONS.put(e.getRegistrationId(), e));
-        return REGISTRATIONS.values()
+               .forEach(e -> registrations.put(e.getRegistrationId(), e));
+        return registrations.values()
                             .iterator();
     }
 
     @Override
     public org.springframework.security.oauth2.client.registration.ClientRegistration findByRegistrationId(String registrationId) {
-        org.springframework.security.oauth2.client.registration.ClientRegistration registration = REGISTRATIONS.get(registrationId);
+        org.springframework.security.oauth2.client.registration.ClientRegistration registration = registrations.get(registrationId);
         if (registration == null) {
             // the store is populated when something iterates it - historically the generated login
             // page. A direct lookup can come first (a custom login page, a native login), so a miss
             // triggers the same initialization before giving up.
             iterator();
-            registration = REGISTRATIONS.get(registrationId);
+            registration = registrations.get(registrationId);
         }
         return registration;
     }
@@ -125,14 +129,14 @@ public class DynamicClientRegistrationRepository
     public ClientRegistration save(ClientRegistration registration) {
         ClientRegistration newRegistration = service.save(registration);
         org.springframework.security.oauth2.client.registration.ClientRegistration clientRegistration = toClientRegistration(registration);
-        REGISTRATIONS.put(clientRegistration.getRegistrationId(), clientRegistration);
+        registrations.put(clientRegistration.getRegistrationId(), clientRegistration);
         return newRegistration;
     }
 
     public void delete(ClientRegistration registration) {
         service.delete(registration);
         org.springframework.security.oauth2.client.registration.ClientRegistration clientRegistration = toClientRegistration(registration);
-        REGISTRATIONS.remove(clientRegistration.getRegistrationId());
+        registrations.remove(clientRegistration.getRegistrationId());
     }
 
     private org.springframework.security.oauth2.client.registration.ClientRegistration toClientRegistration(

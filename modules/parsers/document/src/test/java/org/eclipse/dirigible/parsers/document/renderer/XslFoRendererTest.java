@@ -344,4 +344,23 @@ public class XslFoRendererTest {
         String fo = renderTemplate("<document><image src=\"/logo.png\"/></document>", Map.of());
         assertTrue(fo.contains("<fo:external-graphic src=\"/logo.png\"/>"));
     }
+
+    /** The acceptance case of #8610: the line-number column of an items table. */
+    @Test
+    public void rendersTheRowOrdinalColumnOfAnItemsTable() {
+        String fo = renderTemplate("""
+                <document>
+                    <table source="items">
+                        <column width="24" label="№">{{__index}}</column>
+                        <column width="*" label="Item">{{name}}</column>
+                    </table>
+                </document>
+                """, Map.of("items", List.of(Map.of("name", "Widget"), Map.of("name", "Gadget"))));
+        assertTrue(fo.contains("<fo:table-column column-width=\"24pt\"/>"));
+        assertTrue(fo.contains(">№</fo:block>"));
+        assertTrue(fo, fo.contains(
+                "<fo:table-cell padding=\"2pt\"><fo:block>1</fo:block></fo:table-cell>\n<fo:table-cell padding=\"2pt\"><fo:block>Widget</fo:block>"));
+        assertTrue(fo, fo.contains(
+                "<fo:table-cell padding=\"2pt\"><fo:block>2</fo:block></fo:table-cell>\n<fo:table-cell padding=\"2pt\"><fo:block>Gadget</fo:block>"));
+    }
 }
