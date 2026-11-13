@@ -236,6 +236,79 @@ class PrintFeederSupportTest {
     }
 
     /**
+     * dirigible #7752: <code>&#123;&#123;document.Customer.City.Name&#125;&#125;</code> needs the
+     * cross-model record's own relations, and those must not be named in this model's feeder (that is
+     * the #6422 snapshot again). So the generator emits NO node for them - the depth-1 node is only
+     * flagged, and the hop is taken at runtime from what the owner's entity declares. The flag is the
+     * depth bound: a relation of the document or of a line item, never a cross-model record met deeper.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aCrossModelRelationIsFlaggedForTheRuntimeHopAndNamesNothingOfTheOwner() {
+        IntentModel deep = IntentParser.parse("""
+                name: sales
+                uses:
+                  - { model: customers, project: customers }
+                entities:
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, documentTitle: true }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer, model: customers }
+                      - { name: Template, kind: manyToOne, to: InvoiceTemplate }
+                  - name: SalesInvoiceItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal, required: true }
+                    relations:
+                      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+                      - { name: Product, kind: manyToOne, to: Product, model: customers }
+                      - { name: Unit, kind: manyToOne, to: Unit }
+                  - name: InvoiceTemplate
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer, model: customers }
+                  - name: Unit
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                """);
+        Map<String, Object> feeder = PrintFeederSupport.buildPrintFeeders(deep, IntentEntities.byName(deep),
+                IntentEntities.compositionParents(deep), null, new IntentGenerationContext(deep, "/proj", "proj", "workspace", "app", null))
+                                                       .get(0);
+        Map<String, Map<String, Object>> byVar = new java.util.LinkedHashMap<>();
+        for (Map<String, Object> node : (List<Map<String, Object>>) feeder.get("nodes")) {
+            byVar.put((String) node.get("entityVar"), node);
+        }
+
+        assertEquals(java.util.Set.of("customer", "template", "customer2"), byVar.keySet(),
+                "no node is emitted for a relation of the owner's Customer - nothing of its relation graph is named");
+        assertEquals(Boolean.TRUE, byVar.get("customer")
+                                        .get("expandReferences"),
+                "a cross-model relation of the document follows its record's references at runtime");
+        assertEquals(Boolean.FALSE, byVar.get("template")
+                                         .get("expandReferences"),
+                "a same-model relation is a named node - nothing to discover");
+        assertEquals(Boolean.FALSE, byVar.get("customer2")
+                                         .get("expandReferences"),
+                "a cross-model record met at depth 2 ends the walk - the depth stays bounded");
+
+        Map<String, Map<String, Object>> itemsByKey = new java.util.LinkedHashMap<>();
+        for (Map<String, Object> node : (List<Map<String, Object>>) feeder.get("itemNodes")) {
+            itemsByKey.put((String) node.get("keyInParent"), node);
+        }
+        assertEquals(Boolean.TRUE, itemsByKey.get("Product")
+                                             .get("expandReferences"),
+                "a line item's cross-model relation gets the same hop");
+        assertEquals(Boolean.FALSE, itemsByKey.get("Unit")
+                                              .get("expandReferences"));
+    }
+
+    /**
      * Without grants the endpoint demands the document's convention read gate, which its writers pass
      * too (#7921).
      */

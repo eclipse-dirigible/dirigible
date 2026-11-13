@@ -60,6 +60,12 @@ import org.springframework.beans.factory.annotation.Autowired;
  * controller answers, and its print feeder serves a payload carrying the owner's CURRENT fields (no
  * {@code CustomerEmail}, and the surviving ones present).</li>
  * </ol>
+ *
+ * <p>
+ * The same fixture carries the hop past the owner's record (#7752): the owner's Invoice references
+ * a City, and the consumer's payload reaches {@code document.Invoice.City.Name} although its feeder
+ * names neither the relation nor the City - the owner's generated entity declares the reference and
+ * the feeder follows it at runtime.
  */
 class IntentCrossModelFieldRetirementIT extends IntegrationTest {
 
@@ -87,12 +93,18 @@ class IntentCrossModelFieldRetirementIT extends IntegrationTest {
                       - { name: id,     type: integer, primaryKey: true, generated: true }
                       - { name: number, type: string,  required: true, length: 100 }
                 %s
+                    relations:
+                      - { name: City, kind: manyToOne, to: City }
                   - name: InvoiceItem
                     fields:
                       - { name: id,   type: integer, primaryKey: true, generated: true }
                       - { name: name, type: string, length: 100 }
                     relations:
                       - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                  - name: City
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 100 }
                 """.formatted(withCustomerEmail ? "      - { name: customerEmail, type: string, length: 200 }" : "");
     }
 
@@ -160,6 +172,18 @@ class IntentCrossModelFieldRetirementIT extends IntegrationTest {
                 "the owner's field must NOT be named here - that is the reference that stops compiling when the owner retires it");
         assertFalse(feeder.contains("invoice.Number"), "no field of the owner is named, not even one that happens to survive");
 
+        // One hop past the owner's record (#7752): followed at runtime from what the owner's entity
+        // declares - so neither the owner's relation nor its target is named here.
+        assertTrue(feeder.contains("PrintRecords.expandReferences(invoice, invoiceMap, loadedReferences)"),
+                "the owner's own relations are followed at runtime; feeder was:\n" + feeder);
+        assertFalse(feeder.contains("invoice.City") || feeder.contains("CityRepository"),
+                "the owner's relation and its target must NOT be named here - they are the owner's schema too");
+        String ownerEntity = contentOf(OWNER, "gen/" + OWNER_MODEL + "/data/invoice/InvoiceEntity.java");
+        assertTrue(
+                ownerEntity.contains("@org.eclipse.dirigible.sdk.db.Reference(repository = \"gen." + OWNER_MODEL
+                        + ".data.city.CityRepository\", label = \"Name\")"),
+                "the OWNER declares where its reference is read from; entity was:\n" + ownerEntity);
+
         // The same-model half is unchanged: this project's own fields ARE named, line by line.
         assertTrue(feeder.contains("document.put(\"Number\", root.Number)"), "the document's own fields stay explicit (the audit trail)");
     }
@@ -184,9 +208,20 @@ class IntentCrossModelFieldRetirementIT extends IntegrationTest {
         String ownerApi = "/services/java/" + OWNER + "/gen/" + OWNER_MODEL + "/api";
         String consumerApi = "/services/java/" + CONSUMER + "/gen/" + CONSUMER_MODEL + "/api";
 
+        AtomicInteger cityId = new AtomicInteger();
+        restAssuredExecutor.execute(() -> cityId.set(given().contentType("application/json")
+                                                            .body("{\"Name\":\"Sofia\"}")
+                                                            .when()
+                                                            .post(ownerApi + "/city/CityController")
+                                                            .then()
+                                                            .statusCode(200)
+                                                            .extract()
+                                                            .path("Id")),
+                60);
+
         AtomicInteger invoiceId = new AtomicInteger();
         restAssuredExecutor.execute(() -> invoiceId.set(given().contentType("application/json")
-                                                               .body("{\"Number\":\"INV-1\"}")
+                                                               .body("{\"Number\":\"INV-1\",\"City\":" + cityId.get() + "}")
                                                                .when()
                                                                .post(ownerApi + "/invoice/InvoiceController")
                                                                .then()
@@ -222,6 +257,12 @@ class IntentCrossModelFieldRetirementIT extends IntegrationTest {
         assertEquals("INV-1", document.getString("document.Invoice.Number"), "a surviving field of the owner is still projected");
         assertEquals("INV-1", document.getString("document.Invoice.__label"), "the label resolves through the copied map");
         assertNotNull(document.get("document.Invoice.Id"));
+
+        // #7752: the owner's own relation, one hop past its record - fields and label.
+        assertEquals("Sofia", document.getString("document.Invoice.City.Name"),
+                "a relation of the cross-model record is reachable; payload: " + payload.get());
+        assertEquals("Sofia", document.getString("document.Invoice.City.__label"), "and a bare {{document.Invoice.City}} prints its label");
+
         assertFalse(payload.get()
                            .contains("CustomerEmail"),
                 "the retired field is simply absent - it did not have to break anything to disappear; payload: " + payload.get());

@@ -34,6 +34,11 @@ public class ${name}Entity {
     @UpdatedBy
 #end
     @Column(name = "${property.dataName}"#if($property.dataLength && $property.dataType != "DECIMAL"), length = ${property.dataLength}#end#if($property.dataPrecision), precision = ${property.dataPrecision}#end#if($property.dataScale), scale = ${property.dataScale}#end#if(!$property.dataPrimaryKey && $property.dataNotNull), nullable = false#elseif(!$property.dataPrimaryKey && !$property.dataNotNull), nullable = true#end#if($property.dataUnique), unique = true#end)
+## A to-one reference declares where its record is read from, so a reader that does not own this
+## entity - another model's print feeder - follows it at runtime instead of naming it (dirigible #7752).
+#if($property.targetRepositoryClass)
+    @org.eclipse.dirigible.sdk.db.Reference(repository = "${property.targetRepositoryClass}"#if($property.widgetDropDownValue), label = "${property.widgetDropDownValue}"#end)
+#end
 #if($property.description)
     @Documentation("${property.descriptionJavaLiteral}")
 #else
