@@ -1,0 +1,45 @@
+name: Install ttyd
+description: >
+  Installs the pinned ttyd release as /usr/local/bin/ttyd - the static binary of the ttyd GitHub
+  release, checked against its SHA-256 - so that a job needing the IDE terminal does not depend on
+  the runner reaching the Ubuntu package mirrors.
+
+inputs:
+  version:
+    description: The ttyd release to install.
+    required: false
+    default: '1.7.7'
+  sha256-x86_64:
+    description: The SHA-256 of that release's ttyd.x86_64.
+    required: false
+    default: '8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55'
+  sha256-aarch64:
+    description: The SHA-256 of that release's ttyd.aarch64.
+    required: false
+    default: 'b38acadd89d1d396a0f5649aa52c539edbad07f4bc7348b27b4f4b7219dd4165'
+
+runs:
+  using: composite
+  steps:
+    - name: Download ttyd
+      shell: bash
+      env:
+        TTYD_VERSION: ${{ inputs.version }}
+        TTYD_SHA256_X86_64: ${{ inputs.sha256-x86_64 }}
+        TTYD_SHA256_AARCH64: ${{ inputs.sha256-aarch64 }}
+      run: |
+        set -euo pipefail
+        case "$(uname -m)" in
+          x86_64) asset=ttyd.x86_64; sha256="$TTYD_SHA256_X86_64" ;;
+          aarch64 | arm64) asset=ttyd.aarch64; sha256="$TTYD_SHA256_AARCH64" ;;
+          *) echo "::error::No ttyd release binary for $(uname -m)"; exit 1 ;;
+        esac
+        curl --fail --silent --show-error --location --retry 5 --retry-all-errors --retry-delay 5 \
+          --output "$RUNNER_TEMP/ttyd" \
+          "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/${asset}"
+        echo "${sha256}  $RUNNER_TEMP/ttyd" | sha256sum --check --strict
+        sudo install -m 0755 "$RUNNER_TEMP/ttyd" /usr/local/bin/ttyd
+
+    - name: Verify ttyd installation
+      shell: bash
+      run: ttyd --version
