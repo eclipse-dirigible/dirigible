@@ -373,7 +373,7 @@
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <template x-for="col in s.promptCols" :key="col.name">
-                <div x-h-field :style="['NUMBER','CHECKBOX','DATE'].includes(col.widget) ? '' : 'grid-column: 1 / -1'">
+                <div x-h-field :style="['NUMBER','CHECKBOX','DATE'].includes(col.widget) ? '' : 'grid-column: 1 / -1'" @input="s.promptEdit(col)" @change="s.promptEdit(col)">
                   <template x-if="!['CHECKBOX','MULTISELECT'].includes(col.widget)">
                     <label x-h-label x-text="col.tkey ? T(col.tkey, col.label) : col.label"></label>
                   </template>
