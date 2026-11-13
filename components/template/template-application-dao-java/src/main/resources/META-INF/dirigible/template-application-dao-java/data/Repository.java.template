@@ -485,7 +485,7 @@ ${importsCode}
 
 @Repository
 @Component("${javaGenFolderName}_${name}Repository")
-public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTargetDeleteRules || $hasTargetAgreementRules) implements #if($hasTargetDeleteRules)org.eclipse.dirigible.sdk.db.TargetDeleteRule#if($hasTargetAgreementRules), #end#end#if($hasTargetAgreementRules)org.eclipse.dirigible.sdk.db.TargetAgreementRule#end#end {
+public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTargetDeleteRules || $hasTargetAgreementRules || $share) implements #if($hasTargetDeleteRules)org.eclipse.dirigible.sdk.db.TargetDeleteRule#if($hasTargetAgreementRules || $share), #end#end#if($hasTargetAgreementRules)org.eclipse.dirigible.sdk.db.TargetAgreementRule#if($share), #end#end#if($share)org.eclipse.dirigible.components.engine.share.ShareSubject#end#end {
 
 #if($reportedOnUpdate.size() > 0 || ($guardChecks && $guardChecks.size() > 0))
     /**
@@ -511,6 +511,37 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     public ${name}Repository() {
         super(${name}Entity.class);
     }
+#if($share)
+
+    /** The name ${name}'s share links are stored under (intent {@code share:}, #8613). */
+    public static final String SHARE_SUBJECT = "${tablePrefix}${dataName}";
+
+    @Override
+    public String shareSubject() {
+        return SHARE_SUBJECT;
+    }
+
+    /**
+     * Whether a ${name} may, right now, be read through a share link - asked by the public route on
+     * every open, so a record that left the declared state stops answering whoever moved it. The
+     * stored row is read, untranslated: the condition compares keys and codes, never display text.
+     */
+    @Override
+    public boolean isShareable(String recordId) {
+        return isShareable(super.findById(#foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end.valueOf(recordId)));
+    }
+
+    /**
+     * The intent's {@code share: when:} over one ${name} - the single reading of it, used by the public
+     * route and by the endpoint that creates a link.
+     *
+     * @param entity the record, may be null
+     * @return whether a link to the record's issued copy can exist
+     */
+    public static boolean isShareable(${name}Entity entity) {
+        return entity != null && ${share.whenJavaExpression};
+    }
+#end
 
     @Override
     public ${name}Entity save(${name}Entity entity) {

@@ -286,6 +286,11 @@ final class StatusSymbolResolver {
                     rewriteRecordWhen(related, "when", source, subject + " related when");
                 }
             }
+            // share.when (#8613): the state a record can get a link in, read off the record itself.
+            Map<?, ?> share = asMap(entity.get("share"));
+            if (share != null && share.get("when") != null) {
+                rewriteRecordWhen(share, "when", entityName, "entity [" + entityName + "] share when");
+            }
         }
     }
 

@@ -4264,6 +4264,40 @@ processes:
       - { name: end, kind: end }
 ```
 
+### share - hand an issued document to an external reader through a link
+
+`share:` on an entity declares that the **issued copy** of its records may be opened by somebody
+without an account - a customer, a supplier - through a link a user creates on the record and sends
+by e-mail or a messenger. It is off unless declared, per entity; nothing else makes a document
+reachable from outside.
+
+```yaml
+  - name: SalesInvoice
+    function: Document
+    share:
+      when: "status == ISSUED"      # required - only a record in this state can get a link
+      copy: SalesInvoiceCopy        # required - the function: Snapshot child whose stored file is served
+      roles: [SalesInvoiceShare]    # required - who may create and revoke links; [] admits nobody
+      expiresAfterDays: 0           # optional - 0 (default) = permanent; a tenant can only shorten it
+```
+
+Rules to follow when proposing it:
+
+- **Never put `share:` on a personal document.** An entity whose records belong to the signed-in
+  person (a `personal: true` relation on it or on its composition master - payslips, leave requests,
+  employment contracts) is refused at parse time: a link is a bearer credential, and whoever holds it
+  reads the document. For those, a notification carries `{recordUrl}`, which needs a sign-in.
+- `copy:` must name a `function: Snapshot` composition child of the same entity, and the entity must
+  be a printable document (it has a `function: DocumentItem` child). The link serves that stored PDF -
+  what was issued - never the live record. A process step must mint the copy
+  (`delegate: gen.events.<Entity>SnapshotGenerator`) before a link can be created.
+- `when:` is a record condition like `visibleWhen:` (`<property> ==|!= <literal>`, a status by name).
+  A record that leaves the state loses its links for good - a voided invoice is not readable any more.
+- `roles:` lists roles declared under `permissions`. The key is required; do not invent a role - add
+  it to `permissions` in the same proposal.
+- Issuing a document does not create a link. A user creates one on the record page (Share links), sees
+  how often it was opened, and can revoke it.
+
 ### schedules - run on a cron and notify or generate records
 
 **Use when:** something must run **on a schedule** (cron), find records matching conditions, and, per

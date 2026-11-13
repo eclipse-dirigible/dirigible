@@ -680,6 +680,7 @@
     <script src="/services/web/application-core/shell/js/components/detailPanel.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/printActions.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/relatedPanel.js" defer></script>
+    <script src="/services/web/application-core/shell/js/components/shareLinksPanel.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/processTasks.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/customActions.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/reports.js" defer></script>

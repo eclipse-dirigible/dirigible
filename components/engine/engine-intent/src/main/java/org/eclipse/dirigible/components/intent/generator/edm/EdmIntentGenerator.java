@@ -74,6 +74,7 @@ import org.eclipse.dirigible.components.intent.model.PeriodIntent;
 import org.eclipse.dirigible.components.intent.model.PeriodLockIntent;
 import org.eclipse.dirigible.components.intent.model.RelatedIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
+import org.eclipse.dirigible.components.intent.model.ShareIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.SettlementIntent;
 import org.eclipse.dirigible.components.intent.model.SingleIntent;
@@ -896,6 +897,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // Record-page banners (#8371) read the registers just built, for the foreign key and the key of
         // the rows they test.
         buildBanners(entities, builtByName);
+        // share: (#8613) - the declaration that an entity's issued copy may be handed out through a link.
+        buildShare(entities, builtByName, byName, compositionParents, settingEntities);
         // The reverse link of a scoped calendar: the record the calendar filters by gets a way to open
         // it. Same sweep reason as the registers above - the scope target may be declared after the
         // calendar entity that names it.
@@ -4352,6 +4355,51 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
 
     /** A {@code {field}} placeholder in a banner's text. */
     private static final java.util.regex.Pattern BANNER_PLACEHOLDER = java.util.regex.Pattern.compile("\\{([^{}]*)\\}");
+
+    /**
+     * An entity's {@code share:} (#8613), as the {@code share} map its templates read: the state a
+     * record can get a link in - both as the scalar the pages test and as the typed terms the server
+     * guards with -, the snapshot child whose stored file a link serves (with the foreign key that
+     * finds a record's copies), the declared life and the roles that may create and revoke links.
+     * Nothing without the block, so an entity that does not declare it generates no share code at all.
+     *
+     * @param entities the model's entities
+     * @param builtByName the entity maps built so far, by name
+     * @param byName the entities by name
+     * @param compositionParents each child's composition master
+     * @param settingEntities the setting entities (perspective resolution)
+     */
+    private static void buildShare(List<EntityIntent> entities, Map<String, Map<String, Object>> builtByName,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, Set<String> settingEntities) {
+        for (EntityIntent entity : entities) {
+            Map<String, Object> entityMap = builtByName.get(entity.getName());
+            ShareIntent declared = entity.getShare();
+            if (entityMap == null || declared == null) {
+                continue;
+            }
+            EntityIntent copy = byName.get(declared.getCopy());
+            List<Map<String, Object>> terms = CheckSupport.conditionTerms(entity, byName, declared.getWhen());
+            String masterFk = null;
+            for (RelationIntent relation : copy == null ? List.<RelationIntent>of() : copy.getRelations()) {
+                if (relation.isComposition() && entity.getName()
+                                                      .equals(relation.getTo())) {
+                    masterFk = IntentNaming.pascalCase(relation.getName());
+                }
+            }
+            if (terms == null || masterFk == null || declared.getRoles() == null) {
+                continue; // reported by the parser - never emitted as a weaker gate
+            }
+            Map<String, Object> share = new LinkedHashMap<>();
+            share.put("when", visibleWhenCondition(declared.getWhen()));
+            share.put("whenTerms", terms);
+            share.put("copyEntity", copy.getName());
+            share.put("copyPerspective", perspectiveFor(copy.getName(), compositionParents, settingEntities));
+            share.put("copyMasterFk", masterFk);
+            share.put("expiresAfterDays", String.valueOf(declared.expiresAfterDaysOrNull()));
+            share.put("roles", String.join(",", declared.getRoles()));
+            entityMap.put("share", share);
+        }
+    }
 
     /**
      * Emits each entity's {@code banners:} (dirigible #8371) as the {@code banners} model attribute. A

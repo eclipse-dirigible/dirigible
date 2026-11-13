@@ -99,6 +99,7 @@ final class ModelParameterProcessor {
             resolveLabelParts(entities);
             resolveRelatedRegisters(entities, parameters);
             resolveBanners(entities, parameters);
+            resolveShare(entities);
             resolveCollectionColumns(entities, parameters);
             resolveRollupGuards(entities);
             resolveAgreeGuards(entities, parameters);
@@ -2063,6 +2064,35 @@ final class ModelParameterProcessor {
                     banner.put("actionId", str(parameters, "projectName") + "-" + str(banner, "subject") + "-" + str(banner, "action"));
                 }
             }
+        }
+    }
+
+    /**
+     * Resolves an entity's {@code share} (dirigible #8613) into what its templates render: the state a
+     * record can get a link in as the Java guard the server applies and as the term list the page hides
+     * the button by, the role gate as a Java literal, and the snapshot repository's package.
+     *
+     * <p>
+     * A declaration whose condition does not render is refused rather than generated without it: the
+     * guard is what keeps a draft from being handed to an anonymous reader.
+     *
+     * @param entities every entity in the model
+     */
+    private static void resolveShare(List<Map<String, Object>> entities) {
+        for (Map<String, Object> entity : entities) {
+            Map<String, Object> share = asMap(entity.get("share"));
+            if (share == null) {
+                continue;
+            }
+            String guard = JavaLiterals.conditionExpression(asMaps(share.get("whenTerms")));
+            if (guard == null) {
+                throw new IllegalStateException(
+                        "The share: of entity [" + str(entity, "name") + "] carries no condition that renders - regenerate the model");
+            }
+            share.put("whenJavaExpression", guard);
+            share.put("whenTermsJs", termsOrEmpty(str(share, "when")));
+            share.put("rolesJavaLiteral", JavaLiterals.escape(strOr(share, "roles", "")));
+            share.put("javaCopyPerspective", NamingHelper.sanitizeJavaIdentifier(str(share, "copyPerspective")));
         }
     }
 

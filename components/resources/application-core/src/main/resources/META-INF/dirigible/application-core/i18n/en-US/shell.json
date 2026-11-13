@@ -461,6 +461,29 @@
       "savedOne": "{{saved}} was saved; this record was not. It stays selected - correct this record and save again instead of creating it anew.",
       "savedMany": "{{saved}} were saved; this record was not. They stay selected - correct this record and save again instead of creating them anew."
     },
+    "shareLinks": {
+      "title": "Share links",
+      "empty": "No links yet.",
+      "create": "Create link",
+      "url": "Link",
+      "copy": "Copy",
+      "copied": "Copied",
+      "shownOnce": "This link is shown only once. Anyone who has it can open the document without signing in.",
+      "active": "Active",
+      "expired": "Expired",
+      "revoked": "Revoked",
+      "expires": "Expires {{date}}",
+      "neverExpires": "Never expires",
+      "opened": "Opened: {{count}}",
+      "lastOpened": "last {{date}}",
+      "revokedBy": "Revoked: {{who}}",
+      "revoke": "Revoke",
+      "revokeTitle": "Revoke link",
+      "revokeConfirm": "Are you sure you want to revoke this link? Whoever has it will no longer be able to open the document. This action cannot be undone.",
+      "loadFailed": "Could not load the share links.",
+      "createFailed": "Could not create the link.",
+      "revokeFailed": "Could not revoke the link."
+    },
     "switch": {
       "title": "Switch to",
       "home": "Home"
