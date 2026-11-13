@@ -4536,6 +4536,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertEquals("10,12,11",
                 pageSortOrder(campaignListPage, "CampaignManageListPage", campaignLookups, campaignRows, "Channels", "asc"),
                 "a subset column must sort by its joined labels (Email; Phone; Web, Email), not by the key list");
+        // ...and the search box matches what those columns show, not the keys behind them (#8561).
+        assertEquals("12", pageSearch(campaignListPage, "CampaignManageListPage", campaignLookups, campaignRows, "APPR"),
+                "the search must match a relation column's label, case-insensitively");
+        assertEquals("10,11", pageSearch(campaignListPage, "CampaignManageListPage", campaignLookups, campaignRows, "email"),
+                "the search must match a subset column's resolved labels");
+        assertEquals("", pageSearch(campaignListPage, "CampaignManageListPage", campaignLookups, campaignRows, "3"),
+                "the search must not match a key no cell shows");
         // ...and a date column sorts chronologically however the controller serialised it (#8433): the
         // LocalDate arrays [2025,10,6] etc. compared as the strings "2025,10,6", which sorted the 6th of
         // a month after the 16th and July after December. The ISO strings must keep the same order.
@@ -9696,23 +9703,41 @@ class IntentEmissionCoverageIT extends IntegrationTest {
      */
     private static String pageSortOrder(String pageScript, String componentName, String lookups, String rows, String column,
             String direction) {
+        return runListPage(pageScript, componentName, lookups, rows,
+                "page.sortColumn = '" + column + "'; page.sortDirection = '" + direction + "';", "sortedItems");
+    }
+
+    /**
+     * Type {@code term} into a generated list page's search box: the primary keys of the {@code rows}
+     * {@code filteredItems} keeps, comma-joined, with {@code lookups} as the loaded relation labels.
+     */
+    private static String pageSearch(String pageScript, String componentName, String lookups, String rows, String term) {
+        return runListPage(pageScript, componentName, lookups, rows, "page.searchTerm = '" + term + "';", "filteredItems");
+    }
+
+    /**
+     * Evaluate a generated list page over the shipped {@code basePage.js}, load {@code lookups} and
+     * {@code rows} into it, run {@code setup} against {@code page}, and answer the primary keys of the
+     * rows its {@code rowsGetter} returns, comma-joined.
+     */
+    private static String runListPage(String pageScript, String componentName, String lookups, String rows, String setup,
+            String rowsGetter) {
         try (Context context = Context.newBuilder("js")
                                       .option("engine.WarnInterpreterOnly", "false")
                                       .build()) {
             context.eval("js",
                     "var pages = {}; var window = this; var localStorage = { getItem: () => null };"
                             + " var document = { addEventListener: (event, callback) => callback() };"
-                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; } };");
+                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; } };"
+                            + " window.HarmoniaFormat = { value: (v) => String(v), documentNumber: (v) => v };");
             context.eval("js", classpathResource("/META-INF/dirigible/application-core/shell/js/components/pages/basePage.js"));
             context.eval("js", pageScript);
             return context.eval("js",
-                    "(() => { const page = pages['" + componentName + "'](); page.lookups = " + lookups + "; page.items = " + rows + ";"
-                            + " page.sortColumn = '" + column + "'; page.sortDirection = '" + direction + "';"
-                            + " return page.sortedItems.map(row => row.Id).join(','); })()")
+                    "(() => { const page = pages['" + componentName + "'](); page.lookups = " + lookups + "; page.items = " + rows + "; "
+                            + setup + " return page." + rowsGetter + ".map(row => row.Id).join(','); })()")
                           .asString();
         }
     }
-
 
     /**
      * Run a generated document page's inline create (#7725) over the shipped shell runtime (basePage,

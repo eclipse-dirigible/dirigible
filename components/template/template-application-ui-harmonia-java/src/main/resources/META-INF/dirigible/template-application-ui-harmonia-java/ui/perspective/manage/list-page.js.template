@@ -840,8 +840,11 @@ document.addEventListener('alpine:init', () => {
     get filteredItems() {
       if (!this.searchTerm) return this.items;
       const q = this.searchTerm.toLowerCase();
-      return this.items.filter(it => Object.values(it).some(v =>
-        v != null && String(v).toLowerCase().includes(q)));
+      // The search matches what each column shows, not the row's raw values: a relation column holds
+      // only the key and shows the referenced record's label (issue #8561) - resolved exactly as the
+      // cell, the sort and the export resolve it.
+      return this.items.filter(it => this.exportColumns.some(c =>
+        String(this.exportCell(it, c)).toLowerCase().includes(q)));
     },
 
     get sortedItems() {
