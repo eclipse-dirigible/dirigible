@@ -260,6 +260,16 @@ Points worth keeping:
   wherever the print feeder carries that relation (same-model to-one graph, depth 2). No modeling
   construct was added for this - a relation to the attachment row is an ordinary to-one.
 
+## Links in a template (`href`, #8615)
+
+`href` on a `<text>`, `<image>`, `<qrcode>` or table `<column>` is entirely the parser module's
+(`LinkTarget` + `XslFoRenderer`; syntax and rules: its README, "Links") - this module adds nothing but
+the proof that FOP writes it as a URI link annotation (`PrintRendererTest`, read back with PDFBox).
+What matters here: a target refused **after binding** (a data field carrying `javascript:`, a bare
+domain) is a `LayoutException` out of `PrintRenderer`, so that print fails rather than emit the link;
+a refused **literal** never gets that far, because the parse in `PrintTemplateCatalog.requireParses`
+already refuses the template.
+
 ## QR codes in a template (`PrintQrCodeEncoder`, #8608)
 
 `<qrcode>` is a built-in tag of the DSL (syntax, attributes and the line-keeping rule of its text:

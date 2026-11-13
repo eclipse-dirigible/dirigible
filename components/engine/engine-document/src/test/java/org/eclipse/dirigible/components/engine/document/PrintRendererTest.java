@@ -11,9 +11,11 @@ package org.eclipse.dirigible.components.engine.document;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.awt.image.BufferedImage;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -21,6 +23,11 @@ import java.util.regex.Pattern;
 
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.interactive.action.PDActionURI;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotation;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink;
+import org.apache.pdfbox.text.PDFTextStripper;
+import org.eclipse.dirigible.parsers.document.layout.LayoutException;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.eclipse.dirigible.parsers.document.renderer.ImageResolver;
 import org.junit.jupiter.api.Test;
@@ -243,6 +250,94 @@ class PrintRendererTest {
     private static Map<String, Object> qrCodeData(String iban) {
         return Map.of("document", Map.of("Number", "SI-42", "Balance", 1250.5, "Note", "Благодарим!", "Company",
                 Map.of("LegalName", "Метафор ООД"), "BankAccount", Map.of("Bic", "UNCRBGSF", "Iban", iban)));
+    }
+
+    /**
+     * The footer line of an invoice linking to a website, a "view online" address built from the data
+     * and the company e-mail, through the whole pipeline down to the PDF: each is a URI link annotation
+     * on the page carrying exactly the bound target - Cyrillic percent-encoded, and a brace in the data
+     * neither evaluated by the XSLT step nor lost.
+     */
+    @Test
+    void anHrefIsAUriLinkAnnotationInTheRenderedPdf() throws Exception {
+        byte[] pdf = PrintRenderer.renderPdf(LINK_TEMPLATE, "en", linkData("office@example.com"), ImageResolver.PASS_THROUGH);
+
+        try (PDDocument document = Loader.loadPDF(pdf)) {
+            assertEquals(1, document.getNumberOfPages());
+            assertEquals(List.of("https://example.com/invoices/SI-42?ref=%D0%A4-1%20%7B1+1%7D&lang=bg", "mailto:office@example.com",
+                    "https://example.com"), linkTargets(document));
+            for (PDAnnotation annotation : document.getPage(0)
+                                                   .getAnnotations()) {
+                assertTrue(annotation.getRectangle()
+                                     .getWidth() > 0
+                        && annotation.getRectangle()
+                                     .getHeight() > 0,
+                        "a link covers the box of its text");
+            }
+            String text = new PDFTextStripper().getText(document);
+            assertTrue(text.contains("Issued with Example - example.com"), "the linked text still prints: " + text);
+        }
+    }
+
+    /** No e-mail on the company: that one line prints without a link, the others keep theirs. */
+    @Test
+    void anHrefThatBindsToOnlyItsSchemeIsNoLinkInThePdf() throws Exception {
+        byte[] pdf = PrintRenderer.renderPdf(LINK_TEMPLATE, "en", linkData(""), ImageResolver.PASS_THROUGH);
+
+        try (PDDocument document = Loader.loadPDF(pdf)) {
+            assertEquals(List.of("https://example.com/invoices/SI-42?ref=%D0%A4-1%20%7B1+1%7D&lang=bg", "https://example.com"),
+                    linkTargets(document));
+        }
+    }
+
+    /** A scheme arriving through the data fails the print with the template position - no PDF. */
+    @Test
+    void aSchemeSmuggledInThroughTheDataFailsThePrint() {
+        String template = "<document>\n<page>\n<footer><text href=\"{{document.Site}}\">site</text></footer>\n</page>\n</document>";
+
+        LayoutException refused = assertThrows(LayoutException.class, () -> PrintRenderer.renderPdf(template, "en",
+                Map.of("document", Map.of("Site", "javascript:app.alert(1)")), ImageResolver.PASS_THROUGH));
+
+        assertEquals("Invalid href: 'javascript:app.alert(1)' (expected an http://, https://, mailto: or tel: link) at line 3, column 15",
+                refused.getMessage());
+    }
+
+    private static final String LINK_TEMPLATE = """
+            <document id="sales-invoice">
+                <page>
+                    <field label="Number">{{document.Number}}</field>
+                    <text href="https://example.com/invoices/{{document.Number}}?ref={{document.Reference}}&amp;lang=bg">View online</text>
+                    <text href="mailto:{{document.Company.Email}}">Contact: {{document.Company.Email}}</text>
+                    <footer>
+                        <text align="center" href="https://example.com">Issued with Example - example.com</text>
+                    </footer>
+                </page>
+            </document>
+            """;
+
+    private static Map<String, Object> linkData(String email) {
+        return Map.of("document", Map.of("Number", "SI-42", "Reference", "Ф-1 {1+1}", "Company", Map.of("Email", email)));
+    }
+
+    /** The targets of the URI link annotations of the first page, top to bottom. */
+    private static List<String> linkTargets(PDDocument document) throws Exception {
+        List<PDAnnotationLink> links = new ArrayList<>();
+        for (PDAnnotation annotation : document.getPage(0)
+                                               .getAnnotations()) {
+            if (annotation instanceof PDAnnotationLink link) {
+                links.add(link);
+            }
+        }
+        links.sort((a, b) -> Float.compare(b.getRectangle()
+                                            .getUpperRightY(),
+                a.getRectangle()
+                 .getUpperRightY()));
+        List<String> targets = new ArrayList<>();
+        for (PDAnnotationLink link : links) {
+            assertTrue(link.getAction() instanceof PDActionURI, "a link is a URI action, was " + link.getAction());
+            targets.add(((PDActionURI) link.getAction()).getURI());
+        }
+        return targets;
     }
 
     private static String renderFo(String template, Map<String, Object> data) {
