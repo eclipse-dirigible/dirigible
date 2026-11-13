@@ -236,6 +236,134 @@ class PrintFeederSupportTest {
     }
 
     /**
+     * dirigible #7752: <code>&#123;&#123;document.Customer.City.Name&#125;&#125;</code> needs the
+     * cross-model record's own relations, and those must not be named in this model's feeder (that is
+     * the #6422 snapshot again). So the generator emits NO node for them - the depth-1 node is only
+     * flagged, and the hop is taken at runtime from what the owner's entity declares. The flag is the
+     * depth bound: a relation of the document or of a line item, never a cross-model record met deeper.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aCrossModelRelationIsFlaggedForTheRuntimeHopAndNamesNothingOfTheOwner() {
+        IntentModel deep = IntentParser.parse("""
+                name: sales
+                uses:
+                  - { model: customers, project: customers }
+                entities:
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, documentTitle: true }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer, model: customers }
+                      - { name: Template, kind: manyToOne, to: InvoiceTemplate }
+                  - name: SalesInvoiceItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal, required: true }
+                    relations:
+                      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+                      - { name: Product, kind: manyToOne, to: Product, model: customers }
+                      - { name: Unit, kind: manyToOne, to: Unit }
+                  - name: InvoiceTemplate
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer, model: customers }
+                  - name: Unit
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                """);
+        Map<String, Object> feeder = PrintFeederSupport.buildPrintFeeders(deep, IntentEntities.byName(deep),
+                IntentEntities.compositionParents(deep), null, new IntentGenerationContext(deep, "/proj", "proj", "workspace", "app", null))
+                                                       .get(0);
+        Map<String, Map<String, Object>> byVar = new java.util.LinkedHashMap<>();
+        for (Map<String, Object> node : (List<Map<String, Object>>) feeder.get("nodes")) {
+            byVar.put((String) node.get("entityVar"), node);
+        }
+
+        assertEquals(java.util.Set.of("customer", "template", "customer2"), byVar.keySet(),
+                "no node is emitted for a relation of the owner's Customer - nothing of its relation graph is named");
+        assertEquals(Boolean.TRUE, byVar.get("customer")
+                                        .get("expandReferences"),
+                "a cross-model relation of the document follows its record's references at runtime");
+        assertEquals(Boolean.FALSE, byVar.get("template")
+                                         .get("expandReferences"),
+                "a same-model relation is a named node - nothing to discover");
+        assertEquals(Boolean.FALSE, byVar.get("customer2")
+                                         .get("expandReferences"),
+                "a cross-model record met at depth 2 ends the walk - the depth stays bounded");
+
+        Map<String, Map<String, Object>> itemsByKey = new java.util.LinkedHashMap<>();
+        for (Map<String, Object> node : (List<Map<String, Object>>) feeder.get("itemNodes")) {
+            itemsByKey.put((String) node.get("keyInParent"), node);
+        }
+        assertEquals(Boolean.TRUE, itemsByKey.get("Product")
+                                             .get("expandReferences"),
+                "a line item's cross-model relation gets the same hop");
+        assertEquals(Boolean.FALSE, itemsByKey.get("Unit")
+                                              .get("expandReferences"));
+    }
+
+    /**
+     * dirigible #8609: an {@code audit: true} document prints who compiled it. The four columns are
+     * injected by the EDM generator, not authored, so the feeder has to add them itself - under the
+     * names the generated entity declares, the two timestamps flagged so they print as ISO strings.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void anAuditedDocumentCarriesItsAuditColumns() {
+        Map<String, Boolean> audited = rootScalarsOf(true);
+        assertEquals(Boolean.TRUE, audited.get("CreatedAt"));
+        assertEquals(Boolean.FALSE, audited.get("CreatedBy"));
+        assertEquals(Boolean.TRUE, audited.get("UpdatedAt"));
+        assertEquals(Boolean.FALSE, audited.get("UpdatedBy"));
+        assertEquals(List.of("Number", "CreatedAt", "CreatedBy", "UpdatedAt", "UpdatedBy"), List.copyOf(audited.keySet()),
+                "after the document's own fields, each once");
+    }
+
+    @Test
+    void aDocumentThatIsNotAuditedIsUnchanged() {
+        assertEquals(List.of("Number"), List.copyOf(rootScalarsOf(false).keySet()));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Boolean> rootScalarsOf(boolean audit) {
+        IntentModel bills = IntentParser.parse("""
+                name: bills
+                entities:
+                  - name: Bill
+                %s
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, documentTitle: true }
+                  - name: BillItem
+                    audit: true
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal, required: true }
+                    relations:
+                      - { name: Bill, kind: manyToOne, to: Bill, composition: true, required: true }
+                """.formatted(audit ? "    audit: true" : ""));
+        Map<String, Object> feeder = PrintFeederSupport
+                                                       .buildPrintFeeders(bills, IntentEntities.byName(bills),
+                                                               IntentEntities.compositionParents(bills), null, TestContexts.context(bills))
+                                                       .get(0);
+        Map<String, Boolean> scalars = new java.util.LinkedHashMap<>();
+        for (Map<String, Object> scalar : (List<Map<String, Object>>) feeder.get("rootScalars")) {
+            scalars.put((String) scalar.get("name"), (Boolean) scalar.get("date"));
+        }
+        List<String> itemScalars = ((List<Map<String, Object>>) feeder.get("itemScalars")).stream()
+                                                                                          .map(scalar -> (String) scalar.get("name"))
+                                                                                          .toList();
+        assertEquals(List.of("Quantity"), itemScalars, "the audit columns are the document's - a line item stays as it was");
+        return scalars;
+    }
+
+    /**
      * Without grants the endpoint demands the document's convention read gate, which its writers pass
      * too (#7921).
      */
