@@ -245,13 +245,8 @@ jobs:
       - name: Install TypeScript and esbuild
         run: npm install -g typescript@5.9.3 esbuild
 
-      - name: Install ttyd (prebuilt)
-        run: |
-          sudo apt update
-          sudo apt install -y ttyd
-
-      - name: Verify ttyd installation
-        run: ttyd --version
+      - name: Install ttyd
+        uses: ./.github/actions/install-ttyd
 
       # Fast per-PR gate on H2: the HTTP-level ITs plus the few smoke-tagged UI journeys
       # (including two full clone -> generate -> validate app lifecycles). The heavy Selenide

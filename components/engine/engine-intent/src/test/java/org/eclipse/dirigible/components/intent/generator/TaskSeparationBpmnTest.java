@@ -34,7 +34,8 @@ import org.mockito.ArgumentCaptor;
 /**
  * A user task's candidates and the users it keeps out (issue #8111): the deployment's
  * {@code access.extraRoles} - every tenant member - are no task's candidates unless the step opts
- * in, and an approval is separated from the tasks its submitter completed.
+ * in, and an approval is separated from the tasks its submitter completed - or, with
+ * {@code separateFrom: personal}, from its record's owner (issue #8560).
  */
 class TaskSeparationBpmnTest {
 
@@ -58,6 +59,35 @@ class TaskSeparationBpmnTest {
               - { name: ReimburseExpense, forEntity: ExpenseClaim, fields: [amount], actions: [reimburse] }
             permissions:
               - { role: Approver, can: [ExpenseClaim:read] }
+            """;
+
+    /**
+     * A claim submitted by being created, owned by its employee, and approved by a group the employee
+     * may be in - no submit task to separate the approval from (issue #8560).
+     */
+    private static final String OWNED_YAML = """
+            name: expenses
+            entities:
+              - name: Employee
+                identity: email
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: email, type: string, unique: true }
+              - name: ExpenseClaim
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: amount, type: decimal }
+                relations:
+                  - { name: Employee, kind: manyToOne, to: Employee, required: true, personal: true }
+            processes:
+              - name: ExpenseApproval
+                trigger: { onCreate: ExpenseClaim }
+                steps:
+                  - { name: approve,   kind: userTask, args: { assignee: approver, form: ApproveExpense, separateFrom: personal } }
+                  - { name: reimburse, kind: userTask, args: { assignee: payer, form: ReimburseExpense } }
+            forms:
+              - { name: ApproveExpense,   forEntity: ExpenseClaim, fields: [amount], actions: [approve] }
+              - { name: ReimburseExpense, forEntity: ExpenseClaim, fields: [amount], actions: [reimburse] }
             """;
 
     private static final String SETTINGS = """
@@ -140,6 +170,39 @@ class TaskSeparationBpmnTest {
                 refused.getMessage());
         assertTrue(refused.getMessage()
                           .contains("separateFrom names [sbumit]"),
+                refused.getMessage());
+    }
+
+    @Test
+    void separateFromPersonalKeepsTheRecordsOwnerOffTheTask() {
+        String approve = userTask(bpmn(OWNED_YAML, SETTINGS, null), "approve");
+
+        assertTrue(approve.contains("<flowable:property name=\"taskSeparateFrom\" value=\"personal\"></flowable:property>"), approve);
+        assertTrue(approve.contains(
+                "<flowable:property name=\"taskSeparationMessage\" value=\"You cannot approve your own expense claim\"></flowable:property>"),
+                approve);
+    }
+
+    @Test
+    void separateFromPersonalMixesWithTheSteps() {
+        String reimburse =
+                userTask(bpmn(OWNED_YAML.replace("form: ReimburseExpense }", "form: ReimburseExpense, separateFrom: [personal, approve] }"),
+                        SETTINGS, null), "reimburse");
+
+        assertTrue(reimburse.contains("<flowable:property name=\"taskSeparateFrom\" value=\"personal,approve\"></flowable:property>"),
+                reimburse);
+    }
+
+    @Test
+    void separateFromPersonalNeedsAPersonalOwner() {
+        IntentValidationException refused = assertThrows(IntentValidationException.class, () -> IntentParser.parse(
+                YAML.replace("form: ApproveExpense }", "form: ApproveExpense, separateFrom: [personal, submit] }")));
+
+        assertTrue(refused.getMessage()
+                          .contains("step [approve] separateFrom names [personal] but the trigger entity has no personal relation"),
+                refused.getMessage());
+        assertFalse(refused.getMessage()
+                           .contains("separateFrom names [submit]"),
                 refused.getMessage());
     }
 

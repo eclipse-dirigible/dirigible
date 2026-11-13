@@ -312,4 +312,20 @@ public class HanaCreateTableBuilderTest {
                 sql);
     }
 
+    /**
+     * A schema name that is not a plain identifier is quoted as one identifier, not word by word.
+     */
+    @Test
+    public void createTableInSchemaWithHyphen() {
+        String sql = SqlFactory.getNative(new HanaSqlDialect())
+                               .create()
+                               .table("CUSTOMERS")
+                               .schema("my-schema")
+                               .column("ID", DataType.INTEGER)
+                               .build();
+
+        assertNotNull(sql);
+        assertEquals("CREATE COLUMN TABLE \"my-schema\".\"CUSTOMERS\" ( \"ID\" INTEGER )", sql);
+    }
+
 }

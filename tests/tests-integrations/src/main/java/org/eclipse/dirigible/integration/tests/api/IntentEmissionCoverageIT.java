@@ -114,7 +114,8 @@ import ch.qos.logback.classic.Level;
  * event-driven {@code generates} (posting the source mints the whole document with nobody clicking,
  * and a click afterwards returns that same document - the at-most-once back-reference guard), and
  * the personal (my) surface ({@code identity}/{@code personal}/{@code sensitive}: scoped reads,
- * forced owner, stripped fields).
+ * forced owner, stripped fields), and {@code share:} (the share subject, the three link endpoints
+ * behind the declared roles, the links section of the page - and none of it without the block).
  */
 @Tag("slow")
 class IntentEmissionCoverageIT extends IntegrationTest {
@@ -1320,8 +1321,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     // declared neither. Its own readOnly columns are written through updateProperties by jobs,
     // notifications and task write-backs, which never reach save().
     private static final String INTENT_YAML_FILES = """
+              # share: (#8613) - the issued copy may be handed out through a link while the condition
+              # holds, by the one role the fixture declares.
               - name: Archive
                 function: Document
+                share: { when: "title != Draft", copy: ArchiveCopy, roles: [Payroll] }
                 fields:
                   - { name: id,    type: integer, primaryKey: true, generated: true }
                   - { name: title, type: string, length: 60, required: true, function: DocumentTitle }
@@ -2494,6 +2498,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: title,     type: string, length: 100 }
                   - { name: digest,    type: text, readOnly: true, placement: main }
                   - { name: syncToken, type: string, length: 64, readOnly: true, placement: hidden }
+                  # What an empty value reads as (#8605): the rail shows "Not scheduled", not a hidden row.
+                  - { name: reviewBy,  type: date, readOnly: true, emptyText: Not scheduled }
                 relations:
                   - { name: Team, kind: manyToOne, to: Team, composition: true }
               # The record page is titled with the record's label and declares the line under it
@@ -2744,8 +2750,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         assertEmission();
         assertFieldPlacementEmission();
+        assertFieldEmptyTextEmission();
         assertRecordHeaderEmission();
         assertBannerEmission();
+        assertShareEmission();
 
         publishProject();
         synchronizationProcessor.forceProcessSynchronizers();
@@ -2764,6 +2772,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertEarlyWaitEventRuntime();
         assertCollectionColumnsRuntime();
         assertFieldPlacementRuntime();
+        assertFieldEmptyTextRuntime();
         assertRecordHeaderRuntime();
     }
 
@@ -2789,6 +2798,37 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String plain = contentOf("gen/emission/js/components/pages/Team/TeamFormPage.js");
         String plainSubtitle = plain.substring(plain.indexOf("subtitleParts() {"), plain.indexOf("summaryLine() {"));
         assertFalse(plainSubtitle.contains("this.loadedRecord."), "an entity without subtitle: has no subtitle line: " + plainSubtitle);
+    }
+
+    /**
+     * {@code share:} (#8613): the repository answers whether a record is still shareable with the
+     * declared condition, the controller carries the three link endpoints behind the declared roles and
+     * serves the stored copy only, the document page mounts the links section - and an entity that does
+     * not declare it gets none of it.
+     */
+    private void assertShareEmission() {
+        String repositoryCode = contentOf("gen/emission/data/archive/ArchiveRepository.java");
+        assertTrue(
+                repositoryCode.contains("org.eclipse.dirigible.components.engine.share.ShareSubject")
+                        && repositoryCode.contains("public static final String SHARE_SUBJECT = \"")
+                        && repositoryCode.contains("return entity != null && !java.util.Objects.equals(entity.Title, \"Draft\");"),
+                "the repository must contribute the share subject with the declared condition: " + repositoryCode);
+        String controller = contentOf("gen/emission/api/archive/ArchiveController.java");
+        assertTrue(controller.contains("@Get(\"/{id}/share-links\")") && controller.contains("@Post(\"/{id}/share-links\")")
+                && controller.contains("@Delete(\"/{id}/share-links/{linkId}\")") && controller.contains("if (!isInAnyRole(\"Payroll\")) {")
+                && controller.contains("ArchiveCopyRepository().findAll(") && controller.contains("issued.StoragePath, issued.FileName,"),
+                "the controller must gate the link endpoints by the declared role and serve the stored copy: " + controller);
+        String page = contentOf("gen/emission/js/components/pages/Archive/ArchiveDocumentPage.js");
+        assertTrue(page.contains("shareWhen: [{ property: 'Title', equal: false, value: 'Draft' }],"),
+                "the page must carry the condition the Create link button shows by: " + page);
+        String view = contentOf("gen/emission/views/Archive/Archive-document.html");
+        assertTrue(view.contains("x-data=\"shareLinksPanel(apiPath, id)\""), "the document page must mount the links section: " + view);
+        assertTrue(contentOf("gen/emission/index.html").contains("/shell/js/components/shareLinksPanel.js"),
+                "the shell must load the links panel");
+        String plainController = contentOf("gen/emission/api/team/TeamController.java");
+        assertFalse(plainController.contains("share-links"), "an entity without share: has no link route: " + plainController);
+        assertFalse(contentOf("gen/emission/data/team/TeamRepository.java").contains("ShareSubject"),
+                "an entity without share: contributes no share subject");
     }
 
     /**
@@ -2857,7 +2897,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                .findFirst()
                                .map(this::contentOf)
                                .orElseThrow(() -> new AssertionError("no TeamNote record page among " + views));
-        // Its only read-only fields are placed elsewhere, so the page has no Details rail at all.
+        // The main-column field stays out of the Details rail (the rail itself holds the emptyText field).
         int rail = noteForm.indexOf(".defaults.details', 'Details')");
         String main = rail > 0 ? noteForm.substring(0, rail) : noteForm;
         assertTrue(
@@ -2867,6 +2907,57 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertFalse(rail > 0 && noteForm.substring(rail)
                                         .contains("Digest"),
                 "a placement: main field must leave the Details rail: " + noteForm);
+    }
+
+    /**
+     * {@code emptyText:} (#8605) in the generated pages: the record page prints the field's text in
+     * place of an empty value and always shows its rail row, its other surfaces name the same catalog
+     * key, the en-US catalog seeds it, and no page of a field without the key carries any of it.
+     */
+    private void assertFieldEmptyTextEmission() {
+        List<String> views = new ArrayList<>();
+        collectGenerated(PROJECT_PATH + "/gen/emission", views);
+        String noteForm = views.stream()
+                               .filter(v -> v.endsWith("/TeamNote-form.html"))
+                               .findFirst()
+                               .map(this::contentOf)
+                               .orElseThrow(() -> new AssertionError("no TeamNote record page among " + views));
+        String key = ".t.TEAM_NOTE_REVIEW_BY_empty', 'Not scheduled'";
+        assertTrue(noteForm.contains("orEmptyText(loadedRecord?.ReviewBy, fieldText(loadedRecord?.ReviewBy, ") && noteForm.contains(key),
+                "the record page must print the emptyText in place of an empty ReviewBy: " + noteForm);
+        assertFalse(noteForm.contains("fieldDisplay(form.ReviewBy"),
+                "a field declaring emptyText keeps its rail row - no emptiness gate: " + noteForm);
+        List<String> elsewhere = views.stream()
+                                      .filter(v -> !v.endsWith("/TeamNote-form.html"))
+                                      .filter(v -> contentOf(v).contains("TEAM_NOTE_REVIEW_BY_empty"))
+                                      .toList();
+        assertFalse(elsewhere.isEmpty(), "the list / panel surfaces must name the emptyText key too");
+        // Absent, nothing changes: every page carrying emptyText code is one that shows ReviewBy.
+        List<String> stray = views.stream()
+                                  .filter(v -> {
+                                      String content = contentOf(v);
+                                      return (content.contains("orEmptyText(") || content.contains("_empty'"))
+                                              && !content.contains("ReviewBy") && !content.contains("REVIEW_BY");
+                                  })
+                                  .toList();
+        assertEquals(List.of(), stray, "a page with no emptyText field must carry no emptyText code");
+        ICollection catalogs = repository.getCollection(PROJECT_PATH + "/i18n/en-US");
+        assertTrue(catalogs.exists() && catalogs.getResources()
+                                                .stream()
+                                                .map(r -> new String(r.getContent(), StandardCharsets.UTF_8))
+                                                .anyMatch(
+                                                        c -> c.matches("(?s).*\"TEAM_NOTE_REVIEW_BY_empty\"\\s*:\\s*\"Not scheduled\".*")),
+                "the model catalog seeds the emptyText under t.<DATA_NAME>_empty");
+    }
+
+    /**
+     * {@code emptyText:} (#8605) changes no data: a record created without the field reads it back as
+     * null.
+     */
+    private void assertFieldEmptyTextRuntime() {
+        int team = createRecord("/team/TeamController", "{\"Name\":\"EmptyText\"}");
+        int note = createRecord("/team/TeamNoteController", "{\"Team\":" + team + ",\"Title\":\"Unscheduled\"}");
+        assertNull(readRecord("/team/TeamNoteController", note).get("ReviewBy"), "the emptyText is never stored");
     }
 
     /**
@@ -4445,6 +4536,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertEquals("10,12,11",
                 pageSortOrder(campaignListPage, "CampaignManageListPage", campaignLookups, campaignRows, "Channels", "asc"),
                 "a subset column must sort by its joined labels (Email; Phone; Web, Email), not by the key list");
+        // ...and the search box matches what those columns show, not the keys behind them (#8561).
+        assertEquals("12", pageSearch(campaignListPage, "CampaignManageListPage", campaignLookups, campaignRows, "APPR"),
+                "the search must match a relation column's label, case-insensitively");
+        assertEquals("10,11", pageSearch(campaignListPage, "CampaignManageListPage", campaignLookups, campaignRows, "email"),
+                "the search must match a subset column's resolved labels");
+        assertEquals("", pageSearch(campaignListPage, "CampaignManageListPage", campaignLookups, campaignRows, "3"),
+                "the search must not match a key no cell shows");
         // ...and a date column sorts chronologically however the controller serialised it (#8433): the
         // LocalDate arrays [2025,10,6] etc. compared as the strings "2025,10,6", which sorted the 6th of
         // a month after the 16th and July after December. The ISO strings must keep the same order.
@@ -9605,23 +9703,41 @@ class IntentEmissionCoverageIT extends IntegrationTest {
      */
     private static String pageSortOrder(String pageScript, String componentName, String lookups, String rows, String column,
             String direction) {
+        return runListPage(pageScript, componentName, lookups, rows,
+                "page.sortColumn = '" + column + "'; page.sortDirection = '" + direction + "';", "sortedItems");
+    }
+
+    /**
+     * Type {@code term} into a generated list page's search box: the primary keys of the {@code rows}
+     * {@code filteredItems} keeps, comma-joined, with {@code lookups} as the loaded relation labels.
+     */
+    private static String pageSearch(String pageScript, String componentName, String lookups, String rows, String term) {
+        return runListPage(pageScript, componentName, lookups, rows, "page.searchTerm = '" + term + "';", "filteredItems");
+    }
+
+    /**
+     * Evaluate a generated list page over the shipped {@code basePage.js}, load {@code lookups} and
+     * {@code rows} into it, run {@code setup} against {@code page}, and answer the primary keys of the
+     * rows its {@code rowsGetter} returns, comma-joined.
+     */
+    private static String runListPage(String pageScript, String componentName, String lookups, String rows, String setup,
+            String rowsGetter) {
         try (Context context = Context.newBuilder("js")
                                       .option("engine.WarnInterpreterOnly", "false")
                                       .build()) {
             context.eval("js",
                     "var pages = {}; var window = this; var localStorage = { getItem: () => null };"
                             + " var document = { addEventListener: (event, callback) => callback() };"
-                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; } };");
+                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; } };"
+                            + " window.HarmoniaFormat = { value: (v) => String(v), documentNumber: (v) => v };");
             context.eval("js", classpathResource("/META-INF/dirigible/application-core/shell/js/components/pages/basePage.js"));
             context.eval("js", pageScript);
             return context.eval("js",
-                    "(() => { const page = pages['" + componentName + "'](); page.lookups = " + lookups + "; page.items = " + rows + ";"
-                            + " page.sortColumn = '" + column + "'; page.sortDirection = '" + direction + "';"
-                            + " return page.sortedItems.map(row => row.Id).join(','); })()")
+                    "(() => { const page = pages['" + componentName + "'](); page.lookups = " + lookups + "; page.items = " + rows + "; "
+                            + setup + " return page." + rowsGetter + ".map(row => row.Id).join(','); })()")
                           .asString();
         }
     }
-
 
     /**
      * Run a generated document page's inline create (#7725) over the shipped shell runtime (basePage,

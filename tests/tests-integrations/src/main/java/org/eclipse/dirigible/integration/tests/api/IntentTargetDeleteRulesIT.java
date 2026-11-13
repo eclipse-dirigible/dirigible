@@ -39,6 +39,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 /**
  * dirigible #7547: what a DELETE of a referenced record does to the records still pointing at it -
  * {@code whenTargetDeleted: restrict | nullify | cascade} on a to-one, {@code restrict} when
@@ -185,8 +188,25 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
     private static final String OWNER_BG_OVERLAY = """
             {
               "staff-model": {
+                "t": {
+                  "STAFF_EMPLOYEE": "Служител"
+                },
                 "checks": {
-                  "Employee_fixedWhenReferenced_Code": "Кодът не може да се смени, докато други записи сочат служителя"
+                  "Employee_fixedWhenReferenced_Code": "Кодът не може да се смени, докато други записи сочат служителя",
+                  "deleteReferenced": "{entity} не може да бъде изтрит: използва се в {references}.",
+                  "deleteReference": "{count} {label}"
+                }
+              }
+            }
+            """;
+
+    /** A translator's overlay of the consumer's labels, through which a refusal names its records. */
+    private static final String CONSUMER_BG_OVERLAY = """
+            {
+              "claims-model": {
+                "t": {
+                  "CLAIMS_EXPENSE_CLAIM": "Разходен документ",
+                  "CLAIMS_ADVANCE": "Аванс"
                 }
               }
             }
@@ -218,6 +238,8 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
         writeFile(CONSUMER, "app.intent", CONSUMER_INTENT);
         writeFile(CONSUMER, "claims.numbers", CONSUMER_NUMBERS);
         generateProject(CONSUMER);
+        writeFile(CONSUMER, "i18n/bg-BG/" + CONSUMER_MODEL + ".model.json", CONSUMER_BG_OVERLAY);
+        assertTheCatalogsCarryTheDeleteRefusal();
 
         String claimRepository = contentOf(CONSUMER, "gen/" + CONSUMER_MODEL + "/data/expenseclaim/ExpenseClaimRepository.java");
         assertTrue(claimRepository.contains("implements org.eclipse.dirigible.sdk.db.TargetDeleteRule"),
@@ -244,6 +266,8 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
         assertACascadeMeetsTheCascadedRecordsOwnRefusals();
 
         assertACreateNamingNoRecordIsRefused();
+        // After the first advance is numbered: this one creates advances of its own.
+        assertARefusalListsEveryReferencingEntityInTheReadersLanguage();
         assertAnUpdateNamingNoRecordIsRefused();
         assertAKeepReferenceOutlivesItsTarget();
 
@@ -471,6 +495,92 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
         assertDeleted(claims + "/" + claim);
         assertDeleted(employees + "/" + ada);
         assertDeleted(categories + "/" + travel);
+    }
+
+    /**
+     * #8569: the en-US catalogs carry the refusal's sentence, the way one kind of reference is written
+     * into it, and the labels the refusal names the entities by - under the keys the overlays
+     * translate.
+     */
+    private void assertTheCatalogsCarryTheDeleteRefusal() {
+        JsonObject owner = JsonParser.parseString(contentOf(OWNER, "i18n/en-US/" + OWNER_MODEL + ".model.json"))
+                                     .getAsJsonObject()
+                                     .getAsJsonObject("staff-model");
+        JsonObject checks = owner.getAsJsonObject("checks");
+        assertEquals("This {entity} is referenced by {references} and cannot be deleted", checks.get("deleteReferenced")
+                                                                                                .getAsString());
+        assertEquals("{count} {label} record(s)", checks.get("deleteReference")
+                                                        .getAsString());
+        assertEquals("Employee", owner.getAsJsonObject("t")
+                                      .get("STAFF_EMPLOYEE")
+                                      .getAsString());
+        JsonObject consumerLabels = JsonParser.parseString(contentOf(CONSUMER, "i18n/en-US/" + CONSUMER_MODEL + ".model.json"))
+                                              .getAsJsonObject()
+                                              .getAsJsonObject("claims-model")
+                                              .getAsJsonObject("t");
+        assertTrue(consumerLabels.has("CLAIMS_EXPENSE_CLAIM") && consumerLabels.has("CLAIMS_ADVANCE"),
+                "the consumer's catalog must carry the labels its records are named by: " + consumerLabels);
+    }
+
+    /**
+     * #8569, the issue's walk: an employee referenced cross-model by a claim AND by two advances. One
+     * 409 names both - not only the first rule that counted one - with their counts, and the same
+     * refusal in Bulgarian reads the sentence and the labels from the modules' catalogs; the key and
+     * the parameters ride next to the message.
+     */
+    private void assertARefusalListsEveryReferencingEntityInTheReadersLanguage() {
+        int ivy = create(employees, "{\"Name\":\"Ivy\"}");
+        int claim = create(claims, "{\"Employee\":" + ivy + ",\"Amount\":4}");
+        int first = create(advances, "{\"Employee\":" + ivy + ",\"Amount\":1}");
+        int second = create(advances, "{\"Employee\":" + ivy + ",\"Amount\":2}");
+        String ivyUrl = employees + "/" + ivy;
+
+        Map<String, Object> english = refusalOf(ivyUrl, null);
+        assertRefusalLists(english, "This Employee is referenced by ", " and cannot be deleted", "1 Expense Claim record(s)",
+                "2 Advance record(s)");
+        assertEquals(OWNER + ":staff-model.checks.deleteReferenced", english.get("messageKey"), english.toString());
+        assertEquals("Employee", ((Map<?, ?>) english.get("messageParams")).get("entity"), english.toString());
+
+        Map<String, Object> bulgarian = refusalOf(ivyUrl, "bg-BG");
+        assertRefusalLists(bulgarian, "Служител не може да бъде изтрит: използва се в ", ".", "1 Разходен документ", "2 Аванс");
+        assertEquals(OWNER + ":staff-model.checks.deleteReferenced", bulgarian.get("messageKey"), bulgarian.toString());
+        assertFound(ivyUrl);
+
+        // Every reference gone, the employee goes.
+        assertDeleted(claims + "/" + claim);
+        assertDeleted(advances + "/" + first);
+        assertDeleted(advances + "/" + second);
+        assertDeleted(ivyUrl);
+    }
+
+    /** The message is the sentence around exactly the given references, in the order the rules came. */
+    private static void assertRefusalLists(Map<String, Object> body, String prefix, String suffix, String... references) {
+        String message = String.valueOf(body.get("message"));
+        assertTrue(message.startsWith(prefix) && message.endsWith(suffix), "unexpected refusal: " + body);
+        List<String> listed = List.of(message.substring(prefix.length(), message.length() - suffix.length())
+                                             .split(", "));
+        assertEquals(references.length, listed.size(), "every referencing entity must be listed once: " + body);
+        for (String reference : references) {
+            assertTrue(listed.contains(reference), "the refusal must list [" + reference + "]: " + body);
+        }
+    }
+
+    private Map<String, Object> refusalOf(String record, String language) {
+        AtomicReference<Map<String, Object>> body = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> {
+            var request = given();
+            if (language != null) {
+                request = request.header("Accept-Language", language);
+            }
+            body.set(request.when()
+                            .delete(record)
+                            .then()
+                            .statusCode(409)
+                            .extract()
+                            .jsonPath()
+                            .getMap(""));
+        });
+        return body.get();
     }
 
     /** nullify: the employee goes, the claim stays and no longer names a reviewer. */

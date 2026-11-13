@@ -179,7 +179,7 @@
 #if($hasSettings)
                 <li x-h-sidebar-menu-item>
 #else
-                <li x-h-sidebar-menu-item x-show="($store.tenantUsers && $store.tenantUsers.visible) || ($store.printTemplates && $store.printTemplates.visible)" x-cloak>
+                <li x-h-sidebar-menu-item x-show="($store.tenantUsers && $store.tenantUsers.visible) || ($store.printTemplates && $store.printTemplates.visible) || ($store.tenantExport && $store.tenantExport.visible)" x-cloak>
 #end
                   <button x-h-sidebar-menu-nav :data-active="isActive('/settings')" @click="navigate('/settings')">
                     <svg role="presentation" x-h-lucide data-lucide="settings"></svg><span x-text="T('application-core:shell.nav.settings', 'Settings')"></span>
@@ -399,7 +399,7 @@
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <template x-for="col in s.promptCols" :key="col.name">
-                <div x-h-field :style="['NUMBER','CHECKBOX','DATE'].includes(col.widget) ? '' : 'grid-column: 1 / -1'">
+                <div x-h-field :style="['NUMBER','CHECKBOX','DATE'].includes(col.widget) ? '' : 'grid-column: 1 / -1'" @input="s.promptEdit(col)" @change="s.promptEdit(col)">
                   <template x-if="!['CHECKBOX','MULTISELECT'].includes(col.widget)">
                     <label x-h-label x-text="col.tkey ? T(col.tkey, col.label) : col.label"></label>
                   </template>
@@ -680,6 +680,7 @@
     <script src="/services/web/application-core/shell/js/components/detailPanel.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/printActions.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/relatedPanel.js" defer></script>
+    <script src="/services/web/application-core/shell/js/components/shareLinksPanel.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/processTasks.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/customActions.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/reports.js" defer></script>
@@ -689,6 +690,7 @@
     <script src="/services/web/application-core/shell/js/stores/about.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/tenantUsers.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/printTemplates.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/tenantExport.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/notifications.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/theme.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/locale.js" defer></script>

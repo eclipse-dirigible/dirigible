@@ -114,8 +114,12 @@ class IntentSoftWarningsIT extends IntegrationTest {
                                                       .body("warnings[0].message",
                                                               equalTo("A customer with this name already exists: Acme"));
         assertCount(CUSTOMERS, 1);
-        create(CUSTOMERS, "{\"Name\":\"Acme\"}", DUPLICATE);
+        int twin = create(CUSTOMERS, "{\"Name\":\"Acme\"}", DUPLICATE);
         assertCount(CUSTOMERS, 2);
+        // A confirmed duplicate is not asked again on every later save of it (#8568): an update that leaves
+        // the checked field as stored - byte for byte, or differing only in case and spaces - asks nothing.
+        update(CUSTOMERS, twin, "{\"Name\":\"Acme\",\"Discount\":5}", null);
+        update(CUSTOMERS, twin, "{\"Name\":\" acme\",\"Discount\":6}", null);
         // The same name typed again rarely matches byte for byte (#7524): a different case and stray
         // spaces are still asked about, and {match} names the stored record in its own spelling.
         warned(CUSTOMERS, "{\"Name\":\"  ACME \"}", null).body("warnings", hasSize(1))
@@ -129,6 +133,8 @@ class IntentSoftWarningsIT extends IntegrationTest {
         update(CUSTOMERS, solo, "{\"Name\":\"Solo\",\"Discount\":10}", null);
         // ...while an update INTO a duplicate is asked like a create.
         warnedUpdate(CUSTOMERS, solo, "{\"Name\":\"Acme\"}", null).body("warnings[0].code", equalTo(DUPLICATE));
+        // ...and so is the confirmed twin once its checked field changes into another record's value.
+        warnedUpdate(CUSTOMERS, twin, "{\"Name\":\"solo\"}", null).body("warnings[0].code", equalTo(DUPLICATE));
 
         // A soft compare, and a confirmation covers only the codes it names: both warnings are listed,
         // and confirming one of them still asks.

@@ -2327,4 +2327,69 @@ class ModelParameterProcessorTest {
         assertNull(check.get("guardJavaExpression"), "no record-local condition was authored");
         assertEquals(List.of(check), entity.get("documentChecks"), "gated, so the repository's");
     }
+
+    /**
+     * A field's {@code emptyText} (dirigible #8605) is printed inside single-quoted JS literals and T()
+     * arguments, so an apostrophe in it must not close the literal; a property without it gets no
+     * escaped twin.
+     */
+    @Test
+    void anEmptyTextIsEscapedForTheTemplates() {
+        Map<String, Object> expiresOn = property("ExpiresOn", "DATE");
+        expiresOn.put("widgetEmptyText", "Doesn't expire");
+        Map<String, Object> name = property("Name", "VARCHAR");
+        Map<String, Object> member = entity("Member", "Members", property("Id", "INTEGER"), expiresOn, name);
+
+        ModelParameterProcessor.process(model(member), javaParameters());
+
+        assertEquals("Doesn\\'t expire", expiresOn.get("widgetEmptyTextJs"));
+        assertFalse(name.containsKey("widgetEmptyTextJs"), "nothing is emitted for a field without emptyText");
+    }
+
+    /**
+     * The text seeds its own en-US catalog entry beside the label's, under the {@code _empty} suffix,
+     * so a language catalog translates it like any label (dirigible #8605); a property without it seeds
+     * nothing.
+     */
+    @Test
+    void anEmptyTextSeedsItsCatalogEntryBesideTheLabel() {
+        Map<String, Object> maxLoans = property("MaxLoans", "INTEGER");
+        maxLoans.put("dataName", "MEMBER_MAX_LOANS");
+        maxLoans.put("widgetLabel", "Loan limit");
+        maxLoans.put("widgetEmptyText", "No limit");
+        Map<String, Object> nickname = property("Nickname", "VARCHAR");
+        nickname.put("dataName", "MEMBER_NICKNAME");
+        Map<String, Object> member = entity("Member", "Members", property("Id", "INTEGER"), maxLoans, nickname);
+        member.put("dataName", "MEMBER");
+        Map<String, Object> catalog = new LinkedHashMap<>();
+
+        ModelTranslations.fillEntityCatalog(model(member), catalog);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> texts = (Map<String, Object>) catalog.get("t");
+        assertEquals("Loan limit", texts.get("MEMBER_MAX_LOANS"));
+        assertEquals("No limit", texts.get("MEMBER_MAX_LOANS_empty"));
+        assertTrue(texts.containsKey("MEMBER_NICKNAME"));
+        assertFalse(texts.containsKey("MEMBER_NICKNAME_empty"), "no _empty entry for a property without emptyText");
+    }
+
+    /**
+     * A {@code related:} register column over a field declaring {@code emptyText} carries the text, raw
+     * and JS-escaped, so the register's cell prints it instead of the em dash (dirigible #8605).
+     */
+    @Test
+    void aRelatedColumnCarriesTheEmptyText() {
+        Map<String, Object> column = property("ReturnedOn", "DATE");
+        column.put("widgetEmptyText", "Isn't back");
+        column.put("dataName", "LOAN_RETURNED_ON");
+        Map<String, Object> campaign = entity("Campaign", "Campaigns", property("Id", "INTEGER"));
+        campaign.put("relatedEntities", List.of(register("CampaignCost", "Costs", column)));
+
+        ModelParameterProcessor.process(model(campaign), javaParameters());
+
+        Map<String, Object> resolved = registerColumn(campaign);
+        assertEquals("Isn't back", resolved.get("emptyText"));
+        assertEquals("Isn\\'t back", resolved.get("emptyTextJs"));
+        assertEquals(Boolean.TRUE, resolved.get("date"));
+    }
 }

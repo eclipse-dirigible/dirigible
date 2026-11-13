@@ -36,7 +36,7 @@ document.addEventListener('alpine:init', () => {
   const SLOW_AFTER_MS = 2 * 60 * 1000;
 
   Alpine.store('tenantUsers', {
-    /** What the platform says: { enabled, tenantId, canManage, canRead, ownerRole, roles, caller }; null until loaded. */
+    /** What the platform says: { enabled, tenantId, canManage, canRead, ownerRole, roles, caller, seatLimit }; null until loaded. */
     context: null,
     /** The live users of the tenant, as the provisioning system last reported them. */
     items: [],
@@ -75,6 +75,22 @@ document.addEventListener('alpine:init', () => {
     /** The roles an owner may grant. */
     get roles() {
       return (this.context && this.context.roles) || [];
+    },
+
+    /** The most users the tenant may hold at once, as the provisioning system set it; null for no limit. */
+    get seatLimit() {
+      return (this.context && this.context.seatLimit) || null;
+    },
+
+    /** The seats taken: the users pending, invited or assigned, and the invitations this page sent that the list does not show yet. */
+    get seatsTaken() {
+      return this.items.filter((user) => user.status === 'PENDING' || this.isMember(user)).length + this.sendingInvites.length;
+    },
+
+    /** "7 of 10" - shown only for a tenant with a seat limit; over the limit too, so the owner sees how many to free. */
+    get seatsText() {
+      if (!this.seatLimit) return '';
+      return this.t('shell.tenantUsers.seats', 'Seats: {{taken}} of {{limit}}', { taken: this.seatsTaken, limit: this.seatLimit });
     },
 
     init() {
@@ -380,6 +396,7 @@ document.addEventListener('alpine:init', () => {
         TENANT_NOT_ACTIVE: 'The tenant is not active.',
         WORKSPACE_NOT_PROVISIONED: 'The application is not provisioned for this tenant yet.',
         ACCOUNT_MISSING: 'The person has no account.',
+        SEAT_LIMIT: 'Every seat of the tenant was taken.',
       };
       if (known[code]) return this.t('shell.tenantUsers.reason.' + code, known[code]);
       return message || code || '';
@@ -508,6 +525,7 @@ document.addEventListener('alpine:init', () => {
         STALE_REVISION: 'This person changed since the list was loaded. Reload and try again.',
         NO_CHANGE: 'This person already has exactly these roles.',
         LAST_OWNER: 'This person is the only owner of the tenant. Make someone else an owner first.',
+        SEAT_LIMIT: 'Every seat of this tenant is taken. Remove someone to free a seat, or ask your administrator for more seats.',
         USER_NOT_FOUND: 'This person is no longer in the list. Reload it.',
       };
       if (reason && known[reason]) return this.t('shell.tenantUsers.error.' + reason, known[reason]);

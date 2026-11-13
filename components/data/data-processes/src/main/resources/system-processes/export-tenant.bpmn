@@ -1,0 +1,29 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:flowable="http://flowable.org/bpmn" typeLanguage="http://www.w3.org/2001/XMLSchema" expressionLanguage="http://www.w3.org/1999/XPath" targetNamespace="http://www.flowable.org/processdef">
+  <process id="export-tenant" name="Export Tenant" isExecutable="true">
+    <startEvent id="start-event"/>
+    <serviceTask id="prepare" name="Prepare" flowable:async="true" flowable:delegateExpression="${PrepareTask_ExportTenantProcess}"/>
+    <exclusiveGateway id="has-tables" name="Has tables?" default="no-tables"/>
+    <callActivity id="export-database" name="Export database" calledElement="export-schema" flowable:inheritVariables="false">
+      <extensionElements>
+        <flowable:in source="dataSource" target="dataSource"/>
+        <flowable:in source="schema" target="schema"/>
+        <flowable:in source="exportPath" target="exportPath"/>
+        <flowable:in source="includedTables" target="includedTables"/>
+        <flowable:in source="excludedTables" target="excludedTables"/>
+      </extensionElements>
+    </callActivity>
+    <serviceTask id="package-archive" name="Package archive" flowable:async="true" flowable:delegateExpression="${PackageArchiveTask_ExportTenantProcess}"/>
+    <serviceTask id="complete" name="Complete" flowable:async="true" flowable:delegateExpression="${CompleteTask_ExportTenantProcess}"/>
+    <endEvent id="end-event"/>
+    <sequenceFlow id="start-to-prepare" sourceRef="start-event" targetRef="prepare"/>
+    <sequenceFlow id="prepare-to-gateway" sourceRef="prepare" targetRef="has-tables"/>
+    <sequenceFlow id="with-tables" sourceRef="has-tables" targetRef="export-database">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${exportDatabase}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="no-tables" sourceRef="has-tables" targetRef="package-archive"/>
+    <sequenceFlow id="database-to-package" sourceRef="export-database" targetRef="package-archive"/>
+    <sequenceFlow id="package-to-complete" sourceRef="package-archive" targetRef="complete"/>
+    <sequenceFlow id="complete-to-end" sourceRef="complete" targetRef="end-event"/>
+  </process>
+</definitions>

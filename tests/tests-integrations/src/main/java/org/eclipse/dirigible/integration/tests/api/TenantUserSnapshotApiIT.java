@@ -20,6 +20,7 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -221,6 +222,78 @@ class TenantUserSnapshotApiIT extends IntegrationTest {
                .statusCode(401);
     }
 
+    /**
+     * The seat limit a snapshot carries (#8593): stored as the tenant's property whatever its users'
+     * revisions, cleared by a body without it, refused when it is not a whole number of at least 1, and
+     * gone with the tenant.
+     */
+    @Test
+    void theSeatLimitIsTheTenantsPropertyAndGoesWithTheTenant() throws SQLException {
+        String tenantId = "it-snap-seats";
+        String usersPath = TENANTS_PATH + tenantId + "/users";
+        asProvisioner(() -> {
+            given().contentType(ContentType.JSON)
+                   .body(Map.of("name", "Seats IT"))
+                   .when()
+                   .put(TENANTS_PATH + tenantId)
+                   .then()
+                   .statusCode(anyOf(equalTo(201), equalTo(200)));
+            Map<String, Object> withLimit = body(false, 3, user("ann@example.com", 3, "ASSIGNED"));
+            withLimit.put("seatLimit", 10);
+            given().contentType(ContentType.JSON)
+                   .body(withLimit)
+                   .when()
+                   .put(usersPath)
+                   .then()
+                   .statusCode(200)
+                   .body("applied", equalTo(1));
+        });
+        assertEquals("10", seatLimit(tenantId));
+
+        asProvisioner(() -> {
+            // the same user again is ignored - and the limit is still the body's
+            Map<String, Object> lowered = body(false, 3, user("ann@example.com", 3, "ASSIGNED"));
+            lowered.put("seatLimit", 2);
+            given().contentType(ContentType.JSON)
+                   .body(lowered)
+                   .when()
+                   .put(usersPath)
+                   .then()
+                   .statusCode(200)
+                   .body("ignored", equalTo(1));
+        });
+        assertEquals("2", seatLimit(tenantId));
+
+        asProvisioner(() -> {
+            for (Object refused : new Object[] {0, 2.5, "many"}) {
+                Map<String, Object> bad = body(false, 4, user("ann@example.com", 4, "ASSIGNED"));
+                bad.put("seatLimit", refused);
+                given().contentType(ContentType.JSON)
+                       .body(bad)
+                       .when()
+                       .put(usersPath)
+                       .then()
+                       .statusCode(400);
+            }
+        });
+        assertEquals("2", seatLimit(tenantId), "a refused body changes nothing");
+
+        asProvisioner(() -> given().contentType(ContentType.JSON)
+                                   .body(body(false, 4, user("ann@example.com", 4, "ASSIGNED")))
+                                   .when()
+                                   .put(usersPath)
+                                   .then()
+                                   .statusCode(200));
+        assertNull(seatLimit(tenantId), "a body without a limit clears it");
+        assertEquals(1, propertyRows(tenantId));
+
+        asProvisioner(() -> given().when()
+                                   .delete(TENANTS_PATH + tenantId)
+                                   .then()
+                                   .statusCode(anyOf(equalTo(200), equalTo(204))));
+        assertEquals(0, propertyRows(tenantId), "deprovisioning deletes the tenant's properties");
+    }
+
     @Test
     void anUnknownTenantIsNotFoundWithTheApisErrorBody() {
         asProvisioner(() -> given().contentType(ContentType.JSON)
@@ -283,6 +356,22 @@ class TenantUserSnapshotApiIT extends IntegrationTest {
 
     private int platformUsers(String email) throws SQLException {
         return count("SELECT COUNT(*) FROM DIRIGIBLE_USERS WHERE USER_TENANT_ID = ? AND LOWER(USER_USERNAME) = ?", TENANT_ID, email);
+    }
+
+    private int propertyRows(String tenantId) throws SQLException {
+        return count("SELECT COUNT(*) FROM DIRIGIBLE_TENANT_PROPERTIES WHERE TENANTPROP_TENANT_ID = ?", tenantId);
+    }
+
+    private String seatLimit(String tenantId) throws SQLException {
+        try (Connection connection = dataSourcesManager.getSystemDataSource()
+                                                       .getConnection();
+                PreparedStatement statement = connection.prepareStatement(
+                        "SELECT TENANTPROP_SEAT_LIMIT FROM DIRIGIBLE_TENANT_PROPERTIES WHERE TENANTPROP_TENANT_ID = ?")) {
+            statement.setString(1, tenantId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next() ? resultSet.getString(1) : null;
+            }
+        }
     }
 
     private int roleRows() throws SQLException {

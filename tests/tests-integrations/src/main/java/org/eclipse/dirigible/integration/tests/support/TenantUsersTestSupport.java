@@ -75,9 +75,28 @@ public final class TenantUsersTestSupport {
      * @throws Exception when the request cannot be sent
      */
     public static void pushSnapshot(MockMvc mvc, String tenantId, long revision, UserSnapshot... users) throws Exception {
+        pushSnapshot(mvc, tenantId, revision, null, users);
+    }
+
+    /**
+     * Writes users into a tenant's replica with the tenant's seat limit, as the provisioning system
+     * does.
+     *
+     * @param mvc the MockMvc of the test
+     * @param tenantId the tenant id
+     * @param revision the tenant's revision sequence
+     * @param seatLimit the most users the tenant may hold at once, or null for no limit
+     * @param users the users
+     * @throws Exception when the request cannot be sent
+     */
+    public static void pushSnapshot(MockMvc mvc, String tenantId, long revision, Integer seatLimit, UserSnapshot... users)
+            throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("complete", false);
         body.put("revision", revision);
+        if (seatLimit != null) {
+            body.put("seatLimit", seatLimit);
+        }
         List<Map<String, Object>> entries = new ArrayList<>();
         for (UserSnapshot user : users) {
             entries.add(user.build());

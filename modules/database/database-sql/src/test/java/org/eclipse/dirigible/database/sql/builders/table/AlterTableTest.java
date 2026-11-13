@@ -150,4 +150,38 @@ public class AlterTableTest {
         assertEquals("ALTER TABLE \"SALES_INVOICE\" DROP CONSTRAINT \"SalesInvoice_Company_Number\";", sql);
     }
 
+    /**
+     * A schema name that is not a plain identifier is quoted as one identifier, not word by word.
+     */
+    @Test
+    public void alterTableInSchemaWithHyphen() {
+        String sql = SqlFactory.getDefault()
+                               .alter()
+                               .table("CUSTOMERS")
+                               .schema("my-schema")
+                               .add()
+                               .column("FIRST_NAME", DataType.VARCHAR, Modifiers.REGULAR, Modifiers.NULLABLE, Modifiers.NON_UNIQUE, "(20)")
+                               .build();
+
+        assertNotNull(sql);
+        assertEquals("ALTER TABLE \"my-schema\".\"CUSTOMERS\" ADD \"FIRST_NAME\" VARCHAR (20) ;", sql);
+    }
+
+    /**
+     * A plain schema name renders as before.
+     */
+    @Test
+    public void alterTableInPlainSchema() {
+        String sql = SqlFactory.getDefault()
+                               .alter()
+                               .table("CUSTOMERS")
+                               .schema("SALES")
+                               .add()
+                               .column("FIRST_NAME", DataType.VARCHAR, Modifiers.REGULAR, Modifiers.NULLABLE, Modifiers.NON_UNIQUE, "(20)")
+                               .build();
+
+        assertNotNull(sql);
+        assertEquals("ALTER TABLE \"SALES\".\"CUSTOMERS\" ADD \"FIRST_NAME\" VARCHAR (20) ;", sql);
+    }
+
 }

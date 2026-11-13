@@ -1,0 +1,39 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+	<parent>
+		<artifactId>dirigible-components-parent</artifactId>
+		<groupId>org.eclipse.dirigible</groupId>
+		<version>16.0.0-SNAPSHOT</version>
+		<relativePath>../../pom.xml</relativePath>
+	</parent>
+	<name>Components - Engine - Share</name>
+	<artifactId>dirigible-components-engine-share</artifactId>
+	<modelVersion>4.0.0</modelVersion>
+	<dependencies>
+		<!-- Components -->
+		<dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-core-base</artifactId>
+		</dependency>
+		<!-- Per-tenant link table via the tenant-routed default datasource + SqlFactory -->
+		<dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-data-sources</artifactId>
+		</dependency>
+		<!-- The application's own answer to "is this record still shareable" is a client bean -->
+		<dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-core-java</artifactId>
+		</dependency>
+		<!-- The stored copy a link serves is read from the tenant's document store -->
+		<dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-api-cms</artifactId>
+		</dependency>
+	</dependencies>
+	<properties>
+		<license.header.location>../../../licensing-header.txt</license.header.location>
+		<parent.pom.folder>../../../</parent.pom.folder>
+	</properties>
+</project>

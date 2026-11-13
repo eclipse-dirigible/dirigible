@@ -241,9 +241,11 @@ not as an apology.
   On a relation the FK is compared by id: `CompanyBankAccount.Currency`, `Product.Type`.
 - **`whenTargetDeleted: restrict | nullify | cascade | keep` on a plain (non-composition) `manyToOne`/
   `oneToOne` = what deleting the record it points at does to the records pointing at it** (#7547).
-  - `restrict` is the DEFAULT, also when the key is absent: the delete is refused with a 409 naming the
-    referencing records and their count ("This Employee is referenced by 2 Expense Claim record(s)
-    and cannot be deleted").
+  - `restrict` is the DEFAULT, also when the key is absent: the delete is refused with ONE 409 naming
+    every kind of referencing record with its count ("This Employee is referenced by 2 Expense Claim
+    record(s), 1 Advance record(s) and cannot be deleted"), in the reader's language: the sentence is
+    `checks.deleteReferenced` / `checks.deleteReference` of the deleted entity's model catalog, the
+    entities are named by their `t.<TABLE>` labels (#8569).
   - `nullify` deletes the target and clears this relation. It is refused on a `required` relation.
   - `cascade` deletes this record together with the target, through its own repository, so its
     events, history and own rules apply.
@@ -720,6 +722,21 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   `uuid`), and together with `major: true`, `visibleWhen:`, the entity's `list:` or a `related:`
   register's `show:`. Unlike `visibleTo:`, which also strips the value from REST, `hidden` only keeps
   it off the pages.
+- `emptyText: <text>` (on a **field**) - **what an empty value reads as** when "empty" means
+  something: `{ name: maxLoans, type: integer, readOnly: true, label: Loan limit, emptyText: No limit }`,
+  `{ name: expiresOn, type: date, emptyText: Never }`, `{ name: nickname, type: string, emptyText: Not set }`.
+  Every generated surface that prints the value - record and document pages (main column and Details
+  rail, preview and edit), my/partner pages, the manage and plain lists with their preview sheet,
+  the my/partner lists, composition panels, `related:` registers, the `subtitle:` line and the
+  document's summary line - prints the text in place of a null, blank or empty value instead of the
+  em dash, and a Details rail row of the field is always shown instead of hidden. It is also the
+  placeholder of the field's text, email, url, tel, number or textarea input on the create and edit
+  forms (not the date-family pickers). Translatable: it seeds `t.<DATA_NAME>_empty` beside the label.
+  Nothing is stored - data, REST answers, CSV export and print are unchanged. Prefer it to a sentinel
+  value (`-1`, `9999-12-31`) that every rule, check and report would then have to know about.
+  Refused: blank, on a `boolean` or `uuid`, the primary key, a `required` field, a `number:`, with
+  `placement: hidden`, on an `aggregate`, the document title and a chat `messageBody`; on a relation
+  it is an unknown key.
 - `hierarchy: <RelationName>` (entity-level) - **tree entities**: names the entity's own optional
   to-one SELF-relation forming the tree edge (`hierarchy: Parent` with
   `- { name: Parent, kind: manyToOne, to: <SameEntity> }`). The generated list renders as a
@@ -1997,7 +2014,12 @@ what stops an unresolvable path from minting a task nobody can see.
 **Nobody approves their own work.** A user task whose form offers `approve` cannot be claimed or
 completed by whoever completed another user task of the same process instance - the submitter gets a
 403 "You cannot approve your own <record>". Name the steps yourself with `separateFrom: submit` (or a
-list; `separateFrom: []` turns the default off). The deployment's `.settings` `access.extraRoles`
+list; `separateFrom: []` turns the default off). When the record is submitted by being created - a
+leave request, an expense claim, a timesheet with no submit task - add `separateFrom: personal` (alone
+or in the list, e.g. `[personal, review]`): it keeps the record's owner (the trigger entity's
+`personal: true` relation, as `assignee: personal` resolves it) off the task, whoever created the
+record, so an approval falling back to a group the owner is in cannot be taken by them. It needs that
+`personal: true` relation and is not part of the default. The deployment's `.settings` `access.extraRoles`
 (a multitenant app's `Owner` / `User` - every tenant member) are never a task's candidates unless the
 step says `extraRoles: true`, so route a submit task with `assignee: personal` and an approval with a
 relation walk rather than a role nobody in the tenant holds.
@@ -4263,6 +4285,40 @@ processes:
       - { name: end, kind: end }
 ```
 
+### share - hand an issued document to an external reader through a link
+
+`share:` on an entity declares that the **issued copy** of its records may be opened by somebody
+without an account - a customer, a supplier - through a link a user creates on the record and sends
+by e-mail or a messenger. It is off unless declared, per entity; nothing else makes a document
+reachable from outside.
+
+```yaml
+  - name: SalesInvoice
+    function: Document
+    share:
+      when: "status == ISSUED"      # required - only a record in this state can get a link
+      copy: SalesInvoiceCopy        # required - the function: Snapshot child whose stored file is served
+      roles: [SalesInvoiceShare]    # required - who may create and revoke links; [] admits nobody
+      expiresAfterDays: 0           # optional - 0 (default) = permanent; a tenant can only shorten it
+```
+
+Rules to follow when proposing it:
+
+- **Never put `share:` on a personal document.** An entity whose records belong to the signed-in
+  person (a `personal: true` relation on it or on its composition master - payslips, leave requests,
+  employment contracts) is refused at parse time: a link is a bearer credential, and whoever holds it
+  reads the document. For those, a notification carries `{recordUrl}`, which needs a sign-in.
+- `copy:` must name a `function: Snapshot` composition child of the same entity, and the entity must
+  be a printable document (it has a `function: DocumentItem` child). The link serves that stored PDF -
+  what was issued - never the live record. A process step must mint the copy
+  (`delegate: gen.events.<Entity>SnapshotGenerator`) before a link can be created.
+- `when:` is a record condition like `visibleWhen:` (`<property> ==|!= <literal>`, a status by name).
+  A record that leaves the state loses its links for good - a voided invoice is not readable any more.
+- `roles:` lists roles declared under `permissions`. The key is required; do not invent a role - add
+  it to `permissions` in the same proposal.
+- Issuing a document does not create a link. A user creates one on the record page (Share links), sees
+  how often it was opened, and can revoke it.
+
 ### schedules - run on a cron and notify or generate records
 
 **Use when:** something must run **on a schedule** (cron), find records matching conditions, and, per
@@ -5056,13 +5112,33 @@ imports:
     format: mt940
     map: { statementId: statementId, lineNumber: lineNumber, bookedOn: valueDate, amount: amount, details: details }
     duplicateKey: [statementId, lineNumber]
+  - name: iso
+    into: StatementLine
+    format: camt053
+    camt053: { records: transactions }   # one record per TxDtls; default entries (one per Ntry)
+    where: { status: BOOK, reversal: false }   # only these records are imported; the rest are skipped
+    map: { statementId: statementId, lineNumber: lineNumber, part: transaction, amount: amount, payer: counterpartyName }
+    duplicateKey: [statementId, lineNumber, part]
 ```
 
 An `mt940` / `camt053` file is read into one record per statement line (`:61:` / `Ntry`) with these
 keys - map from them: `statementId`, `sequence`, `account`, `currency`, `lineNumber` (counts from 1 in
 each statement), `valueDate`, `bookingDate`, `mark` (`C`/`D`), `amount` (signed: a debit is negative),
 `transactionType`, `reference`, `bankReference`, `details` (`:86:` / the remittance text);
-`mt940` adds `supplementary`, `camt053` adds `counterpartyName` and `counterpartyAccount`.
+`mt940` adds `supplementary`, `camt053` adds `counterpartyName`, `counterpartyAccount`, `status` (the
+booking status: `BOOK`, `PDNG`, `INFO`), `reversal` (`true` for a reversal of an earlier entry) and
+`transactions` (how many `TxDtls` the entry books - more than 1 is a batch).
+
+A camt.053 entry booked as a batch (several payers in one credit) is ONE record of the entry's amount
+by default. `camt053: { records: transactions }` reads one record per transaction instead: each carries
+its own `amount`, `reference`, counterparty and `details`, the entry's `lineNumber`, and its 1-based
+`transaction` position in the entry (so the duplicate key becomes `[statementId, lineNumber,
+transaction]`). A batch whose parts have no amount or do not add up to the entry is refused.
+
+`where: { <key>: <value> }` imports only the records whose key holds the value (a list allows any of
+its values; every key must match): `where: { status: BOOK }` leaves pending and informational entries
+out. The skipped records are counted in the result (`skipped`), never saved. A key is a source of the
+file (a csv column, a statement key), never `_line` / `_file` / `_checksum`.
 
 Each import generates `gen/events/<module>/<Name>Import.java`: an **upload** endpoint (`POST
 .../<Name>Import/upload`, a multipart file or the raw body with `?fileName=`), gated by the entity's
@@ -5080,7 +5156,8 @@ code, not intent; mention it as a boundary when the requirement asks for matchin
 has no required to-one relation (an import fills fields, never relations); `map` names fields only,
 never the primary key, and must cover every required field without a default; a `csv` source without
 a header is a 1-based column number; an `mt940`/`camt053` source is one of the keys above (or
-`_line`/`_file`); `duplicateKey` lists mapped fields. Declare a `unique:` over the same fields too
+`_line`/`_file`/`_checksum` - the file's SHA-256, so a key can refuse the same content uploaded under
+another name); `transaction` needs `camt053: { records: transactions }`; `duplicateKey` lists mapped fields. Declare a `unique:` over the same fields too
 when two concurrent uploads of one statement must be impossible - the check runs before the write.
 
 ### outbound - the app raises an event for another system
@@ -5660,7 +5737,9 @@ or a seeded name.
 | schedule `where` `op` | `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `like` |
 | integration `method` | `GET`, `POST`, `PUT`, `PATCH`, `DELETE` |
 | import `format` | `csv`, `mt940`, `camt053` |
-| import `map` source | `csv`: a header column (or a 1-based position with `header: false`); `mt940`/`camt053`: `statementId`, `sequence`, `account`, `currency`, `lineNumber`, `valueDate`, `bookingDate`, `mark`, `amount`, `transactionType`, `reference`, `bankReference`, `details` (+ `supplementary` for mt940; `counterpartyName`, `counterpartyAccount` for camt053); any format: `_line`, `_file` |
+| import `map` source | `csv`: a header column (or a 1-based position with `header: false`); `mt940`/`camt053`: `statementId`, `sequence`, `account`, `currency`, `lineNumber`, `valueDate`, `bookingDate`, `mark`, `amount`, `transactionType`, `reference`, `bankReference`, `details` (+ `supplementary` for mt940; `counterpartyName`, `counterpartyAccount`, `status`, `reversal`, `transactions`, and `transaction` with `records: transactions`, for camt053); any format: `_line`, `_file`, `_checksum` |
+| import `camt053.records` | `entries` (default, one per `Ntry`), `transactions` (one per `TxDtls`) |
+| import `where` | `{ <source key>: <value> or [<value>, ...] }` - every key must hold one of its values |
 | entity `function` | `Document`, `DocumentItem`, `Master`, `Detail`, `List`, `Setting`, `Calendar` (reserved-and-rejected: `Board`, `Gantt`, `Timeline`) |
 | field `function` | `DocumentTitle` |
 | relation `function` | `EntityStatus` |

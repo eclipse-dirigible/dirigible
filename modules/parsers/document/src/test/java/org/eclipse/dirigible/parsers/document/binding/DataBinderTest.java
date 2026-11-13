@@ -622,4 +622,118 @@ public class DataBinderTest {
                                      .get(1)
                                      .text());
     }
+
+    /** The "No." column of an items table: every rendered row knows its 1-based position. */
+    @Test
+    public void indexNumbersTheRowsOfATableFromOne() {
+        Node root = parser.parse("""
+                <document>
+                    <table source="items">
+                        <column width="24" label="№">{{__index}}</column>
+                        <column>{{name}}</column>
+                    </table>
+                </document>
+                """);
+        Node bound =
+                binder.bind(root, Map.of("items", List.of(Map.of("name", "Widget"), Map.of("name", "Gadget"), Map.of("name", "Gizmo"))));
+
+        assertEquals(List.of("1|Widget", "2|Gadget", "3|Gizmo"), rowTexts(bound.children()
+                                                                               .get(0)));
+    }
+
+    @Test
+    public void indexNumbersTheRowsTheFilterKeptContiguously() {
+        Node root = parser.parse("""
+                <document>
+                    <table source="items" filter="kind" match="TAX | BASE">
+                        <column>{{__index}}</column>
+                        <column>{{name}}</column>
+                    </table>
+                    <for source="items" filter="billable"><text>{{__index}}. {{name}}</text></for>
+                </document>
+                """);
+        Node bound = binder.bind(root,
+                Map.of("items",
+                        List.of(Map.of("name", "a", "kind", "BASE", "billable", false), Map.of("name", "b", "kind", "NOTE"),
+                                Map.of("name", "c", "kind", "TAX", "billable", true), Map.of("name", "d", "kind", "NOTE", "billable", true),
+                                Map.of("name", "e", "kind", "TAX"))));
+
+        assertEquals(List.of("1|a", "2|c", "3|e"), rowTexts(bound.children()
+                                                                 .get(0)));
+        assertEquals("1. c", bound.children()
+                                  .get(1)
+                                  .text());
+        assertEquals("2. d", bound.children()
+                                  .get(2)
+                                  .text());
+    }
+
+    @Test
+    public void indexOfAGroupIsTheOrdinalOfTheGroup() {
+        Node root = parser.parse(
+                "<document><for source=\"items\" groupBy=\"VatRate\"><text>{{__index}}: {{VatRate}}% x{{count()}}</text></for></document>");
+        Node bound = binder.bind(root,
+                Map.of("items", List.of(Map.of("VatRate", 20), Map.of("VatRate", 9), Map.of("VatRate", 20), Map.of("VatRate", 20))));
+
+        assertEquals(2, bound.children()
+                             .size());
+        assertEquals("1: 9% x1", bound.children()
+                                      .get(0)
+                                      .text());
+        assertEquals("2: 20% x3", bound.children()
+                                       .get(1)
+                                       .text());
+    }
+
+    @Test
+    public void indexReadsTheInnermostRowWhereLoopsNestAndRestartsPerLoop() {
+        Node root = parser.parse("""
+                <document>
+                    <for source="orders">
+                        <text>{{__index}} {{number}}</text>
+                        <if source="lines"><text>has lines, still order {{__index}}</text></if>
+                        <for source="lines"><text>{{__index}} {{sku}}</text></for>
+                    </for>
+                </document>
+                """);
+        Node bound = binder.bind(root,
+                Map.of("orders", List.of(Map.of("number", "PO-1", "lines", List.of(Map.of("sku", "A"), Map.of("sku", "B"))),
+                        Map.of("number", "PO-2", "lines", List.of(Map.of("sku", "C"))))));
+
+        assertEquals(List.of("1 PO-1", "has lines, still order 1", "1 A", "2 B", "2 PO-2", "has lines, still order 2", "1 C"),
+                bound.children()
+                     .stream()
+                     .map(Node::text)
+                     .toList());
+    }
+
+    @Test
+    public void indexTakesAFormatIsReservedOverARowFieldAndRendersEmptyOutsideARow() {
+        Node root = parser.parse("""
+                <document>
+                    <text>[{{__index}}]</text>
+                    <for source="items"><text>{{__index:000}} {{name}}</text></for>
+                </document>
+                """);
+        Node bound = binder.bind(root, Map.of("__index", 99, "items", List.of(Map.of("name", "a", "__index", 7))));
+
+        assertEquals("[]", bound.children()
+                                .get(0)
+                                .text());
+        assertEquals("001 a", bound.children()
+                                   .get(1)
+                                   .text());
+    }
+
+    /** The text of every data row of a bound table, its cells joined by {@code |}. */
+    private static List<String> rowTexts(Node table) {
+        return table.children()
+                    .stream()
+                    .filter(child -> child instanceof org.eclipse.dirigible.parsers.document.RowNode)
+                    .map(row -> row.children()
+                                   .stream()
+                                   .map(Node::text)
+                                   .collect(java.util.stream.Collectors.joining("|")))
+                    .toList();
+    }
 }

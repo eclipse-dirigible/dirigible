@@ -60,6 +60,8 @@ class TenantUserCommandsTest {
         when(replica.find(anyString(), anyString())).thenReturn(Optional.empty());
         when(replica.find(anyString(), anyLong())).thenReturn(Optional.empty());
         when(replica.list(TENANT, false)).thenReturn(live);
+        // no seat limit unless a test sets one - a mock's Integer would otherwise read 0
+        when(replica.seatLimit(anyString())).thenReturn(null);
         commands = new TenantUserCommands(replica, publisher, access);
     }
 
@@ -158,6 +160,71 @@ class TenantUserCommandsTest {
         commands.invite(TENANT, new TenantUserCommands.Invite("ben@example.com", List.of("User")));
 
         verify(publisher, org.mockito.Mockito.times(2)).publish(any());
+    }
+
+    @Test
+    void anInviteIsRefusedWhileEverySeatIsTakenAndNothingIsPublished() {
+        when(replica.seatLimit(TENANT)).thenReturn(2);
+        live.add(view(1, "ann@example.com", 1, "ASSIGNED", granted("Owner")));
+        live.add(view(2, "ben@example.com", 1, "INVITED", granted("User")));
+
+        assertReason("SEAT_LIMIT", HttpStatus.CONFLICT,
+                () -> commands.invite(TENANT, new TenantUserCommands.Invite("cat@example.com", List.of("User"))));
+        verify(publisher, never()).publish(any());
+    }
+
+    @Test
+    void aPendingUserTakesASeatAndAFailedOrRemovedOneDoesNot() {
+        when(replica.seatLimit(TENANT)).thenReturn(2);
+        live.add(view(1, "ann@example.com", 1, "ASSIGNED", granted("Owner")));
+        live.add(view(2, "ben@example.com", 1, "FAILED"));
+        live.add(view(3, "dan@example.com", 1, "REMOVED"));
+
+        commands.invite(TENANT, new TenantUserCommands.Invite("cat@example.com", List.of("User")));
+        verify(publisher).publish(any());
+
+        live.add(view(4, "eve@example.com", 1, "PENDING", adding("User")));
+        assertReason("SEAT_LIMIT", HttpStatus.CONFLICT,
+                () -> commands.invite(TENANT, new TenantUserCommands.Invite("fay@example.com", List.of("User"))));
+    }
+
+    @Test
+    void theInviteesOwnRowTakesNoSeat() {
+        when(replica.seatLimit(TENANT)).thenReturn(2);
+        live.add(view(1, "ann@example.com", 1, "ASSIGNED", granted("Owner")));
+        TenantUserView failed = view(2, "ben@example.com", 1, "FAILED");
+        live.add(failed);
+        when(replica.find(TENANT, "ben@example.com")).thenReturn(Optional.of(failed));
+
+        commands.invite(TENANT, new TenantUserCommands.Invite("ben@example.com", List.of("User")));
+
+        verify(publisher).publish(any());
+    }
+
+    @Test
+    void aLoweredLimitRefusesInvitesButNeverARoleChangeOrARemoval() {
+        when(replica.seatLimit(TENANT)).thenReturn(2);
+        addOwner(1, "ann@example.com");
+        member(7, "ben@example.com", 4, "ASSIGNED", granted("User"));
+        member(8, "cat@example.com", 4, "ASSIGNED", granted("User"));
+
+        assertReason("SEAT_LIMIT", HttpStatus.CONFLICT,
+                () -> commands.invite(TENANT, new TenantUserCommands.Invite("dan@example.com", List.of("User"))));
+        commands.setRoles(TENANT, 7, new TenantUserCommands.RolesChange(List.of("Owner", "User"), 4L));
+        commands.remove(TENANT, 8, new TenantUserCommands.Removal(4L));
+
+        verify(publisher, org.mockito.Mockito.times(2)).publish(any());
+    }
+
+    @Test
+    void noLimitNeverRefusesAnInvite() {
+        for (int index = 0; index < 5; index++) {
+            live.add(view(index, "user" + index + "@example.com", 1, "ASSIGNED", granted("User")));
+        }
+
+        commands.invite(TENANT, new TenantUserCommands.Invite("new@example.com", List.of("User")));
+
+        verify(publisher).publish(any());
     }
 
     @Test

@@ -113,7 +113,10 @@ public class CognitoSecurityConfiguration {
                     oauth2.loginPage(loginPage);
                 }
             })
+            // a bearer token the provider did not issue is not resolved: the request goes on with its
+            // session or anonymously, and the application decides (#8592)
             .oauth2ResourceServer(oauth2 -> oauth2.authenticationEntryPoint(bearerEntryPoint)
+                                                  .bearerTokenResolver(resourceServerJwtSupport.bearerTokenResolver())
                                                   .jwt(jwt -> jwt.decoder(resourceServerJwtSupport.decoder())
                                                                  .jwtAuthenticationConverter(
                                                                          resourceServerJwtSupport.authenticationConverter())))

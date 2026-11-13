@@ -153,6 +153,18 @@ public class HttpSecurityURIConfigurator {
             "/services/data/**", //
             "/websockets/data/transfer"};
 
+    /**
+     * The tenant data export, the one family under {@code /services/data/} that is not for the
+     * platform's operations roles: the owner of a tenant holds none of them, and the export is theirs.
+     * It is matched before {@link #DATA_MANAGEMENT_PATTERNS} and asks only for an authenticated caller;
+     * who may export is the endpoint's own {@code @RolesAllowed}. Its routes take no data source,
+     * schema or path from the caller, which is why it may sit outside the gate that guards the rest of
+     * the prefix.
+     */
+    static final String[] TENANT_EXPORT_PATTERNS = { //
+            "/services/data/tenant-export", //
+            "/services/data/tenant-export/**"};
+
     /** The roles allowed on the monitoring, native-app management and data management surfaces. */
     private static final String[] OPERATIONS_ROLES = { //
             Roles.ADMINISTRATOR.getRoleName(), //
@@ -208,6 +220,9 @@ public class HttpSecurityURIConfigurator {
                  .authenticated();
 
             authz.requestMatchers(HttpMethod.POST, "/services/bpm/bpm-processes/tasks/*")
+                 .authenticated();
+
+            authz.requestMatchers(TENANT_EXPORT_PATTERNS)
                  .authenticated();
 
             // Role gates, in declaration order

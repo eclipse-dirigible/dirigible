@@ -325,6 +325,29 @@ class ControllerInvokerBindingTest {
     }
 
     @Test
+    void a_translated_delete_refusal_carries_its_key_and_params() throws Exception {
+        ControllerEntry entry = consumer.build(loaded(Demo.class));
+        Route route = entry.routes()
+                           .stream()
+                           .filter(r -> r.method()
+                                         .getName()
+                                         .equals("deleteMeKeyed"))
+                           .findFirst()
+                           .orElseThrow();
+
+        FakeResponse response = new FakeResponse();
+        invoker.invoke(new RouteMatch(entry, route, Map.of()), mockRequest(null), response);
+        Map<?, ?> body = new ObjectMapper().readValue(response.body(), Map.class);
+        // #8569: the 409 keeps its readable message and adds the key and the parameters next to it.
+        assertEquals(HttpStatus.CONFLICT.value(), response.getStatus());
+        assertEquals("This Category is referenced by 2 Expense record(s), 1 Budget record(s) and cannot be deleted", body.get("message"),
+                response.body());
+        assertEquals("ledger:ledger-model.checks.deleteReferenced", body.get("messageKey"), response.body());
+        assertEquals(Map.of("entity", "Category", "references", "2 Expense record(s), 1 Budget record(s)"), body.get("messageParams"),
+                response.body());
+    }
+
+    @Test
     void concurrent_write_exception_yields_409() {
         ControllerEntry entry = consumer.build(loaded(Demo.class));
         Route route = entry.routes()
@@ -403,6 +426,14 @@ class ControllerInvokerBindingTest {
         @Get("/delete-me")
         public String deleteMe() {
             throw new org.eclipse.dirigible.sdk.db.DeleteRestrictionException("This Category is referenced by Expense records");
+        }
+
+        @Get("/delete-me-keyed")
+        public String deleteMeKeyed() {
+            throw new org.eclipse.dirigible.sdk.db.DeleteRestrictionException(
+                    "This Category is referenced by 2 Expense record(s), 1 Budget record(s) and cannot be deleted",
+                    "ledger:ledger-model.checks.deleteReferenced",
+                    Map.of("entity", "Category", "references", "2 Expense record(s), 1 Budget record(s)"));
         }
 
         @Get("/collide")

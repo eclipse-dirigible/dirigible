@@ -166,7 +166,7 @@
           <div x-h-sidebar-footer data-borderless="true">
             <nav :aria-label="T('application-core:shell.nav.settings', 'Settings')">
               <ul x-h-sidebar-menu>
-                <li x-h-sidebar-menu-item x-show="visibleSettingsItems().length > 0 || ($store.tenantUsers && $store.tenantUsers.visible) || ($store.printTemplates && $store.printTemplates.visible)">
+                <li x-h-sidebar-menu-item x-show="visibleSettingsItems().length > 0 || ($store.tenantUsers && $store.tenantUsers.visible) || ($store.printTemplates && $store.printTemplates.visible) || ($store.tenantExport && $store.tenantExport.visible)">
                   <button x-h-sidebar-menu-nav :data-active="settingsMode" @click="openSettings()">
                     <svg role="presentation" x-h-lucide data-lucide="settings"></svg><span x-text="T('application-core:shell.nav.settings', 'Settings')"></span>
                   </button>
@@ -186,7 +186,28 @@
             <button x-show="isSmallScreen" x-h-button data-variant="transparent" aria-label="Navigation" @click="openSideNav()" data-size="icon">
               <svg role="presentation" x-h-lucide data-lucide="menu"></svg>
             </button>
-            <span x-h-toolbar-title x-text="T('application-core:shell.nav.applications', 'Applications')"></span>
+            <!-- The route-derived breadcrumb (`breadcrumbTrail`), in the generated application shell's
+                 markup. A hosted app runs embedded, which hides its own breadcrumb, so the trail names its
+                 group, the app and the page it shows. -->
+            <nav x-h-breadcrumb data-overflow="scroll" :data-variant="isSmallScreen ? 'outline' : 'default'" data-size="md">
+              <ol x-h-breadcrumb-list>
+                <li x-h-breadcrumb-item>
+                  <span x-show="isDashboard" x-h-breadcrumb-page :aria-label="T('application-core:shell.nav.home', 'Home')">
+                    <svg x-h-icon data-icon="home" class="size-4" role="img" :aria-label="T('application-core:shell.nav.home', 'Home')"></svg>
+                  </span>
+                  <button x-show="!isDashboard" x-h-breadcrumb-link @click="navigate('/dashboard')" :aria-label="T('application-core:shell.nav.home', 'Home')">
+                    <svg x-h-icon data-icon="home" class="size-4" role="img" :aria-label="T('application-core:shell.nav.home', 'Home')"></svg>
+                  </button>
+                </li>
+                <template x-for="(crumb, i) in breadcrumbTrail" :key="i">
+                  <li x-h-breadcrumb-item>
+                    <button x-show="crumb.open && i < breadcrumbTrail.length - 1" x-h-breadcrumb-link @click="crumb.open()" x-text="crumb.label"></button>
+                    <span x-show="i === breadcrumbTrail.length - 1" x-h-breadcrumb-page x-text="crumb.label"></span>
+                    <span x-show="!crumb.open && i < breadcrumbTrail.length - 1" x-text="crumb.label"></span>
+                  </li>
+                </template>
+              </ol>
+            </nav>
             <div x-h-toolbar-spacer></div>
             <!-- Theme: light / dark / auto through the shared `theme` store. Harmonia applies the saved
                  colour scheme (or the OS scheme in auto mode) itself and keeps every same-origin frame
@@ -397,7 +418,7 @@
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <template x-for="col in s.promptCols" :key="col.name">
-                <div x-h-field :style="['NUMBER','CHECKBOX','DATE'].includes(col.widget) ? '' : 'grid-column: 1 / -1'">
+                <div x-h-field :style="['NUMBER','CHECKBOX','DATE'].includes(col.widget) ? '' : 'grid-column: 1 / -1'" @input="s.promptEdit(col)" @change="s.promptEdit(col)">
                   <template x-if="!['CHECKBOX','MULTISELECT'].includes(col.widget)">
                     <label x-h-label x-text="col.tkey ? T(col.tkey, col.label) : col.label"></label>
                   </template>
@@ -570,6 +591,7 @@
     <script src="/services/web/application-core/shell/js/stores/about.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/printTemplates.js" defer></script>
   <script src="/services/web/application-core/shell/js/stores/tenantUsers.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/tenantExport.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/shells.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/pages/inboxPage.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/pages/documentsPage.js" defer></script>

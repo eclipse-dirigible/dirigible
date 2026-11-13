@@ -21,7 +21,9 @@ import java.util.List;
  * @param ownerRole the owner role
  * @param roles the grantable roles
  * @param caller who the caller is, as the change requests record them - so a page can mark "you"
+ * @param seatLimit the most users the tenant may hold at once, or null for no limit (#8593) - the
+ *        page counts the seats taken from the users it lists
  */
 record TenantUsersContext(boolean enabled, String tenantId, boolean canManage, boolean canRead, String ownerRole, List<String> roles,
-        String caller) {
+        String caller, Integer seatLimit) {
 }

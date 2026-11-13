@@ -37,7 +37,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -57,6 +60,9 @@ public class SchemaExportImportIT extends IntegrationTest {
     private static final String SOURCE_DATA_SOURCE_NAME = "SOURCEDS";
     private static final String TARGET_DATA_SOURCE_NAME = "TARGETDS";
     private static final String MISSING_SCHEMA = "MISSING_SCHEMA_7281";
+    private static final String HYPHEN_SOURCE_DATA_SOURCE_NAME = "HYPHENSOURCEDS";
+    private static final String HYPHEN_TARGET_DATA_SOURCE_NAME = "HYPHENTARGETDS";
+    private static final String HYPHEN_SCHEMA = "A15DDBBA-BD12-4457-A93F-C8F54C402C3B";
     private static final List<String> EXCLUDED_SYSTEM_TABLES = List.of("ACT_RU_VARIABLE", "ACT_RU_JOB");
 
     @Autowired
@@ -401,6 +407,69 @@ public class SchemaExportImportIT extends IntegrationTest {
         try (Connection connection = dataSource.getConnection()) {
             return connection.getSchema();
         }
+    }
+
+    /**
+     * A schema whose name is not a plain identifier - a tenant schema named by a UUID - is exported and
+     * imported like any other: the import used to quote its name word by word in every CREATE TABLE
+     * (#8581).
+     *
+     * @throws SQLException the SQL exception
+     */
+    @Test
+    void testExportImportOfSchemaWithHyphenInItsName() throws SQLException {
+        createH2DataSource(HYPHEN_SOURCE_DATA_SOURCE_NAME);
+        executeStatements(HYPHEN_SOURCE_DATA_SOURCE_NAME, "CREATE SCHEMA \"" + HYPHEN_SCHEMA + "\"",
+                "CREATE TABLE \"" + HYPHEN_SCHEMA + "\".\"NOTES\" (\"NOTE_ID\" INTEGER NOT NULL PRIMARY KEY, \"NOTE_TEXT\" VARCHAR(100))",
+                "INSERT INTO \"" + HYPHEN_SCHEMA + "\".\"NOTES\" VALUES (1, 'first'), (2, 'second')");
+
+        String exportBody = """
+                {
+                    "dataSource": "%s",
+                    "schema": "%s",
+                    "exportPath": "/hyphen-schema-export-folder",
+                    "includedTables": [],
+                    "excludedTables": []
+                }
+                """.formatted(HYPHEN_SOURCE_DATA_SOURCE_NAME, HYPHEN_SCHEMA);
+        assertProcessExecutedSuccessfully(triggerExportProcess(exportBody));
+
+        createH2DataSource(HYPHEN_TARGET_DATA_SOURCE_NAME);
+        executeStatements(HYPHEN_TARGET_DATA_SOURCE_NAME, "CREATE SCHEMA \"" + HYPHEN_SCHEMA + "\"");
+
+        String importBody = """
+                {
+                    "dataSource": "%s",
+                    "exportPath": "/hyphen-schema-export-folder"
+                }
+                """.formatted(HYPHEN_TARGET_DATA_SOURCE_NAME);
+        assertProcessExecutedSuccessfully(triggerImportProcess(importBody));
+
+        assertThat(readNotes(HYPHEN_TARGET_DATA_SOURCE_NAME)).containsExactly("1:first", "2:second");
+    }
+
+    private void executeStatements(String dataSourceName, String... sqls) throws SQLException {
+        try (Connection connection = dataSourcesManager.getDataSource(dataSourceName)
+                                                       .getConnection();
+                Statement statement = connection.createStatement()) {
+            for (String sql : sqls) {
+                statement.executeUpdate(sql);
+            }
+        }
+    }
+
+    private List<String> readNotes(String dataSourceName) throws SQLException {
+        List<String> notes = new ArrayList<>();
+        try (Connection connection = dataSourcesManager.getDataSource(dataSourceName)
+                                                       .getConnection();
+                Statement statement = connection.createStatement();
+                ResultSet rows = statement.executeQuery(
+                        "SELECT \"NOTE_ID\", \"NOTE_TEXT\" FROM \"" + HYPHEN_SCHEMA + "\".\"NOTES\" ORDER BY \"NOTE_ID\"")) {
+            while (rows.next()) {
+                notes.add(rows.getInt(1) + ":" + rows.getString(2));
+            }
+        }
+        return notes;
     }
 
     @Test

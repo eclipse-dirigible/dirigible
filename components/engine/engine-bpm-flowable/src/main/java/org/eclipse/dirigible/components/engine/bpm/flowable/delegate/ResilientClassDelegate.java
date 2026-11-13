@@ -12,12 +12,16 @@ package org.eclipse.dirigible.components.engine.bpm.flowable.delegate;
 import java.util.List;
 import java.util.Optional;
 
+import org.eclipse.dirigible.components.base.spring.BeanProvider;
+import org.eclipse.dirigible.components.base.tenant.TenantConfigurationScope;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.flowable.bpmn.model.MapExceptionEntry;
 import org.flowable.common.engine.api.delegate.Expression;
 import org.flowable.common.engine.impl.util.ReflectUtil;
 import org.flowable.engine.delegate.DelegateExecution;
 import org.flowable.engine.impl.bpmn.helper.ClassDelegate;
 import org.flowable.engine.impl.bpmn.parser.FieldDeclaration;
+import org.flowable.task.service.delegate.DelegateTask;
 
 /**
  * The {@link ClassDelegate} every {@code flowable:class} element runs through - a service task, and
@@ -38,6 +42,14 @@ import org.flowable.engine.impl.bpmn.parser.FieldDeclaration;
  * listener's failure keeps the stock behaviour: {@link #execute} is the service-task entry point,
  * and Flowable's own {@code notify} paths never reach it, so nothing about a listener is converted
  * into a step error.
+ *
+ * <p>
+ * Every entry point that runs the client class - the service task's {@link #execute} and
+ * {@link #trigger}, and both listener kinds' {@code notify} - runs it in the scope of the tenant
+ * stamped on its execution or task, with that tenant's configuration overrides (#8549), exactly as
+ * {@code ${JavaTask}} does. Synchronously the thread usually carries the request's tenant already;
+ * a step on the async executor carries none, and without the scope its repositories resolved to the
+ * default tenant's schema.
  */
 class ResilientClassDelegate extends ClassDelegate {
 
@@ -75,7 +87,7 @@ class ResilientClassDelegate extends ClassDelegate {
     @Override
     public void execute(DelegateExecution execution) {
         try {
-            super.execute(execution);
+            inTenantScope(execution.getTenantId(), describe(execution), () -> super.execute(execution));
         } catch (RuntimeException | Error failure) {
             // A BpmnError never reaches here (the superclass propagates it to its boundary itself);
             // this is a plain failure, normally destined for the retry cycle / dead-letter path. An
@@ -84,5 +96,53 @@ class ResilientClassDelegate extends ClassDelegate {
                 throw failure;
             }
         }
+    }
+
+    @Override
+    public void trigger(DelegateExecution execution, String signalName, Object signalData) {
+        inTenantScope(execution.getTenantId(), describe(execution), () -> super.trigger(execution, signalName, signalData));
+    }
+
+    @Override
+    public void notify(DelegateExecution execution) {
+        inTenantScope(execution.getTenantId(), describe(execution), () -> super.notify(execution));
+    }
+
+    @Override
+    public void notify(DelegateTask task) {
+        inTenantScope(task.getTenantId(), "task [" + task.getId() + "] in process instance [" + task.getProcessInstanceId() + "]",
+                () -> super.notify(task));
+    }
+
+    /**
+     * Runs the client class in the tenant's scope with the tenant's configuration overrides. A
+     * standalone engine (no Spring context) has no tenants, and runs it as it is.
+     */
+    private static void inTenantScope(String tenantId, String owner, Runnable work) {
+        if (!BeanProvider.isInitialzed()) {
+            work.run();
+            return;
+        }
+        if (tenantId == null) {
+            throw new IllegalStateException("Missing tenant id for " + owner);
+        }
+        TenantContext tenantContext = BeanProvider.getTenantContext();
+        Optional<TenantConfigurationScope> configurationScope = BeanProvider.getOptionalBean(TenantConfigurationScope.class);
+        tenantContext.execute(tenantId, () -> {
+            if (configurationScope.isPresent()) {
+                configurationScope.get()
+                                  .executeWithTenantOverrides(() -> {
+                                      work.run();
+                                      return null;
+                                  });
+            } else {
+                work.run();
+            }
+            return null;
+        });
+    }
+
+    private static String describe(DelegateExecution execution) {
+        return "execution [" + execution.getId() + "] in process instance [" + execution.getProcessInstanceId() + "]";
     }
 }

@@ -862,7 +862,7 @@ class GlueGenerator {
      */
     private static void bindImport(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "nameLiteral", "className", "entity", "perspective", "format", "readerExpression", "valuesExpression",
-                "roles", "mapFields", "hasDuplicateKey", "duplicateKey");
+                "roles", "mapFields", "hasDuplicateKey", "duplicateKey", "hasWhere", "whereExpression");
         context.put("javaPerspective", sanitize(item, "perspective"));
         String tablePrefix = strOr(parameters, "tablePrefix", "");
         if (!tablePrefix.isEmpty() && !tablePrefix.endsWith("_")) {
@@ -1512,8 +1512,13 @@ class GlueGenerator {
         // The role gate of the endpoint (issue #7921), as for a click (#7913): a .glue written before the
         // key existed renders an empty gate that no caller satisfies, never the ungated endpoint.
         context.put("readRolesJavaLiteral", JavaLiterals.escape(strOr(item, "readRoles", "")));
-        context.put("itemNodes", feederNodes(item.get("itemNodes"), parameters, false));
-        context.put("nodes", feederNodes(item.get("nodes"), parameters, true));
+        List<Object> itemNodes = feederNodes(item.get("itemNodes"), parameters, false);
+        List<Object> nodes = feederNodes(item.get("nodes"), parameters, true);
+        context.put("itemNodes", itemNodes);
+        context.put("nodes", nodes);
+        // Whether any node follows its record's own references (issue #7752) - drives the one shared
+        // per-payload load cache. A .glue written before the key existed has none, and renders as before.
+        context.put("expandsReferences", expandsReferences(nodes) || expandsReferences(itemNodes));
     }
 
     /**
@@ -1544,9 +1549,16 @@ class GlueGenerator {
             resolved.put("javaPerspective", sanitize(node, "perspective"));
             resolved.put("labelField", node.get("labelField"));
             resolved.put("scalars", node.get("scalars"));
+            // Only a record of another model is followed: this model's own relations are named nodes.
+            resolved.put("expandReferences", crossModel && Boolean.TRUE.equals(node.get("expandReferences")));
             nodes.add(resolved);
         }
         return nodes;
+    }
+
+    private static boolean expandsReferences(List<Object> nodes) {
+        return nodes.stream()
+                    .anyMatch(node -> Boolean.TRUE.equals(((Map<?, ?>) node).get("expandReferences")));
     }
 
     /**

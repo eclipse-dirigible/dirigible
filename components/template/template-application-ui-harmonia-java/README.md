@@ -39,7 +39,8 @@ for a single language) writes the shared `locale` Alpine store
 `Accept-Language` on every call, which the generated multilingual Java repositories
 translate by (`<TABLE>_LANG` overlay), and the document Print flow prefers the same
 language when a template for it exists. The standalone **report page** offers **typed per-column filters** (date ranges,
-number ranges, boolean, text contains) from generation-time column metadata, applied
+number ranges, boolean, text contains) from generation-time column metadata - added through the
+manage list's Filter menu and shown as editable, removable chips - applied
 **server-side** over the wrapped report query — pagination, count and CSV export all
 reflect the active filters. UI **labels** remain untranslated — the Harmonia
 framework itself has no i18n API (verified against 1.24.2: only breakpoint +
@@ -179,7 +180,7 @@ Three things about it are deliberate and easy to get wrong:
 | main-details | (within master) | ⬜ stub |
 | setting | `uiSettingModels` | ✅ reuses the manage CRUD templates, grouped under a "Settings" sidebar section |
 | report / report-chart / report-table | `uiReportTableModels` / `uiReportChartModels` | ✅ in-SPA table page (data table; Refresh + Updated stamp, CSV export and Print under More actions) + chart page (native Harmonia `x-h-chart-*` bar/line/pie/doughnut/polar-area/radar - no external chart library) against the Java report controller |
-| **standalone report** (a `.report` file) | `reportModels` / `generateReportModels` | ✅ `template/template-report-file.js` ("Application Report - Table - Harmonia"): reuses the framework-neutral Java backend (reportFileEntity Repository + Controller) and generates a self-contained Harmonia page (`gen/<javaGenFolder>/reports/<name>/` - the same sanitized folder as its Java: index.html + report.js — list with `$limit`/`$offset`, count, pagination; one action row - title, Filters, Refresh + Updated stamp, the icon-only Chart / Table switch and Export / Print under More actions). This is the intent recipe's `report` default |
+| **standalone report** (a `.report` file) | `reportModels` / `generateReportModels` | ✅ `template/template-report-file.js` ("Application Report - Table - Harmonia"): reuses the framework-neutral Java backend (reportFileEntity Repository + Controller) and generates a self-contained Harmonia page (`gen/<javaGenFolder>/reports/<name>/` - the same sanitized folder as its Java: index.html + report.js — list with `$limit`/`$offset`, count, pagination; one action row - title, the Filter menu, Refresh + Updated stamp, the icon-only Chart / Table switch and Export / Print under More actions). This is the intent recipe's `report` default |
 | navigation (generated nav data) | `uiNavigations` | ⬜ folded into index.html for now |
 | dialogs (filter/window) | per view | ⬜ |
 | forms + BPM task forms | (separate module) | ✅ `template-form-builder-harmonia` renders a `.form` as a Harmonia page via the neutral `formController(ctx)` contract; BPM task forms complete via `ctx.task.complete()` |

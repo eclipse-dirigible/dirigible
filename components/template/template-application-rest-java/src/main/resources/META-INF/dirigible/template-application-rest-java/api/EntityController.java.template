@@ -311,6 +311,81 @@ public class ${name}Controller {
                 "${name} records are written by the system only - they cannot be " + verb + " over REST");
     }
 #end
+#if($share)
+
+    // Share links (intent `share:`, #8613): a link hands the ISSUED COPY of this ${name} - the stored
+    // file of its newest ${share.copyEntity} - to a reader without an account. The three endpoints
+    // below are the whole authenticated surface: nothing here serves a document, and nothing mints a
+    // link on its own. They are gated by the declared roles alone, and an empty list admits nobody.
+
+    @Get("/{id}/share-links")
+    @Documentation("The share links of ${name} {id}, newest first - never their tokens, which are shown once, at creation")
+    public List<Map<String, Object>> shareLinks(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
+        requireShareRole();
+        ${name}Entity entity = repository.findOne(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found"));
+        if (!${name}Repository.isShareable(entity)) {
+            // The record left the state it may be shared in: its links are dead, and say so here rather
+            // than on the first reader who tries one.
+            org.eclipse.dirigible.sdk.share.ShareLinks.revokeAll(${name}Repository.SHARE_SUBJECT, id);
+        }
+        List<Map<String, Object>> links = new java.util.ArrayList<>();
+        for (org.eclipse.dirigible.sdk.share.ShareLinks.Link link : org.eclipse.dirigible.sdk.share.ShareLinks.list(
+                ${name}Repository.SHARE_SUBJECT, id)) {
+            links.add(link.toMap());
+        }
+        return links;
+    }
+
+    @Post("/{id}/share-links")
+    @Documentation("Create a share link to the issued copy of ${name} {id} - the answer carries the URL, which cannot be read again")
+    public Map<String, Object> createShareLink(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
+        requireShareRole();
+        ${name}Entity entity = repository.findOne(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found"));
+        if (!${name}Repository.isShareable(entity)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This ${name} cannot be shared in its current state");
+        }
+        if (!org.eclipse.dirigible.sdk.share.ShareLinks.enabled()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Sharing documents through a link is switched off");
+        }
+        // The newest stored copy, and only a stored one: a link never renders the live record.
+        gen.${javaGenFolderName}.data.${share.javaCopyPerspective}.${share.copyEntity}Entity issued = null;
+        for (gen.${javaGenFolderName}.data.${share.javaCopyPerspective}.${share.copyEntity}Entity copy : new gen.${javaGenFolderName}.data.${share.javaCopyPerspective}.${share.copyEntity}Repository().findAll(
+                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${share.copyMasterFk}", id))) {
+            if (copy.StoragePath != null && (issued == null || (copy.Version != null && (issued.Version == null || copy.Version > issued.Version)))) {
+                issued = copy;
+            }
+        }
+        if (issued == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This ${name} has no issued copy yet - a link serves the stored copy, which is minted when the document is issued");
+        }
+        org.eclipse.dirigible.sdk.http.Response.setStatus(201);
+        return org.eclipse.dirigible.sdk.share.ShareLinks.create(${name}Repository.SHARE_SUBJECT, id, issued.StoragePath, issued.FileName,
+                issued.ContentType, ${share.expiresAfterDays}).toMap();
+    }
+
+    @Delete("/{id}/share-links/{linkId}")
+    @Documentation("Revoke one share link of ${name} {id} - it stops answering at once")
+    public void revokeShareLink(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id, @PathParam("linkId") String linkId) {
+        requireShareRole();
+        if (repository.findOne(id).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found");
+        }
+        if (!org.eclipse.dirigible.sdk.share.ShareLinks.revoke(${name}Repository.SHARE_SUBJECT, id, linkId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "This ${name} has no such link to revoke");
+        }
+    }
+
+    /** The share gate: one of the roles the intent's {@code share: roles:} lists - an empty list admits nobody. */
+    private static void requireShareRole() {
+        if (!isInAnyRole("${share.rolesJavaLiteral}")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        }
+    }
+#end
 #if($history == "true")
 
     @Get("/{id}/history")
@@ -636,8 +711,8 @@ public class ${name}Controller {
             // A foreign-key violation means other records still reference this one - a data-integrity
             // conflict the user can act on, not a server error.
             if (isConstraintViolation(e)) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "This ${name} is referenced by other records and cannot be deleted");
+                // Answered 409 in the reader's language (#8569), as the refusal of a counted reference is.
+                throw repository.referencedByOthers();
             }
             throw e;
         }
@@ -1840,7 +1915,7 @@ public class ${name}Controller {
 #end
     }
 #end
-#if($needsRoles || $isEntityPropertySecurityEnabled)
+#if($needsRoles || $isEntityPropertySecurityEnabled || $share)
 
     /**
      * Whether the caller holds ANY of a comma-separated role list. One role name is what the entity

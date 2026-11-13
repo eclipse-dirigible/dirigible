@@ -4735,8 +4735,12 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(repository.contains("LIKE :\").append(marker).append(\" ESCAPE '!'\")"),
                 "the report repository should apply CONTAINS as a lower-cased, escaped LIKE (#8431)");
         String view = contentOf("gen/ordersbycustomer/reports/OrdersByCustomer/index.html");
-        assertTrue(view.contains("applyFilters()") && view.contains("data-lucide=\"filter\""),
-                "the report view should carry the filter panel and toolbar toggle");
+        // The filters are the manage list's (#7390): a Filter menu that picks a column and edits it,
+        // and a chip per filter in force that edits or removes it.
+        assertTrue(view.contains("x-h-popover-trigger.chevron=\"filterOpen\"") && view.contains("@click=\"applyFilterDraft()\""),
+                "the report view should carry the Filter menu");
+        assertTrue(view.contains("x-for=\"chip in activeFilterChips\"") && view.contains("@click=\"removeFilter(chip.key)\""),
+                "the report view should show the filters in force as removable chips");
         assertTrue(view.contains("alignClass(col)") && view.contains("cellText(col, row)"),
                 "the report table should align and format cells from the column metadata");
         // The page shape of #7390: one action row whose Chart / Table switch is the icon-only group
@@ -4790,6 +4794,11 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(statementPage.contains("limit: 500"), "a statement page should fetch the whole line structure at once");
         assertTrue(statementPage.contains("{ key: 'Code', kind: 'text'") && statementPage.contains("{ key: 'Amount', kind: 'number'"),
                 "the statement page should carry the Code / Label / Amount column metadata");
+        // The parameter inputs are named from the report's catalog, as its title and columns are (#7390).
+        assertTrue(statementPage.contains("{ name: 'fromDate', tId: 'paramFromDate'"),
+                "a report parameter should carry the catalog key of its label");
+        assertTrue(contentOf("i18n/en-US/OrderStatement.report.json").contains("\"paramFromDate\": \"From Date\""),
+                "the report's catalog should hold each parameter's label");
     }
 
     @Test
