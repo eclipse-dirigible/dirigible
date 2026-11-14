@@ -115,10 +115,13 @@
     /**
      * The property a server rejection NAMES, or null.
      *
-     * The generated controllers reject a bad write with a business message that carries the
-     * property in single quotes ("The 'TaxRate' property is required"), as a plain 400 rather
-     * than a structured 422 with errorCauses. Read that way it is a per-field rejection, and
-     * answering it with the generic banner tells the user nothing about which field to fix.
+     * The generated controllers reject a bad write as a plain 400 or 409 rather than a structured
+     * 422 with errorCauses, naming the property in the body's `field` - a required value, a unique
+     * one repeated, a `checks:` rule about one field (#8596, #8597). Read that way it is a per-field
+     * rejection, and answering it with the generic banner tells the user nothing about which field
+     * to fix. A server that does not send `field` (an application generated earlier) names the
+     * property in single quotes inside its sentence ("The 'TaxRate' property is required"), which
+     * is read as a fallback.
      *
      * `knownNames` is one half of the gate that keeps the developer-facing rule intact: only a
      * quoted token that IS a field of the form in hand is recognised, so an arbitrary refusal (a
@@ -130,6 +133,7 @@
     namedProperty(err, knownNames) {
       const text = this.refusalText(err);
       const known = new Set(knownNames || []);
+      if (text && err.field) return known.has(err.field) ? err.field : null;
       const pattern = /'([A-Za-z_][A-Za-z0-9_]*)'/g;
       let match;
       while ((match = pattern.exec(text)) !== null) {
@@ -145,10 +149,12 @@
      *
      * Quoted through `refusalText`, so a response that is not a refusal yields '' rather than
      * developer-facing text - the callers reach here only after `namedProperty` said yes, which
-     * is the same gate.
+     * is the same gate. A message the server resolved from a catalog (it carries a `messageKey`)
+     * already names the property by its label in the reader's language, and is quoted as it is.
      */
     messageWithLabels(err, labels) {
       const text = this.refusalText(err);
+      if (err && err.messageKey) return text;
       const map = labels || {};
       return text.replace(/'([A-Za-z_][A-Za-z0-9_]*)'/g,
         (whole, name) => (Object.prototype.hasOwnProperty.call(map, name) ? `'${map[name]}'` : whole));

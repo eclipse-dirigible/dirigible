@@ -599,6 +599,13 @@ final class ModelParameterProcessor {
      * entity's label - the key the en-US catalog writes the label under. A bare render, with no project
      * or file path, has no catalog: both are {@code null}, and the refusal keeps its default text.
      *
+     * <p>
+     * The refusals of one property's value are translated through the same catalog (dirigible #8596):
+     * {@code entityLabelJava} is the entity's default-language label, and each property's
+     * {@code refusalFieldArgsJava} its name, its label and the label's catalog key. A check about one
+     * property of the record gets a {@code refusalJava} that names it (#8597), so the error body
+     * carries the field a form marks; any other check's refuses as before.
+     *
      * @param entity the entity
      * @param parameters the generation parameters (project name and model file path)
      */
@@ -608,6 +615,38 @@ final class ModelParameterProcessor {
         entity.put("messageCatalogJava", catalog == null ? "null" : "\"" + JavaLiterals.escape(catalog) + "\"");
         entity.put("labelCatalogKeyJava",
                 catalog == null || dataName == null ? "null" : "\"" + JavaLiterals.escape(catalog + ".t." + dataName) + "\"");
+        if (str(entity, "name") != null) {
+            entity.put("entityLabelJava", "\"" + JavaLiterals.escape(ModelTranslations.entityLabel(entity)) + "\"");
+        }
+        Set<String> propertyNames = new HashSet<>();
+        for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+            String name = str(property, "name");
+            if (name == null) {
+                continue;
+            }
+            propertyNames.add(name);
+            // A refusal of this property's value (#8596): its name, its label and the label's catalog key.
+            Object label = ModelTranslations.propertyLabel(property);
+            String propertyDataName = str(property, "dataName");
+            property.put("refusalFieldArgsJava",
+                    "\"" + JavaLiterals.escape(name) + "\", \"" + JavaLiterals.escape(label == null ? name : label.toString()) + "\", "
+                            + (catalog == null || propertyDataName == null ? "null"
+                                    : "\"" + JavaLiterals.escape(catalog + ".t." + propertyDataName) + "\""));
+        }
+        for (Map<String, Object> check : asMaps(entity.get("checks"))) {
+            String args = str(check, "messageArgsJava");
+            if (args == null) {
+                continue;
+            }
+            // A check about one property of the record names it in its refusal (#8597), so a form marks
+            // the field; a field one hop away, or on the lines, is not one of this record's form.
+            String field = str(check, "field");
+            check.put("refusalJava",
+                    field != null && propertyNames.contains(field)
+                            ? "org.eclipse.dirigible.sdk.db.CheckMessages.fieldRefusal(\"" + JavaLiterals.escape(field) + "\", " + args
+                                    + ")"
+                            : "org.eclipse.dirigible.sdk.db.CheckMessages.refusal(" + args + ")");
+        }
     }
 
     /**

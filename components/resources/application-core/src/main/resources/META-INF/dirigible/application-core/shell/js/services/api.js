@@ -20,12 +20,15 @@
  * Error body contract:
  *   { errorType, errorMessage, errorCauses: [{ errorType, errorMessage, field }], requestId }
  *
+ * A refusal of one property's value also names it as `field` (#8596, #8597), and a refusal resolved
+ * from a translation catalog carries its `messageKey`.
+ *
  * `requestId` is the id the platform gave the failed request (#7948) - from the body, else the
  * X-Request-Id response header. It is safe to show: a user quotes it, and an issue report carries it
  * so the operator finds the request's log lines.
  */
 class ApiError extends Error {
-  constructor({ httpStatus, errorType, errorMessage, errorCauses, requestId } = {}) {
+  constructor({ httpStatus, errorType, errorMessage, errorCauses, requestId, field, messageKey } = {}) {
     super(errorMessage || String(httpStatus || ''));
     this.name = 'ApiError';
     this.isApiError = true;
@@ -34,6 +37,8 @@ class ApiError extends Error {
     this.errorMessage = errorMessage || '';     // dev-facing — never shown to user
     this.errorCauses = Array.isArray(errorCauses) ? errorCauses : [];
     this.requestId = requestId || null;
+    this.field = typeof field === 'string' && field ? field : null;
+    this.messageKey = typeof messageKey === 'string' && messageKey ? messageKey : null;
   }
 }
 
@@ -217,6 +222,8 @@ App.services.api = {
           errorMessage: parsed.errorMessage || parsed.message || parsed.error || r.statusText,
           errorCauses: parsed.errorCauses,
           requestId,
+          field: parsed.field,
+          messageKey: parsed.messageKey,
         })
       : new ApiError({
           httpStatus: r.status,

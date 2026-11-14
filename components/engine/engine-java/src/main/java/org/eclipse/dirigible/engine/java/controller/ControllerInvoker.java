@@ -360,6 +360,11 @@ public class ControllerInvoker {
             body.put("messageKey", restriction.getMessageKey());
             body.put("messageParams", restriction.getMessageParams());
         }
+        if (e.getCause() instanceof ValidationException validation && validation.getField() != null) {
+            // The property the refusal is about (#8596, #8597), so a form marks that field without reading
+            // it out of a sentence that may be in any language.
+            body.put("field", validation.getField());
+        }
         try {
             // Same channel as writeResponse: the output stream, written and flushed here rather than
             // left to the container's commit.

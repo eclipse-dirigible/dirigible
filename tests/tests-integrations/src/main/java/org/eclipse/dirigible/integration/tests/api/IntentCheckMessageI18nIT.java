@@ -61,6 +61,7 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
     private static final String CUSTOMERS = API + "/customer/CustomerController";
     private static final String INVOICES = API + "/invoice/InvoiceController";
     private static final String ITEMS = API + "/invoice/InvoiceItemController";
+    private static final String UOMS = API + "/uom/UomController";
     private static final String CONFIRM = "X-Confirm-Warnings";
     private static final String CATALOG = PROJECT + ":" + PROJECT + "-model.checks.";
     private static final long TIMEOUT_SECONDS = 90;
@@ -100,6 +101,14 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: note, type: string, length: 200 }
 
+              - name: Uom
+                checks:
+                  - { kind: compare, field: numerator, op: gt, value: 0, message: "The numerator is greater than zero" }
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: sap,       type: string, length: 6, required: true, unique: true, label: SAP Code }
+                  - { name: numerator, type: decimal, precision: 18, scale: 2 }
+
               - name: InvoiceItem
                 fields:
                   - { name: id,    type: integer, primaryKey: true, generated: true }
@@ -133,6 +142,62 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
 
     @Autowired
     private SynchronizationProcessor synchronizationProcessor;
+
+    /**
+     * The refusals of one property's value - a required value left out, a too long one, a repeated
+     * unique one - are translated like a check's, naming the field and the entity by their translated
+     * labels, and every refusal about one field (a {@code compare} too) names it in the body -
+     * dirigible #8596, #8597.
+     */
+    @Test
+    void field_refusals_are_answered_in_the_request_language_and_name_their_field() {
+        generateProject();
+        JsonObject generated = generatedCatalog();
+        JsonObject checks = generated.getAsJsonObject("checks");
+        assertEquals("The '{label}' property is required", checks.get("fieldRequired")
+                                                                 .getAsString());
+        assertEquals("A {entity} with this '{label}' already exists", checks.get("fieldDuplicate")
+                                                                            .getAsString());
+        String sapKey = textKey(generated, "SAP Code");
+        String uomKey = entityKey(generated, "UOM");
+        String uomLabel = generated.getAsJsonObject("t")
+                                   .get(uomKey)
+                                   .getAsString();
+        // The translator's overlay: fieldTooLong is left untranslated, so it falls back to the default
+        // text.
+        writeResource(PROJECT_PATH + "/i18n/bg-BG/checkmsg.model.json", """
+                {
+                  "checkmsg-model": {
+                    "checks": {
+                      "fieldRequired": "Полето '{label}' е задължително",
+                      "fieldDuplicate": "Вече съществува {entity} с това '{label}'"
+                    },
+                    "t": { "%s": "САП код", "%s": "мерна единица" }
+                  }
+                }
+                """.formatted(sapKey, uomKey));
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        refused(UOMS, "{}", "bg", 400).body("message", equalTo("Полето 'САП код' е задължително"))
+                                      .body("messageKey", equalTo(CATALOG + "fieldRequired"))
+                                      .body("field", equalTo("Sap"));
+        refused(UOMS, "{}", "en", 400).body("message", equalTo("The 'SAP Code' property is required"));
+        refused(UOMS, "{\"Sap\":\"TOOLONGX\"}", "bg", 400).body("message", equalTo("The 'САП код' exceeds the maximum length of 6"))
+                                                          .body("field", equalTo("Sap"));
+        // A compare about one field names it, so the form marks it (#8597).
+        refused(UOMS, "{\"Sap\":\"M\",\"Numerator\":0}", "bg", 400).body("message", equalTo("The numerator is greater than zero"))
+                                                                   .body("field", equalTo("Numerator"));
+
+        create(UOMS, "{\"Sap\":\"KG\",\"Numerator\":1}", null, "en");
+        refused(UOMS, "{\"Sap\":\"KG\",\"Numerator\":1}", "bg", 409)
+                                                                    .body("message",
+                                                                            equalTo("Вече съществува мерна единица с това 'САП код'"))
+                                                                    .body("messageKey", equalTo(CATALOG + "fieldDuplicate"))
+                                                                    .body("field", equalTo("Sap"));
+        refused(UOMS, "{\"Sap\":\"KG\",\"Numerator\":1}", "en", 409).body("message",
+                equalTo("A " + uomLabel + " with this 'SAP Code' already exists"));
+    }
 
     @Test
     void check_messages_are_answered_in_the_request_language() {
@@ -189,12 +254,7 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
      * generated code resolves - the entry a translator copies into another language's catalog.
      */
     private void assertGeneratedCatalog() {
-        IResource catalog = repository.getResource(PROJECT_PATH + "/i18n/en-US/checkmsg.model.json");
-        assertTrue(catalog.exists(), "the en-US catalog of the model was not generated");
-        JsonObject checks = JsonParser.parseString(new String(catalog.getContent(), StandardCharsets.UTF_8))
-                                      .getAsJsonObject()
-                                      .getAsJsonObject("checkmsg-model")
-                                      .getAsJsonObject("checks");
+        JsonObject checks = generatedCatalog().getAsJsonObject("checks");
         assertEquals("A customer named {match} already exists", checks.get("Customer_duplicate_0")
                                                                       .getAsString());
         assertEquals("The discount is at most 50%", checks.get("Customer_compare_1")
@@ -203,6 +263,53 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
                                                            .getAsString());
         assertEquals("{count} line(s) at price zero", checks.get("Invoice_zeroLines")
                                                             .getAsString());
+    }
+
+    /** The generated en-US catalog of the model. */
+    private JsonObject generatedCatalog() {
+        IResource catalog = repository.getResource(PROJECT_PATH + "/i18n/en-US/checkmsg.model.json");
+        assertTrue(catalog.exists(), "the en-US catalog of the model was not generated");
+        return JsonParser.parseString(new String(catalog.getContent(), StandardCharsets.UTF_8))
+                         .getAsJsonObject()
+                         .getAsJsonObject("checkmsg-model");
+    }
+
+    /** The key the generated catalog writes a label under, found by its default-language text. */
+    private static String textKey(JsonObject catalog, String label) {
+        return catalog.getAsJsonObject("t")
+                      .entrySet()
+                      .stream()
+                      .filter(entry -> entry.getValue()
+                                            .isJsonPrimitive()
+                              && label.equals(entry.getValue()
+                                                   .getAsString()))
+                      .map(Map.Entry::getKey)
+                      .findFirst()
+                      .orElseThrow(() -> new AssertionError("the generated catalog carries no label [" + label + "]: " + catalog));
+    }
+
+    /**
+     * The key the generated catalog writes an entity's singular label under - the one with a plural
+     * sibling.
+     */
+    private static String entityKey(JsonObject catalog, String table) {
+        JsonObject texts = catalog.getAsJsonObject("t");
+        return texts.keySet()
+                    .stream()
+                    .filter(key -> key.endsWith(table) && texts.has(key + "_plural"))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("the generated catalog carries no label of [" + table + "]: " + catalog));
+    }
+
+    private io.restassured.response.ValidatableResponse refused(String controller, String body, String language, int status) {
+        AtomicReference<io.restassured.response.ValidatableResponse> response = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> response.set(request(null, language).body(body)
+                                                                              .when()
+                                                                              .post(controller)
+                                                                              .then()
+                                                                              .statusCode(status)),
+                TIMEOUT_SECONDS);
+        return response.get();
     }
 
     private io.restassured.response.ValidatableResponse refused(String body, String language) {

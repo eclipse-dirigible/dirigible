@@ -967,7 +967,7 @@ public class ${name}PartnerController {
 #end
             Object requiredValue = ${check.valueExpression};
             if ((${check.guardJavaExpression}) && (requiredValue == null || org.eclipse.dirigible.sdk.db.Normalize.isBlank(String.valueOf(requiredValue)))) {
-                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
+                throw #if($check.refusalJava)${check.refusalJava}#{else}org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava})#end;
             }
         }
 #elseif($check.kind == "forbidWhen")
@@ -1046,7 +1046,7 @@ public class ${name}PartnerController {
 #else
                 && !(entity.${check.field}.compareTo(${check.literalJavaExpression}) ${check.op} 0)) {
 #end
-            throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
+            throw #if($check.refusalJava)${check.refusalJava}#{else}org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava})#end;
         }
 #else
         if (entity.${check.field} != null && entity.${check.than} != null
@@ -1055,7 +1055,7 @@ public class ${name}PartnerController {
 #else
                 && !(entity.${check.field}.compareTo(entity.${check.than}) ${check.op} 0)) {
 #end
-            throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
+            throw #if($check.refusalJava)${check.refusalJava}#{else}org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava})#end;
         }
 #end
 #else
@@ -1074,7 +1074,17 @@ public class ${name}PartnerController {
 #end
 #end
 #end
+## The refusals of one property's value are resolved for the reader's language (#8596): the model's
+## catalog, the entity's label and its key - each as the processor derived it, else the bare names.
+#set($refusalCatalog = "null")
+#if($messageCatalogJava)#set($refusalCatalog = $messageCatalogJava)#end
+#set($refusalEntityLabel = '"' + $name + '"')
+#if($entityLabelJava)#set($refusalEntityLabel = $entityLabelJava)#end
+#set($refusalEntityLabelKey = "null")
+#if($labelCatalogKeyJava)#set($refusalEntityLabelKey = $labelCatalogKeyJava)#end
 #foreach($property in $properties)
+#set($refusalField = '"' + $property.name + '", "' + $property.name + '", null')
+#if($property.refusalFieldArgsJava)#set($refusalField = $property.refusalFieldArgsJava)#end
 ## A required value the PLATFORM supplies is not the caller's to send: the generated repository fills a
 ## document number and a uuid on insert, so demanding them here would refuse every create of a numbered
 ## document with a message about a field no form has (#7099).
@@ -1082,20 +1092,20 @@ public class ${name}PartnerController {
 #if($requiredChecked)
 ## A whitespace-only text value is no value (#7719) - the repository trims it to empty on the write.
         if (entity.${property.name} == null#if($property.dataTypeJavaClass == "String") || org.eclipse.dirigible.sdk.db.Normalize.isBlank(entity.${property.name})#end) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The '${property.name}' property is required");
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required(${refusalCatalog}, ${refusalField});
         }
 #end
 #if($property.dataTypeJavaClass == "String" && $property.dataLength && $property.dataTypeJava != "time")
 ## The null guard only where the required check above did not already refuse a null (#7696).
         if (#if(!$requiredChecked)entity.${property.name} != null && #{end}entity.${property.name}.length() > ${property.dataLength}) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The '${property.name}' exceeds the maximum length of ${property.dataLength}");
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.tooLong(${refusalCatalog}, ${refusalField}, ${property.dataLength});
         }
 #end
 #if($property.widgetPattern && $property.widgetPattern != "")
 ## A format constraint describes what a value must look like WHEN THERE IS ONE - on an OPTIONAL
 ## property a blank string is "no value", exactly as on the power surface.
         if (entity.${property.name} != null#if($property.isRequiredProperty != "true") && !entity.${property.name}.toString().isBlank()#end && !entity.${property.name}.toString().matches("${property.widgetPatternJava}")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The value of '${property.name}' does not match the required pattern '${property.widgetPatternJava}'");
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.pattern(${refusalCatalog}, ${refusalField}, "${property.widgetPatternJava}");
         }
 #end
 #end
@@ -1204,41 +1214,39 @@ public class ${name}PartnerController {
      * with its own message rather than the shorter key's. The power surface's map verbatim - the same
      * collision has to read the same whichever surface the caller wrote through.
      */
-    private static final Map<String, String> DUPLICATE_MESSAGES = duplicateMessages();
+    private static final Map<String, java.util.function.Supplier<org.eclipse.dirigible.sdk.db.ValidationException>> DUPLICATE_REFUSALS = duplicateRefusals();
 
-    /**
-     * The translation keys of the authored business-key messages (#7611), by the same constraint
-     * names: a key's message is resolved for the request's language when the collision is answered.
-     */
-    private static final Map<String, String> DUPLICATE_MESSAGE_KEYS = duplicateMessageKeys();
-
-    private static Map<String, String> duplicateMessageKeys() {
-        Map<String, String> keys = new java.util.HashMap<>();
-#if($uniqueConstraints)
-#foreach($uniqueConstraint in $uniqueConstraints)
-#if($uniqueConstraint.messageCatalogKeyJavaLiteral)
-        keys.put("${uniqueConstraint.nameJavaLiteral}".toUpperCase(Locale.ROOT), "${uniqueConstraint.messageCatalogKeyJavaLiteral}");
-#end
-#end
-#end
-        return java.util.Collections.unmodifiableMap(keys);
-    }
-
-    private static Map<String, String> duplicateMessages() {
-        Map<String, String> messages = new java.util.TreeMap<>(java.util.Comparator.comparingInt(String::length)
+## The refusals of one property's value are resolved for the reader's language (#8596): the model's
+## catalog, the entity's label and its key - each as the processor derived it, else the bare names.
+#set($refusalCatalog = "null")
+#if($messageCatalogJava)#set($refusalCatalog = $messageCatalogJava)#end
+#set($refusalEntityLabel = '"' + $name + '"')
+#if($entityLabelJava)#set($refusalEntityLabel = $entityLabelJava)#end
+#set($refusalEntityLabelKey = "null")
+#if($labelCatalogKeyJava)#set($refusalEntityLabelKey = $labelCatalogKeyJava)#end
+    private static Map<String, java.util.function.Supplier<org.eclipse.dirigible.sdk.db.ValidationException>> duplicateRefusals() {
+        Map<String, java.util.function.Supplier<org.eclipse.dirigible.sdk.db.ValidationException>> refusals = new java.util.TreeMap<>(java.util.Comparator.comparingInt(String::length)
                                                                                    .reversed()
                                                                                    .thenComparing(java.util.Comparator.naturalOrder()));
 #if($uniqueConstraints)
 #foreach($uniqueConstraint in $uniqueConstraints)
-        messages.put("${uniqueConstraint.nameJavaLiteral}".toUpperCase(Locale.ROOT), "${uniqueConstraint.messageJavaLiteral}");
+#if($uniqueConstraint.messageCatalogKeyJavaLiteral)
+        refusals.put("${uniqueConstraint.nameJavaLiteral}".toUpperCase(Locale.ROOT),
+                () -> org.eclipse.dirigible.sdk.db.CheckMessages.refusal("${uniqueConstraint.messageCatalogKeyJavaLiteral}", "${uniqueConstraint.messageJavaLiteral}"));
+#else
+        refusals.put("${uniqueConstraint.nameJavaLiteral}".toUpperCase(Locale.ROOT), () -> new org.eclipse.dirigible.sdk.db.ValidationException("${uniqueConstraint.messageJavaLiteral}"));
+#end
 #end
 #end
 #foreach($property in $properties)
 #if($property.dataUnique)
-        messages.put("${property.dataName}".toUpperCase(Locale.ROOT), "A ${name} with this '${property.name}' already exists");
+#set($refusalField = '"' + $property.name + '", "' + $property.name + '", null')
+#if($property.refusalFieldArgsJava)#set($refusalField = $property.refusalFieldArgsJava)#end
+        refusals.put("${property.dataName}".toUpperCase(Locale.ROOT), () -> org.eclipse.dirigible.sdk.db.FieldRefusals.duplicate(${refusalCatalog},
+                ${refusalEntityLabel}, ${refusalEntityLabelKey}, ${refusalField}));
 #end
 #end
-        return java.util.Collections.unmodifiableMap(messages);
+        return java.util.Collections.unmodifiableMap(refusals);
     }
 
     /**
@@ -1256,28 +1264,28 @@ public class ${name}PartnerController {
      */
     private static RuntimeException duplicateOrRethrow(RuntimeException e) {
         if (isConstraintViolation(e) && isDuplicateViolation(e)) {
-            String message = duplicateMessageFor(violationText(e));
-            if (message != null) {
-                return new ResponseStatusException(HttpStatus.CONFLICT, message);
+            org.eclipse.dirigible.sdk.db.ValidationException refusal = duplicateRefusalFor(violationText(e));
+            if (refusal != null) {
+                // The refusal rides as the cause, so the body carries its key and the field (#8596).
+                return new ResponseStatusException(HttpStatus.CONFLICT, refusal.getMessage(), refusal);
             }
         }
         return e;
     }
 
     /**
-     * The message of the business key the given violation names, or {@code null} when it names none of
-     * them - a primary key, or a uniqueness constraint of another table.
+     * The refusal of the business key the given violation names, resolved for the reader's language, or
+     * {@code null} when it names none of them - a primary key, or a uniqueness constraint of another table.
      */
-    private static String duplicateMessageFor(String violation) {
+    private static org.eclipse.dirigible.sdk.db.ValidationException duplicateRefusalFor(String violation) {
         if (violation == null) {
             return null;
         }
         String upper = violation.toUpperCase(Locale.ROOT);
-        for (Map.Entry<String, String> constraint : DUPLICATE_MESSAGES.entrySet()) {
+        for (Map.Entry<String, java.util.function.Supplier<org.eclipse.dirigible.sdk.db.ValidationException>> constraint : DUPLICATE_REFUSALS.entrySet()) {
             if (upper.contains(constraint.getKey())) {
-                String key = DUPLICATE_MESSAGE_KEYS.get(constraint.getKey());
-                return key == null ? constraint.getValue()
-                        : org.eclipse.dirigible.sdk.db.CheckMessages.message(key, constraint.getValue());
+                return constraint.getValue()
+                                 .get();
             }
         }
         return null;

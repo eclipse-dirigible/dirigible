@@ -280,6 +280,28 @@ class ControllerInvokerBindingTest {
     }
 
     @Test
+    void a_refusal_about_one_property_names_it_as_field() throws Exception {
+        ControllerEntry entry = consumer.build(loaded(Demo.class));
+        for (Map.Entry<String, Integer> expected : Map.of("rejectField", 400, "conflictField", 409)
+                                                      .entrySet()) {
+            Route route = entry.routes()
+                               .stream()
+                               .filter(r -> r.method()
+                                             .getName()
+                                             .equals(expected.getKey()))
+                               .findFirst()
+                               .orElseThrow();
+            FakeResponse response = new FakeResponse();
+            invoker.invoke(new RouteMatch(entry, route, Map.of()), mockRequest(null), response);
+            Map<?, ?> body = new ObjectMapper().readValue(response.body(), Map.class);
+            // #8596 / #8597: the form marks the field from the body, not from the (translated) sentence.
+            assertEquals(expected.getValue(), response.getStatus(), response.body());
+            assertEquals("rejectField".equals(expected.getKey()) ? "Rate" : "Sap", body.get("field"), response.body());
+            assertTrue(((String) body.get("messageKey")).startsWith("billing:billing-model.checks.field"), response.body());
+        }
+    }
+
+    @Test
     void unconfirmed_warnings_yield_428_listing_them() throws Exception {
         ControllerEntry entry = consumer.build(loaded(Demo.class));
         Route route = entry.routes()
@@ -409,6 +431,19 @@ class ControllerInvokerBindingTest {
         public String rejectKeyed() {
             throw new org.eclipse.dirigible.sdk.db.ValidationException("2 line(s) at price zero",
                     "billing:billing-model.checks.Invoice_zeroLines", Map.of("count", 2));
+        }
+
+        @Get("/reject-field")
+        public String rejectField() {
+            throw new org.eclipse.dirigible.sdk.db.ValidationException("The 'Rate' property is required",
+                    "billing:billing-model.checks.fieldRequired", Map.of("label", "Rate"), "Rate");
+        }
+
+        @Get("/conflict-field")
+        public String conflictField() {
+            org.eclipse.dirigible.sdk.db.ValidationException refusal = new org.eclipse.dirigible.sdk.db.ValidationException(
+                    "A UoM with this 'Sap' already exists", "billing:billing-model.checks.fieldDuplicate", Map.of("label", "Sap"), "Sap");
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.CONFLICT, refusal.getMessage(), refusal);
         }
 
         @Get("/warn-keyed")

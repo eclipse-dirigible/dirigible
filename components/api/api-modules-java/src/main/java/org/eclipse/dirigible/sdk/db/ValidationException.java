@@ -36,6 +36,9 @@ public class ValidationException extends RuntimeException {
     /** The values interpolated into the message's placeholders, by placeholder name. */
     private final transient Map<String, Object> messageParams;
 
+    /** The property the refusal is about, or {@code null} when it is about no single one. */
+    private final String field;
+
     /**
      * Creates a validation exception.
      *
@@ -56,10 +59,26 @@ public class ValidationException extends RuntimeException {
      * @param messageParams the placeholder values interpolated into the message, or {@code null}
      */
     public ValidationException(String message, String messageKey, Map<String, Object> messageParams) {
+        this(message, messageKey, messageParams, null);
+    }
+
+    /**
+     * Creates a validation exception about one property (dirigible #8596, #8597) - a required value
+     * left out, a value too long, a {@code checks:} rule naming its {@code field:}. The REST error body
+     * carries the property as {@code field}, so a form marks the field it is about whatever language
+     * the message was resolved in.
+     *
+     * @param message the user-facing reason, already resolved for the request's language
+     * @param messageKey the fully qualified translation key, or {@code null} for a literal message
+     * @param messageParams the placeholder values interpolated into the message, or {@code null}
+     * @param field the property the refusal is about, or {@code null}
+     */
+    public ValidationException(String message, String messageKey, Map<String, Object> messageParams, String field) {
         super(message);
         this.messageKey = messageKey;
         this.messageParams = messageParams == null || messageParams.isEmpty() ? Collections.emptyMap()
                 : Collections.unmodifiableMap(new LinkedHashMap<>(messageParams));
+        this.field = field;
     }
 
     /**
@@ -72,6 +91,7 @@ public class ValidationException extends RuntimeException {
         super(message, cause);
         this.messageKey = cause instanceof ValidationException validation ? validation.getMessageKey() : null;
         this.messageParams = cause instanceof ValidationException validation ? validation.getMessageParams() : Collections.emptyMap();
+        this.field = cause instanceof ValidationException validation ? validation.getField() : null;
     }
 
     /**
@@ -90,6 +110,15 @@ public class ValidationException extends RuntimeException {
      */
     public Map<String, Object> getMessageParams() {
         return messageParams == null ? Collections.emptyMap() : messageParams;
+    }
+
+    /**
+     * The property the refusal is about.
+     *
+     * @return the property name, or {@code null} when the refusal is about no single property
+     */
+    public String getField() {
+        return field;
     }
 
 }
