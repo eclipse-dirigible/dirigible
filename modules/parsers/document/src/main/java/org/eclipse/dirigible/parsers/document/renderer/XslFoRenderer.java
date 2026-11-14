@@ -23,6 +23,7 @@ import org.eclipse.dirigible.parsers.document.HeaderNode;
 import org.eclipse.dirigible.parsers.document.IfNode;
 import org.eclipse.dirigible.parsers.document.ImageNode;
 import org.eclipse.dirigible.parsers.document.LineNode;
+import org.eclipse.dirigible.parsers.document.LinkTarget;
 import org.eclipse.dirigible.parsers.document.Node;
 import org.eclipse.dirigible.parsers.document.PageNode;
 import org.eclipse.dirigible.parsers.document.QrCodeNode;
@@ -50,6 +51,13 @@ import org.eclipse.dirigible.parsers.document.layout.Measurement;
  * repeated page regions), {@code repeatHeader} and {@code pageBreak} are ignored, a data-less
  * {@code table} is skipped entirely (FOP rejects an empty table body), and measurements map
  * 1&nbsp;px&nbsp;=&nbsp;1&nbsp;pt.
+ *
+ * <p>
+ * An {@code href} on a {@code text}, an {@code image}, a {@code qrcode} or a table {@code column}
+ * makes the element a link ({@code fo:basic-link}, a URI link annotation in the PDF). Its bound
+ * value is validated here, after the data was merged, for every {@code href} - literal or built
+ * from placeholders - so a value read from the data cannot choose a scheme the DSL refuses
+ * ({@link LinkTarget}); a refused one is a {@link LayoutException} at the attribute.
  */
 public final class XslFoRenderer implements DocumentRenderer<String> {
 
@@ -190,7 +198,7 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
             case IfNode ignored -> appendChildren(fo, node, width); // pre-expanded by the DataBinder
             case ForNode ignored -> appendChildren(fo, node, width); // pre-expanded by the DataBinder
             case CustomNode custom -> {
-                appendTextBlock(fo, node, custom.text(), "");
+                appendTextBlock(fo, node, custom.text(), "", "");
                 appendChildren(fo, node, width);
             }
         }
@@ -220,17 +228,18 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
             case "title" -> " font-size=\"18pt\" font-weight=\"bold\"";
             case "subtitle" -> " font-size=\"12pt\" color=\"#444444\"";
             case "caption" -> " font-size=\"9pt\" font-weight=\"bold\" color=\"#666666\"";
+            case "link" -> " color=\"#0563C1\" text-decoration=\"underline\"";
             default -> "";
         };
-        appendTextBlock(fo, node, text.text(), styleAttributes);
+        appendTextBlock(fo, node, text.text(), styleAttributes, linkTarget(text.attributes()));
     }
 
-    private void appendTextBlock(StringBuilder fo, LayoutNode node, String text, String styleAttributes) {
+    private void appendTextBlock(StringBuilder fo, LayoutNode node, String text, String styleAttributes, String linkTarget) {
         fo.append("<fo:block")
           .append(alignAttribute(node))
           .append(styleAttributes)
           .append(">")
-          .append(escape(text))
+          .append(linked(linkTarget, escape(text)))
           .append("</fo:block>\n");
         appendChildren(fo, node, Double.NaN);
     }
@@ -329,8 +338,10 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
                 fo.append("<fo:table-cell padding=\"2pt\"><fo:block")
                   .append(alignAttribute(cell))
                   .append(">")
-                  .append(escape(cell.source()
-                                     .text()))
+                  .append(linked(linkTarget(cell.source()
+                                                .attributes()),
+                          escape(cell.source()
+                                     .text())))
                   .append("</fo:block></fo:table-cell>\n");
             }
             fo.append("</fo:table-row>\n");
@@ -416,6 +427,7 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
      * absolute measurement, so a single one scales the image proportionally.
      */
     private void appendImage(StringBuilder fo, LayoutNode node, ImageNode image) {
+        String linkTarget = linkTarget(image.attributes());
         String src = image.attributes()
                           .getOrDefault("src", "");
         if (src.isBlank()) {
@@ -425,14 +437,16 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
         if (resolved == null || resolved.isBlank()) {
             return;
         }
+        StringBuilder graphic = new StringBuilder("<fo:external-graphic src=\"").append(escape(resolved))
+                                                                                .append("\"");
+        appendContentDimension(graphic, "content-width", node.width());
+        appendContentDimension(graphic, "content-height", node.height());
+        graphic.append("/>");
         fo.append("<fo:block")
           .append(alignAttribute(node))
-          .append("><fo:external-graphic src=\"")
-          .append(escape(resolved))
-          .append("\"");
-        appendContentDimension(fo, "content-width", node.width());
-        appendContentDimension(fo, "content-height", node.height());
-        fo.append("/></fo:block>\n");
+          .append(">")
+          .append(linked(linkTarget, graphic.toString()))
+          .append("</fo:block>\n");
     }
 
     /**
@@ -444,6 +458,7 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
     private void appendQrCode(StringBuilder fo, LayoutNode node, QrCodeNode qrCode) {
         String side = points(qrCodeSize(qrCode.attributes()));
         QrCodeLevel level = qrCodeLevel(qrCode.attributes());
+        String linkTarget = linkTarget(qrCode.attributes());
         String payload = qrCode.payload();
         if (payload.isBlank()) {
             return;
@@ -454,13 +469,10 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
         }
         fo.append("<fo:block")
           .append(alignAttribute(node))
-          .append("><fo:external-graphic src=\"")
-          .append(escape(encoded))
-          .append("\" content-width=\"")
-          .append(side)
-          .append("\" content-height=\"")
-          .append(side)
-          .append("\"/></fo:block>\n");
+          .append(">")
+          .append(linked(linkTarget,
+                  "<fo:external-graphic src=\"" + escape(encoded) + "\" content-width=\"" + side + "\" content-height=\"" + side + "\"/>"))
+          .append("</fo:block>\n");
     }
 
     private static double qrCodeSize(Attributes attributes) {
@@ -474,6 +486,33 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
         } catch (IllegalArgumentException e) {
             throw new LayoutException(e.getMessage(), attributes.positionOf(LEVEL));
         }
+    }
+
+    /**
+     * The link an element's {@code href} opens, as the ASCII URI to emit; empty when the element is no
+     * link - no {@code href}, or one that is blank or only its scheme after binding. A target of any
+     * other kind than {@code http://}, {@code https://}, {@code mailto:} and {@code tel:} is a layout
+     * error at the attribute, wherever its value came from.
+     */
+    private static String linkTarget(Attributes attributes) {
+        try {
+            return LinkTarget.parse(attributes.get(LinkTarget.ATTRIBUTE));
+        } catch (IllegalArgumentException e) {
+            throw new LayoutException(e.getMessage(), attributes.positionOf(LinkTarget.ATTRIBUTE));
+        }
+    }
+
+    /**
+     * The content wrapped in the link to the target, or as it is when there is no target or nothing to
+     * click. The target is already a plain ASCII URI ({@link LinkTarget}) - no quote, parenthesis or
+     * brace is left in it to end the {@code url('...')} notation or to open an XSLT attribute value
+     * template - so only its {@code &} needs escaping.
+     */
+    private static String linked(String linkTarget, String content) {
+        if (linkTarget.isEmpty() || content.isEmpty()) {
+            return content;
+        }
+        return "<fo:basic-link external-destination=\"url('" + escape(linkTarget) + "')\">" + content + "</fo:basic-link>";
     }
 
     private static void appendContentDimension(StringBuilder fo, String attribute, Measurement measurement) {

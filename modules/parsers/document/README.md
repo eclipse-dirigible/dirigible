@@ -71,7 +71,7 @@ switch (node) {
 ## Attributes
 
 `id`, `width`, `height`, `flex`, `align`, `style`, `gap`, `padding`, `margin`, `label`,
-`source`, `src`, `filter`, `match`, `groupBy`, `fontSize`, `value`, `size`, `level`, `repeatHeader`, `pageBreak` — all
+`source`, `src`, `href`, `filter`, `match`, `groupBy`, `fontSize`, `value`, `size`, `level`, `repeatHeader`, `pageBreak` — all
 stored as plain strings.
 
 - **Alignment** (`align`): `left`, `center`, `right`, `justify`.
@@ -290,7 +290,7 @@ the bold labels word by word; inside a `row`, where the table's width is not kno
 per column beyond three), unless the table sets `fontSize` (`<table source="items" fontSize="9">`,
 points; `9pt`/`9px` accepted, anything but a positive number is a layout error);
 fields render as **Label:** value; `text` styles map `title`/`subtitle`/
-`caption` to font presets. v1 limits (deliberate, documented in the class): header/footer render
+`caption`/`link` to font presets. v1 limits (deliberate, documented in the class): header/footer render
 once in-flow, `repeatHeader`/`pageBreak` are ignored, 1 px = 1 pt, and a table with no data rows
 is skipped (FOP rejects an empty table body).
 
@@ -347,6 +347,7 @@ link to the document, a verification code:
 | `level` | error correction: `L` (7%), `M` (15%, the default and what EPC069-12 prescribes), `Q` (25%), `H` (30%), case-insensitive. Anything else is a layout error |
 | `align` | `left` / `center` / `right` within the space the element has |
 | `width` | the element's column inside a `row`, as for any other row child - `size` is the symbol, not the column |
+| `href` | makes the printed code a link as well, usually to what it encodes - see [Links](#links-href) |
 
 **The payload is the element's text with its line breaks kept** - placeholders, alternative
 operands and format specifiers resolve exactly as in `<text>`. Line-oriented payloads count their
@@ -379,6 +380,73 @@ keeps the lines and lays the square out, and hands the payload to a `QrCodeEncod
 (`new XslFoRenderer(imageResolver, qrCodeEncoder)`), which returns the image to embed - a `data:`
 URI - or `null` for nothing. The default, `QrCodeEncoder.NONE`, renders no QR code;
 `engine-document` supplies the real one (`PrintQrCodeEncoder`, UTF-8, so Cyrillic names scan back).
+
+## Links (`href`)
+
+`href` makes an element a clickable link in the PDF - the footer line pointing at a website, a
+"view online" address, the support e-mail:
+
+```xml
+<footer>
+    <text align="center" href="https://example.com">Issued with Example - example.com</text>
+</footer>
+
+<text href="https://example.com/invoices/{{document.Number}}">View online</text>
+<text href="mailto:{{document.Company.Email}}">{{document.Company.Email}}</text>
+<text href="tel:{{document.Company.Phone}}" style="link">{{document.Company.Phone}}</text>
+<image src="/Templates/Print/logo.png" width="120" href="https://example.com"/>
+```
+
+| element | what is the link |
+| --- | --- |
+| `text` | the text, wherever a `text` prints: the page flow, a `section`, `row`, `stack`, `header`, `footer`, under an `if`/`for` |
+| `image` | the image |
+| `qrcode` | the printed code |
+| `column` of a `table` | the cell of every row, each with the `href` bound in **its own row** (`<column href="{{Url}}">{{Name}}</column>`); a row whose `href` is blank is plain text, the header label is never a link |
+
+On any other element (`field`, `total`, `section`, ...) `href` is not a link and is ignored.
+
+**The value is bound like any other attribute** - placeholders, alternative operands and format
+specifiers resolve (`href="https://example.com/i/{{document.Number}}?d={{document.Date:yyyyMMdd}}"`).
+
+**No link is not an error.** An `href` that is blank after binding renders the element exactly as
+if it had none, and so does one that is only its scheme: `mailto:{{document.Company.Email}}` for a
+company with no e-mail is `mailto:`, which links nowhere. An element that itself renders nothing (an
+image with no source, an empty text) leaves no link behind.
+
+**Only four kinds of target are accepted**, the scheme in any letter case: `http://`, `https://`,
+`mailto:` and `tel:`. Everything else is refused - `javascript:`, `file:`, `data:`, `ftp:`, a
+scheme-relative `//host`, a relative path, a bare domain (`example.com` - write
+`https://example.com`), a web address with no host. A generated business document must not carry a
+link that runs a script or opens a local file. The check runs at two moments, and the second is the
+authority:
+
+- **when the template is parsed** - for a **literal** `href`, one with no placeholder. It is the
+  author's own word, so it fails wherever the template is parsed - a host that parses on save
+  refuses the template there - and whatever data it is printed with: a
+  `ParseException` naming the attribute's line and column
+  (`Invalid href: 'javascript:alert(1)' (expected an http://, https://, mailto: or tel: link) at line 12, column 15`);
+- **when the bound document is rendered** - for **every** `href`, literal or not, on the value the
+  data produced. A value read from the data therefore cannot pick the scheme: `href="{{document.Site}}"`
+  fed `javascript:...` (or a bare `example.com`) fails the print with a `LayoutException` carrying the
+  same message and the attribute's position in the template, as an invalid `size` or `level` does.
+  A template that wants to be immune to what a field holds writes the scheme itself -
+  `href="https://{{document.Company.Domain}}"` is a web address whatever the field contains.
+
+**The target is emitted as a plain ASCII URI** (`LinkTarget`): an internationalized host name becomes
+its `xn--` form, and every character outside the URI syntax - a space, a quote, a parenthesis, a
+brace, Cyrillic - is percent-encoded as UTF-8 (`https://example.com/търси?q=a b` →
+`https://example.com/%D1%82%D1%8A%D1%80%D1%81%D0%B8?q=a%20b`); percent-escapes already there are kept.
+So nothing a value contains can end the `url('...')` notation of XSL-FO, open an XSLT attribute value
+template, or break the XML. A phone number is best fed without spaces (`tel:+35929876543`).
+
+**No visual change.** A link looks like the text around it - most printed documents want the
+address readable, not blue. `style="link"` is the opt-in blue underlined preset, and it is only a
+style: it needs no `href`, and `href` does not imply it (so `href` combines with `title`, `caption`,
+...).
+
+In the stylesheet a link is `<fo:basic-link external-destination="url('...')">` around the text or
+graphic, which FOP writes as a URI link annotation over the element's box.
 
 ## Example templates
 
