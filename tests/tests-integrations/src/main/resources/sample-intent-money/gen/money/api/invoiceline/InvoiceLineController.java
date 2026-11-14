@@ -348,19 +348,19 @@ public class InvoiceLineController {
     // reviewer's edits to exactly these rules and messages before it writes them (#7552).
     public static void validate(InvoiceLineEntity entity) {
         if (entity.Description == null || org.eclipse.dirigible.sdk.db.Normalize.isBlank(entity.Description)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The 'Description' property is required");
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required("sample-intent-money:money-model", "Description", "Description", "sample-intent-money:money-model.t.INVOICE_LINE_DESCRIPTION");
         }
         if (entity.Description.length() > 200) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The 'Description' exceeds the maximum length of 200");
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.tooLong("sample-intent-money:money-model", "Description", "Description", "sample-intent-money:money-model.t.INVOICE_LINE_DESCRIPTION", 200);
         }
         if (entity.Quantity == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The 'Quantity' property is required");
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required("sample-intent-money:money-model", "Quantity", "Quantity", "sample-intent-money:money-model.t.INVOICE_LINE_QUANTITY");
         }
         if (entity.UnitPrice == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The 'UnitPrice' property is required");
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required("sample-intent-money:money-model", "UnitPrice", "UnitPrice", "sample-intent-money:money-model.t.INVOICE_LINE_UNIT_PRICE");
         }
         if (entity.VatRate == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The 'VatRate' property is required");
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required("sample-intent-money:money-model", "VatRate", "VatRate", "sample-intent-money:money-model.t.INVOICE_LINE_VAT_RATE");
         }
     }
 
