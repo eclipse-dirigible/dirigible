@@ -1809,6 +1809,17 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (!countryLabels.isEmpty()) {
             p.put("widgetCountryLabels", countryLabels);
         }
+        // A boolean's own words for its two values (#8564): two scalars, so they survive the `.edm`, and
+        // seed the en-US catalog's <COLUMN>_TRUE / _FALSE beside the field's label. Absent, the value
+        // reads as the shared Yes / No, as before.
+        if (field.getLabels() != null) {
+            p.put("widgetLabelTrue", field.getLabels()
+                                          .get("true")
+                                          .trim());
+            p.put("widgetLabelFalse", field.getLabels()
+                                           .get("false")
+                                           .trim());
+        }
         p.put("description", field.getDescription() == null ? "" : field.getDescription());
         p.put("tooltip", "");
         p.put("dataName", column);

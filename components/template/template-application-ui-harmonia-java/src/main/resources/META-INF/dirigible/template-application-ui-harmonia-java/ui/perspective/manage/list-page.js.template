@@ -12,6 +12,9 @@
 ## A relation labelled by a number: { stampOn: issue } field shows the draft marker, never its UUID
 ## placeholder (#7722): labelOf reads one row's label, labelRows hands a helper rows already marked.
 #macro(labelOf $dnProp $dnRow)#if($dnProp.widgetDropDownDocumentNumber)window.HarmoniaFormat.documentNumber(${dnRow}.${dnProp.widgetDropDownValue})#else${dnRow}.${dnProp.widgetDropDownValue}#end#end
+## A boolean's words (#8564): its own intent `labels:`, else the shared Yes / No - [key, word] per value,
+## resolved by the shared basePage.booleanText.
+#macro(booleanWords $property)['$projectName:${tprefix}.${property.booleanTrueKey}', '${property.booleanTrueTextJs}', '$projectName:${tprefix}.${property.booleanFalseKey}', '${property.booleanFalseTextJs}']#end
 #macro(labelRows $dnProp $dnRows)#if($dnProp.widgetDropDownDocumentNumber)this.documentNumberLabels(${dnRows}, '${dnProp.widgetDropDownValue}')#else${dnRows}#end#end
 ## What a delete confirmation calls the record (#8134): its Name, else its document Number, else none -
 ## the page then names it by id.
@@ -54,7 +57,7 @@ document.addEventListener('alpine:init', () => {
     filterColumns: [
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-      { name: '${property.name}', type: '#if($property.widgetType == "MULTISELECT" || $property.collectionColumn)none#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")fk#elseif($property.dataTypeTypescript == "boolean")boolean#elseif($property.isDateType)date#elseif($property.isNumberType)number#{else}string#end', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.isNumberType), number: true#end#if($property.isDateType && $property.dataTypeJavaClass == "java.time.Instant"), instant: true#end },
+      { name: '${property.name}', type: '#if($property.widgetType == "MULTISELECT" || $property.collectionColumn)none#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")fk#elseif($property.dataTypeTypescript == "boolean")boolean#elseif($property.isDateType)date#elseif($property.isNumberType)number#{else}string#end', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.isNumberType), number: true#end#if($property.isDateType && $property.dataTypeJavaClass == "java.time.Instant"), instant: true#end#if($property.booleanTrueKey), bool: #booleanWords($property)#end },
 #end
 #end
     ],
@@ -788,10 +791,7 @@ document.addEventListener('alpine:init', () => {
         return from ? T('application-core:shell.list.dateFromValue', 'From {{date}}', { date: from })
                     : T('application-core:shell.list.dateToValue', 'To {{date}}', { date: to });
       }
-      if (col.type === 'boolean') {
-        const yes = v === true || String(v) === 'true';
-        return window.T ? (yes ? T('$projectName:${tprefix}.defaults.yes', 'Yes') : T('$projectName:${tprefix}.defaults.no', 'No')) : (yes ? 'Yes' : 'No');
-      }
+      if (col.type === 'boolean') return this.booleanText(v, col.bool);
       return String(v);
     },
 
@@ -923,7 +923,7 @@ document.addEventListener('alpine:init', () => {
     exportColumns: [
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.collectionColumn), list: true#elseif($property.widgetType == "MULTISELECT"), multi: true#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end#if($property.numberStampOnIssue), documentNumber: true#end },
+      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.collectionColumn), list: true#elseif($property.widgetType == "MULTISELECT"), multi: true#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end#if($property.numberStampOnIssue), documentNumber: true#end#if($property.booleanTrueKey), bool: #booleanWords($property)#end },
 #end
 #end
     ],
@@ -938,6 +938,7 @@ document.addEventListener('alpine:init', () => {
       // the whole csv as one key and fall back to the raw ids.
       if (col.multi) return this.multiLookupText(col.name, v);
       if (col.documentNumber) return String(window.HarmoniaFormat.documentNumber(v));
+      if (col.bool) return this.booleanText(v, col.bool);
       return col.fk ? this.lookupText(col.name, v) : this.displayValue(v, !!col.date);
     },
     // Export / Print take a scope (#8434): 'all' (the default) is the full filtered and sorted set,

@@ -9,6 +9,9 @@
  * (loading | error | empty | no-results | default) on the fetch entity client,
  * with search, tri-state column sort and client-side pagination.
  */
+## A boolean's words (#8564): its own intent `labels:`, else the shared Yes / No - [key, word] per value,
+## resolved by the shared basePage.booleanText.
+#macro(booleanWords $property)['$projectName:${tprefix}.${property.booleanTrueKey}', '${property.booleanTrueTextJs}', '$projectName:${tprefix}.${property.booleanFalseKey}', '${property.booleanFalseTextJs}']#end
 ## A relation labelled by a number: { stampOn: issue } field shows the draft marker, never its UUID
 ## placeholder (#7722): labelOf reads one row's label, labelRows hands a helper rows already marked.
 #macro(labelOf $dnProp $dnRow)#if($dnProp.widgetDropDownDocumentNumber)window.HarmoniaFormat.documentNumber(${dnRow}.${dnProp.widgetDropDownValue})#else${dnRow}.${dnProp.widgetDropDownValue}#end#end
@@ -264,7 +267,7 @@ document.addEventListener('alpine:init', () => {
     exportColumns: [
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "MULTISELECT"), multi: true#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end#if($property.numberStampOnIssue), documentNumber: true#end },
+      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "MULTISELECT"), multi: true#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end#if($property.numberStampOnIssue), documentNumber: true#end#if($property.booleanTrueKey), bool: #booleanWords($property)#end },
 #end
 #end
     ],
@@ -273,6 +276,7 @@ document.addEventListener('alpine:init', () => {
       if (v == null || v === '') return '';
       if (col.multi) return this.multiLookupText(col.name, v);
       if (col.documentNumber) return String(window.HarmoniaFormat.documentNumber(v));
+      if (col.bool) return this.booleanText(v, col.bool);
       return col.fk ? this.lookupText(col.name, v) : this.displayValue(v, !!col.date);
     },
     // Export / Print take a scope (#8434): 'all' (the default) is the full filtered and sorted set,

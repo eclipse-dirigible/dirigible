@@ -73,6 +73,8 @@
               <td x-h-table-cell class="text-right" x-text="displayNumber(row.${property.name}, '${property.formatPattern}')"></td>
 #elseif($property.isNumberType)
               <td x-h-table-cell class="text-right" x-text="row.${property.name}"></td>
+#elseif($property.booleanTrueKey)
+              <td x-h-table-cell x-text="booleanText(row.${property.name}, ['$projectName:${tprefix}.${property.booleanTrueKey}', '${property.booleanTrueTextJs}', '$projectName:${tprefix}.${property.booleanFalseKey}', '${property.booleanFalseTextJs}'])"></td>
 #else
               <td x-h-table-cell x-text="row.${property.name}"></td>
 #end

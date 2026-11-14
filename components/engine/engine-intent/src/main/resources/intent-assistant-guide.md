@@ -424,6 +424,12 @@ a `required` text field is refused when it is blank after that trim - spaces alo
       BG: ЕГН
       DE: Steuer-ID
   ```
+- `labels: { true: <text>, false: <text> }` (a `boolean` field only) - the words its two values read
+  as wherever the value is shown (list cell, record sheet, filter options and chip, form value options,
+  export), written in the default language and translated like `label:` (catalog keys
+  `<ENTITY>_<FIELD>_TRUE` / `_FALSE`). Without it a boolean reads as the shared Yes / No. Both words are
+  required, and a word YAML reads as a boolean (`Yes`, `No`, `On`, `Off`, `True`, `False`) must be
+  quoted: `- { name: active, type: boolean, labels: { true: Active, false: Inactive } }`.
 - `major: false` - keep the field <b>off the entity list table</b> (it is still shown in forms and the
   record details pane). Defaults to `true` (every field is a list column). Use it to declutter the list
   of wide/secondary fields (e.g. `uuid`, long notes). To choose the list's columns AND their order in one

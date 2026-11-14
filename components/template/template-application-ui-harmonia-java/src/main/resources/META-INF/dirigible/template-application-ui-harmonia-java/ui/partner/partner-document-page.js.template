@@ -422,7 +422,7 @@ document.addEventListener('alpine:init', () => {
       }
       if (col.date) return window.HarmoniaFormat ? window.HarmoniaFormat.date(v) : String(v);
       if (col.number) return window.HarmoniaFormat ? window.HarmoniaFormat.number(v) : String(v);
-      if (col.widget === 'CHECKBOX') return window.T ? (v ? window.T('$projectName:${tprefix}.defaults.yes', 'Yes') : window.T('$projectName:${tprefix}.defaults.no', 'No')) : String(!!v);
+      if (col.widget === 'CHECKBOX') return this.booleanText(v, col.bool);
       return String(v);
     },
 

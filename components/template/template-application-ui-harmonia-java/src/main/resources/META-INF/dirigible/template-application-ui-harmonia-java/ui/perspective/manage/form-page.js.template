@@ -1381,10 +1381,9 @@ document.addEventListener('alpine:init', () => {
       return text === null ? '\u2014' : text;
     },
 
-    checkboxText(value) {
-      return value
-        ? T('$projectName:${tprefix}.defaults.yes', 'Yes')
-        : T('$projectName:${tprefix}.defaults.no', 'No');
+    // A checkbox in preview reads as its field's word for its state (#8564) - unset is unchecked.
+    checkboxText(value, words) {
+      return this.booleanText(Boolean(value), words);
     },
 
     // A MULTISELECT holds a key list; preview shows the labels those keys stand for.
