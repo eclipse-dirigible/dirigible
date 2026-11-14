@@ -91,6 +91,7 @@ document.addEventListener('alpine:init', () => {
     promptBusy: false,
     promptError: '',
     promptBlurred: {},    // col.name -> the input has lost focus once: its format line may show (#8366)
+    promptEdited: {},     // col.name -> the user changed the input since the dialog opened (#8598)
     promptChecked: false, // Run was pressed: every format line may show
     // Why the last run of the prompt failed (issue #8365) - the endpoint's refusal or the catalog
     // line for a fault, shown in an alert INSIDE the dialog, which stays open with its inputs.
@@ -386,7 +387,8 @@ document.addEventListener('alpine:init', () => {
       }
       // A call's declared defaults (issue #8296): a literal opens the dialog with it, a "{property}" is
       // read off the record - asynchronously, as a to-one's display text is fetched - and fills the
-      // input only while the user has not typed into it. A MULTISELECT always binds an array.
+      // input only while the user has not changed it (#8598): the change decides, not the value, so an
+      // input the user emptied on purpose stays empty. A MULTISELECT always binds an array.
       const fromRecord = [];
       for (const col of this.promptCols) {
         if (col.widget === 'MULTISELECT') this.promptValues[col.name] = [];
@@ -402,6 +404,7 @@ document.addEventListener('alpine:init', () => {
       this.promptError = '';
       this.promptRefusal = '';
       this.promptBlurred = {};
+      this.promptEdited = {};
       this.promptChecked = false;
       this.dialogDescription = '';
       this.promptAction = action;
@@ -410,7 +413,7 @@ document.addEventListener('alpine:init', () => {
       this.loadPromptOptions().then(() => this.seedPromptCascade());
       for (const { col, property } of fromRecord) {
         this.recordValue(action, record, property).then((v) => {
-          if (this.promptAction === action && this.isEmptyInput(this.promptValues[col.name])) this.setPromptDefault(col, v);
+          if (this.promptAction === action && !this.promptEdited[col.name]) this.setPromptDefault(col, v);
         });
       }
       this.describe(action, record).then((texts) => {
@@ -501,6 +504,7 @@ document.addEventListener('alpine:init', () => {
       this.promptError = '';
       this.promptRefusal = '';
       this.promptBlurred = {};
+      this.promptEdited = {};
       this.promptChecked = false;
       this.dialogDescription = '';
     },
@@ -677,6 +681,11 @@ document.addEventListener('alpine:init', () => {
     },
 
     promptBlur(col) { this.promptBlurred[col.name] = true; },
+
+    // The user changed an input (an `input` or `change` event bubbling to its field): a record default
+    // read later no longer fills it. A default sets the model and dispatches no event, so it never
+    // marks an input changed.
+    promptEdit(col) { this.promptEdited[col.name] = true; },
 
     // Whether any input holds a value of the wrong format - Run is disabled while one does.
     get promptHasInvalid() {

@@ -42,6 +42,8 @@
 ## (my) surface must drop it entirely - the personal controller nulls the value on the wire, so
 ## rendering it would only show a permanently empty column the owner is not meant to see.
 #macro(sensitiveMeta $property)#if($property.sensitiveProperty), sensitive: true#end#end
+## intent `emptyText:` (#8605): the text an empty cell reads as, translated through t.<DATA_NAME>_empty.
+#macro(emptyMeta $p)#if($p.widgetEmptyText), emptyText: '${p.widgetEmptyTextJs}', emptyTkey: '$projectName:${tprefix}.t.${p.dataName}_empty'#end#end
 ## The authored field default (intent `defaultValue:`) as the seed for a NEW line in the item dialog.
 ## The column already carries this value as a DB DEFAULT and as the reason its required-check is
 ## skipped; seeding the dialog is what makes it VISIBLE and editable before the row is posted, so a
@@ -128,13 +130,13 @@ App.registerDetail('${masterEntity}', {
 ## the lookup and joins the labels - the `multi` flag is what routes it there (never comma-sniffing).
     { name: '${property.name}', label: '${clabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', multi: true, lookup: { url: '${property.widgetDropdownControllerUrl}', key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}'#if($property.widgetDropDownDocumentNumber), documentNumber: true#end }#sensitiveMeta($property) },
 #elseif($property.isDateType)
-    { name: '${property.name}', label: '${clabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', date: true#sensitiveMeta($property) },
+    { name: '${property.name}', label: '${clabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', date: true#sensitiveMeta($property)#emptyMeta($property) },
 #elseif($property.isFloatType)
-    { name: '${property.name}', label: '${clabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', number: true, float: true, pattern: '${property.formatPattern}'#sensitiveMeta($property) },
+    { name: '${property.name}', label: '${clabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', number: true, float: true, pattern: '${property.formatPattern}'#sensitiveMeta($property)#emptyMeta($property) },
 #elseif($property.isNumberType)
-    { name: '${property.name}', label: '${clabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', number: true#sensitiveMeta($property) },
+    { name: '${property.name}', label: '${clabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', number: true#sensitiveMeta($property)#emptyMeta($property) },
 #else
-    { name: '${property.name}', label: '${clabel}'#if($property.numberStampOnIssue), documentNumber: true#end#sensitiveMeta($property) },
+    { name: '${property.name}', label: '${clabel}'#if($property.numberStampOnIssue), documentNumber: true#end#sensitiveMeta($property)#emptyMeta($property) },
 #end
 #end
 #end

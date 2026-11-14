@@ -66,12 +66,13 @@ switch (node) {
 ## Built-in tags
 
 `document`, `page`, `header`, `footer`, `section`, `row`, `column`, `stack`, `text`,
-`field`, `table`, `image`, `line`, `space`, `total`, `if`, `for`
+`field`, `table`, `image`, `qrcode`, `line`, `space`, `total`, `if`, `for`
 
 ## Attributes
 
 `id`, `width`, `height`, `flex`, `align`, `style`, `gap`, `padding`, `margin`, `label`,
-`source`, `src`, `filter`, `match`, `fontSize`, `repeatHeader`, `pageBreak` — all stored as plain strings.
+`source`, `src`, `href`, `filter`, `match`, `groupBy`, `fontSize`, `value`, `size`, `level`, `repeatHeader`, `pageBreak` — all
+stored as plain strings.
 
 - **Alignment** (`align`): `left`, `center`, `right`, `justify`.
 - **Widths/heights**: `100` (px), `100px`, `50%`, `*` (fraction weight 1), `2*`, `3*`;
@@ -85,10 +86,15 @@ fast rather than silently drop content. Extending the DSL is one line, no parser
 
 ```java
 TagRegistry registry = TagRegistry.builtIn();
-registry.register("qrcode");                       // parses to CustomNode
+registry.register("stamp");                        // parses to CustomNode
 registry.register("barcode", BarcodeNode::new);    // or a CustomNode subclass
 Node root = new DocumentParser(registry).parse(source);
 ```
+
+A tag whose content is line-oriented by nature registers as **line-preserving**
+(`registry.registerLinePreserving("address", AddressNode::new)`): its text keeps its line breaks
+instead of collapsing to one line - the rule the built-in `qrcode` uses, spelled out under
+[QR codes](#qr-codes-qrcode-rendererqrcodeencoder).
 
 ## Grammar (EBNF)
 
@@ -136,8 +142,9 @@ hostile:
 - Tag names are case-sensitive lowercase.
 - Duplicate attributes on one element are an error (determinism).
 - A literal `<` in text must be written `&lt;`.
-- Text whitespace is normalized: runs collapse to a single space, ends are trimmed.
-  There is no preformatted-text escape hatch (yet).
+- Text whitespace is normalized: runs collapse to a single space, ends are trimmed. The one
+  exception is a line-preserving tag - the built-in `qrcode` - whose text keeps its lines (see
+  [QR codes](#qr-codes-qrcode-rendererqrcodeencoder)). There is no preformatted *text* (yet).
 
 Every syntax error reports its exact 1-based line and column; an unclosed element points
 at its **opening** tag.
@@ -248,6 +255,26 @@ several VAT rates - a legal requirement wherever rates are mixed - needs nothing
 The VAT of each rate is the sum of its lines' VAT, so per-line rounding carries through to the
 cent.
 
+**Row ordinal** - inside a `table`/`for` the reserved `{{__index}}` is the row's 1-based position
+among the rows **actually rendered**: it counts after the row filter, so a filtered table numbers
+the rows it kept 1, 2, 3 with no gaps, and with `groupBy` it is the ordinal of the group. The "№"
+column every invoice items table starts with is one cell:
+
+```xml
+<table source="items">
+    <column width="24" label="№">{{__index}}</column>
+    <column width="4*" label="Item">{{Name}}</column>
+    <column width="*" label="Amount" align="right">{{Amount}}</column>
+</table>
+<!-- 1 | Widget | 100.00
+     2 | Gadget |  23.45 -->
+```
+
+It is a number like any other, so it takes a format (`{{__index:00}}`) and composes with text
+(`{{__index}}.`). Where loops nest it reads the innermost row, and each `table`/`for` counts from 1
+again - also once per pass of an enclosing loop. Outside a row it renders empty. The name is
+reserved, double underscore like `__label`: a row field called `__index` is not reachable.
+
 **Floating-point values** (`Double`/`Float`/`BigDecimal`) print in the generated forms' money
 pattern `### ### ### ##0.00` (space-grouped thousands, two decimals, locale-independent);
 integral numbers print unformatted.
@@ -263,7 +290,7 @@ the bold labels word by word; inside a `row`, where the table's width is not kno
 per column beyond three), unless the table sets `fontSize` (`<table source="items" fontSize="9">`,
 points; `9pt`/`9px` accepted, anything but a positive number is a layout error);
 fields render as **Label:** value; `text` styles map `title`/`subtitle`/
-`caption` to font presets. v1 limits (deliberate, documented in the class): header/footer render
+`caption`/`link` to font presets. v1 limits (deliberate, documented in the class): header/footer render
 once in-flow, `repeatHeader`/`pageBreak` are ignored, 1 px = 1 pt, and a table with no data rows
 is skipped (FOP rejects an empty table body).
 
@@ -286,6 +313,140 @@ absent or blank `src` never reaches the resolver.
 
 FOP reads a `data:` URI natively (`InternalResourceResolver`), so an inlined image needs no
 configuration; `PDFFacadeTest.generatePdfWithInlineImageTest` pins that contract.
+
+## QR codes (`<qrcode>`, `renderer.QrCodeEncoder`)
+
+`<qrcode>` prints a QR code of a text payload - the payment code of an invoice (EPC069-12, "SEPA
+credit transfer": scanned in a banking app, the IBAN, amount and remittance text are prefilled), a
+link to the document, a verification code:
+
+```xml
+<if source="document.BankAccount.Iban">
+    <qrcode size="90" level="M" align="right">
+        BCD
+        002
+        1
+        SCT
+        {{document.BankAccount.Bic}}
+        {{document.Company.LegalName}}
+        {{document.BankAccount.Iban}}
+        EUR{{document.Balance:0.00}}
+
+
+        Invoice {{document.Number}}
+    </qrcode>
+</if>
+
+<qrcode value="https://example.com/invoices/{{document.Number}}"/>
+```
+
+| attribute | meaning |
+| --- | --- |
+| `value` | the payload on one line - the short form; when it is not blank it wins over the text |
+| `size` | the side of the printed square in points, quiet zone included (`90`, `90pt`, `90px`); default `90` (about 32 mm). Anything but a positive number is a layout error |
+| `level` | error correction: `L` (7%), `M` (15%, the default and what EPC069-12 prescribes), `Q` (25%), `H` (30%), case-insensitive. Anything else is a layout error |
+| `align` | `left` / `center` / `right` within the space the element has |
+| `width` | the element's column inside a `row`, as for any other row child - `size` is the symbol, not the column |
+| `href` | makes the printed code a link as well, usually to what it encodes - see [Links](#links-href) |
+
+**The payload is the element's text with its line breaks kept** - placeholders, alternative
+operands and format specifiers resolve exactly as in `<text>`. Line-oriented payloads count their
+lines (the remittance text of a payment code is line 11, whatever lines 9 and 10 hold), so the text
+is normalized only as far as the template's own formatting goes:
+
+- line endings (`\r\n`, `\r`) become a line feed;
+- every line loses its leading and trailing spaces and tabs - the indentation of the template;
+  spaces inside a line stay;
+- the first line is dropped when it is blank, and so is the last one: the line break after
+  `<qrcode ...>` and the indentation before `</qrcode>`. Exactly one at each end - a second blank
+  line there is yours and is kept;
+- every other line stays, **the empty ones included**.
+
+This happens when the template is parsed, before any data is merged, so a line that holds only a
+placeholder is a line whatever the placeholder resolves to - `{{document.Missing}}` leaves an empty
+line, it does not swallow one. A resolved value is inserted as it is: one that itself carries a line
+break adds a line. The five entities are decoded as everywhere else, so a `<` in a payload is
+`&lt;`.
+
+**Fail-soft, like `<image>`.** A payload that is blank after binding - a `value` whose placeholders
+resolved empty, an element with no text - renders **nothing**: no block, no placeholder. So does a
+payload too long for a QR code at the requested level. A payment code is never blank as a whole
+(its fixed lines are always there), so the "no bank account / not in EUR / nothing left to pay"
+cases are an `<if>` around it, as above. It prints wherever an `<image>` does - in the flow, in a
+`row`, a `stack`, the `header` or `footer` - but not inside a `table` cell, which is text.
+
+**The encoding is the host's.** The library carries no dependency, so it models the element,
+keeps the lines and lays the square out, and hands the payload to a `QrCodeEncoder`
+(`new XslFoRenderer(imageResolver, qrCodeEncoder)`), which returns the image to embed - a `data:`
+URI - or `null` for nothing. The default, `QrCodeEncoder.NONE`, renders no QR code;
+`engine-document` supplies the real one (`PrintQrCodeEncoder`, UTF-8, so Cyrillic names scan back).
+
+## Links (`href`)
+
+`href` makes an element a clickable link in the PDF - the footer line pointing at a website, a
+"view online" address, the support e-mail:
+
+```xml
+<footer>
+    <text align="center" href="https://example.com">Issued with Example - example.com</text>
+</footer>
+
+<text href="https://example.com/invoices/{{document.Number}}">View online</text>
+<text href="mailto:{{document.Company.Email}}">{{document.Company.Email}}</text>
+<text href="tel:{{document.Company.Phone}}" style="link">{{document.Company.Phone}}</text>
+<image src="/Templates/Print/logo.png" width="120" href="https://example.com"/>
+```
+
+| element | what is the link |
+| --- | --- |
+| `text` | the text, wherever a `text` prints: the page flow, a `section`, `row`, `stack`, `header`, `footer`, under an `if`/`for` |
+| `image` | the image |
+| `qrcode` | the printed code |
+| `column` of a `table` | the cell of every row, each with the `href` bound in **its own row** (`<column href="{{Url}}">{{Name}}</column>`); a row whose `href` is blank is plain text, the header label is never a link |
+
+On any other element (`field`, `total`, `section`, ...) `href` is not a link and is ignored.
+
+**The value is bound like any other attribute** - placeholders, alternative operands and format
+specifiers resolve (`href="https://example.com/i/{{document.Number}}?d={{document.Date:yyyyMMdd}}"`).
+
+**No link is not an error.** An `href` that is blank after binding renders the element exactly as
+if it had none, and so does one that is only its scheme: `mailto:{{document.Company.Email}}` for a
+company with no e-mail is `mailto:`, which links nowhere. An element that itself renders nothing (an
+image with no source, an empty text) leaves no link behind.
+
+**Only four kinds of target are accepted**, the scheme in any letter case: `http://`, `https://`,
+`mailto:` and `tel:`. Everything else is refused - `javascript:`, `file:`, `data:`, `ftp:`, a
+scheme-relative `//host`, a relative path, a bare domain (`example.com` - write
+`https://example.com`), a web address with no host. A generated business document must not carry a
+link that runs a script or opens a local file. The check runs at two moments, and the second is the
+authority:
+
+- **when the template is parsed** - for a **literal** `href`, one with no placeholder. It is the
+  author's own word, so it fails wherever the template is parsed - a host that parses on save
+  refuses the template there - and whatever data it is printed with: a
+  `ParseException` naming the attribute's line and column
+  (`Invalid href: 'javascript:alert(1)' (expected an http://, https://, mailto: or tel: link) at line 12, column 15`);
+- **when the bound document is rendered** - for **every** `href`, literal or not, on the value the
+  data produced. A value read from the data therefore cannot pick the scheme: `href="{{document.Site}}"`
+  fed `javascript:...` (or a bare `example.com`) fails the print with a `LayoutException` carrying the
+  same message and the attribute's position in the template, as an invalid `size` or `level` does.
+  A template that wants to be immune to what a field holds writes the scheme itself -
+  `href="https://{{document.Company.Domain}}"` is a web address whatever the field contains.
+
+**The target is emitted as a plain ASCII URI** (`LinkTarget`): an internationalized host name becomes
+its `xn--` form, and every character outside the URI syntax - a space, a quote, a parenthesis, a
+brace, Cyrillic - is percent-encoded as UTF-8 (`https://example.com/търси?q=a b` →
+`https://example.com/%D1%82%D1%8A%D1%80%D1%81%D0%B8?q=a%20b`); percent-escapes already there are kept.
+So nothing a value contains can end the `url('...')` notation of XSL-FO, open an XSLT attribute value
+template, or break the XML. A phone number is best fed without spaces (`tel:+35929876543`).
+
+**No visual change.** A link looks like the text around it - most printed documents want the
+address readable, not blue. `style="link"` is the opt-in blue underlined preset, and it is only a
+style: it needs no `href`, and `href` does not imply it (so `href` combines with `title`, `caption`,
+...).
+
+In the stylesheet a link is `<fo:basic-link external-destination="url('...')">` around the text or
+graphic, which FOP writes as a URI link annotation over the element's box.
 
 ## Example templates
 

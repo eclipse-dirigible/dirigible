@@ -15,6 +15,7 @@ import java.util.Objects;
 
 import org.eclipse.dirigible.parsers.document.Attributes;
 import org.eclipse.dirigible.parsers.document.DocumentNode;
+import org.eclipse.dirigible.parsers.document.LinkTarget;
 import org.eclipse.dirigible.parsers.document.Node;
 import org.eclipse.dirigible.parsers.document.SourcePosition;
 
@@ -27,9 +28,10 @@ import org.eclipse.dirigible.parsers.document.SourcePosition;
  * The grammar is XML-like with business-user leniencies: only the five named entities
  * ({@code &lt; &gt; &amp; &quot; &apos;}) are decoded and a raw {@code &} that does not form one is
  * literal text; comments and an optional XML prolog are skipped; attribute values may use single or
- * double quotes. Unknown tags are a parse error — extend the DSL by registering tags on a
- * {@link TagRegistry}. Parsing is deterministic and instances are stateless per parse, so a parser
- * may be reused and shared.
+ * double quotes. Attribute values are not validated here, with one exception: a literal
+ * {@code href} must be an accepted link ({@link LinkTarget}). Unknown tags are a parse error —
+ * extend the DSL by registering tags on a {@link TagRegistry}. Parsing is deterministic and
+ * instances are stateless per parse, so a parser may be reused and shared.
  */
 public final class DocumentParser {
 
@@ -112,7 +114,7 @@ public final class DocumentParser {
             }
             if (scanner.lookingAt("/>")) {
                 scanner.skip(2);
-                return factory.create(tag, start, Attributes.of(attributes), List.of(), "");
+                return create(factory, tag, start, attributes, List.of(), "");
             }
             if (scanner.peek() == '>') {
                 scanner.skip(1);
@@ -120,6 +122,30 @@ public final class DocumentParser {
             }
             parseAttribute(scanner, attributes);
         }
+    }
+
+    /**
+     * Creates the node of a parsed element. The one attribute value judged here is a literal
+     * {@code href} on an element that takes a link: its target is the template author's own word, so a
+     * refused one ({@code javascript:}, a relative path) fails where the template is parsed - when it
+     * is saved - and not at the first print. A value holding a placeholder can only be judged once the
+     * data is bound, which the renderer does for every {@code href}.
+     */
+    private static Node create(NodeFactory factory, String tag, SourcePosition start, List<Attributes.Attribute> attributes,
+            List<Node> children, String text) {
+        Node node = factory.create(tag, start, Attributes.of(attributes), children, text);
+        String href = node.attributes()
+                          .get(LinkTarget.ATTRIBUTE);
+        if (href != null && LinkTarget.appliesTo(node) && !LinkTarget.isTemplated(href)) {
+            try {
+                LinkTarget.parse(href);
+            } catch (IllegalArgumentException e) {
+                SourcePosition position = node.attributes()
+                                              .positionOf(LinkTarget.ATTRIBUTE);
+                throw new ParseException(e.getMessage(), position.line(), position.column());
+            }
+        }
+        return node;
     }
 
     private void parseAttribute(Scanner scanner, List<Attributes.Attribute> attributes) {
@@ -183,7 +209,8 @@ public final class DocumentParser {
                 if (!closeTag.equals(tag)) {
                     throw scanner.errorAt("Mismatched closing tag: expected </" + tag + ">, found </" + closeTag + ">", closePosition);
                 }
-                return factory.create(tag, start, Attributes.of(attributes), children, normalize(text));
+                String content = registry.preservesLines(tag) ? normalizeLines(text) : normalize(text);
+                return create(factory, tag, start, attributes, children, content);
             } else if (scanner.peek() == '<') {
                 children.add(parseElement(scanner));
             } else if (scanner.peek() == '&') {
@@ -303,5 +330,45 @@ public final class DocumentParser {
             }
         }
         return normalized.toString();
+    }
+
+    /**
+     * The text of a line-preserving tag ({@link TagRegistry#registerLinePreserving}): line endings
+     * unified to a line feed, every line trimmed of the template's indentation, and the blank first and
+     * last line the template's formatting adds around the content dropped. Every other line stays - an
+     * empty line in the middle is content.
+     */
+    private static String normalizeLines(StringBuilder text) {
+        List<String> lines = new ArrayList<>();
+        for (String line : text.toString()
+                               .split("\\r\\n|\\r|\\n", -1)) {
+            lines.add(trimIndentation(line));
+        }
+        if (lines.size() > 1 && lines.get(0)
+                                     .isEmpty()) {
+            lines.remove(0);
+        }
+        if (lines.size() > 1 && lines.get(lines.size() - 1)
+                                     .isEmpty()) {
+            lines.remove(lines.size() - 1);
+        }
+        return String.join("\n", lines);
+    }
+
+    /** One line without its leading and trailing spaces and tabs. */
+    private static String trimIndentation(String line) {
+        int start = 0;
+        int end = line.length();
+        while (start < end && isIndentation(line.charAt(start))) {
+            start++;
+        }
+        while (end > start && isIndentation(line.charAt(end - 1))) {
+            end--;
+        }
+        return line.substring(start, end);
+    }
+
+    private static boolean isIndentation(char c) {
+        return c == ' ' || c == '\t';
     }
 }

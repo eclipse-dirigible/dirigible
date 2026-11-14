@@ -42,7 +42,8 @@ import tools.jackson.databind.JsonNode;
  * it, edits the person's roles in one save, reads why a change was not applied, removes the person,
  * and is refused - locally - when they would leave the tenant without an owner. The provisioning
  * system is played by the test: it reads the change requests off the queue and pushes the snapshots
- * back through the users snapshot endpoint.
+ * back through the users snapshot endpoint. With a seat limit the section shows the seats taken and
+ * refuses an invitation beyond them.
  */
 class TenantUsersSettingsIT extends KeycloakUserInterfaceIntegrationTest {
 
@@ -204,6 +205,49 @@ class TenantUsersSettingsIT extends KeycloakUserInterfaceIntegrationTest {
                   .until(() -> String.valueOf(Selenide.<Object>executeJavaScript("return Alpine.store('tenantUsers').error;"))
                                      .contains("only owner"));
         assertTrue(drainQueue(QUEUE).isEmpty(), "a refused change publishes nothing");
+    }
+
+    /**
+     * A tenant at its seat limit (#8593): the seats line, and an invitation refused in the dialog
+     * before anything is published. The owner is the one user that takes a seat whichever case runs
+     * first: the other case removes the person it invites.
+     */
+    @Test
+    void anOwnerAtTheSeatLimitIsShownTheSeatsAndRefusedAnInvitation() throws Exception {
+        try {
+            pushSnapshot(mvc, tenant.getId(), 100, 1, user(OWNER).revision(100)
+                                                                 .role("Owner", "GRANTED")
+                                                                 .role("User", "GRANTED"));
+            drainQueue(QUEUE);
+            signInAndOpen("/services/web/application/index.html", OWNER);
+            Selenide.$(By.id("tenant-menu-trigger"))
+                    .shouldBe(Condition.visible, Duration.ofSeconds(60));
+            browser.openPath(SECTION);
+            Selenide.$(By.id("tenant-users-page"))
+                    .shouldBe(Condition.visible, WAIT);
+
+            Selenide.$(By.id("tenant-users-seats"))
+                    .shouldBe(Condition.visible, WAIT)
+                    .shouldHave(Condition.text("Seats: 1 of 1"));
+
+            Selenide.$(By.id("tenant-users-invite-open"))
+                    .click();
+            Selenide.$(By.id("tenant-users-invite-dialog"))
+                    .shouldBe(Condition.visible, WAIT);
+            Selenide.$(By.id("tenant-users-email"))
+                    .setValue("seat.refused@example.com");
+            Selenide.$(By.id("tenant-users-invite-button"))
+                    .click();
+            Selenide.$("#tenant-users-invite-dialog [role='alert']")
+                    .shouldHave(Condition.text(
+                            "Every seat of this tenant is taken. Remove someone to free a seat, or ask your administrator for more seats."),
+                            WAIT);
+            assertTrue(drainQueue(QUEUE).isEmpty(), "a refused invitation publishes nothing");
+        } finally {
+            pushSnapshot(mvc, tenant.getId(), 101, user(OWNER).revision(101)
+                                                              .role("Owner", "GRANTED")
+                                                              .role("User", "GRANTED"));
+        }
     }
 
     @Test

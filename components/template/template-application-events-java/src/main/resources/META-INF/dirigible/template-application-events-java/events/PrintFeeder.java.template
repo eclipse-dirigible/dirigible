@@ -15,6 +15,9 @@ import org.eclipse.dirigible.sdk.http.Response;
 import org.eclipse.dirigible.sdk.log.Logger;
 import org.eclipse.dirigible.sdk.log.Logging;
 #end
+#if($expandsReferences)
+import org.eclipse.dirigible.sdk.print.PrintRecords;
+#end
 import org.eclipse.dirigible.sdk.security.User;
 import org.eclipse.dirigible.sdk.utils.Json;
 
@@ -26,7 +29,8 @@ import org.eclipse.dirigible.sdk.utils.Json;
  * Generated from the intent printFeeders glue - do not edit; it is re-generated with the application.
  * Every fetch is explicit below, and so is every field of a record this project owns (this class IS
  * the audit of what a print receives). A record owned by ANOTHER model is copied field-by-field at
- * runtime instead - see copyRecordFields. Entity access goes ONLY through the generated repositories,
+ * runtime instead - see copyRecordFields - and its own to-one relations are followed one hop from
+ * what its entity declares (PrintRecords). Entity access goes ONLY through the generated repositories,
  * so validations, events and the multilingual translation overlay (print in the caller's language)
  * all apply, and the browser calls it as the logged-in user so authorization and tenant are the
  * caller's own.
@@ -74,6 +78,11 @@ public class ${className}PrintFeeder {
             return NOT_FOUND;
         }
         Map<String, Object> document = new LinkedHashMap<>();
+#if($expandsReferences)
+        // The records reached through another model's own relations, by repository and key: each is
+        // loaded once for this payload, however many header relations and item rows lead to it.
+        Map<String, Map<String, Object>> loadedReferences = new java.util.HashMap<>();
+#end
 #foreach($s in $rootScalars)
 #if($s.date)
         document.put("${s.name}", root.${s.name} == null ? null : root.${s.name}.toString());
@@ -96,6 +105,11 @@ public class ${className}PrintFeeder {
             copyRecordFields(${n.entityVar}, ${n.mapVar});
 #if($n.labelField != "")
             ${n.mapVar}.put("__label", ${n.mapVar}.get("${n.labelField}"));
+#end
+#if($n.expandReferences)
+            // One hop further ({{document.${n.keyInParent}.<Relation>.<Field>}}, dirigible #7752): the
+            // relations are the ones ${n.model}'s entity declares, read at runtime - none is named here.
+            PrintRecords.expandReferences(${n.entityVar}, ${n.mapVar}, loadedReferences);
 #end
 #else
 #if($n.labelField != "")
@@ -149,6 +163,11 @@ public class ${className}PrintFeeder {
                 copyRecordFields(${n.entityVar}, ${n.mapVar});
 #if($n.labelField != "")
                 ${n.mapVar}.put("__label", ${n.mapVar}.get("${n.labelField}"));
+#end
+#if($n.expandReferences)
+                // One hop further ({{${n.keyInParent}.<Relation>.<Field>}}, dirigible #7752), from what
+                // ${n.model}'s entity declares; a record many rows lead to is loaded once.
+                PrintRecords.expandReferences(${n.entityVar}, ${n.mapVar}, loadedReferences);
 #end
 #else
 #if($n.labelField != "")

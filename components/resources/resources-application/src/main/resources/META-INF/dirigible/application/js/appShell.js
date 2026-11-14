@@ -613,6 +613,7 @@ document.addEventListener('alpine:init', () => {
               if (item.id === 'print-templates') this.loadPrintTemplates();
               if (item.id === 'document-numbering') this.loadNumbering();
               if (item.id === 'tenant-users') this.loadTenantUsers();
+              if (item.id === 'tenant-export') this.loadTenantExport();
             }
           }
         } else {
@@ -752,6 +753,12 @@ document.addEventListener('alpine:init', () => {
       if (store) store.load();
     },
 
+    /** Reads the Data export section's rows - the store may be absent on a page that predates it. */
+    loadTenantExport() {
+      const store = window.Alpine && Alpine.store('tenantExport');
+      if (store) store.load();
+    },
+
     /** Reads the Print Templates section's catalogue - the store may be absent on a page that predates it. */
     loadPrintTemplates() {
       const store = window.Alpine && Alpine.store('printTemplates');
@@ -784,6 +791,7 @@ document.addEventListener('alpine:init', () => {
         if (item.id === 'print-templates') this.loadPrintTemplates();
         if (item.id === 'document-numbering') this.loadNumbering();
         if (item.id === 'tenant-users') this.loadTenantUsers();
+        if (item.id === 'tenant-export') this.loadTenantExport();
       }
     },
 
@@ -797,6 +805,7 @@ document.addEventListener('alpine:init', () => {
       if (id === 'print-templates') return { id: 'print-templates' };
       if (id === 'document-numbering') return { id: 'document-numbering' };
       if (id === 'tenant-users') return { id: 'tenant-users' };
+      if (id === 'tenant-export') return { id: 'tenant-export' };
       return (this.settingsItems || []).find(i => i.id === id) || null;
     },
 
@@ -934,6 +943,95 @@ document.addEventListener('alpine:init', () => {
       const itemIds = proj.items || [];
       return this.settingsItems.filter(it => groupIds.includes(it.groupId) || itemIds.includes(it.id) || this.inProjection(it.path));
     },
+
+    get isDashboard() { return this.currentPath === '/' || this.currentPath === '/dashboard'; },
+
+    /** The crumbs after the Home icon, derived from the route the way the generated application shell
+     *  derives its own: a built-in page (with the selected report or setting), or a hosted app as its
+     *  navigation group, the app, and the page the app shows. The hosted app runs embedded, which hides
+     *  its own breadcrumb, so this trail is the only one on screen. The last crumb is the current page;
+     *  a crumb with `open` links back. */
+    get breadcrumbTrail() {
+      if (this.isDashboard) return [{ label: this.tr('application-core:shell.nav.dashboard', 'Dashboard') }];
+      if (this.currentPath.indexOf('/app/') === 0) return this.hostedAppTrail();
+      const [top, rest] = this.currentPath.split('/').filter(Boolean);
+      if (top === 'settings') return this.settingsTrail(rest ? decodeURIComponent(rest) : '');
+      const BUILTIN = { inbox: 'Inbox', issues: 'Issues', documents: 'Documents', reports: 'Reports' };
+      if (!BUILTIN[top]) return [];
+      const label = this.tr('application-core:shell.nav.' + top, BUILTIN[top]);
+      const reports = Alpine.store('reports');
+      const report = top === 'reports' && reports.selected;
+      if (!report) return [{ label }];
+      return [{ label, open: () => this.navigate('/reports') }, { label: reports.displayLabel(report) }];
+    },
+
+    /** Settings and the selected setting. Settings itself does not link: its list stays beside the detail. */
+    settingsTrail(id) {
+      const crumbs = [{ label: this.tr('application-core:shell.nav.settings', 'Settings') }];
+      const BUILTIN = {
+        'region-language': ['regionLanguage', 'Region & Language'],
+        'tenant-configuration': ['tenantConfig', 'Tenant Configuration'],
+        'document-numbering': ['numbering', 'Document Numbering'],
+        'tenant-users': ['tenantUsers', 'Users'],
+        'print-templates': ['printTemplates', 'Print Templates'],
+      };
+      const item = !BUILTIN[id] && this.settingsItems.find(i => i.id === id);
+      if (BUILTIN[id]) crumbs.push({ label: this.tr('application-core:shell.settings.' + BUILTIN[id][0], BUILTIN[id][1]) });
+      else if (item) crumbs.push({ label: this.itemLabel(item) });
+      return crumbs;
+    },
+
+    /** Group > App [> page], where the page is the embedded app's route beyond its landing one. */
+    hostedAppTrail() {
+      const match = this.currentPath.match(/^\/app\/([^/]+)(?:\/(.*))?$/);
+      const id = decodeURIComponent(match[1]);
+      const group = this.groups.find(g => g.items.some(i => i.id === id));
+      if (!group) return [];
+      const item = group.items.find(i => i.id === id);
+      const crumbs = [{ label: this.itemLabel(group) }];
+      const page = this.hostedPageLabel(item, match[2] || '');
+      if (!page) {
+        crumbs.push({ label: this.itemLabel(item) });
+        return crumbs;
+      }
+      crumbs.push({ label: this.itemLabel(item), open: () => this.showHostedLanding(item) }, { label: page });
+      return crumbs;
+    },
+
+    /** The page an embedded app shows beyond its landing list, or '' for the list itself. A record
+     *  selected on the list (/<Entity>/:id) opens in a sheet over it, so it is still the list; only
+     *  /create, /:id/edit and the like are pages of their own. A route outside the landing one names nothing. */
+    hostedPageLabel(item, inner) {
+      const landing = this.landingRoute(item).split('/').filter(Boolean);
+      const segments = inner.split('/').filter(Boolean);
+      if (landing.some((s, i) => segments[i] !== s)) return '';
+      const rest = segments.slice(landing.length);
+      if (rest.length === 0 || (rest.length === 1 && rest[0] !== 'create')) return '';
+      const last = rest[rest.length - 1];
+      if (last === 'create') return this.tr('application-core:shell.nav.create', 'Create');
+      if (last === 'edit') return this.tr('application-core:shell.nav.edit', 'Edit');
+      return last.charAt(0).toUpperCase() + last.slice(1);
+    },
+
+    /** The route a perspective opens its app at: the hash of its path (e.g. /Customer, /my/Customer). */
+    landingRoute(item) {
+      const path = item.path || '';
+      const hashAt = path.indexOf('#');
+      return hashAt === -1 ? '/' : '/' + path.slice(hashAt + 1).replace(/^\/+/, '');
+    },
+
+    /** Route the hosted app back to its landing page in place - reloading the iframe would lose its state.
+     *  The app's own router hears it, and mirrorInner then updates the address bar and the trail. */
+    showHostedLanding(item) {
+      const win = this.$refs.hostedFrame && this.$refs.hostedFrame.contentWindow;
+      if (!win) return;
+      const route = this.landingRoute(item);
+      if (win.PineconeRouter) win.PineconeRouter.navigate(route);
+      else win.location.hash = '#' + route;
+    },
+
+    itemLabel(it) { return it.tkey ? this.tr(it.tkey, it.label) : it.label; },
+    tr(key, fallback) { return window.T ? T(key, fallback) : fallback; },
 
     isBuiltinActive(route) { return !this.hostedUrl && this.currentPath === route; },
     isAppActive(item) { return this.hostedId === item.id; },

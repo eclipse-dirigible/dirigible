@@ -128,6 +128,8 @@ function harmoniaCalcEval(expr, vars, scale) {
 ## number: { stampOn: issue } one as a document number, and a float - only a float - through its pattern.
 #macro(displayWidget $p)#if($p.numberStampOnIssue)DOCUMENT_NUMBER#elseif($p.isDateType && $p.widgetType == "DATE")DATE#elseif($p.isDateType)DATETIME-LOCAL#else$!{p.widgetType}#end#end
 #macro(displayPattern $p)#if($p.isFloatType)$!{p.formatPattern}#end#end
+## intent `emptyText:` (#8605): the catalog key and authored text an empty value reads as.
+#macro(emptyTextArgs $p)'$projectName:${tprefix}.t.${p.dataName}_empty', '${p.widgetEmptyTextJs}'#end
 ## What a delete confirmation calls the record (#8134): its Name, else its document Number, else none -
 ## the page then names it by id.
 #set($recordLabelProperty = "")
@@ -201,6 +203,14 @@ document.addEventListener('alpine:init', () => {
     // Controller path for ${name}, relative to App.config.restBase
     // (the default base api.* prepends): <restBase>/<perspective>/<Entity>Controller.
     apiPath: '/${javaPerspectiveName}/${name}Controller',
+#if($share)
+
+    // Share links (intent `share:`, #8613): the rail's shareLinksPanel reports here whether the caller
+    // may see the record's links, so the rail shows for that section alone; `shareWhen` are the terms
+    // (basePage.visibleWhenHolds) the record satisfies while a link may be created.
+    shareLinksShown: false,
+    shareWhen: #if($share.whenTermsJs)${share.whenTermsJs}#{else}[]#end,
+#end
 #if($history == "true")
 
     // Change history (intent `history: true`): the record's field-level trail, read from the
@@ -1263,7 +1273,13 @@ document.addEventListener('alpine:init', () => {
       return [
 #foreach($property in $properties)
 #if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty && $property.widgetPlacement != "MAIN")
+#if($property.widgetEmptyText)
+## A field declaring emptyText (#8605) always shows its row, so it counts whenever the caller may see it.
+#if($property.roleRead)#set($emptyTextShown = "this.canSee('${property.name}') || null")#{else}#set($emptyTextShown = "true")#end
+        ${emptyTextShown},
+#else
         this.form.${property.name},
+#end
 #end
 #end
       ].some(v => v !== null && v !== undefined && v !== '');
@@ -1275,9 +1291,9 @@ document.addEventListener('alpine:init', () => {
     // The rail itself is only worth its rule and its column when something inside it renders.
     get hasRailContent() {
 #if($history == "true")
-      return this.hasDetailValues || (this.history || []).length > 0;
+      return this.hasDetailValues || (this.history || []).length > 0#if($share) || this.shareLinksShown#end;
 #else
-      return this.hasDetailValues;
+      return this.hasDetailValues#if($share) || this.shareLinksShown#end;
 #end
     },
 
@@ -1325,7 +1341,12 @@ document.addEventListener('alpine:init', () => {
 #if($property.roleRead)
       if (this.canSee('${property.name}')) {
 #end
+#if($property.widgetEmptyText)
+## An empty value reads as the field's emptyText (#8605) instead of being skipped.
+      parts.push({ text: this.orEmptyText(this.loadedRecord.${property.name}, this.fieldText(this.loadedRecord.${property.name}, '#displayWidget($property)', '#displayPattern($property)', #if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT")this.options${property.name}#{else}null#end), #emptyTextArgs($property)), title: T('$projectName:${tprefix}.t.${property.dataName}', '${slabel}') });
+#else
       this.pushSummary(parts, this.loadedRecord.${property.name}, '#displayWidget($property)', '#displayPattern($property)', #if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT")this.options${property.name}#{else}null#end, T('$projectName:${tprefix}.t.${property.dataName}', '${slabel}'));
+#end
 #if($property.roleRead)
       }
 #end

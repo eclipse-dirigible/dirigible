@@ -27,7 +27,8 @@ class TenantUserSyncValidationTest {
                 List.of(new TenantUserSync.Snapshot("ann@example.com", 7L, "ASSIGNED",
                         List.of(new TenantUserSync.RoleState("Owner", "ADDING", null, null),
                                 new TenantUserSync.RoleState("User", "GRANTED", "bob@acme.test", AT)),
-                        "bob@acme.test", AT, "bob@acme.test", AT, new TenantUserSync.LastError("LAST_OWNER", null))));
+                        "bob@acme.test", AT, "bob@acme.test", AT, new TenantUserSync.LastError("LAST_OWNER", null))),
+                10);
 
         assertEquals(List.of(), TenantUserSyncValidation.problems(body));
     }
@@ -38,15 +39,18 @@ class TenantUserSyncValidationTest {
         for (int index = 0; index < 21; index++) {
             tooMany.add(new TenantUserSync.RoleState("Role" + index, "GRANTED", null, AT));
         }
-        TenantUserSync body = new TenantUserSync(false, 7L, List.of(
-                new TenantUserSync.Snapshot("not-an-email", 0L, "LOST",
-                        List.of(new TenantUserSync.RoleState("x".repeat(101), "GRANTED", null, AT),
-                                new TenantUserSync.RoleState("Owner", "ADDING", "bob@acme.test", null),
-                                new TenantUserSync.RoleState("User", "GRANTED", null, null),
-                                new TenantUserSync.RoleState("Auditor", "PAUSED", null, null)),
-                        null, "yesterday", null, null, new TenantUserSync.LastError(null, "no code")),
-                new TenantUserSync.Snapshot("ann@example.com", null, null, tooMany, null, null, null, null, null),
-                new TenantUserSync.Snapshot("ANN@example.com", 3L, "INVITED", List.of(), null, null, null, null, null)));
+        TenantUserSync body =
+                new TenantUserSync(
+                        false, 7L, List.of(
+                                new TenantUserSync.Snapshot("not-an-email", 0L, "LOST",
+                                        List.of(new TenantUserSync.RoleState("x".repeat(101), "GRANTED", null, AT),
+                                                new TenantUserSync.RoleState("Owner", "ADDING", "bob@acme.test", null),
+                                                new TenantUserSync.RoleState("User", "GRANTED", null, null),
+                                                new TenantUserSync.RoleState("Auditor", "PAUSED", null, null)),
+                                        null, "yesterday", null, null, new TenantUserSync.LastError(null, "no code")),
+                                new TenantUserSync.Snapshot("ann@example.com", null, null, tooMany, null, null, null, null, null),
+                                new TenantUserSync.Snapshot("ANN@example.com", 3L, "INVITED", List.of(), null, null, null, null, null)),
+                        null);
 
         String all = String.join("\n", TenantUserSyncValidation.problems(body));
 
@@ -62,14 +66,14 @@ class TenantUserSyncValidationTest {
 
     @Test
     void anEmptyListIsOnlyAResync() {
-        assertTrue(String.join("", TenantUserSyncValidation.problems(new TenantUserSync(false, 7L, List.of())))
+        assertTrue(String.join("", TenantUserSyncValidation.problems(new TenantUserSync(false, 7L, List.of(), null)))
                          .contains("users: must not be empty unless complete is true"));
-        assertEquals(List.of(), TenantUserSyncValidation.problems(new TenantUserSync(true, 7L, List.of())));
+        assertEquals(List.of(), TenantUserSyncValidation.problems(new TenantUserSync(true, 7L, List.of(), null)));
     }
 
     @Test
     void theBodyNeedsItsRevisionAndItsUsers() {
-        List<String> problems = TenantUserSyncValidation.problems(new TenantUserSync(null, null, null));
+        List<String> problems = TenantUserSyncValidation.problems(new TenantUserSync(null, null, null, null));
 
         assertTrue(problems.contains("revision: is required"));
         assertTrue(problems.contains("users: is required"));
@@ -77,13 +81,28 @@ class TenantUserSyncValidationTest {
 
     @Test
     void aRoleNamedTwiceIsRefused() {
-        TenantUserSync body = new TenantUserSync(false, 7L, List
-                                                                .of(new TenantUserSync.Snapshot("ann@example.com", 7L, "ASSIGNED",
-                                                                        List.of(new TenantUserSync.RoleState("User", "GRANTED", null, AT),
-                                                                                new TenantUserSync.RoleState("User", "REMOVING", null, AT)),
-                                                                        null, null, null, null, null)));
+        TenantUserSync body = new TenantUserSync(
+                false, 7L, List
+                               .of(new TenantUserSync.Snapshot("ann@example.com", 7L, "ASSIGNED",
+                                       List.of(new TenantUserSync.RoleState("User", "GRANTED", null, AT),
+                                               new TenantUserSync.RoleState("User", "REMOVING", null, AT)),
+                                       null, null, null, null, null)),
+                null);
 
         assertTrue(String.join("", TenantUserSyncValidation.problems(body))
                          .contains("users[0].roles[1].role: [User] appears more than once"));
+    }
+
+    @Test
+    void aSeatLimitIsAWholeNumberOfAtLeastOneOrAbsent() {
+        for (Number refused : new Number[] {0, -1, 2.5, 3_000_000_000L}) {
+            assertTrue(String.join("", TenantUserSyncValidation.problems(new TenantUserSync(true, 7L, List.of(), refused)))
+                             .contains("seatLimit: must be a whole number of at least 1"),
+                    "refused: " + refused);
+        }
+        for (Number accepted : new Number[] {null, 1, 10L, 4.0}) {
+            assertEquals(List.of(), TenantUserSyncValidation.problems(new TenantUserSync(true, 7L, List.of(), accepted)),
+                    "accepted: " + accepted);
+        }
     }
 }

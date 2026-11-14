@@ -25,10 +25,10 @@ public class TagRegistryTest {
     @Test
     public void unregisteredTagFailsWithPosition() {
         try {
-            new DocumentParser().parse("<document><qrcode value=\"{{invoice.uuid}}\"/></document>");
+            new DocumentParser().parse("<document><stamp value=\"{{invoice.uuid}}\"/></document>");
         } catch (ParseException e) {
             assertTrue(e.getMessage()
-                        .contains("Unknown tag <qrcode>"));
+                        .contains("Unknown tag <stamp>"));
             assertEquals(11, e.getColumn());
             return;
         }
@@ -38,15 +38,15 @@ public class TagRegistryTest {
     @Test
     public void registeredTagParsesToCustomNode() {
         TagRegistry registry = TagRegistry.builtIn();
-        registry.register("qrcode");
-        Node root = new DocumentParser(registry).parse("<document><qrcode value=\"{{invoice.uuid}}\">payload</qrcode></document>");
-        Node qrcode = root.children()
-                          .get(0);
-        assertTrue(qrcode instanceof CustomNode);
-        assertEquals("qrcode", qrcode.tag());
-        assertEquals("{{invoice.uuid}}", qrcode.attributes()
-                                               .get("value"));
-        assertEquals("payload", qrcode.text());
+        registry.register("stamp");
+        Node root = new DocumentParser(registry).parse("<document><stamp value=\"{{invoice.uuid}}\">payload</stamp></document>");
+        Node stamp = root.children()
+                         .get(0);
+        assertTrue(stamp instanceof CustomNode);
+        assertEquals("stamp", stamp.tag());
+        assertEquals("{{invoice.uuid}}", stamp.attributes()
+                                              .get("value"));
+        assertEquals("payload", stamp.text());
     }
 
     @Test
@@ -67,14 +67,14 @@ public class TagRegistryTest {
     @Test
     public void builtInsStillWorkOnACustomRegistry() {
         TagRegistry registry = TagRegistry.builtIn();
-        registry.register("qrcode");
-        Node root = new DocumentParser(registry).parse("<document><text>Hi</text><qrcode/></document>");
+        registry.register("stamp");
+        Node root = new DocumentParser(registry).parse("<document><text>Hi</text><stamp/></document>");
         assertEquals("text", root.children()
                                  .get(0)
                                  .tag());
-        assertEquals("qrcode", root.children()
-                                   .get(1)
-                                   .tag());
+        assertEquals("stamp", root.children()
+                                  .get(1)
+                                  .tag());
     }
 
     @Test

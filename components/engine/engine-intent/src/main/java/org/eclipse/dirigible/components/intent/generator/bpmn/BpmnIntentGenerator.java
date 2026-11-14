@@ -28,6 +28,7 @@ import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.CheckSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
+import org.eclipse.dirigible.components.intent.generator.ClaimSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.generator.ProcessAssigneeSupport;
@@ -1380,7 +1381,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         List<String> writes = writesByTask.getOrDefault(step.getName(), List.of());
         switch (kind) {
             case "userTask":
-                appendUserTask(sb, step, rolesByLowerName, projectName, access, clears, completingActionsByForm, writes, hasEventWait);
+                appendUserTask(sb, step, rolesByLowerName, projectName, processName, eventsPackage, access, clears, completingActionsByForm,
+                        writes, hasEventWait);
                 break;
             case "serviceTask":
             case "script":
@@ -1401,7 +1403,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             default:
                 LOGGER.warn("Unknown step kind [{}] for step [{}] - rendering as userTask", LoggedValue.of(kind),
                         LoggedValue.of(step.getName()));
-                appendUserTask(sb, step, rolesByLowerName, projectName, access, clears, completingActionsByForm, writes, hasEventWait);
+                appendUserTask(sb, step, rolesByLowerName, projectName, processName, eventsPackage, access, clears, completingActionsByForm,
+                        writes, hasEventWait);
                 break;
         }
     }
@@ -1426,8 +1429,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static void appendUserTask(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName, String projectName,
-            TaskAccess access, List<String> clears, Map<String, List<String>> completingActionsByForm, List<String> writes,
-            boolean discardEarlyEvents) {
+            String processName, String eventsPackage, TaskAccess access, List<String> clears,
+            Map<String, List<String>> completingActionsByForm, List<String> writes, boolean discardEarlyEvents) {
         String assignee = stringArg(step, "assignee");
         String form = stringArg(step, "form");
         String candidateGroupsExtra = String.join(",", access.candidateGroupsExtra(step));
@@ -1499,6 +1502,16 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         sb.append("        <flowable:property name=\"taskWrites\" value=\"")
           .append(escapeXmlAttribute(String.join(",", writes)))
           .append("\"></flowable:property>\n");
+        if (ClaimSupport.declaresClaim(step)) {
+            // onClaim / onUnclaim (#8461): the record moves while the task is claimed, so a completion
+            // that never claimed it would decide over a record nothing froze - the platform refuses it.
+            // Flowable fires "assignment" on a claim and on an unclaim (and on creation with an
+            // assignee), whatever path claims the task.
+            sb.append("        <flowable:property name=\"taskClaimRequired\" value=\"true\"></flowable:property>\n");
+            sb.append("        <flowable:taskListener event=\"assignment\" class=\"")
+              .append(escapeXmlAttribute(eventsPackage + "." + ClaimSupport.className(processName, step.getName())))
+              .append("\"></flowable:taskListener>\n");
+        }
         appendClearVariableListeners(sb, clears);
         if (discardEarlyEvents) {
             // Only an event that arrives after this task completes may resume a later wait (#8106).

@@ -10,8 +10,14 @@
 package org.eclipse.dirigible.components.api.bpm;
 
 import java.util.Map;
+import org.eclipse.dirigible.components.base.tenant.TenantConfigurationScope;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.engine.bpm.flowable.config.BpmProviderFlowable;
+import org.flowable.common.engine.impl.cfg.TransactionContext;
+import org.flowable.common.engine.impl.cfg.TransactionState;
+import org.flowable.common.engine.impl.context.Context;
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -26,9 +32,16 @@ public class BpmFacade implements InitializingBean {
 
     private final BpmProviderFlowable bpmProviderFlowable;
 
+    private final TenantContext tenantContext;
+
+    private final ObjectProvider<TenantConfigurationScope> tenantConfigurationScope;
+
     @Autowired
-    private BpmFacade(BpmProviderFlowable bpmProviderFlowable) {
+    BpmFacade(BpmProviderFlowable bpmProviderFlowable, TenantContext tenantContext,
+            ObjectProvider<TenantConfigurationScope> tenantConfigurationScope) {
         this.bpmProviderFlowable = bpmProviderFlowable;
+        this.tenantContext = tenantContext;
+        this.tenantConfigurationScope = tenantConfigurationScope;
     }
 
     /**
@@ -250,17 +263,45 @@ public class BpmFacade implements InitializingBean {
      * racing the steps that run milliseconds after the publisher. Outside a Flowable command (no
      * transaction context) the action runs immediately.
      *
+     * <p>
+     * The action runs in the tenant scope that was current when it was registered, with that tenant's
+     * configuration overrides (#8550): a step on the async executor has closed its tenant scope by the
+     * time its job's transaction commits, and an unscoped action published into the default tenant.
+     * Registered with no tenant scope current, it runs as it is.
+     *
      * @param action the action to run on commit
      */
     public static void executeAfterCommit(Runnable action) {
-        org.flowable.common.engine.impl.cfg.TransactionContext transactionContext =
-                org.flowable.common.engine.impl.context.Context.getTransactionContext();
+        TransactionContext transactionContext = Context.getTransactionContext();
         if (transactionContext != null) {
-            transactionContext.addTransactionListener(org.flowable.common.engine.impl.cfg.TransactionState.COMMITTED,
-                    commandContext -> action.run());
+            Runnable scopedAction = INSTANCE == null ? action : INSTANCE.inCurrentTenantScope(action);
+            transactionContext.addTransactionListener(TransactionState.COMMITTED, commandContext -> scopedAction.run());
         } else {
             action.run();
         }
+    }
+
+    /**
+     * The action bound to the tenant scope current now, to run later on whatever thread commits.
+     */
+    Runnable inCurrentTenantScope(Runnable action) {
+        if (tenantContext.isNotInitialized()) {
+            return action;
+        }
+        String tenantId = tenantContext.getCurrentTenant()
+                                       .getId();
+        return () -> tenantContext.execute(tenantId, () -> {
+            TenantConfigurationScope scope = tenantConfigurationScope.getIfAvailable();
+            if (scope == null) {
+                action.run();
+            } else {
+                scope.executeWithTenantOverrides(() -> {
+                    action.run();
+                    return null;
+                });
+            }
+            return null;
+        });
     }
 
     /**

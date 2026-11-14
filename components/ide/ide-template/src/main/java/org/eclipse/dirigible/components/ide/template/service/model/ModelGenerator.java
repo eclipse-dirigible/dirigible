@@ -95,6 +95,7 @@ class ModelGenerator {
             ModelTranslations.migrateForm(model, str(parameters, "fileName"));
         } else if (isReport) {
             ModelTranslations.migrateReport(model);
+            ModelTranslations.labelReportParameters(model);
         }
         Map<String, Object> context = new LinkedHashMap<>();
         context.putAll(model);

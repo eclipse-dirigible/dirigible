@@ -99,6 +99,7 @@ final class ModelParameterProcessor {
             resolveLabelParts(entities);
             resolveRelatedRegisters(entities, parameters);
             resolveBanners(entities, parameters);
+            resolveShare(entities);
             resolveCollectionColumns(entities, parameters);
             resolveRollupGuards(entities);
             resolveAgreeGuards(entities, parameters);
@@ -144,6 +145,7 @@ final class ModelParameterProcessor {
         splitChecks(entity, parameters);
         resolveUniqueConstraintLiterals(entity, parameters);
         resolveFixedProperties(entity, parameters);
+        resolveRefusalCatalog(entity, parameters);
         for (Map<String, Object> flag : asMaps(entity.get("singleFlags"))) {
             // A refusing single flag's conflict message (#8101), resolved for the reader's language.
             resolveMessageCatalog(flag, ModelTranslations.singleFlagMessageKey(entity, flag), parameters);
@@ -591,6 +593,24 @@ final class ModelParameterProcessor {
     }
 
     /**
+     * Hands the entity's repository and controllers what a delete refusal is translated through
+     * (dirigible #8569), as Java expressions: {@code messageCatalogJava}, the model's catalog the
+     * refusal's sentence is looked up in, and {@code labelCatalogKeyJava}, the catalog key of the
+     * entity's label - the key the en-US catalog writes the label under. A bare render, with no project
+     * or file path, has no catalog: both are {@code null}, and the refusal keeps its default text.
+     *
+     * @param entity the entity
+     * @param parameters the generation parameters (project name and model file path)
+     */
+    private static void resolveRefusalCatalog(Map<String, Object> entity, Map<String, Object> parameters) {
+        String catalog = ModelTranslations.catalog(parameters);
+        String dataName = str(entity, "dataName");
+        entity.put("messageCatalogJava", catalog == null ? "null" : "\"" + JavaLiterals.escape(catalog) + "\"");
+        entity.put("labelCatalogKeyJava",
+                catalog == null || dataName == null ? "null" : "\"" + JavaLiterals.escape(catalog + ".t." + dataName) + "\"");
+    }
+
+    /**
      * Collects the properties fixed after create (intent {@code fixedAfterCreate: true} on a to-one
      * relation, #7903, or on a field, #8363) into {@code fixedAfterCreateProperties}: each property's
      * name and the arguments its refusal hands {@code CheckMessages} - the fully qualified catalog key
@@ -890,6 +910,12 @@ final class ModelParameterProcessor {
         // class). Escaped once here, the same way widgetPatternJs is, so every template can write
         // '${property.widgetLabelJs}' instead of '${property.widgetLabel}' without re-deriving it.
         property.put("widgetLabelJs", JsLiterals.escape(str(property, "widgetLabel")));
+        // The text an empty value reads as (#8605) prints inside single-quoted JS literals and T()
+        // arguments, so it is escaped for the same reason as the label (an apostrophe in "Doesn't
+        // expire" must not close the literal). Only when authored: a model without it is unchanged.
+        if (truthy(property, "widgetEmptyText")) {
+            property.put("widgetEmptyTextJs", JsLiterals.escape(str(property, "widgetEmptyText")));
+        }
         // A picker rule naming its message's catalog key (#7611) gets the fully qualified key the
         // shared runtime's T() resolves - the namespace is this project and the catalog prefix this
         // model file's, neither of which the model itself may embed.
@@ -2060,6 +2086,35 @@ final class ModelParameterProcessor {
         }
     }
 
+    /**
+     * Resolves an entity's {@code share} (dirigible #8613) into what its templates render: the state a
+     * record can get a link in as the Java guard the server applies and as the term list the page hides
+     * the button by, the role gate as a Java literal, and the snapshot repository's package.
+     *
+     * <p>
+     * A declaration whose condition does not render is refused rather than generated without it: the
+     * guard is what keeps a draft from being handed to an anonymous reader.
+     *
+     * @param entities every entity in the model
+     */
+    private static void resolveShare(List<Map<String, Object>> entities) {
+        for (Map<String, Object> entity : entities) {
+            Map<String, Object> share = asMap(entity.get("share"));
+            if (share == null) {
+                continue;
+            }
+            String guard = JavaLiterals.conditionExpression(asMaps(share.get("whenTerms")));
+            if (guard == null) {
+                throw new IllegalStateException(
+                        "The share: of entity [" + str(entity, "name") + "] carries no condition that renders - regenerate the model");
+            }
+            share.put("whenJavaExpression", guard);
+            share.put("whenTermsJs", termsOrEmpty(str(share, "when")));
+            share.put("rolesJavaLiteral", JavaLiterals.escape(strOr(share, "roles", "")));
+            share.put("javaCopyPerspective", NamingHelper.sanitizeJavaIdentifier(str(share, "copyPerspective")));
+        }
+    }
+
     /** A condition's term list, or the empty list - which every row and record satisfies. */
     private static String termsOrEmpty(String condition) {
         String terms = VisibleWhenLiterals.termsLiteral(condition);
@@ -2310,6 +2365,11 @@ final class ModelParameterProcessor {
             // A number: { stampOn: issue } column holds a UUID placeholder until its document is
             // issued; the register shows the draft marker instead (issue #7722).
             column.put("documentNumber", Boolean.TRUE);
+        }
+        if (truthy(property, "widgetEmptyText")) {
+            // The text an empty cell reads as (#8605), in place of the em dash.
+            column.put("emptyText", str(property, "widgetEmptyText"));
+            column.put("emptyTextJs", JsLiterals.escape(str(property, "widgetEmptyText")));
         }
         return column;
     }

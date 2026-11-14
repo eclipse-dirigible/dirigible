@@ -36,6 +36,12 @@ import java.util.Map;
  *     duplicateKey: [statementId, lineNumber]
  * </pre>
  *
+ * {@code camt053: { records: transactions }} reads a camt.053 file one record per transaction
+ * instead of one per entry. {@link #where} keeps only the records whose source keys hold the given
+ * values ({@code where: { status: BOOK }}; a list allows any of its values) - the rest are skipped
+ * and counted, never saved.
+ *
+ * <p>
  * A file is imported whole or not at all: an unreadable value, or a record repeating the
  * {@link #duplicateKey} of a row already imported (or of another record of the same file), refuses
  * the file and saves nothing. Every attempt is recorded in the entity's import ledger.
@@ -47,6 +53,8 @@ public class ImportIntent {
     private String format;
     private String encoding;
     private ImportCsvIntent csv;
+    private ImportCamt053Intent camt053;
+    private Map<String, Object> where = new LinkedHashMap<>();
     private Map<String, Object> map = new LinkedHashMap<>();
     private List<String> duplicateKey = new ArrayList<>();
 
@@ -88,6 +96,22 @@ public class ImportIntent {
 
     public void setCsv(ImportCsvIntent csv) {
         this.csv = csv;
+    }
+
+    public ImportCamt053Intent getCamt053() {
+        return camt053;
+    }
+
+    public void setCamt053(ImportCamt053Intent camt053) {
+        this.camt053 = camt053;
+    }
+
+    public Map<String, Object> getWhere() {
+        return where == null ? new LinkedHashMap<>() : where;
+    }
+
+    public void setWhere(Map<String, Object> where) {
+        this.where = where;
     }
 
     public Map<String, Object> getMap() {

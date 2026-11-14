@@ -153,7 +153,7 @@
 
           <div class="hbox gap-2 flex-wrap" x-show="state.selected?.attachments?.length">
             <template x-for="file in (state.selected?.attachments || [])" :key="file.id">
-              <a x-h-button data-variant="outline" data-size="sm" :href="state.attachmentUrl(file)" download>
+              <a x-h-button data-variant="outline" data-size="sm" :href="state.attachmentUrl(file)" download data-native>
                 <svg role="presentation" x-h-lucide data-lucide="paperclip"></svg><span x-text="file.fileName"></span>
               </a>
             </template>

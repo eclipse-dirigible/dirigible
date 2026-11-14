@@ -84,7 +84,7 @@ public class DirigibleConfigCatalogueTest {
     }
 
     @Test
-    public void theTenantAllowListIsTodaysFifteenKeysInTodaysOrder() {
+    public void theTenantAllowListIsTodaysSeventeenKeysInTodaysOrder() {
         assertEquals(List.of( //
                 "DIRIGIBLE_BRANDING_NAME", //
                 "DIRIGIBLE_BRANDING_SUBTITLE", //
@@ -100,7 +100,9 @@ public class DirigibleConfigCatalogueTest {
                 "DIRIGIBLE_CMS_ROLES_ENABLED", //
                 "DIRIGIBLE_APP_BASE_URL", //
                 "DIRIGIBLE_MAIL_SENDER", //
-                "DIRIGIBLE_MAIL_REPLY_TO"), DirigibleConfig.tenantOverridableKeys());
+                "DIRIGIBLE_MAIL_REPLY_TO", //
+                "DIRIGIBLE_DOCUMENTS_SHARE_ENABLED", //
+                "DIRIGIBLE_DOCUMENTS_SHARE_MAX_EXPIRY_DAYS"), DirigibleConfig.tenantOverridableKeys());
         for (String key : DirigibleConfig.tenantOverridableKeys()) {
             assertFalse(key + " is read per call", DirigibleConfig.fromKey(key)
                                                                   .orElseThrow()

@@ -30,13 +30,17 @@ import org.xml.sax.SAXException;
 import org.xml.sax.SAXParseException;
 
 /**
- * Reads an ISO 20022 camt.053 bank-to-customer statement into one record per entry ({@code Ntry}).
+ * Reads an ISO 20022 camt.053 bank-to-customer statement into one record per entry ({@code Ntry}),
+ * or - with {@link #readTransactions(byte[])} - one record per transaction of an entry
+ * ({@code Ntry/NtryDtls/TxDtls}).
  *
  * <p>
  * Every record carries the keys of {@link #KEYS} - the vocabulary {@link Mt940} uses, plus the
- * counterparty a camt entry names. Values are canonical: an amount is a plain decimal, negative for
- * a debit ({@code DBIT}), and a date is ISO {@code yyyy-MM-dd}. A key the entry does not carry is
- * absent from its record.
+ * counterparty a camt entry names, the entry's booking {@code status} ({@code BOOK}, {@code PDNG},
+ * {@code INFO}), whether it is a {@code reversal} of an earlier entry, and how many
+ * {@code transactions} it books. Values are canonical: an amount is a plain decimal, negative for a
+ * debit ({@code DBIT}), a date is ISO {@code yyyy-MM-dd} and a flag is {@code true} /
+ * {@code false}. A key the entry does not carry is absent from its record.
  *
  * <p>
  * Elements are matched by their local name, so every published version of the message
@@ -47,16 +51,21 @@ import org.xml.sax.SAXParseException;
 public final class Camt053 {
 
     /** Every key a record may carry. */
-    public static final Set<String> KEYS =
-            Set.of("statementId", "sequence", "account", "currency", "lineNumber", "valueDate", "bookingDate", "mark", "amount",
-                    "transactionType", "reference", "bankReference", "details", "counterpartyName", "counterpartyAccount");
+    public static final Set<String> KEYS = Set.of("statementId", "sequence", "account", "currency", "lineNumber", "valueDate",
+            "bookingDate", "mark", "amount", "transactionType", "reference", "bankReference", "details", "counterpartyName",
+            "counterpartyAccount", "status", "reversal", "transactions", "transaction");
+
+    /** The keys only {@link #readTransactions(byte[])} produces. */
+    public static final Set<String> TRANSACTION_KEYS = Set.of("transaction");
 
     private static final String NOT_PROVIDED = "NOTPROVIDED";
 
     private Camt053() {}
 
     /**
-     * Read the entries of a camt.053 document.
+     * Read the entries of a camt.053 document - one record per {@code Ntry}. An entry booking several
+     * transactions (a batch) is one record of the entry's amount, with the reference and counterparty
+     * of its first transaction; its {@code transactions} key says how many it books.
      *
      * @param content the file's bytes
      * @return one record per entry, in document order
@@ -64,6 +73,28 @@ public final class Camt053 {
      *         entry lacks its amount or direction
      */
     public static List<Map<String, String>> read(byte[] content) {
+        return read(content, false);
+    }
+
+    /**
+     * Read the transactions of a camt.053 document - one record per {@code Ntry/NtryDtls/TxDtls}, so a
+     * batch-booked entry yields one record per payer. Each record carries its own amount (the
+     * transaction's {@code Amt}, or {@code AmtDtls/TxAmt/Amt}), reference, counterparty and remittance,
+     * the entry's {@code lineNumber}, and its 1-based {@code transaction} position within the entry. An
+     * entry with at most one transaction is one record of the entry's amount, exactly as
+     * {@link #read(byte[])} reads it.
+     *
+     * @param content the file's bytes
+     * @return one record per transaction, in document order
+     * @throws IllegalArgumentException when the file is not a well-formed camt.053 statement, an entry
+     *         lacks its amount or direction, a transaction of a batch has no amount, or the amounts of
+     *         a batch do not add up to its entry's amount
+     */
+    public static List<Map<String, String>> readTransactions(byte[] content) {
+        return read(content, true);
+    }
+
+    private static List<Map<String, String>> read(byte[] content, boolean perTransaction) {
         Element root = parse(content).getDocumentElement();
         Element message = child(root, "BkToCstmrStmt");
         if (message == null) {
@@ -71,6 +102,7 @@ public final class Camt053 {
                     "the file is not a camt.053 bank-to-customer statement (no BkToCstmrStmt under " + root.getLocalName() + ")");
         }
         List<Map<String, String>> records = new ArrayList<>();
+        int entries = 0;
         for (Element statement : children(message, "Stmt")) {
             Map<String, String> header = new LinkedHashMap<>();
             putIfPresent(header, "statementId", text(child(statement, "Id")));
@@ -81,10 +113,23 @@ public final class Camt053 {
             int lineNumber = 0;
             for (Element entry : children(statement, "Ntry")) {
                 lineNumber++;
+                entries++;
                 Map<String, String> record = new LinkedHashMap<>(header);
                 record.put("lineNumber", Integer.toString(lineNumber));
-                readEntry(entry, record, records.size() + 1);
-                records.add(record);
+                List<Element> transactions = transactions(entry);
+                boolean debit = readEntry(entry, record, entries, transactions.size());
+                if (!perTransaction || transactions.size() <= 1) {
+                    Element details = transactions.isEmpty() ? null : transactions.get(0);
+                    putIfPresent(record, "reference", reference(entry, details));
+                    putIfPresent(record, "details", remittance(entry));
+                    counterparty(record, details, debit);
+                    if (perTransaction) {
+                        record.put("transaction", "1");
+                    }
+                    records.add(record);
+                } else {
+                    records.addAll(readBatch(entry, record, transactions, debit, entries));
+                }
             }
         }
         if (records.isEmpty()) {
@@ -93,44 +138,152 @@ public final class Camt053 {
         return records;
     }
 
-    private static void readEntry(Element entry, Map<String, String> record, int number) {
+    /**
+     * Fill the entry-level keys of a record.
+     *
+     * @return whether the entry is a debit
+     */
+    private static boolean readEntry(Element entry, Map<String, String> record, int number, int transactions) {
         Element amount = child(entry, "Amt");
         String direction = text(child(entry, "CdtDbtInd"));
         if (amount == null || text(amount) == null || direction == null) {
             throw new IllegalArgumentException("entry " + number + " has no Amt or no CdtDbtInd");
         }
-        boolean debit = "DBIT".equals(direction);
-        if (!debit && !"CRDT".equals(direction)) {
-            throw new IllegalArgumentException("entry " + number + " has an unknown CdtDbtInd [" + direction + "]");
-        }
-        BigDecimal value;
-        try {
-            value = new BigDecimal(text(amount));
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("entry " + number + " has an invalid amount [" + text(amount) + "]", e);
-        }
+        boolean debit = debit(direction, "entry " + number);
+        BigDecimal value = amount(amount, "entry " + number);
         record.put("amount", (debit ? value.negate() : value).toPlainString());
         record.put("mark", debit ? "D" : "C");
         String currency = amount.getAttribute("Ccy");
         if (!currency.isBlank()) {
             record.put("currency", currency);
         }
+        putIfPresent(record, "status", status(child(entry, "Sts")));
+        record.put("reversal", Boolean.toString(reversal(entry, number)));
+        record.put("transactions", Integer.toString(transactions));
         putIfPresent(record, "bookingDate", date(child(entry, "BookgDt")));
         putIfPresent(record, "valueDate", date(child(entry, "ValDt")));
         putIfPresent(record, "bankReference", text(child(entry, "AcctSvcrRef")));
         putIfPresent(record, "transactionType", transactionType(child(entry, "BkTxCd")));
-        Element details = first(entry, "TxDtls");
-        putIfPresent(record, "reference", reference(entry, details));
-        putIfPresent(record, "details", remittance(entry));
-        if (details != null) {
-            Element parties = child(details, "RltdPties");
-            // The counterparty is whoever is on the other side: the debtor of a credit, the creditor of a
-            // debit.
-            String party = debit ? "Cdtr" : "Dbtr";
-            putIfPresent(record, "counterpartyName", text(first(child(parties, party), "Nm")));
-            Element partyAccount = child(parties, party + "Acct");
-            putIfPresent(record, "counterpartyAccount", accountId(child(partyAccount, "Id")));
+        return debit;
+    }
+
+    /**
+     * One record per transaction of a batch-booked entry. Every transaction must name its amount, and
+     * the amounts must add up to the entry's: a part that cannot be told apart is never guessed.
+     */
+    private static List<Map<String, String>> readBatch(Element entry, Map<String, String> entryRecord, List<Element> transactions,
+            boolean entryDebit, int number) {
+        List<Map<String, String>> records = new ArrayList<>(transactions.size());
+        BigDecimal total = BigDecimal.ZERO;
+        int position = 0;
+        for (Element details : transactions) {
+            position++;
+            String subject = "entry " + number + " transaction " + position;
+            Element amount = child(details, "Amt");
+            if (amount == null) {
+                amount = child(child(child(details, "AmtDtls"), "TxAmt"), "Amt");
+            }
+            if (amount == null || text(amount) == null) {
+                throw new IllegalArgumentException(subject + " has no amount (Amt or AmtDtls/TxAmt/Amt) - the entry books "
+                        + transactions.size() + " transactions, so its parts cannot be told apart");
+            }
+            String direction = text(child(details, "CdtDbtInd"));
+            boolean debit = direction == null ? entryDebit : debit(direction, subject);
+            BigDecimal value = amount(amount, subject);
+            BigDecimal signed = debit ? value.negate() : value;
+            total = total.add(signed);
+            Map<String, String> record = new LinkedHashMap<>(entryRecord);
+            record.put("amount", signed.toPlainString());
+            record.put("mark", debit ? "D" : "C");
+            record.put("transaction", Integer.toString(position));
+            String bankReference = text(child(child(details, "Refs"), "AcctSvcrRef"));
+            if (bankReference != null) {
+                record.put("bankReference", bankReference);
+            }
+            putIfPresent(record, "reference", reference(entry, details));
+            putIfPresent(record, "details", transactionRemittance(entry, details));
+            counterparty(record, details, debit);
+            records.add(record);
         }
+        BigDecimal entryAmount = new BigDecimal(entryRecord.get("amount"));
+        if (total.compareTo(entryAmount) != 0) {
+            throw new IllegalArgumentException("entry " + number + " books " + entryAmount.toPlainString() + ", but its "
+                    + transactions.size() + " transactions add up to " + total.toPlainString());
+        }
+        return records;
+    }
+
+    /**
+     * The counterparty is whoever is on the other side: the debtor of a credit, the creditor of a
+     * debit.
+     */
+    private static void counterparty(Map<String, String> record, Element details, boolean debit) {
+        if (details == null) {
+            return;
+        }
+        Element parties = child(details, "RltdPties");
+        String party = debit ? "Cdtr" : "Dbtr";
+        putIfPresent(record, "counterpartyName", text(first(child(parties, party), "Nm")));
+        Element partyAccount = child(parties, party + "Acct");
+        putIfPresent(record, "counterpartyAccount", accountId(child(partyAccount, "Id")));
+    }
+
+    /** Every {@code TxDtls} of the entry, across all of its {@code NtryDtls} blocks. */
+    private static List<Element> transactions(Element entry) {
+        List<Element> transactions = new ArrayList<>();
+        for (Element details : children(entry, "NtryDtls")) {
+            transactions.addAll(children(details, "TxDtls"));
+        }
+        return transactions;
+    }
+
+    private static boolean debit(String direction, String subject) {
+        if ("DBIT".equals(direction)) {
+            return true;
+        }
+        if ("CRDT".equals(direction)) {
+            return false;
+        }
+        throw new IllegalArgumentException(subject + " has an unknown CdtDbtInd [" + direction + "]");
+    }
+
+    private static BigDecimal amount(Element amount, String subject) {
+        try {
+            return new BigDecimal(text(amount));
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(subject + " has an invalid amount [" + text(amount) + "]", e);
+        }
+    }
+
+    /**
+     * The booking status: {@code Sts/Cd} (camt.053.001.08 on), {@code Sts/Prtry}, or the text of
+     * {@code Sts} itself (up to .001.07).
+     */
+    private static String status(Element status) {
+        if (status == null) {
+            return null;
+        }
+        String code = text(child(status, "Cd"));
+        if (code != null) {
+            return code;
+        }
+        String proprietary = text(child(status, "Prtry"));
+        if (proprietary != null) {
+            return proprietary;
+        }
+        return child(status, "*") == null ? text(status) : null;
+    }
+
+    /** {@code RvslInd}: absent means the entry is no reversal. */
+    private static boolean reversal(Element entry, int number) {
+        String indicator = text(child(entry, "RvslInd"));
+        if (indicator == null || "false".equals(indicator) || "0".equals(indicator)) {
+            return false;
+        }
+        if ("true".equals(indicator) || "1".equals(indicator)) {
+            return true;
+        }
+        throw new IllegalArgumentException("entry " + number + " has an invalid RvslInd [" + indicator + "]");
     }
 
     private static String reference(Element entry, Element details) {
@@ -158,6 +311,26 @@ public final class Camt053 {
         }
         String additional = text(child(entry, "AddtlNtryInf"));
         return additional != null ? additional : text(first(entry, "AddtlTxInf"));
+    }
+
+    /**
+     * The unstructured remittance lines of one transaction, or its additional information, or the
+     * entry's when the transaction has neither.
+     */
+    private static String transactionRemittance(Element entry, Element details) {
+        List<String> lines = new ArrayList<>();
+        NodeList unstructured = details.getElementsByTagNameNS("*", "Ustrd");
+        for (int i = 0; i < unstructured.getLength(); i++) {
+            String line = text((Element) unstructured.item(i));
+            if (line != null) {
+                lines.add(line);
+            }
+        }
+        if (!lines.isEmpty()) {
+            return String.join(" ", lines);
+        }
+        String additional = text(child(details, "AddtlTxInf"));
+        return additional != null ? additional : text(child(entry, "AddtlNtryInf"));
     }
 
     /**
@@ -250,13 +423,16 @@ public final class Camt053 {
         }
     }
 
-    /** The first direct child element with the local name, or {@code null} (also for a null parent). */
+    /**
+     * The first direct child element with the local name ({@code *} for any), or {@code null} (also for
+     * a null parent).
+     */
     private static Element child(Element parent, String localName) {
         if (parent == null) {
             return null;
         }
         for (Node node = parent.getFirstChild(); node != null; node = node.getNextSibling()) {
-            if (node instanceof Element element && localName.equals(element.getLocalName())) {
+            if (node instanceof Element element && ("*".equals(localName) || localName.equals(element.getLocalName()))) {
                 return element;
             }
         }

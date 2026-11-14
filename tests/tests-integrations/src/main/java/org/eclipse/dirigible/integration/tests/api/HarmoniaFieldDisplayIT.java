@@ -77,6 +77,26 @@ class HarmoniaFieldDisplayIT {
         }
     }
 
+    /**
+     * #8605: a field declaring {@code emptyText} prints it in place of an empty value - null,
+     * undefined, '' or an empty list - translated through its key when one is given, and passes any
+     * other value through as formatted.
+     */
+    @Test
+    void anEmptyValueReadsAsTheFieldsEmptyText() {
+        try (Context context = load()) {
+            context.eval("js", "window.T = function (key, fallback) { return key === 'p:t.X_empty' ? 'Kein Limit' : fallback; };");
+            assertEquals("No limit", orEmptyText(context, "null, '\u2014', null, 'No limit'"));
+            assertEquals("No limit", orEmptyText(context, "undefined, '\u2014', null, 'No limit'"));
+            assertEquals("No limit", orEmptyText(context, "'', '', null, 'No limit'"));
+            assertEquals("No limit", orEmptyText(context, "[], '', null, 'No limit'"));
+            assertEquals("Kein Limit", orEmptyText(context, "null, '\u2014', 'p:t.X_empty', 'No limit'"),
+                    "the text resolves through its catalog key");
+            assertEquals("5", orEmptyText(context, "5, '5', 'p:t.X_empty', 'No limit'"), "a value prints as formatted");
+            assertEquals("0", orEmptyText(context, "0, '0', null, 'No limit'"), "zero is a value, not an empty one");
+        }
+    }
+
     @Test
     void aDateGoesThroughTheInstanceFormat() {
         try (Context context = load()) {
@@ -124,16 +144,24 @@ class HarmoniaFieldDisplayIT {
     void everyReadOnlyCardPrintsThroughTheSharedHelper() throws Exception {
         for (String view : VIEWS) {
             String content = read(UI_BASE + view);
+            // A field declaring emptyText (#8605) wraps the same formatted value in orEmptyText; every
+            // other field prints exactly as before.
+            String shown = RECORD_PAGE.equals(view) ? "fieldText(loadedRecord?.${property.name}, #displayArgs($property))"
+                    : "fieldDisplay(record.${property.name}, #displayArgs($property))";
+            String served = RECORD_PAGE.equals(view) ? "loadedRecord?.${property.name}" : "record.${property.name}";
             assertTrue(
-                    content.contains(RECORD_PAGE.equals(view)
-                            ? "#macro(valueDisplay $property)fieldText(loadedRecord?.${property.name}, #displayArgs($property))"
-                            : "#macro(valueDisplay $property)fieldDisplay(record.${property.name}, #displayArgs($property))"),
+                    content.contains("#macro(valueDisplay $property)#if($property.widgetEmptyText)orEmptyText(" + served + ", " + shown
+                            + ", #emptyTextArgs($property))#{else}" + shown + "#end#end"),
                     view + " does not define its value display over the shared fieldDisplay()");
             assertTrue(content.contains("#valueGate($property)"), view + " gates a read-only card row outside the shared helper");
             assertTrue(content.contains("x-text=\"#valueDisplay($property)"),
                     view + " renders a read-only card that does not go through the shared helper");
-            assertTrue(content.contains("#macro(valueGate $property)x-show=\"#if($property.roleRead)canSee('${property.name}') && #end"),
+            String gate = lineStartingWith(content, "#macro(valueGate $property)");
+            assertTrue(gate.contains("#{else}x-show=\"#if($property.roleRead)canSee('${property.name}') && #end"),
                     view + " shows a role-scoped read-only field without asking canSee()");
+            assertTrue(gate.contains(
+                    "#if($property.widgetEmptyText)#if($property.roleRead || $property.visibleWhenJs)x-show=\"#if($property.roleRead)canSee('${property.name}')"),
+                    view + " shows a role-scoped emptyText field without asking canSee(): " + gate);
             assertFalse(content.contains("x-text=\"form."), view + " prints a raw form value");
             assertFalse(content.contains("headerDisplay("), view + " still calls a per-page copy of the formatter");
         }
@@ -174,6 +202,11 @@ class HarmoniaFieldDisplayIT {
             }
         }
         throw new IllegalStateException("No line starts with " + prefix);
+    }
+
+    private static String orEmptyText(Context context, String arguments) {
+        return context.eval("js", "basePage().orEmptyText(" + arguments + ")")
+                      .asString();
     }
 
     private static String display(Context context, String arguments) {

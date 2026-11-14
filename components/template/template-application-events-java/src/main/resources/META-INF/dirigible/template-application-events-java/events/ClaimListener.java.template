@@ -1,0 +1,68 @@
+package gen.events.${javaGenFolderName};
+
+import org.eclipse.dirigible.sdk.bpm.Process;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+import org.eclipse.dirigible.sdk.messaging.Producer;
+import org.eclipse.dirigible.sdk.utils.Json;
+import org.flowable.engine.delegate.TaskListener;
+import org.flowable.task.service.delegate.DelegateTask;
+
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
+
+/**
+ * Moves ${entity}.${field} while the ${userTask} task of the ${process} process is claimed: to
+ * ${claimValue} when someone claims it, back to ${unclaimValue} when it is unclaimed (the user task's
+ * onClaim / onUnclaim). Generated from the intent .glue file - do not edit; it is re-generated with
+ * the application.
+ * <p>
+ * Runs as the task's "assignment" listener, inside the claim itself, so whatever claims the task (the
+ * Inbox, the record page, the REST API) moves the record, and a move the record's lifecycle refuses
+ * fails the claim. A task created already assigned counts as claimed from the start. The write is the
+ * same TARGETED single-column write a setRelationField step makes, and it only moves the record from
+ * the status the other half leaves it in: a record another writer has moved meanwhile is left alone.
+ */
+public class ${className} implements TaskListener {
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}");
+
+    private final ${entity}Repository repository = new ${entity}Repository();
+
+    @Override
+    public void notify(DelegateTask task) {
+        Object key = task.getVariable("${keyProperty}");
+        if (!(key instanceof Number)) {
+            return;
+        }
+        boolean claimed = task.getAssignee() != null;
+        int from = claimed ? ${unclaimValue} : ${claimValue};
+        int to = claimed ? ${claimValue} : ${unclaimValue};
+        ${entity}Entity current = repository.findOne(((Number) key).${keyAccessor}())
+                                            .orElse(null);
+        if (current == null) {
+            return;
+        }
+        Object status = current.${field};
+        if (status instanceof Number number && number.longValue() == to) {
+            return; // already there - the task passed from one claimant to another
+        }
+        if (!(status instanceof Number number) || number.longValue() != from) {
+            LOG.warn("Process [{}] task [{}]: ${entity} [{}] has ${field} [{}], not [{}] - left as it is", "${process}",
+                    task.getTaskDefinitionKey(), key, status, from);
+            return;
+        }
+        int updated = repository.updateProperty(((Number) key).${keyAccessor}(), "${field}", to);
+        if (updated == 0) {
+            return;
+        }
+        ${entity}Entity entity = repository.findOne(((Number) key).${keyAccessor}())
+                                           .orElse(null);
+        if (entity != null) {
+            // Published once the claim commits, on the channel status-reached consumers listen on.
+            String transitioned = Json.stringify(entity);
+            Process.executeAfterCommit(
+                    () -> Producer.sendToTopicDurable("${projectName}-${perspective}-${entity}-transitioned", transitioned));
+        }
+    }
+}

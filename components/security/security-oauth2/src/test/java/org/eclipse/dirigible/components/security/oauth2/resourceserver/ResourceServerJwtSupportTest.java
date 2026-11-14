@@ -51,6 +51,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.oauth2.jwt.BadJwtException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -67,6 +68,7 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.gen.ECKeyGenerator;
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
+import com.nimbusds.jose.jwk.source.RateLimitReachedException;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import com.sun.net.httpserver.HttpServer;
@@ -79,8 +81,8 @@ import com.sun.net.httpserver.HttpServer;
  * The first test is the regression guard: the machine-to-machine access token accepted before this
  * class existed - scopes to roles, {@code sub} as the name, no audience - must pass unchanged. The
  * last group pins the key handling: every asymmetric algorithm the provider publishes a key for is
- * accepted, a shared-secret one never, and tokens naming unknown keys do not fetch the key set once
- * each.
+ * accepted, a shared-secret one never, tokens naming unknown keys do not fetch the key set once
+ * each, and are refused as invalid tokens even once the refresh is rate limited (#8592).
  */
 class ResourceServerJwtSupportTest {
 
@@ -600,12 +602,58 @@ class ResourceServerJwtSupportTest {
                                                                          .build(),
                     new RSASSASigner(unknownKey), COGNITO_ISSUER, claims -> claims.claim("token_use", "access")
                                                                                   .claim("scope", M2M_SCOPES));
-            assertThrows(AuthenticationException.class, () -> support.authenticate(token));
+            assertThrows(InvalidBearerTokenException.class, () -> support.authenticate(token));
         }
 
         int fetches = jwksFetches.get() - fetchesBefore;
         assertTrue(fetches >= 1 && fetches <= 3, "ten tokens naming unknown keys caused [" + fetches
                 + "] JWKS fetches: the first load and at most one rate-limited refresh were expected, not one per token");
+    }
+
+    @Test
+    void aTokenNamingAnUnknownKeyIsAnInvalidTokenAlsoWhileTheRefreshIsRateLimited() throws Exception {
+        // the rate limit used to surface as a failure of the decoder, which the chain answers with a 500
+        ResourceServerJwtSupport support = cognito();
+        boolean rateLimited = false;
+
+        for (int i = 0; i < 3; i++) {
+            String token = signedWithUnknownKey(COGNITO_ISSUER, "unknown-" + i);
+            InvalidBearerTokenException refusal = assertThrows(InvalidBearerTokenException.class, () -> support.authenticate(token));
+            assertThrows(BadJwtException.class, () -> support.decoder()
+                                                             .decode(token));
+            rateLimited |= causedBy(refusal, RateLimitReachedException.class);
+        }
+
+        assertTrue(rateLimited, "no refresh of the key set was rate limited, so the refusal of a rate limited one is not covered");
+    }
+
+    @Test
+    void aTokenOfAnotherIssuerIsRefusedWithoutLookingUpAKey() throws Exception {
+        ResourceServerJwtSupport support = cognito();
+        int fetchesBefore = jwksFetches.get();
+
+        for (int i = 0; i < 3; i++) {
+            String token = signedWithUnknownKey("https://the-application.example.org/oidc", "the-application-key-" + i);
+            assertRefused(support, token, "not issued by");
+        }
+
+        assertEquals(fetchesBefore, jwksFetches.get(), "a token of another issuer fetched the key set of the provider");
+    }
+
+    private static String signedWithUnknownKey(String issuer, String keyId) throws Exception {
+        return sign(new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(keyId)
+                                                             .build(),
+                new RSASSASigner(unknownKey), issuer, claims -> claims.claim("token_use", "access")
+                                                                      .claim("scope", M2M_SCOPES));
+    }
+
+    private static boolean causedBy(Throwable failure, Class<? extends Throwable> type) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (type.isInstance(cause)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static ResourceServerJwtSupport cognito() {

@@ -79,10 +79,8 @@ jobs:
       - name: Install TypeScript and esbuild
         run: npm install -g typescript@5.9.3 esbuild
 
-      - name: Install ttyd (prebuilt)
-        run: |
-          sudo apt update
-          sudo apt install -y ttyd
+      - name: Install ttyd
+        uses: ./.github/actions/install-ttyd
 
       - name: Upgrade from the previous release
         run: |
@@ -143,10 +141,8 @@ jobs:
       - name: Install TypeScript and esbuild
         run: npm install -g typescript@5.9.3 esbuild
 
-      - name: Install ttyd (prebuilt)
-        run: |
-          sudo apt update
-          sudo apt install -y ttyd
+      - name: Install ttyd
+        uses: ./.github/actions/install-ttyd
 
       - name: Record the performance baseline
         run: mvn clean install -P integration-tests -Dit.groups=perf -Dperf.baseline.record=true

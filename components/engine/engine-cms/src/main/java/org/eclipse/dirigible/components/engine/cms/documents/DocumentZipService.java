@@ -15,6 +15,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.function.Predicate;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
@@ -62,21 +63,44 @@ public class DocumentZipService {
         // Reuse the listing gate: a folder the caller may not read must not be packable either.
         documentsService.list(folder.getPath(), request);
         try (ZipOutputStream zip = new ZipOutputStream(output)) {
-            packFolder(folder, "", zip);
+            packFolder(folder, "", zip, path -> false);
         }
     }
 
-    private void packFolder(CmisFolder folder, String prefix, ZipOutputStream zip) throws IOException {
+    /**
+     * Writes a folder and everything under it into an archive the caller owns, for a caller that packs
+     * on its own account rather than for a request: a background step has no request, so nothing here
+     * asks the per-folder access rules. The archive is left open, so the caller can add entries of its
+     * own around the tree.
+     * <p>
+     * The CMS's own bookkeeping folder is never packed; {@code skip} names whatever else the caller
+     * leaves out.
+     *
+     * @param folderPath the folder to pack, or the root when blank
+     * @param entryPrefix what every entry name starts with, e.g. {@code files/}; empty for none
+     * @param skip answers true for the absolute CMS path of a folder or document to leave out
+     * @param zip the archive to write into
+     * @return how many documents were written
+     * @throws IOException when the CMS cannot be read or the archive cannot be written
+     */
+    public int packTree(String folderPath, String entryPrefix, Predicate<String> skip, ZipOutputStream zip) throws IOException {
+        CmisFolder folder = documentsService.folderOrRoot(folderPath);
+        return packFolder(folder, entryPrefix == null ? "" : entryPrefix, zip, skip);
+    }
+
+    private int packFolder(CmisFolder folder, String prefix, ZipOutputStream zip, Predicate<String> skip) throws IOException {
+        int documents = 0;
         for (CmisObject child : folder.getChildren()) {
             String entryName = prefix + child.getName();
-            if (DocumentsService.isHidden(DocumentsService.childPath(folder.getPath(), child.getName()))) {
+            String childPath = DocumentsService.childPath(folder.getPath(), child.getName());
+            if (DocumentsService.isHidden(childPath) || skip.test(childPath)) {
                 continue;
             }
             if (DocumentsService.isFolder(child)) {
                 // No explicit directory entry: it would carry no content, and every reader recreates
                 // the tree from the file paths. A folder with no files anywhere under it is therefore
                 // absent from the archive - the documented trade-off for not writing empty entries.
-                packFolder((CmisFolder) child, entryName + "/", zip);
+                documents += packFolder((CmisFolder) child, entryName + "/", zip, skip);
             } else {
                 zip.putNextEntry(new ZipEntry(entryName));
                 try (InputStream content = cmsService.getDocumentStream((CmisDocument) child)) {
@@ -86,8 +110,10 @@ public class DocumentZipService {
                     throw e;
                 }
                 zip.closeEntry();
+                documents++;
             }
         }
+        return documents;
     }
 
     /**
