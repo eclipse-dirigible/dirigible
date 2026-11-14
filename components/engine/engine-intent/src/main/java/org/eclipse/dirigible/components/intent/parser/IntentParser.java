@@ -108,6 +108,8 @@ import org.eclipse.dirigible.components.intent.model.ShareIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
 import org.eclipse.dirigible.components.intent.generator.report.ReportMoments;
+import org.eclipse.dirigible.components.intent.generator.report.ReportUnion;
+import org.eclipse.dirigible.components.intent.model.ReportUnionMemberIntent;
 import org.eclipse.dirigible.components.intent.model.ReportAgingIntent;
 import org.eclipse.dirigible.components.intent.model.ReportParameterIntent;
 import org.eclipse.dirigible.components.intent.model.ReportPeriodIntent;
@@ -13604,8 +13606,10 @@ public final class IntentParser {
             if (!reportNames.add(report.getName())) {
                 issues.add("duplicate report [" + report.getName() + "]");
             }
-            if (report.getSource() == null || report.getSource()
-                                                    .isBlank()) {
+            if (report.isUnion()) {
+                validateReportUnion(model, report, entityNames, issues);
+            } else if (report.getSource() == null || report.getSource()
+                                                           .isBlank()) {
                 issues.add("report [" + report.getName() + "] has no source");
             } else if (!entityNames.contains(report.getSource())) {
                 issues.add("report [" + report.getName() + "] sources from unknown entity [" + report.getSource() + "]");
@@ -13966,7 +13970,149 @@ public final class IntentParser {
 
     /** The report's source entity, or null when it is missing or unknown (reported separately). */
     private static EntityIntent reportSource(IntentModel model, ReportIntent report) {
+        if (report.isUnion()) {
+            // The union's logical entity, so dimensions, measures and parameters are checked against the
+            // columns its members map (#7946).
+            RelationIntent counterparty = ReportUnion.sameModelCounterparty(model, report);
+            return ReportUnion.entity(report, counterparty == null ? null : counterparty.getTo(),
+                    counterparty == null ? null : counterparty.getModel());
+        }
         return report.getSource() == null ? null : entityByName(model, report.getSource());
+    }
+
+    /**
+     * A report's {@code union:} (dirigible #7946) - several member entities read as one source. It
+     * replaces {@code source:}, and a ledger kind computes its own fixed columns over one ledger, so
+     * neither combines with it. Every member names its entity (a same-model one, or one of a
+     * {@code uses:} model) and its signed {@code amount}; {@code counterparty}, {@code date} and
+     * {@code due} are each declared by every member or by none, since a column one member leaves out
+     * would read as empty for exactly that document type. A same-model member is checked here in full -
+     * the dates are date/timestamp fields, the amount sums numeric ones, the counterparty is a to-one
+     * relation pointing at the same entity as every other member's; a member of another model names
+     * only its own fields, which are checked against its owner at generation.
+     */
+    private static void validateReportUnion(IntentModel model, ReportIntent report, Set<String> entityNames, List<String> issues) {
+        String subject = "report [" + report.getName() + "] union";
+        if (!isBlank(report.getSource())) {
+            issues.add(subject + " replaces source: - declare one or the other");
+        }
+        if (report.isLedgerKind()) {
+            issues.add(subject + " cannot be combined with kind [" + report.getKind()
+                                                                           .trim()
+                    + "] - a ledger kind reads one ledger source");
+        }
+        Set<String> aliases = new HashSet<>();
+        for (org.eclipse.dirigible.components.intent.model.UsesIntent uses : model.getUses()) {
+            aliases.add(uses.getModel());
+        }
+        RelationIntent counterparty = ReportUnion.sameModelCounterparty(model, report);
+        for (String column : List.of(ReportUnion.COUNTERPARTY, ReportUnion.DATE, ReportUnion.DUE)) {
+            long declaring = report.getUnion()
+                                   .stream()
+                                   .filter(member -> member != null && !isBlank(unionMemberColumn(member, column)))
+                                   .count();
+            if (declaring > 0 && declaring < report.getUnion()
+                                                   .size()) {
+                issues.add(subject + " " + column + " is mapped by " + declaring + " of " + report.getUnion()
+                                                                                                  .size()
+                        + " members - map it on every member or on none");
+            }
+        }
+        for (ReportUnionMemberIntent member : report.getUnion()) {
+            if (member == null || isBlank(member.getSource())) {
+                issues.add(subject + " has a member with no source");
+                continue;
+            }
+            String name = member.getSource()
+                                .trim();
+            String memberSubject = subject + " member [" + name + "]";
+            List<ReportAgingIntent.AmountTerm> terms = ReportAgingIntent.amountTerms(member.getAmount());
+            if (isBlank(member.getAmount())) {
+                issues.add(memberSubject + " has no amount - name its signed amount, e.g. \"total - paid\"");
+            } else if (terms == null) {
+                issues.add(memberSubject + " amount [" + member.getAmount()
+                        + "] must be a numeric field or numeric fields joined by + and - (e.g. \"total - paid\")");
+            }
+            for (String problem : ReportMoments.problems(member.getFilter())) {
+                issues.add(memberSubject + " filter " + problem);
+            }
+            if (member.isCrossModel()) {
+                if (!aliases.contains(member.getModel()
+                                            .trim())) {
+                    issues.add(memberSubject + " uses unknown model alias [" + member.getModel()
+                                                                                     .trim()
+                            + "] - declare it under uses:");
+                }
+                for (String path : unionMemberPaths(member, terms)) {
+                    if (path.contains(".")) {
+                        issues.add(memberSubject + " field [" + path + "] must be an own field of a member of another model");
+                    }
+                }
+                continue;
+            }
+            if (!entityNames.contains(name)) {
+                issues.add(memberSubject + " is not an entity of this model - name its model: when it lives in another one");
+                continue;
+            }
+            EntityIntent entity = entityByName(model, name);
+            if (!isBlank(member.getDate())) {
+                validateAgingDate(model, entity, memberSubject + " date", member.getDate()
+                                                                                .trim(),
+                        issues);
+            }
+            if (!isBlank(member.getDue())) {
+                validateAgingDate(model, entity, memberSubject + " due", member.getDue()
+                                                                               .trim(),
+                        issues);
+            }
+            if (terms != null) {
+                for (ReportAgingIntent.AmountTerm term : terms) {
+                    FieldIntent field = reportPathField(model, entity, memberSubject + " amount", term.path(), issues);
+                    if (field != null && !AGING_AMOUNT_TYPES.contains(fieldType(field))) {
+                        issues.add(memberSubject + " amount sums [" + term.path() + "], a [" + field.getType()
+                                + "] field - it must be numeric");
+                    }
+                }
+            }
+            if (!isBlank(member.getCounterparty())) {
+                RelationIntent relation = toOneRelationByName(entity, member.getCounterparty()
+                                                                            .trim());
+                if (relation == null) {
+                    issues.add(memberSubject + " counterparty [" + member.getCounterparty()
+                                                                         .trim()
+                            + "] is not a to-one relation of [" + name + "]");
+                } else if (counterparty != null && (!java.util.Objects.equals(relation.getTo(), counterparty.getTo())
+                        || !java.util.Objects.equals(relation.getModel(), counterparty.getModel()))) {
+                    issues.add(memberSubject + " counterparty points at [" + relation.getTo() + "], but another member's points at ["
+                            + counterparty.getTo() + "] - every member must name the same entity");
+                }
+            }
+        }
+    }
+
+    /**
+     * A member's mapping of one of the logical columns {@code counterparty}, {@code date}, {@code due}.
+     */
+    private static String unionMemberColumn(ReportUnionMemberIntent member, String column) {
+        return switch (column) {
+            case ReportUnion.COUNTERPARTY -> member.getCounterparty();
+            case ReportUnion.DATE -> member.getDate();
+            default -> member.getDue();
+        };
+    }
+
+    /** Every field path a member names - its dates, its amount's terms and its counterparty. */
+    private static List<String> unionMemberPaths(ReportUnionMemberIntent member, List<ReportAgingIntent.AmountTerm> terms) {
+        List<String> paths = new ArrayList<>();
+        for (String path : new String[] {member.getCounterparty(), member.getDate(), member.getDue()}) {
+            if (!isBlank(path)) {
+                paths.add(path.trim());
+            }
+        }
+        if (terms != null) {
+            terms.forEach(term -> paths.add(term.path()));
+        }
+        return paths;
     }
 
     /** A field's declared type, lower-cased, or the empty string when it declares none. */
@@ -14315,6 +14461,23 @@ public final class IntentParser {
                                                                            .trim()
                     + "] - an aging report sums open documents, a ledger kind computes its own columns");
         }
+        if (report.isUnion()) {
+            // The members map their own due, amount and document date onto the union's columns (#7946).
+            if (!isBlank(aging.getDue()) || !isBlank(aging.getAmount()) || !isBlank(aging.getDate())) {
+                issues.add(subject + " over a union reads each member's due, amount and date - declare them on the members, not here");
+            }
+            if (!ReportUnion.declares(report, ReportUnionMemberIntent::getDue)) {
+                issues.add(subject + " needs every union member to map its due date (due:)");
+            }
+        } else {
+            validateAgingInputs(model, report, aging, subject, issues);
+        }
+        validateAgingBuckets(report, aging, subject, issues);
+    }
+
+    /** The {@code due}, {@code date} and {@code amount} of a single-source aging block. */
+    private static void validateAgingInputs(IntentModel model, ReportIntent report, ReportAgingIntent aging, String subject,
+            List<String> issues) {
         EntityIntent source = reportSource(model, report);
         if (aging.getDue() == null || aging.getDue()
                                            .isBlank()) {
@@ -14346,6 +14509,10 @@ public final class IntentParser {
                 }
             }
         }
+    }
+
+    /** The bucket thresholds and the as-of parameter of an aging block. */
+    private static void validateAgingBuckets(ReportIntent report, ReportAgingIntent aging, String subject, List<String> issues) {
         if (aging.getBuckets()
                  .contains(null)) {
             issues.add(subject + " buckets must be whole day counts");

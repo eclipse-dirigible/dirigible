@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BinaryOperator;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -46,6 +47,8 @@ import org.eclipse.dirigible.components.intent.model.OrderByIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
 import org.eclipse.dirigible.components.intent.model.ReportParameterIntent;
 import org.eclipse.dirigible.components.intent.model.ReportPeriodIntent;
+import org.eclipse.dirigible.components.intent.model.ReportUnionMemberIntent;
+import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.eclipse.dirigible.components.intent.model.StatementLineIntent;
 import org.eclipse.dirigible.components.intent.model.WidgetIntent;
 import org.slf4j.Logger;
@@ -399,15 +402,24 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
 
     private static Emission build(IntentGenerationContext context, ReportIntent report) {
         IntentModel model = context.getModel();
-        EntityIntent source = entityByName(model, report.getSource());
-        String baseAlias = tableAlias(report.getSource() == null ? report.getName() : report.getSource());
-        String baseTable = report.getSource() == null ? "" : IntentNaming.tableName(context, report.getSource());
-
         boolean balance = report.isBalance();
         boolean statement = report.isStatement();
         boolean aggregated = balance || statement || report.isAging() || report.getMeasures()
                                                                                .stream()
                                                                                .anyMatch(m -> m != null && !m.isBlank());
+
+        // A union report (dirigible #7946) is an ordinary report over its logical entity, whose table is
+        // the generated UNION ALL view of its members.
+        UnionPrepared union = report.isUnion() ? prepareUnion(context, model, report, aggregated) : null;
+        EntityIntent source = union != null ? union.entity() : entityByName(model, report.getSource());
+        String baseAlias = tableAlias(report.getSource() == null ? report.getName() : report.getSource());
+        String baseTable;
+        if (union != null) {
+            baseTable = union.view()
+                             .viewName();
+        } else {
+            baseTable = report.getSource() == null ? "" : IntentNaming.tableName(context, report.getSource());
+        }
 
         Map<String, Join> joins = new LinkedHashMap<>();
         List<Map<String, Object>> columns = new ArrayList<>();
@@ -417,6 +429,9 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         Map<String, WidgetDimension> dimensionColumns = new LinkedHashMap<>();
         Map<String, Map<String, Object>> measureColumns = new LinkedHashMap<>();
         List<ViewArtifact> views = new ArrayList<>();
+        if (union != null) {
+            views.add(union.view());
+        }
 
         warnOnRestrictedColumns(context, model, source, report);
 
@@ -562,7 +577,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         if (report.getWidget() != null) {
             document.put("widget", widget(report, dimensionColumns, measureColumns));
         }
-        Map<String, Object> drill = drill(context, model, source, report, plainDimensions, scoped);
+        // A union's rows come from several entities, so no single list can repeat what a row counts.
+        Map<String, Object> drill = union != null ? null : drill(context, model, source, report, plainDimensions, scoped);
         if (drill != null) {
             document.put("drill", drill);
         }
@@ -961,12 +977,17 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     private static AgingQuery addAgingMeasures(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
             ReportIntent report, Map<String, Join> joins, List<Map<String, Object>> columns) {
         ReportAgingIntent aging = report.getAging();
-        ColumnRef due = resolve(context, model, source, baseAlias, aging.getDue()
-                                                                        .trim());
+        // A union's members map their own due, amount and date onto the union's columns (#7946).
+        boolean union = report.isUnion();
+        ColumnRef due = resolve(context, model, source, baseAlias, union ? ReportUnion.DUE
+                : aging.getDue()
+                       .trim());
         registerJoin(joins, due);
         ColumnRef amountColumn = null;
         StringBuilder amount = new StringBuilder();
-        for (ReportAgingIntent.AmountTerm term : aging.getAmountTerms()) {
+        List<ReportAgingIntent.AmountTerm> terms =
+                union ? List.of(new ReportAgingIntent.AmountTerm(1, ReportUnion.AMOUNT)) : aging.getAmountTerms();
+        for (ReportAgingIntent.AmountTerm term : terms) {
             ColumnRef ref = resolve(context, model, source, baseAlias, term.path());
             registerJoin(joins, ref);
             if (amountColumn == null) {
@@ -1003,16 +1024,302 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         // (overpaid) is open too - it is the opposite sign, not zero.
         List<Map<String, Object>> conditions = new ArrayList<>();
         conditions.add(condition("(" + open + ")", "<>", "0"));
-        if (aging.getDate() != null && !aging.getDate()
-                                             .isBlank()) {
-            ColumnRef date = resolve(context, model, source, baseAlias, aging.getDate()
-                                                                             .trim());
+        String documentDateField;
+        if (union) {
+            documentDateField = fieldByName(source, ReportUnion.DATE) == null ? null : ReportUnion.DATE;
+        } else {
+            documentDateField = aging.getDate() == null || aging.getDate()
+                                                                .isBlank() ? null
+                                                                        : aging.getDate()
+                                                                               .trim();
+        }
+        if (documentDateField != null) {
+            ColumnRef date = resolve(context, model, source, baseAlias, documentDateField);
             registerJoin(joins, date);
             String documentDate = "TIMESTAMP".equals(date.reportType) ? "CAST(" + date.qualified() + " AS DATE)" : date.qualified();
             // A document issued after the as-of date was not open on it yet.
             conditions.add(condition(documentDate, "<=", asOf));
         }
         return new AgingQuery(asOfName, conditions);
+    }
+
+    /** A union report's logical source and the view that is its table (dirigible #7946). */
+    private record UnionPrepared(EntityIntent entity, ViewArtifact view) {
+    }
+
+    /** The entity a union's {@code counterparty} points at, and the {@code uses:} alias owning it. */
+    private record UnionTarget(String to, String model) {
+    }
+
+    /**
+     * A report's {@code union:} (dirigible #7946) as a parameter-free {@code UNION ALL} view - one arm
+     * per member, every arm selecting the same logical columns ({@code source}, then
+     * {@code counterparty}, {@code date}, {@code due} where the members declare them, then
+     * {@code amount}) under the view's own column names - and the logical entity the report then reads
+     * that view as.
+     *
+     * <p>
+     * Each arm carries what belongs to its member and to nothing else: the member's {@code filter}, and
+     * the lifecycle scope of the member's own status - a draft invoice is not a receivable, whichever
+     * document type it is. The dates are cast to {@code DATE}, so a timestamp member and a date member
+     * share a column; the amount is the member's signed sum with every missing term read as zero.
+     */
+    private static UnionPrepared prepareUnion(IntentGenerationContext context, IntentModel model, ReportIntent report, boolean aggregated) {
+        UnionTarget target = unionTarget(context, model, report);
+        EntityIntent entity = ReportUnion.entity(report, target == null ? null : target.to(), target == null ? null : target.model());
+        List<String> arms = new ArrayList<>();
+        for (ReportUnionMemberIntent member : report.getUnion()) {
+            arms.add(member.isCrossModel() ? crossModelUnionArm(context, model, report, member, target, aggregated)
+                    : unionArm(context, model, report, member, target, aggregated));
+        }
+        String viewName = IntentNaming.tableName(context, report.getName()) + "_UNION";
+        return new UnionPrepared(entity, new ViewArtifact(report.getName() + "Union.view", viewName, String.join("\nUNION ALL\n", arms)));
+    }
+
+    /**
+     * What the union's {@code counterparty} points at: the target of a same-model member's relation, or
+     * - when every member naming one lives in another model - the entity those members' relation
+     * references, provided this model declares it too.
+     *
+     * @return the target, or null when the union declares no counterparty
+     */
+    private static UnionTarget unionTarget(IntentGenerationContext context, IntentModel model, ReportIntent report) {
+        if (!ReportUnion.declares(report, ReportUnionMemberIntent::getCounterparty)) {
+            return null;
+        }
+        RelationIntent relation = ReportUnion.sameModelCounterparty(model, report);
+        if (relation != null) {
+            return new UnionTarget(relation.getTo(), relation.isCrossModel() ? relation.getModel() : null);
+        }
+        for (ReportUnionMemberIntent member : report.getUnion()) {
+            Map<String, String> relations = unionMemberInfo(context, model, member).propertyRelations();
+            String to = relations == null ? null
+                    : relations.get(IntentNaming.pascalCase(member.getCounterparty()
+                                                                  .trim()));
+            if (to != null && entityByName(model, to) != null) {
+                return new UnionTarget(to, null);
+            }
+        }
+        throw new IntentValidationException(List.of("report [" + report.getName()
+                + "] union counterparty cannot be resolved - no member of this model names it, and the entity the other models'"
+                + " members point at is not declared here. Add a member of this model, or declare the counterparty entity here."));
+    }
+
+    /** One same-model member's arm of the union view. */
+    private static String unionArm(IntentGenerationContext context, IntentModel model, ReportIntent report, ReportUnionMemberIntent member,
+            UnionTarget target, boolean aggregated) {
+        String name = member.getSource()
+                            .trim();
+        EntityIntent entity = entityByName(model, name);
+        String alias = tableAlias(name);
+        Map<String, Join> joins = new LinkedHashMap<>();
+        Function<String, String> qualify = path -> {
+            ColumnRef ref = resolve(context, model, entity, alias, path);
+            registerJoin(joins, ref);
+            return ref.qualified();
+        };
+        List<Map<String, Object>> columns = unionColumns(report, member, target, alias, name, qualify);
+        String filter = buildWhere(context, model, entity, alias, joins, member.getFilter());
+        RelationIntent status = LifecycleStages.statusRelation(entity);
+        Map<String, Object> scope = status != null && mentionsWord(member.getFilter(), status.getName()) ? null
+                : scopeCondition(context, model, entity, alias, report, aggregated);
+        return buildQuery(IntentNaming.tableName(context, name), alias, joinRows(joins), columns, rawWhere(filter, scope, null));
+    }
+
+    /**
+     * One member's arm when the member is owned by another model: its table and status classification
+     * come from the owner's resolved {@code .model}, its columns follow the platform's naming
+     * convention - the same convention a cross-model {@code relation.field} reference already relies on
+     * - and every field it names is checked against the owner's properties, which is the only place
+     * they are known.
+     */
+    private static String crossModelUnionArm(IntentGenerationContext context, IntentModel model, ReportIntent report,
+            ReportUnionMemberIntent member, UnionTarget target, boolean aggregated) {
+        String name = member.getSource()
+                            .trim();
+        CrossModelSupport.TargetInfo info = unionMemberInfo(context, model, member);
+        String alias = tableAlias(name);
+        String subject = "report [" + report.getName() + "] union member [" + name + "] of model [" + member.getModel()
+                                                                                                            .trim()
+                + "]";
+        Function<String, String> qualify = field -> {
+            requireProperty(info, subject, field);
+            return alias + "." + quote(column(name, field));
+        };
+        if (target != null && info.propertyRelations() != null) {
+            String counterparty = member.getCounterparty()
+                                        .trim();
+            requireProperty(info, subject, counterparty);
+            String to = info.propertyRelations()
+                            .get(IntentNaming.pascalCase(counterparty));
+            if (!target.to()
+                       .equals(to)) {
+                throw new IntentValidationException(List.of(subject + " counterparty [" + counterparty + "] points at [" + to
+                        + "], but the union's counterparty is [" + target.to() + "] - every member must name the same entity"));
+            }
+        }
+        List<Map<String, Object>> columns = unionColumns(report, member, target, alias, name, qualify);
+        String filter = crossModelFilter(info, alias, name, member.getFilter());
+        String scope = crossModelScope(context, report, member, info, alias, aggregated);
+        String where = scope == null ? filter : filter == null ? scope : "(" + filter + ") AND " + scope;
+        return buildQuery(info.tableDataName(), alias, List.of(), columns, where);
+    }
+
+    /** The owner-model facts of a cross-model union member. */
+    private static CrossModelSupport.TargetInfo unionMemberInfo(IntentGenerationContext context, IntentModel model,
+            ReportUnionMemberIntent member) {
+        String alias = member.getModel()
+                             .trim();
+        for (UsesIntent uses : model.getUses()) {
+            if (alias.equals(uses.getModel())) {
+                return CrossModelSupport.resolve(context, uses, member.getSource()
+                                                                      .trim());
+            }
+        }
+        // The parser refuses an alias the model does not use; reaching here means an unvalidated model.
+        throw new IntentValidationException(List.of("union member [" + member.getSource() + "] uses unknown model alias [" + alias + "]"));
+    }
+
+    private static void requireProperty(CrossModelSupport.TargetInfo info, String subject, String field) {
+        if (info.propertyNames() != null && !info.propertyNames()
+                                                 .contains(IntentNaming.pascalCase(field))) {
+            throw new IntentValidationException(List.of(subject + " has no property [" + field + "]"));
+        }
+    }
+
+    /**
+     * The logical columns of one arm, in the order every arm selects them, aliased with the view's own
+     * column names.
+     *
+     * @param qualify a member field path to its qualified column
+     */
+    private static List<Map<String, Object>> unionColumns(ReportIntent report, ReportUnionMemberIntent member, UnionTarget target,
+            String alias, String name, Function<String, String> qualify) {
+        String union = report.getName();
+        List<Map<String, Object>> columns = new ArrayList<>();
+        columns.add(unionColumn(union, ReportUnion.SOURCE, "CAST(" + sqlLiteral(name) + " AS " + LEDGER_TEXT_TYPE + ")"));
+        if (target != null) {
+            columns.add(unionColumn(union, ReportUnion.COUNTERPARTY, alias + "." + quote(column(name, member.getCounterparty()
+                                                                                                            .trim()))));
+        }
+        if (ReportUnion.declares(report, ReportUnionMemberIntent::getDate)) {
+            columns.add(unionColumn(union, ReportUnion.DATE, "CAST(" + qualify.apply(member.getDate()
+                                                                                           .trim())
+                    + " AS DATE)"));
+        }
+        if (ReportUnion.declares(report, ReportUnionMemberIntent::getDue)) {
+            columns.add(unionColumn(union, ReportUnion.DUE, "CAST(" + qualify.apply(member.getDue()
+                                                                                          .trim())
+                    + " AS DATE)"));
+        }
+        StringBuilder amount = new StringBuilder();
+        for (ReportAgingIntent.AmountTerm term : ReportAgingIntent.amountTerms(member.getAmount())) {
+            if (amount.isEmpty()) {
+                amount.append(term.sign() < 0 ? "-" : "");
+            } else {
+                amount.append(term.sign() < 0 ? " - " : " + ");
+            }
+            amount.append("COALESCE(")
+                  .append(qualify.apply(term.path()))
+                  .append(", 0)");
+        }
+        columns.add(unionColumn(union, ReportUnion.AMOUNT, amount.toString()));
+        return columns;
+    }
+
+    /** One selected column of a union arm - what {@link #buildQuery} reads of a column row. */
+    private static Map<String, Object> unionColumn(String union, String logical, String expression) {
+        Map<String, Object> column = new LinkedHashMap<>();
+        column.put("alias", column(union, logical));
+        column.put("expression", expression);
+        column.put("aggregate", "NONE");
+        return column;
+    }
+
+    /**
+     * A cross-model member's filter with every name of one of the owner's properties - matched
+     * case-insensitively, as an intent field and the owner's PascalCase property differ in case only -
+     * rewritten to its qualified column. Quoted literals and dotted names are left alone. Without the
+     * owner's property list (no repository to read it from) the filter is kept as written.
+     */
+    private static String crossModelFilter(CrossModelSupport.TargetInfo info, String alias, String name, String filter) {
+        if (filter == null || filter.isBlank()) {
+            return null;
+        }
+        Map<String, String> properties = new java.util.HashMap<>();
+        if (info.propertyNames() != null) {
+            for (String property : info.propertyNames()) {
+                properties.put(property.toLowerCase(Locale.ROOT), property);
+            }
+        }
+        String text = filter.trim();
+        StringBuilder out = new StringBuilder(text.length());
+        int i = 0;
+        while (i < text.length()) {
+            char character = text.charAt(i);
+            if (character == '\'') {
+                int end = text.indexOf('\'', i + 1);
+                end = end < 0 ? text.length() : end + 1;
+                out.append(text, i, end);
+                i = end;
+            } else if (isIdentifierStart(character) && (i == 0 || (!isWordCharacter(text.charAt(i - 1)) && text.charAt(i - 1) != '.'))) {
+                int end = identifierEnd(text, i);
+                String property = properties.get(text.substring(i, end)
+                                                     .toLowerCase(Locale.ROOT));
+                boolean dotted = end < text.length() && text.charAt(end) == '.';
+                out.append(property != null && !dotted ? alias + "." + quote(column(name, property)) : text.substring(i, end));
+                i = end;
+            } else {
+                out.append(character);
+                i++;
+            }
+        }
+        return ReportMoments.rewrite(normalizeEqualityOperator(out.toString()));
+    }
+
+    /**
+     * The lifecycle scope of a cross-model member, from the stage classification its owner model
+     * records - the same default as {@link #scopeCondition}: {@code live} for an aggregating report,
+     * the report's own {@code scope:} when it declares one, nothing when the member's filter already
+     * speaks about its status.
+     */
+    private static String crossModelScope(IntentGenerationContext context, ReportIntent report, ReportUnionMemberIntent member,
+            CrossModelSupport.TargetInfo info, String alias, boolean aggregated) {
+        String status = info.statusProperty();
+        String name = member.getSource()
+                            .trim();
+        if (status == null || mentionsWord(member.getFilter(), status)) {
+            return null;
+        }
+        String stage = report.getNormalizedScope();
+        if (LifecycleStages.SCOPE_ALL.equals(stage) || (stage == null && !aggregated)) {
+            return null;
+        }
+        Map<String, List<Integer>> stages = info.statusStages() == null ? Map.of() : info.statusStages();
+        if (stage == null && stages.isEmpty()) {
+            context.addIssue("report [" + report.getName() + "] union member [" + name + "] carries a lifecycle status [" + status
+                    + "] its model does not classify with `stage:` - draft, cancelled and voided rows are counted in every total");
+            return null;
+        }
+        stage = stage == null ? LifecycleStages.LIVE : stage;
+        List<Integer> ids = stages.get(stage);
+        if (ids == null || ids.isEmpty()) {
+            context.addIssue("report [" + report.getName() + "] union member [" + name + "] scope [" + stage
+                    + "] matches no status of its model - the member is read over every status");
+            return null;
+        }
+        return alias + "." + quote(column(name, status)) + " IN (" + ids.stream()
+                                                                        .map(String::valueOf)
+                                                                        .collect(Collectors.joining(", "))
+                + ")";
+    }
+
+    /** Whether the text names the word, case-insensitively - a filter speaking about a status. */
+    private static boolean mentionsWord(String text, String word) {
+        return text != null && word != null && !word.isBlank()
+                && Pattern.compile("\\b" + Pattern.quote(word) + "\\b", Pattern.CASE_INSENSITIVE)
+                          .matcher(text)
+                          .find();
     }
 
     private static void addAgingColumn(List<Map<String, Object>> columns, ColumnRef amount, String alias, String bucket, String open) {

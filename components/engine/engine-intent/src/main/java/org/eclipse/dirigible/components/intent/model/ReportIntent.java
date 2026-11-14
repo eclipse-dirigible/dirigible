@@ -23,6 +23,12 @@ public class ReportIntent {
     private String name;
     private String source;
     /**
+     * Several member entities read as ONE source (dirigible #7946), in place of {@link #source}: the
+     * report runs over the {@code UNION ALL} of the members, each mapped onto the same logical columns.
+     * See {@link ReportUnionMemberIntent}.
+     */
+    private List<ReportUnionMemberIntent> union = new ArrayList<>();
+    /**
      * Optional report kind. {@code balance} is the accounting balance shape: opening / period / closing
      * debit and credit totals per dimension over the runtime {@code fromDate}/{@code toDate} window -
      * {@link #date} drives the window, {@link #debit}/{@link #credit} are the summed amount fields, and
@@ -173,6 +179,19 @@ public class ReportIntent {
 
     public void setSource(String source) {
         this.source = source;
+    }
+
+    public List<ReportUnionMemberIntent> getUnion() {
+        return union;
+    }
+
+    public void setUnion(List<ReportUnionMemberIntent> union) {
+        this.union = union == null ? new ArrayList<>() : union;
+    }
+
+    /** Whether the report reads a {@code union:} of member entities instead of one source. */
+    public boolean isUnion() {
+        return !union.isEmpty();
     }
 
     /** Whether this is a balance report ({@code kind: balance}). */

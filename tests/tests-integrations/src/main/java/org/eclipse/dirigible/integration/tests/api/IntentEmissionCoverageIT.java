@@ -2076,6 +2076,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         source: Entry
                         dimensions: [Account.name]
                         aging: { due: date, amount: "debit - credit", buckets: [30, 60, 90] }
+                      # union (#7946): the same open amounts read as TWO members - each entry's debit, and its
+                      # credit negated - so the union view, each member's own filter and lifecycle scope, and
+                      # the aging over it are published, synchronized and run like any report.
+                      - name: EntryAgingUnion
+                        union:
+                          - { source: Entry, counterparty: Account, date: date, due: date, amount: debit, filter: "debit <> 0" }
+                          - { source: Entry, counterparty: Account, date: date, due: date, amount: "-credit", filter: "credit <> 0" }
+                        dimensions: [counterparty]
+                        aging: { buckets: [30, 60, 90] }
                       # kind: statement (#6938): the line classification is emitted as a generated
                       # <REPORT>_LINES .view artifact - published with the project and provisioned by the
                       # ViewsSynchronizer AFTER the tables - and the .report keeps a thin windowed join over
@@ -4113,6 +4122,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // kind: statement (#6938): the line classification is a generated .view artifact next to the
         // .report - the selectors and labels live THERE, as data the ViewsSynchronizer provisions,
         // never inside the generated repository.
+        // union (#7946): the members are a generated <REPORT>_UNION view the report reads as its table.
+        String entryUnionView = contentOf("EntryAgingUnionUnion.view");
+        assertTrue(entryUnionView.contains("\"name\": \"EMISSION_ENTRY_AGING_UNION_UNION\"") && entryUnionView.contains("UNION ALL"),
+                "the union must be emitted as its own view: " + entryUnionView);
         String entrySheetView = contentOf("EntrySheetLines.view");
         assertTrue(entrySheetView.contains("\"name\": \"EMISSION_ENTRY_SHEET_LINES\""),
                 "the statement's lines view must be a named database object: " + entrySheetView);
@@ -6618,6 +6631,24 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("find { it.'Account Name' == 'Vault' }.'Not Yet Due'", equalTo(-40.0F))
                                                  .body("find { it.'Account Name' == 'Vault' }.'Overdue 90+'", numberOf("0"))
                                                  .body("find { it.'Account Name' == 'Vault' }.'Open Amount'", equalTo(60.0F)));
+
+        // union, end to end (#7946): the debit and the negated credit, read as two members of one
+        // report, age exactly as the single-source EntryAging above does.
+        String entryAgingUnion = "/services/java/" + PROJECT + "/gen/entryagingunion/api/reports/EntryAgingUnionController";
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(entryAgingUnion)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("find { it.'Counterparty' == 'Vault' }.'Overdue 90+'", equalTo(60.0F))
+                                                 .body("find { it.'Counterparty' == 'Vault' }.'Open Amount'", equalTo(60.0F)));
+        restAssuredExecutor.execute(() -> given().queryParam("asOf", "2026-01-10")
+                                                 .when()
+                                                 .get(entryAgingUnion)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("find { it.'Counterparty' == 'Vault' }.'Overdue 0-30'", equalTo(100.0F))
+                                                 .body("find { it.'Counterparty' == 'Vault' }.'Not Yet Due'", numberOf("0"))
+                                                 .body("find { it.'Counterparty' == 'Vault' }.'Open Amount'", equalTo(100.0F)));
 
         // orderBy + relative moments, end to end (#8435). The debit turnover per account is 1050 (5030),
         // 400 (5010), 200 (2040) and 120 (4010): the report answers it largest first. The per-column

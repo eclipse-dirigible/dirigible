@@ -558,6 +558,26 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   drop out. The report declares the date parameter `asOf` itself (rename it with `asOf: <name>`), defaulting to the day
   the report is run - do not declare it under `parameters:`. The optional `date` (the document date) leaves out
   documents issued after the as-of date. Prefer this over the `ageing(...)` dimension for an AR/AP ageing report.
+- `union:` (on a report, in place of `source:`) - **several entities read as one source**: each member maps its own
+  fields onto the same logical columns - `source` (the member's entity name, always there), `counterparty` (a to-one
+  relation; every member's must point at the same entity), `date`, `due` (date/timestamp fields) and `amount` (the
+  member's SIGNED amount, same grammar as `aging.amount`, with an optional leading sign: `"-total"`) - plus an optional
+  `filter:` over the member's own fields, and `model:` for a member of a `uses:` model (own fields only). Map
+  `counterparty`/`date`/`due` on every member or on none. The report's `dimensions`, `measures`, `parameters` and
+  `filter` then name those logical columns, and each member keeps its own lifecycle scope (a draft is excluded per
+  member). With `aging:` the members supply due, amount and date, so the block carries only `buckets` (and `asOf`):
+  ```yaml
+  - name: AgedReceivables
+    union:
+      - { source: SalesInvoice, counterparty: customer, date: date, due: due, amount: "payable - paid" }
+      - { source: CreditNote,   counterparty: customer, date: date, due: date, amount: "allocated - total" }
+      - { source: OpeningBalance, counterparty: customer, date: documentDate, due: dueDate,
+          amount: "debit - credit", filter: "customer IS NOT NULL" }
+    dimensions: [counterparty]
+    aging: { buckets: [30, 60, 90] }
+  ```
+  Also for a netted total: revenue = `{ source: Invoice, date: date, amount: total }` + `{ source: CreditNote, date:
+  date, amount: "-total" }` with `dimensions: [source]`, `measures: ["sum(amount)"]`. Not with a ledger `kind:`.
 - `where` (on a user-picked to-one relation) - **a static option filter**: a single
   `<target property>: <literal>` pair that permanently narrows the dropdown's option list to matching
   target rows. Unlike `dependsOn` (which reacts to a sibling selection) the condition is constant.
