@@ -46,6 +46,7 @@ class BpmServiceCompleteTaskTest {
     private static final String DECLARING_PROCESS = "declaring";
     private static final String HAND_AUTHORED_PROCESS = "hand-authored";
     private static final String SEPARATED_PROCESS = "separated";
+    private static final String CLAIMED_PROCESS = "claimed";
     private static final String OWNER_SEPARATED_PROCESS = "owner-separated";
 
     /** The user {@code UserFacade} names outside a request - who every completion here is made by. */
@@ -69,6 +70,25 @@ class BpmServiceCompleteTaskTest {
                         <sequenceFlow id="flow_start_submit" sourceRef="start" targetRef="submit"></sequenceFlow>
                         <sequenceFlow id="flow_submit_approve" sourceRef="submit" targetRef="approve"></sequenceFlow>
                         <sequenceFlow id="flow_approve_end" sourceRef="approve" targetRef="end"></sequenceFlow>
+                      </process>
+                    </definitions>
+                    """;
+
+    /** An approval whose claim holds its record, so it completes only claimed (issue #8461). */
+    private static final String CLAIMED_PROCESS_XML =
+            """
+                    <?xml version="1.0" encoding="UTF-8"?>
+                    <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flowable="http://flowable.org/bpmn" targetNamespace="http://www.flowable.org/processdef">
+                      <process id="claimed" name="Claimed" isExecutable="true">
+                        <startEvent id="start"></startEvent>
+                        <userTask id="confirm" name="Confirm">
+                          <extensionElements>
+                            <flowable:property name="taskClaimRequired" value="true"></flowable:property>
+                          </extensionElements>
+                        </userTask>
+                        <endEvent id="end"></endEvent>
+                        <sequenceFlow id="flow_start_confirm" sourceRef="start" targetRef="confirm"></sequenceFlow>
+                        <sequenceFlow id="flow_confirm_end" sourceRef="confirm" targetRef="end"></sequenceFlow>
                       </process>
                     </definitions>
                     """;
@@ -149,6 +169,7 @@ class BpmServiceCompleteTaskTest {
         deploy(DECLARING_PROCESS, DECLARING_PROCESS_XML);
         deploy(HAND_AUTHORED_PROCESS, HAND_AUTHORED_PROCESS_XML);
         deploy(SEPARATED_PROCESS, SEPARATED_PROCESS_XML);
+        deploy(CLAIMED_PROCESS, CLAIMED_PROCESS_XML);
         deploy(OWNER_SEPARATED_PROCESS, OWNER_SEPARATED_PROCESS_XML);
 
         BpmProviderFlowable bpmProvider =
@@ -236,6 +257,25 @@ class BpmServiceCompleteTaskTest {
               .complete(taskOf(instance), Map.of("__completedBy_submit", "requester"));
 
         bpmService.completeTask(taskOf(instance), null);
+
+        assertEquals(0, engine.getRuntimeService()
+                              .createProcessInstanceQuery()
+                              .processInstanceId(instance.getId())
+                              .count());
+    }
+
+    @Test
+    void aTaskWhoseClaimHoldsItsRecordCompletesOnlyClaimed() {
+        ProcessInstance instance = start(CLAIMED_PROCESS, Map.of());
+        String confirm = taskOf(instance);
+
+        ResponseStatusException unclaimed = assertThrows(ResponseStatusException.class, () -> bpmService.completeTask(confirm, null));
+
+        assertEquals(HttpStatus.CONFLICT, unclaimed.getStatusCode());
+        assertEquals(confirm, taskOf(instance), "the refused completion leaves the task open");
+
+        bpmService.claimTask(confirm, USER);
+        bpmService.completeTask(confirm, null);
 
         assertEquals(0, engine.getRuntimeService()
                               .createProcessInstanceQuery()

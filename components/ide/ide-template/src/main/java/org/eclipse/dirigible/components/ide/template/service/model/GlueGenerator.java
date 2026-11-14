@@ -50,12 +50,12 @@ class GlueGenerator {
     private static final String REPORT_PERSPECTIVE = "Reports";
 
     /** The names of the collections this generator handles. */
-    private static final List<String> COLLECTIONS =
-            List.of("triggers", "resolvers", "fieldLoaders", "assignees", "timerLoaders", "waits", "aborts", "deleteAborts", "setters",
-                    "writers", "notifications", "schedules", "integrations", "inbound", "inboundMessages", "inboundFiles", "imports",
-                    "outbound", "exports", "stepEvents", "rollups", "expansions", "expansionCleanups", "settlements", "settlementListeners",
-                    "settlementCleanups", "generates", "generateEvents", "generateReopens", "transitions", "personalTransitions", "sends",
-                    "posts", "aggregates", "postings", "postingReopens", "printFeeders", "snapshots", "numbering", "resolves");
+    private static final List<String> COLLECTIONS = List.of("triggers", "resolvers", "fieldLoaders", "assignees", "timerLoaders", "waits",
+            "aborts", "deleteAborts", "setters", "claimListeners", "writers", "notifications", "schedules", "integrations", "inbound",
+            "inboundMessages", "inboundFiles", "imports", "outbound", "exports", "stepEvents", "rollups", "expansions", "expansionCleanups",
+            "settlements", "settlementListeners", "settlementCleanups", "generates", "generateEvents", "generateReopens", "transitions",
+            "personalTransitions", "sends", "posts", "aggregates", "postings", "postingReopens", "printFeeders", "snapshots", "numbering",
+            "resolves");
 
     /** The renderer. */
     private final ModelTemplateRenderer renderer;
@@ -102,6 +102,7 @@ class GlueGenerator {
             case "aborts" -> each(collection, source, content, model, parameters, GlueGenerator::bindAbort);
             case "deleteAborts" -> each(collection, source, content, model, parameters, GlueGenerator::bindDeleteAbort);
             case "setters" -> each(collection, source, content, model, parameters, GlueGenerator::bindSetter);
+            case "claimListeners" -> each(collection, source, content, model, parameters, GlueGenerator::bindClaimListener);
             case "writers" -> each(collection, source, content, model, parameters, GlueGenerator::bindWriter);
             case "notifications" -> each(collection, source, content, model, parameters, GlueGenerator::bindNotification);
             case "schedules" -> each(collection, source, content, model, parameters, GlueGenerator::bindSchedule);
@@ -395,6 +396,20 @@ class GlueGenerator {
             context.put("readsErrorMessage", assignments.stream()
                                                         .anyMatch(assignment -> isTrue(assignment, "errorMessage")));
         }
+    }
+
+    /**
+     * Binds a claim listener (#8461) - the task listener that moves the record into one status while
+     * its user task is claimed and back when it is unclaimed.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindClaimListener(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        copy(context, item, "process", "userTask", "className", "entity", "perspective", "keyProperty", "keyAccessor", "field",
+                "claimValue", "unclaimValue");
+        context.put("javaPerspective", sanitize(item, "perspective"));
     }
 
     /**

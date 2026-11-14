@@ -2024,6 +2024,25 @@ record, so an approval falling back to a group the owner is in cannot be taken b
 step says `extraRoles: true`, so route a submit task with `assignee: personal` and an approval with a
 relation walk rather than a role nobody in the tenant holds.
 
+**Hold the record while its approver decides: `onClaim` / `onUnclaim`.** A flow started on create
+(`trigger: { onCreate: SalesOrder }`) leaves the document DRAFT while its first user task waits, so a
+`forbidWhen: "SalesOrder.Status != DRAFT"` on its lines freezes nothing and the approver can confirm a
+total that changed under them. Declare both on the user task - the record moves while the task is
+claimed and moves back when it is unclaimed:
+
+```yaml
+- { name: confirm, kind: userTask, args: { assignee: approver, form: ConfirmSalesOrder,
+    onClaim: { setRelationField: Status, value: SUBMITTED },
+    onUnclaim: { setRelationField: Status, value: DRAFT } } }
+```
+
+Each half names a to-one relation of the trigger record (the status) and a seeded name or id; the two
+come together, name the same relation and different values, and the record's `lifecycle:` must allow
+both moves (DRAFT -> SUBMITTED and SUBMITTED -> DRAFT). Such a task completes only claimed - a
+completion of the unclaimed task answers 409 - and a task created already assigned (`assignee:
+personal`, a relation walk) counts as claimed from the start. The decision step after the task then
+moves the record on from SUBMITTED, so give the lifecycle that edge too.
+
 **Approve/Reject on a user task = branch on the chosen `action`.** A task form's button (e.g. Approve,
 Reject) completes the task with an `action` variable; put a `decision` immediately after the task that
 tests it. Continue on approve, branch to a cancel-and-end on reject - or loop the reject branch back to

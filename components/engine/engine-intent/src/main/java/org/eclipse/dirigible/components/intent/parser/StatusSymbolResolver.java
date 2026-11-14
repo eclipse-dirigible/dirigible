@@ -378,6 +378,16 @@ final class StatusSymbolResolver {
                 if (relationName != null && args.get("value") != null) {
                     resolveSetterValue(args, "value", relationName, triggerEntity, false, stepSubject + " setRelationField");
                 }
+                // A user task's onClaim / onUnclaim (#8461) is a setRelationField of the trigger record,
+                // written when the task is claimed or unclaimed - its value names a seed the same way.
+                for (String claimKey : List.of("onClaim", "onUnclaim")) {
+                    Map<?, ?> claimWrite = asMap(args.get(claimKey));
+                    String claimRelation = claimWrite == null ? null : text(claimWrite, "setRelationField");
+                    if (claimRelation != null && claimRelation.indexOf('.') < 0 && claimWrite.get("value") != null) {
+                        resolveSetterValue(claimWrite, "value", claimRelation, triggerEntity, false,
+                                stepSubject + " " + claimKey + " setRelationField");
+                    }
+                }
                 // A set: map (#8042) writes several members at once: each key naming a to-one relation is
                 // resolved exactly as a setRelationField's value; a field key passes through untouched.
                 Map<?, ?> set = asMap(args.get("set"));

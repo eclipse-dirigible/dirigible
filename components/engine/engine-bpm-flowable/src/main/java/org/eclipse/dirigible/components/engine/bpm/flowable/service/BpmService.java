@@ -596,13 +596,15 @@ public class BpmService {
      *
      * <p>
      * The completion records who completed the task ({@link BpmProviderFlowable#COMPLETED_BY_PREFIX}),
-     * and is refused when the task is separated from one this user completed (issue #8111).
+     * and is refused when the task is separated from one this user completed (issue #8111), or when it
+     * completes only claimed and nobody has claimed it (issue #8461).
      *
      * @param taskId the task id
      * @param variables the completion's variables, as the caller sent them
      */
     public void completeTask(String taskId, Map<String, Object> variables) {
         refuseSeparated(taskId);
+        refuseUnclaimed(taskId);
         Map<String, Object> writable = writableVariables(taskId, variables);
         String key = bpmProviderFlowable.getTaskDefinitionKey(taskId);
         String user = UserFacade.getName();
@@ -612,6 +614,14 @@ public class BpmService {
         }
         bpmProviderFlowable.getTaskService()
                            .completeTask(taskId, writable);
+    }
+
+    /** A 409 when the task completes only claimed and nobody has claimed it (issue #8461). */
+    private void refuseUnclaimed(String taskId) {
+        String refusal = bpmProviderFlowable.getUnclaimedRefusal(taskId);
+        if (refusal != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, refusal);
+        }
     }
 
     /** A 403 carrying the task's own message when the current user may not act on it (issue #8111). */

@@ -94,6 +94,10 @@ public class BpmProviderFlowable implements BpmProvider {
     private static final String TASK_SEPARATE_FROM_PROPERTY = "taskSeparateFrom";
     /** The user-task property carrying what the user it keeps out is told. */
     private static final String TASK_SEPARATION_MESSAGE_PROPERTY = "taskSeparationMessage";
+    /**
+     * The user-task property marking a task whose claim moves its record, so it completes only claimed.
+     */
+    private static final String TASK_CLAIM_REQUIRED_PROPERTY = "taskClaimRequired";
 
     /**
      * The process variable a completion through {@code BpmService} records its user in, followed by the
@@ -771,6 +775,25 @@ public class BpmProviderFlowable implements BpmProvider {
     /** The process variable holding the user a {@code taskSeparateFrom} entry keeps out. */
     private static String separatedUserVariable(String separateFrom) {
         return SEPARATE_FROM_PERSONAL.equals(separateFrom) ? PERSONAL_USER_VARIABLE : COMPLETED_BY_PREFIX + separateFrom;
+    }
+
+    /**
+     * Why the task may not be completed yet, or null when it may: its user task declares
+     * {@code taskClaimRequired} - an intent {@code onClaim} moves the record while the task is claimed,
+     * which is what freezes it for the decision - and nobody has claimed it (issue #8461). A completion
+     * of an unclaimed task would decide over a record that was never held.
+     *
+     * @param taskId the task id
+     * @return the refusal, or null
+     */
+    public String getUnclaimedRefusal(String taskId) {
+        Task task = findTask(taskId);
+        if (task == null || task.getAssignee() != null
+                || !property(userTaskOf(task), TASK_CLAIM_REQUIRED_PROPERTY).map(Boolean::parseBoolean)
+                                                                            .orElse(false)) {
+            return null;
+        }
+        return "Claim this task before completing it - its record is held for the decision only while the task is claimed";
     }
 
     /**
