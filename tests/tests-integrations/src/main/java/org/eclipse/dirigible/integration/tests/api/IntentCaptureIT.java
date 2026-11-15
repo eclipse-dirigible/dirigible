@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.notNullValue;
@@ -74,10 +75,11 @@ import org.springframework.beans.factory.annotation.Autowired;
  * The answer is deliberately imperfect, the way a reading of print is: a date that disagrees with
  * the document's QR code, a printed VAT that differs from the calculated one, a registration number
  * nothing matches next to a VAT number that does, and a second line read with low confidence and no
- * price. The bill must still be created - with the code's date, the calculated VAT, the vendor the
- * VAT number identifies, both lines and the uploaded file - and each of those is a flag in the
- * capture ledger, served by the review endpoint. A provider that declines creates nothing and is
- * recorded as a failed attempt.
+ * price, and a third line without the description a line cannot be saved without. The bill must
+ * still be created - with the code's date, the calculated VAT, the vendor the VAT number
+ * identifies, both lines and the uploaded file - and each of those is a flag in the capture ledger,
+ * served by the review endpoint. A provider that declines creates nothing and is recorded as a
+ * failed attempt.
  */
 class IntentCaptureIT extends IntegrationTest {
 
@@ -108,7 +110,7 @@ class IntentCaptureIT extends IntegrationTest {
               - name: Bill
                 fields:
                   - { name: id,           type: integer, primaryKey: true, generated: true }
-                  - { name: vendorNumber, type: string,  length: 50 }
+                  - { name: vendorNumber, type: string,  length: 50, required: true }
                   - { name: billedOn,     type: date }
                   - { name: gross,        type: decimal, precision: 18, scale: 2 }
                   - { name: net,          type: decimal, precision: 18, scale: 2 }
@@ -119,7 +121,7 @@ class IntentCaptureIT extends IntegrationTest {
               - name: BillLine
                 fields:
                   - { name: id,          type: integer, primaryKey: true, generated: true }
-                  - { name: description, type: string,  length: 200 }
+                  - { name: description, type: string,  length: 200, required: true }
                   - { name: quantity,    type: decimal, precision: 18, scale: 3 }
                   - { name: price,       type: decimal, precision: 18, scale: 2 }
                 relations:
@@ -162,8 +164,13 @@ class IntentCaptureIT extends IntegrationTest {
               "Vendor_vatNumber":{"value":"BG123456789","confidence":"high"}},
              "items":[
               {"description":"Хартия А4","quantity":2,"price":30.00,"confidence":"high"},
-              {"description":"Тонер","quantity":1,"price":null,"confidence":"low"}]}
+              {"description":"Тонер","quantity":1,"price":null,"confidence":"low"},
+              {"description":null,"quantity":3,"price":4.50,"confidence":"high"}]}
             """;
+
+    /** A reading without the vendor's number, which a bill cannot be created without. */
+    private static final String ANSWER_WITHOUT_NUMBER =
+            ANSWER.replace("{\"value\":\"INV-77\",\"confidence\":\"high\"}", "{\"value\":null,\"confidence\":\"low\"}");
 
     @Autowired
     private IRepository repository;
@@ -180,6 +187,7 @@ class IntentCaptureIT extends IntegrationTest {
     private HttpServer provider;
     private final List<JsonObject> requests = new CopyOnWriteArrayList<>();
     private final AtomicBoolean decline = new AtomicBoolean();
+    private final AtomicReference<String> answer = new AtomicReference<>(ANSWER);
 
     @BeforeEach
     void startProvider() throws IOException {
@@ -210,7 +218,7 @@ class IntentCaptureIT extends IntegrationTest {
                 content.add(thinking);
                 JsonObject text = new JsonObject();
                 text.addProperty("type", "text");
-                text.addProperty("text", ANSWER);
+                text.addProperty("text", answer.get());
                 content.add(text);
             }
             reply.add("content", content);
@@ -297,14 +305,16 @@ class IntentCaptureIT extends IntegrationTest {
                 "the VAT number identified the vendor the registration number did not");
 
         List<Map<String, Object>> lines = list(LINES + "?Bill=" + recordId.get());
-        assertEquals(2, lines.size(), "every line read is a row of the bill: " + lines);
+        assertEquals(2, lines.size(),
+                "every line that can be a row is one; the line without its required description is left out: " + lines);
         List<Map<String, Object>> scans = list(SCANS + "?Bill=" + recordId.get());
         assertEquals(1, scans.size(), "the uploaded file is kept on the bill: " + scans);
         assertEquals("bill.png", scans.get(0)
                                       .get("FileName"));
 
         // What a person must look at.
-        List<String> expected = List.of("billedOn QR_MISMATCH", "items[2] LINE", "items[2].price MISSING", "vat MISMATCH");
+        List<String> expected = List.of("billedOn QR_MISMATCH", "items[2] LINE", "items[2].price MISSING", "items[3] LINE",
+                "items[3].description MISSING", "vat MISMATCH");
         AtomicReference<List<Map<String, Object>>> flags = new AtomicReference<>();
         restAssuredExecutor.execute(() -> flags.set(given().when()
                                                            .get(CAPTURE + "/review/" + recordId.get())
@@ -315,6 +325,24 @@ class IntentCaptureIT extends IntegrationTest {
                                                            .jsonPath()
                                                            .getList("flags")));
         assertEquals(expected, flagNames(flags.get()), "the review endpoint answers the capture's flags: " + flags.get());
+
+        // A reading without what the record cannot be created without is refused, with what was read.
+        answer.set(ANSWER_WITHOUT_NUMBER);
+        AtomicReference<List<Map<String, Object>>> refusedFlags = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> refusedFlags.set(given().multiPart("file", "no-number.png", scan, "image/png")
+                                                                  .when()
+                                                                  .post(CAPTURE + "/upload")
+                                                                  .then()
+                                                                  .statusCode(422)
+                                                                  .body("status", equalTo("REJECTED"))
+                                                                  .body("message", containsString("vendorNumber"))
+                                                                  .extract()
+                                                                  .jsonPath()
+                                                                  .getList("flags")));
+        assertTrue(flagNames(refusedFlags.get()).contains("vendorNumber MISSING"),
+                "a refusal says what was not read: " + refusedFlags.get());
+        assertEquals(1, list(BILLS).size(), "a rejected capture creates no record");
+        answer.set(ANSWER);
 
         // A provider that declines creates nothing.
         decline.set(true);
@@ -327,7 +355,8 @@ class IntentCaptureIT extends IntegrationTest {
         assertEquals(1, list(BILLS).size(), "a failed capture creates no record");
 
         assertEquals(List.of("billScan CAPTURED bill.png anthropic claude-test-model 1800 240 record",
-                "billScan FAILED refused.png null null 0 0 -"), ledger());
+                "billScan REJECTED no-number.png anthropic claude-test-model 1800 240 -", "billScan FAILED refused.png null null 0 0 -"),
+                ledger());
     }
 
     private static List<String> flagNames(List<Map<String, Object>> flags) {
@@ -350,8 +379,8 @@ class IntentCaptureIT extends IntegrationTest {
                                        .length(),
                         "every attempt records the file's checksum");
                 assertNotNull(result.getTimestamp("CapturedAt"));
-                boolean captured = "CAPTURED".equals(result.getString("Status"));
-                assertEquals(captured, result.getString("Answer") != null, "the provider's raw answer is kept with a captured record");
+                boolean read = !"FAILED".equals(result.getString("Status"));
+                assertEquals(read, result.getString("Answer") != null, "the provider's raw answer is kept whenever it answered");
                 entries.add(result.getString("CaptureName") + " " + result.getString("Status") + " " + result.getString("FileName") + " "
                         + result.getString("Provider") + " " + result.getString("Model") + " " + result.getInt("InputTokens") + " "
                         + result.getInt("OutputTokens") + " " + (result.getString("RecordId") == null ? "-" : "record"));

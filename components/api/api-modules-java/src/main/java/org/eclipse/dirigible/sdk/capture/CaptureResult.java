@@ -82,10 +82,12 @@ public final class CaptureResult {
      * @param checksum the file's checksum
      * @param reading what the provider read, may be null
      * @param message why it was rejected
+     * @param flags what the reading already flagged - what the person retrying the capture must supply
      * @return the result
      */
-    public static CaptureResult rejected(String captureName, String fileName, String checksum, CaptureReading reading, String message) {
-        return new CaptureResult(captureName, fileName, checksum, Status.REJECTED, message, null, null, reading);
+    public static CaptureResult rejected(String captureName, String fileName, String checksum, CaptureReading reading, String message,
+            List<CaptureFlag> flags) {
+        return new CaptureResult(captureName, fileName, checksum, Status.REJECTED, message, null, flags, reading);
     }
 
     /**

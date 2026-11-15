@@ -215,10 +215,35 @@ public class ${className}Capture {
 #foreach($relation in $relations)
         ${relation.local}(entity, read, ${relation.nameLiteral}, flags);
 #end
+#if($hasRequired)
+        // What a ${entity} cannot be inserted without. Missing it is not a flag on a record - there can
+        // be no record - so the capture is refused with what was read, for the person to supply it (a
+        // supplier not registered yet) and capture again.
+        List<String> absent = new ArrayList<>();
+#foreach($field in $fields)
+#if($field.required)
+        if (entity.${field.property} == null) {
+            absent.add(${field.nameLiteral});
+        }
+#end
+#end
+#foreach($relation in $relations)
+#if($relation.required)
+        if (entity.${relation.property} == null) {
+            absent.add(${relation.nameLiteral});
+        }
+#end
+#end
+        if (!absent.isEmpty()) {
+            return new Outcome(refused(CaptureResult.rejected(NAME, fileName, checksum, reading,
+                    "a ${entity} cannot be created without " + String.join(", ", absent) + ", which the document did not give", flags)), 422);
+        }
+#end
 #if($hasItems)
         List<gen.${javaGenFolderName}.data.${javaItemPerspective}.${itemEntity}Entity> lines = new ArrayList<>();
+        int skipped = 0;
         for (CaptureValues line : reading.items()) {
-            String at = "items[" + (lines.size() + 1) + "]";
+            String at = "items[" + (lines.size() + skipped + 1) + "]";
             gen.${javaGenFolderName}.data.${javaItemPerspective}.${itemEntity}Entity child =
                     new gen.${javaGenFolderName}.data.${javaItemPerspective}.${itemEntity}Entity();
 #foreach($field in $itemFields)
@@ -226,6 +251,15 @@ public class ${className}Capture {
 #end
 #foreach($relation in $itemRelations)
             ${relation.local}(child, line, at + "." + ${relation.nameLiteral}, flags);
+#end
+#if($hasItemRequired)
+            // A line that lacks what a ${itemEntity} cannot be inserted without is left out and flagged:
+            // one unreadable line must not cost the whole document.
+            if (#foreach($field in $itemFields)#if($field.required)child.${field.property} == null || #end#end#foreach($relation in $itemRelations)#if($relation.required)child.${relation.property} == null || #end#end false) {
+                flags.add(CaptureFlag.of(at, CaptureFlag.Reason.LINE, null, "the line was not created: a value it requires was not read"));
+                skipped++;
+                continue;
+            }
 #end
             // A line carries one confidence for all its values.
             if (line.confidence("") != CaptureConfidence.HIGH) {
@@ -286,7 +320,8 @@ public class ${className}Capture {
 #end
             LOG.error("Capture {}: the record read from [{}] could not be saved - nothing was saved", NAME, fileName, e);
             return new Outcome(
-                    refused(CaptureResult.rejected(NAME, fileName, checksum, reading, "the record could not be saved: " + e.getMessage())), 422);
+                    refused(CaptureResult.rejected(NAME, fileName, checksum, reading, "the record could not be saved: " + e.getMessage(), flags)),
+                    422);
         }
 #foreach($field in $compares)
         compare(read, ${field.nameLiteral}, saved.${field.property}, VALUES::${field.conversion}, flags);

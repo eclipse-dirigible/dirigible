@@ -893,11 +893,23 @@ class GlueGenerator {
         context.put("relations", captureRelations(item.get("relations"), parameters));
         context.put("itemRelations", itemRelations);
         context.put("hasItemRelations", !itemRelations.isEmpty());
+        context.put("hasRequired", anyRequired(item.get("fields")) || anyRequired(item.get("relations")));
+        context.put("hasItemRequired", anyRequired(item.get("itemFields")) || anyRequired(item.get("itemRelations")));
         String tablePrefix = strOr(parameters, "tablePrefix", "");
         if (!tablePrefix.isEmpty() && !tablePrefix.endsWith("_")) {
             tablePrefix = tablePrefix + "_";
         }
         context.put("table", tablePrefix + str(item, "table"));
+    }
+
+    /** Whether any of a capture's fields or relations is one its row cannot be inserted without. */
+    private static boolean anyRequired(Object raw) {
+        for (Map<String, Object> entry : asMaps(raw)) {
+            if (truthy(entry, "required")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

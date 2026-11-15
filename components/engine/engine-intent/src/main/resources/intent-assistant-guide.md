@@ -5197,6 +5197,7 @@ model reads, so a value it could not read is expected and is flagged, never a re
 captures:
   - name: supplierInvoice
     into: PurchaseInvoice            # the entity whose record the document becomes (local, not a composition child)
+    label: Scan a supplier invoice   # optional: the caption of the button; defaults to the humanized name
     attachment: InvoiceScan          # optional: a `function: Attachment` composition child of `into` that keeps the file
     instructions: "The supplier is the party that issued the document, not the one billed."
     qr:                              # optional: the layout of the QR code the document carries (images only)
@@ -5233,8 +5234,12 @@ field's type; the field stays empty), `NO_MATCH` and `AMBIGUOUS_MATCH` (a relati
 several), `QR_MISMATCH` (the reading differs from the document's code), `MISMATCH` (the printed value
 of a `compare:` field differs from the saved record's) and `LINE` (a line was read with less than high
 confidence). The record goes through the entity's own validation, as one a person creates would, and
-the capture never approves, posts or transitions it. Only a record that validation refuses is not
-created (REJECTED, 422). A provider that fails creates nothing (FAILED): 412 when no provider is
+the capture never approves, posts or transitions it. Two readings create no record (REJECTED, 422, with
+the flags of what was read, so the person can supply what is missing and capture again): one that
+lacks a value the record cannot be inserted without - a `required` field or relation nothing defaults,
+typically a supplier that is not registered yet - and one the entity's validation refuses. A **line**
+that lacks a required value is left out and flagged `LINE`, so one unreadable line does not cost the
+document; a compared total then shows the difference. A provider that fails creates nothing (FAILED): 412 when no provider is
 configured, 502 when the provider is unreachable or errors, 422 when it refuses or the file is
 unreadable.
 
@@ -5278,8 +5283,13 @@ the Anthropic API, so say so plainly where the requirement concerns confidential
 documents. A self-hosted model plugs in as a client `@Component` implementing
 `org.eclipse.dirigible.sdk.capture.CaptureProvider`, selected with `DIRIGIBLE_CAPTURE_PROVIDER`.
 
-**Not supported in v1:** timestamp fields, nested collections, creating the targets of relations, and a
-review screen in the generated UI (the flags are served by the review endpoint only).
+**In the generated UI** the capture contributes two buttons to the entity's views: its own (the
+`label:`) on the list, which opens a dialog to pick or photograph the document, uploads it and shows
+what was flagged; and `<label> review` on a record, which shows the kept file beside the flags of the
+capture that created it. The flags are a list beside the document, not marks on the record's form.
+
+**Not supported in v1:** timestamp fields, nested collections, creating the targets of relations, and
+flag marks on the fields of the record's own form.
 
 ### outbound - the app raises an event for another system
 

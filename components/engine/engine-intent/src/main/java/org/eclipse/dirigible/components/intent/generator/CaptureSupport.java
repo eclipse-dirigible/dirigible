@@ -488,6 +488,8 @@ public final class CaptureSupport {
             value.put("property", IntentNaming.pascalCase(name));
             value.put("conversion", conversion(field.getType()));
             value.put("decimal", "decimal".equals(conversion(field.getType())));
+            // What a row cannot be inserted without: required, and nothing else supplies it.
+            value.put("required", field.isRequired() && field.getDefaultValue() == null);
             value.put("hasQr", declared.getQr() != null);
             value.put("qrLiteral", declared.getQr() == null ? "null" : NotificationSupport.quote(declared.getQr()));
             if (declared.isCompare()) {
@@ -519,6 +521,7 @@ public final class CaptureSupport {
         entry.put("nameLiteral", NotificationSupport.quote(name));
         entry.put("local", "match" + localPrefix + IntentNaming.pascalCase(name));
         entry.put("property", IntentNaming.pascalCase(name));
+        entry.put("required", relation.isRequired() && relation.getInit() == null);
         entry.put("targetEntity", relation.getTo());
         entry.put("crossModel", crossModel);
         entry.put("targetModel", crossModel ? relation.getModel() : "");
