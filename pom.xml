@@ -180,7 +180,10 @@
         <ftpserver.version>1.2.1</ftpserver.version>
 
         <!-- ActiveMQ -->
-        <activemq.version>6.1.0</activemq.version>
+        <activemq.version>6.2.10</activemq.version>
+
+        <!-- RabbitMQ Java client: ahead of the version Spring Boot manages (5.30.0), for its security fixes -->
+        <amqp-client.version>5.37.1</amqp-client.version>
 
         <!-- Maven Artifact Resolver (embedded for dynamic dependency resolution);
              maven-resolver-maven.version is the Maven line the resolver release pairs with -->
@@ -1058,6 +1061,11 @@
                 <version>${spring.boot.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.rabbitmq</groupId>
+                <artifactId>amqp-client</artifactId>
+                <version>${amqp-client.version}</version>
             </dependency>
             <!-- The AWS SDK v2 line, for every module that reaches it: api-s3 through
                  s3-transfer-manager and api-qldb through the QLDB driver. Without it the two chains
