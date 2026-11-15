@@ -313,7 +313,7 @@ class IntentCaptureIT extends IntegrationTest {
                                       .get("FileName"));
 
         // What a person must look at.
-        List<String> expected = List.of("billedOn QR_MISMATCH", "items[2] LINE", "items[2].price MISSING", "items[3] LINE",
+        List<String> expected = List.of("billedOn QR_MISMATCH", "items[2] LINE", "items[2].price MISSING", "items[3] LINE_SKIPPED",
                 "items[3].description MISSING", "vat MISMATCH");
         AtomicReference<List<Map<String, Object>>> flags = new AtomicReference<>();
         restAssuredExecutor.execute(() -> flags.set(given().when()
@@ -333,7 +333,7 @@ class IntentCaptureIT extends IntegrationTest {
                                                                   .when()
                                                                   .post(CAPTURE + "/upload")
                                                                   .then()
-                                                                  .statusCode(422)
+                                                                  .statusCode(400)
                                                                   .body("status", equalTo("REJECTED"))
                                                                   .body("message", containsString("vendorNumber"))
                                                                   .extract()

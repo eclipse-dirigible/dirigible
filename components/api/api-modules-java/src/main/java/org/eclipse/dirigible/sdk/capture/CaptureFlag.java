@@ -28,8 +28,10 @@ public final class CaptureFlag {
         QR_MISMATCH,
         /** The value contradicts another value of the document. */
         MISMATCH,
-        /** A line item needs attention. */
-        LINE
+        /** A line item was read without high confidence. */
+        LINE,
+        /** A line item was left out: it lacks a value its row cannot be inserted without. */
+        LINE_SKIPPED
     }
 
     private final String field;

@@ -5232,13 +5232,13 @@ flag on it, served by the review endpoint. The reasons: `MISSING` (the value is 
 `LOW_CONFIDENCE` (the model was not sure; the value is kept), `UNREADABLE` (it does not convert to the
 field's type; the field stays empty), `NO_MATCH` and `AMBIGUOUS_MATCH` (a relation found no row or
 several), `QR_MISMATCH` (the reading differs from the document's code), `MISMATCH` (the printed value
-of a `compare:` field differs from the saved record's) and `LINE` (a line was read with less than high
-confidence). The record goes through the entity's own validation, as one a person creates would, and
-the capture never approves, posts or transitions it. Two readings create no record (REJECTED, 422, with
+of a `compare:` field differs from the saved record's) `LINE` (a line was read with less than high
+confidence) and `LINE_SKIPPED` (a line was left out, see below). The record goes through the entity's own validation, as one a person creates would, and
+the capture never approves, posts or transitions it. Two readings create no record (REJECTED, answered 400 as the refusal it is, with
 the flags of what was read, so the person can supply what is missing and capture again): one that
 lacks a value the record cannot be inserted without - a `required` field or relation nothing defaults,
 typically a supplier that is not registered yet - and one the entity's validation refuses. A **line**
-that lacks a required value is left out and flagged `LINE`, so one unreadable line does not cost the
+that lacks a required value is left out and flagged `LINE_SKIPPED`, so one unreadable line does not cost the
 document; a compared total then shows the difference. A provider that fails creates nothing (FAILED): 412 when no provider is
 configured, 502 when the provider is unreachable or errors, 422 when it refuses or the file is
 unreadable.

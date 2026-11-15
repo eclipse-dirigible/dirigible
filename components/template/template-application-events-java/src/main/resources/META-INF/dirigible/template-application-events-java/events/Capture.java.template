@@ -57,6 +57,7 @@ import org.eclipse.dirigible.sdk.capture.Captures;
 import org.eclipse.dirigible.sdk.cms.Attachments;
 #end
 import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.db.ValidationException;
 import org.eclipse.dirigible.sdk.http.Controller;
 import org.eclipse.dirigible.sdk.http.Get;
 import org.eclipse.dirigible.sdk.http.PathParam;
@@ -87,8 +88,9 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  * find, a relation no single row matched#if($hasCompares), a printed total that differs from the calculated one#end#if($hasQr), a
  * value that differs from the document's QR code#end - each is a flag on the created record, never a
  * refusal. The record is saved in its initial status through the entity's own validation, so nothing
- * a capture creates skips a rule a person creating it would meet; a record that validation refuses
- * is not created (422). Every attempt is recorded in the ${table}_CAPTURES ledger with the provider,
+ * a capture creates skips a rule a person creating it would meet. A reading that lacks a value the
+ * record cannot be inserted without, or one that validation refuses, creates nothing and is answered
+ * as the refusal it is (400), with what was read; a provider that fails answers 412, 502 or 422. Every attempt is recorded in the ${table}_CAPTURES ledger with the provider,
  * the model, the tokens and the flags, and .../review/{id} answers the flags of a record's capture.
  * After the record is committed, every Hook bean is called with it; a failing hook is logged and
  * does not undo the capture.
@@ -236,7 +238,7 @@ public class ${className}Capture {
 #end
         if (!absent.isEmpty()) {
             return new Outcome(refused(CaptureResult.rejected(NAME, fileName, checksum, reading,
-                    "a ${entity} cannot be created without " + String.join(", ", absent) + ", which the document did not give", flags)), 422);
+                    "a ${entity} cannot be created without " + String.join(", ", absent) + ", which the document did not give", flags)), 400);
         }
 #end
 #if($hasItems)
@@ -256,7 +258,7 @@ public class ${className}Capture {
             // A line that lacks what a ${itemEntity} cannot be inserted without is left out and flagged:
             // one unreadable line must not cost the whole document.
             if (#foreach($field in $itemFields)#if($field.required)child.${field.property} == null || #end#end#foreach($relation in $itemRelations)#if($relation.required)child.${relation.property} == null || #end#end false) {
-                flags.add(CaptureFlag.of(at, CaptureFlag.Reason.LINE, null, "the line was not created: a value it requires was not read"));
+                flags.add(CaptureFlag.of(at, CaptureFlag.Reason.LINE_SKIPPED, null, "the line was not created: a value it requires was not read"));
                 skipped++;
                 continue;
             }
@@ -318,10 +320,15 @@ public class ${className}Capture {
                 }
             }
 #end
+            ValidationException refusal = refusalIn(e);
+            if (refusal != null) {
+                // The entity's own rule, in the sentence authored for the person creating the record.
+                return new Outcome(refused(CaptureResult.rejected(NAME, fileName, checksum, reading, refusal.getMessage(), flags)), 400);
+            }
+            // Anything else is a fault, not a refusal: its text is for the log, never for the caller.
             LOG.error("Capture {}: the record read from [{}] could not be saved - nothing was saved", NAME, fileName, e);
-            return new Outcome(
-                    refused(CaptureResult.rejected(NAME, fileName, checksum, reading, "the record could not be saved: " + e.getMessage(), flags)),
-                    422);
+            return new Outcome(refused(CaptureResult.rejected(NAME, fileName, checksum, reading, "the record could not be saved", flags)),
+                    500);
         }
 #foreach($field in $compares)
         compare(read, ${field.nameLiteral}, saved.${field.property}, VALUES::${field.conversion}, flags);
@@ -338,6 +345,16 @@ public class ${className}Capture {
             }
         }
         return new Outcome(result, 200);
+    }
+
+    /** The validation refusal a failed unit of work carries, or null when it failed for another reason. */
+    private static ValidationException refusalIn(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {
+            if (cause instanceof ValidationException refusal) {
+                return refusal;
+            }
+        }
+        return null;
     }
 
     private static CaptureResult refused(CaptureResult result) {
