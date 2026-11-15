@@ -84,6 +84,21 @@ public class DirigibleConfigCatalogueTest {
     }
 
     @Test
+    public void theCaptureKeysAreInstanceLevelAndGroupedWithAi() {
+        assertTrue(DirigibleConfig.CAPTURE_API_KEY.isSensitive());
+        assertEquals(ConfigType.URL, DirigibleConfig.CAPTURE_BASE_URL.getType());
+        assertEquals("anthropic", DirigibleConfig.CAPTURE_PROVIDER.getDefaultValue());
+        assertEquals("10485760", DirigibleConfig.CAPTURE_MAX_FILE_SIZE.getDefaultValue());
+        for (DirigibleConfig config : DirigibleConfig.values()) {
+            if (config.getKey()
+                      .startsWith("DIRIGIBLE_CAPTURE_")) {
+                assertEquals(config.getKey(), ConfigGroup.AI, ConfigGroups.resolve(config.getKey()));
+                assertFalse(config.getKey(), config.isTenantOverridable());
+            }
+        }
+    }
+
+    @Test
     public void theTenantAllowListIsTodaysSeventeenKeysInTodaysOrder() {
         assertEquals(List.of( //
                 "DIRIGIBLE_BRANDING_NAME", //

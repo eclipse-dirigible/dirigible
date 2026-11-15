@@ -52,10 +52,10 @@ class GlueGenerator {
     /** The names of the collections this generator handles. */
     private static final List<String> COLLECTIONS = List.of("triggers", "resolvers", "fieldLoaders", "assignees", "timerLoaders", "waits",
             "aborts", "deleteAborts", "setters", "claimListeners", "writers", "notifications", "schedules", "integrations", "inbound",
-            "inboundMessages", "inboundFiles", "imports", "outbound", "exports", "stepEvents", "rollups", "expansions", "expansionCleanups",
-            "settlements", "settlementListeners", "settlementCleanups", "generates", "generateEvents", "generateReopens", "transitions",
-            "personalTransitions", "sends", "posts", "aggregates", "postings", "postingReopens", "printFeeders", "snapshots", "numbering",
-            "resolves");
+            "inboundMessages", "inboundFiles", "imports", "captures", "outbound", "exports", "stepEvents", "rollups", "expansions",
+            "expansionCleanups", "settlements", "settlementListeners", "settlementCleanups", "generates", "generateEvents",
+            "generateReopens", "transitions", "personalTransitions", "sends", "posts", "aggregates", "postings", "postingReopens",
+            "printFeeders", "snapshots", "numbering", "resolves");
 
     /** The renderer. */
     private final ModelTemplateRenderer renderer;
@@ -111,6 +111,7 @@ class GlueGenerator {
             case "inboundMessages" -> each(collection, source, content, model, parameters, GlueGenerator::bindInboundMessage);
             case "inboundFiles" -> each(collection, source, content, model, parameters, GlueGenerator::bindInboundFile);
             case "imports" -> each(collection, source, content, model, parameters, GlueGenerator::bindImport);
+            case "captures" -> each(collection, source, content, model, parameters, GlueGenerator::bindCapture);
             case "outbound" -> each(collection, source, content, model, parameters, GlueGenerator::bindOutbound);
             case "exports" -> each(collection, source, content, model, parameters, GlueGenerator::bindExport);
             case "stepEvents" -> each(collection, source, content, model, parameters, GlueGenerator::bindStepEvent);
@@ -869,6 +870,65 @@ class GlueGenerator {
             tablePrefix = tablePrefix + "_";
         }
         context.put("table", tablePrefix + str(item, "table"));
+    }
+
+    /**
+     * Binds a document capture: what the model is asked for, the fields and relations its answer fills,
+     * and the rows the capture owns. A relation is resolved through its target's repository, which
+     * lives in the owner model's generation folder when the target is declared in another model.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindCapture(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        copy(context, item, "name", "nameLiteral", "className", "entity", "perspective", "keyProperty", "roles", "readRoles",
+                "instructionsLiteral", "hasQr", "qrSeparatorLiteral", "qrPartsLiteral", "schemaFields", "schemaItems", "fields", "compares",
+                "hasRelations", "hasCompares", "hasItems", "itemFields", "itemEntity", "itemBackRef", "hasAttachment", "attachmentEntity",
+                "attachmentBackRef");
+        context.put("javaPerspective", sanitize(item, "perspective"));
+        context.put("javaItemPerspective", truthy(item, "hasItems") ? sanitize(item, "itemPerspective") : "");
+        context.put("javaAttachmentPerspective", truthy(item, "hasAttachment") ? sanitize(item, "attachmentPerspective") : "");
+        List<Object> itemRelations = captureRelations(item.get("itemRelations"), parameters);
+        context.put("relations", captureRelations(item.get("relations"), parameters));
+        context.put("itemRelations", itemRelations);
+        context.put("hasItemRelations", !itemRelations.isEmpty());
+        context.put("hasRequired", anyRequired(item.get("fields")) || anyRequired(item.get("relations")));
+        context.put("hasItemRequired", anyRequired(item.get("itemFields")) || anyRequired(item.get("itemRelations")));
+        String tablePrefix = strOr(parameters, "tablePrefix", "");
+        if (!tablePrefix.isEmpty() && !tablePrefix.endsWith("_")) {
+            tablePrefix = tablePrefix + "_";
+        }
+        context.put("table", tablePrefix + str(item, "table"));
+    }
+
+    /** Whether any of a capture's fields or relations is one its row cannot be inserted without. */
+    private static boolean anyRequired(Object raw) {
+        for (Map<String, Object> entry : asMaps(raw)) {
+            if (truthy(entry, "required")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Resolves the Java packages of the relations a capture matches by a natural key.
+     *
+     * @param raw the declared relations
+     * @param parameters the generation parameters
+     * @return the relations, each with its target's generation folder and package segment
+     */
+    private static List<Object> captureRelations(Object raw, Map<String, Object> parameters) {
+        List<Object> relations = new ArrayList<>();
+        for (Map<String, Object> relation : asMaps(raw)) {
+            Map<String, Object> resolved = new LinkedHashMap<>(relation);
+            resolved.put("genFolder",
+                    truthy(relation, "crossModel") ? sanitize(relation, "targetModel") : str(parameters, "javaGenFolderName"));
+            resolved.put("javaTargetPerspective", sanitize(relation, "targetPerspective"));
+            relations.add(resolved);
+        }
+        return relations;
     }
 
     /**

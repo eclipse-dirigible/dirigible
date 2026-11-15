@@ -584,6 +584,39 @@ public enum DirigibleConfig {
     INTENT_AI_VERSION("DIRIGIBLE_INTENT_AI_VERSION", "2023-06-01"),
 
     /**
+     * Vision-model provider the document capture constructs read uploaded documents with:
+     * {@code anthropic} (built in) or the name of a client {@code CaptureProvider} component.
+     */
+    CAPTURE_PROVIDER("DIRIGIBLE_CAPTURE_PROVIDER", "anthropic"),
+
+    /** API key of the capture provider; blank disables document capture. */
+    CAPTURE_API_KEY("DIRIGIBLE_CAPTURE_API_KEY", null, meta().secret()),
+
+    /** Vision model the built-in capture provider reads documents with. */
+    CAPTURE_MODEL("DIRIGIBLE_CAPTURE_MODEL", "claude-opus-5-5"),
+
+    /** Base URL of the Anthropic-compatible API the built-in capture provider calls. */
+    CAPTURE_BASE_URL("DIRIGIBLE_CAPTURE_BASE_URL", "https://api.anthropic.com"),
+
+    /** Anthropic API version header sent by the built-in capture provider. */
+    CAPTURE_VERSION("DIRIGIBLE_CAPTURE_VERSION", "2026-10-21"),
+
+    /** Maximum tokens the capture provider may generate for one document reading. */
+    CAPTURE_MAX_TOKENS("DIRIGIBLE_CAPTURE_MAX_TOKENS", "16000"),
+
+    /**
+     * Inference geography the built-in capture provider pins requests to (the API's
+     * {@code inference_geo} field, e.g. {@code us}); left unset the field is not sent.
+     */
+    CAPTURE_INFERENCE_GEO("DIRIGIBLE_CAPTURE_INFERENCE_GEO", null),
+
+    /**
+     * Largest document, in bytes, a capture accepts; bigger uploads are refused before any provider
+     * call.
+     */
+    CAPTURE_MAX_FILE_SIZE("DIRIGIBLE_CAPTURE_MAX_FILE_SIZE", "10485760"),
+
+    /**
      * URL of an external ActiveMQ broker the messaging engine connects to, e.g.
      * {@code tcp://activemq:61616}, {@code ssl://b-....mq.eu-central-1.amazonaws.com:61617} or a
      * {@code failover:(...)} list. Left unset (or blank) the platform starts and uses its own embedded

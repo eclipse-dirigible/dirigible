@@ -57,6 +57,7 @@ window.IntentDiagrams = (() => {
         integration: 'sap-icon--chain-link',
         inbound: 'sap-icon--inbox',
         fileImport: 'sap-icon--upload',
+        capture: 'sap-icon--camera',
         outbound: 'sap-icon--outbox',
         rollup: 'sap-icon--sum',
         resolve: 'sap-icon--search',
@@ -470,6 +471,8 @@ window.IntentDiagrams = (() => {
             { list: model.inbound, icon: ICON.inbound, color: COLOR.glue, entity: w => w.create, detail: inboundDetail },
             // A file import: the format it reads, and the key a re-upload is refused on.
             { list: model.imports, icon: ICON.fileImport, color: COLOR.glue, entity: i => i.into, detail: i => 'upload ' + (i.format || '?') + ((i.duplicateKey || []).length ? ' • key ' + i.duplicateKey.join('+') : '') },
+            // A document capture: a scanned document read into a draft record of the entity it names.
+            { list: model.captures, icon: ICON.capture, color: COLOR.glue, entity: c => c.into, detail: c => 'scan \u2192 ' + (c.into || '?') },
             { list: model.outbound, icon: ICON.outbound, color: COLOR.glue, entity: o => eventEntity(model, o.event), detail: outboundDetail },
             // A cross-model child has no node here, so the card anchors to the LOCAL parent it feeds and
             // names the foreign child in its detail line (the same shape a cross-model schedule uses).
@@ -529,7 +532,7 @@ window.IntentDiagrams = (() => {
     const normalize = (model) => {
         model = model || {};
         for (const key of ['entities', 'processes', 'forms', 'reports', 'permissions', 'seeds',
-            'notifications', 'schedules', 'integrations', 'inbound', 'imports', 'outbound', 'rollups', 'resolves', 'generates']) {
+            'notifications', 'schedules', 'integrations', 'inbound', 'imports', 'captures', 'outbound', 'rollups', 'resolves', 'generates']) {
             model[key] = model[key] || [];
         }
         return model;

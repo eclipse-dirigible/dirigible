@@ -1,0 +1,468 @@
+#macro(captureMatch $relation)
+        boolean readAny = false;
+        boolean ambiguous = false;
+        String last = null;
+#foreach($key in $relation.keys)
+        String key${foreach.count} = read.text(${key.schemaNameLiteral});
+        if (key${foreach.count} != null) {
+            readAny = true;
+            last = key${foreach.count};
+            List<gen.${relation.genFolder}.data.${relation.javaTargetPerspective}.${relation.targetEntity}Entity> matches${foreach.count} =
+                    new gen.${relation.genFolder}.data.${relation.javaTargetPerspective}.${relation.targetEntity}Repository().findAll(
+                            Criteria.create()
+                                    .eq("${key.byProperty}", key${foreach.count}));
+            if (matches${foreach.count}.size() == 1) {
+                row.${relation.property} = matches${foreach.count}.get(0).${relation.targetKeyProperty};
+                return;
+            }
+            ambiguous |= matches${foreach.count}.size() > 1;
+        }
+#end
+        if (!readAny) {
+            flags.add(CaptureFlag.of(label, CaptureFlag.Reason.MISSING, null, "not found on the document"));
+        } else if (ambiguous) {
+            flags.add(CaptureFlag.of(label, CaptureFlag.Reason.AMBIGUOUS_MATCH, last, "several ${relation.targetEntity} records match what the document prints"));
+        } else {
+            flags.add(CaptureFlag.of(label, CaptureFlag.Reason.NO_MATCH, last, "no ${relation.targetEntity} matches what the document prints"));
+        }
+#end
+package gen.events.${javaGenFolderName};
+
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
+
+#if($hasRelations || $hasItemRelations)
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+#end
+import org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork;
+import org.eclipse.dirigible.sdk.capture.CaptureConfidence;
+import org.eclipse.dirigible.sdk.capture.CaptureException;
+import org.eclipse.dirigible.sdk.capture.CaptureFlag;
+import org.eclipse.dirigible.sdk.capture.CaptureLedger;
+#if($hasQr)
+import org.eclipse.dirigible.sdk.capture.CaptureQr;
+#end
+import org.eclipse.dirigible.sdk.capture.CaptureReading;
+import org.eclipse.dirigible.sdk.capture.CaptureResult;
+import org.eclipse.dirigible.sdk.capture.CaptureSchema;
+import org.eclipse.dirigible.sdk.capture.CaptureType;
+import org.eclipse.dirigible.sdk.capture.CaptureValues;
+import org.eclipse.dirigible.sdk.capture.Captures;
+#if($hasAttachment)
+import org.eclipse.dirigible.sdk.cms.Attachments;
+#end
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.db.ValidationException;
+import org.eclipse.dirigible.sdk.http.Controller;
+import org.eclipse.dirigible.sdk.http.Get;
+import org.eclipse.dirigible.sdk.http.PathParam;
+import org.eclipse.dirigible.sdk.http.Post;
+import org.eclipse.dirigible.sdk.http.QueryParam;
+import org.eclipse.dirigible.sdk.http.Response;
+import org.eclipse.dirigible.sdk.imports.ImportText;
+import org.eclipse.dirigible.sdk.imports.ImportValues;
+import org.eclipse.dirigible.sdk.imports.UploadedFile;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+import org.eclipse.dirigible.sdk.security.Roles;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
+
+/**
+ * Document capture ${className}: a vision model reads an uploaded scan, photo or PDF into a new
+ * ${entity}, which a person then reviews.
+ *
+ * Generated from the intent captures block - do not edit; it is re-generated with the application.
+ * The upload is served under /services/java/<project>/gen/events/${javaGenFolderName}/${className}Capture/upload
+ * (a multipart form with one file, or the raw file as the body with ?fileName=), and a job captures a
+ * file it fetched by injecting this bean and calling capture.
+ *
+ * A capture reads print, so a miss is not a failure: a value the model was not sure of or did not
+ * find, a relation no single row matched#if($hasCompares), a printed total that differs from the calculated one#end#if($hasQr), a
+ * value that differs from the document's QR code#end - each is a flag on the created record, never a
+ * refusal. The record is saved in its initial status through the entity's own validation, so nothing
+ * a capture creates skips a rule a person creating it would meet. A reading that lacks a value the
+ * record cannot be inserted without, or one that validation refuses, creates nothing and is answered
+ * as the refusal it is (400), with what was read; a provider that fails answers 412, 502 or 422. Every attempt is recorded in the ${table}_CAPTURES ledger with the provider,
+ * the model, the tokens and the flags, and .../review/{id} answers the flags of a record's capture.
+ * After the record is committed, every Hook bean is called with it; a failing hook is logged and
+ * does not undo the capture.
+ */
+@Controller
+@Component("${javaGenFolderName}_${className}Capture")
+public class ${className}Capture {
+
+    /** A contribution called after a capture of ${className} committed its record. */
+    public interface Hook {
+
+        /**
+         * Called once per captured document, after its record was committed.
+         *
+         * @param result the capture's outcome
+         * @param record the saved record
+         */
+        void afterCapture(CaptureResult result, ${entity}Entity record);
+    }
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}Capture");
+
+    private static final String NAME = ${nameLiteral};
+
+    private static final String TABLE = "${table}";
+
+    private static final String INSTRUCTIONS = ${instructionsLiteral};
+
+    private static final ImportValues VALUES = ImportValues.canonical();
+
+    private static final CaptureSchema SCHEMA = CaptureSchema.create()
+#foreach($field in $schemaFields)
+                                                             .field(${field.nameLiteral}, CaptureType.${field.type}, ${field.descriptionLiteral})
+#end
+#foreach($field in $schemaItems)
+                                                             .item(${field.nameLiteral}, CaptureType.${field.type}, ${field.descriptionLiteral})
+#end
+    ;
+
+    private final List<Hook> hooks;
+
+    public ${className}Capture(List<Hook> hooks) {
+        this.hooks = List.copyOf(hooks);
+    }
+
+    @Post("/upload")
+    @Roles({${roles}})
+    public String upload(@QueryParam("fileName") String fileName) {
+        // Every answer below is JSON, so the endpoint says so - a caller must not have to guess.
+        Response.setContentType("application/json");
+        UploadedFile file;
+        try {
+            file = UploadedFile.fromRequest(fileName);
+        } catch (IOException e) {
+            LOG.error("Capture {}: cannot read the uploaded file [{}]", NAME, fileName, e);
+            Response.setStatus(400);
+            return Json.stringify(Map.of("error", "the uploaded file cannot be read"));
+        }
+        if (file == null) {
+            Response.setStatus(400);
+            return Json.stringify(Map.of("error", "the upload holds no file"));
+        }
+        Outcome outcome = run(file.getName(), file.getContent());
+        Response.setStatus(outcome.status());
+        return Json.stringify(outcome.result());
+    }
+
+    /** What the capture of a record flagged for review: the newest capture that created it. */
+    @Get("/review/{id}")
+    @Roles({${readRoles}})
+    public String review(@PathParam("id") String id) {
+        Response.setContentType("application/json");
+        String latest = CaptureLedger.latest(TABLE, id);
+        return latest == null ? "{\"flags\":[]}" : latest;
+    }
+
+    /**
+     * Capture a document - the same capture the upload performs, for a job that fetched the file itself.
+     *
+     * @param fileName the file's name; its extension tells an image from a PDF
+     * @param content the file's bytes
+     * @return the outcome; a record exists only when it is CAPTURED
+     */
+    public CaptureResult capture(String fileName, byte[] content) {
+        return run(fileName, content).result();
+    }
+
+    /** A capture's outcome and the HTTP status the upload answers it with. */
+    private record Outcome(CaptureResult result, int status) {
+    }
+
+    private Outcome run(String fileName, byte[] content) {
+        String checksum = ImportText.checksum(content);
+        String contentType = fileName == null ? null : java.net.URLConnection.guessContentTypeFromName(fileName);
+#if($hasQr)
+        // The document's own code is exact where the model only reads print: its parts are handed to
+        // the model as known values and settle the fields declared against them.
+        Map<String, String> qr = CaptureQr.read(contentType, content, ${qrSeparatorLiteral}, ${qrPartsLiteral});
+#else
+        Map<String, String> qr = Map.of();
+#end
+        CaptureReading reading;
+        try {
+            reading = Captures.read(SCHEMA, INSTRUCTIONS, fileName, contentType, content, qr);
+        } catch (CaptureException e) {
+            int status = switch (e.getKind()) {
+                case NOT_CONFIGURED -> 412;
+                case UPSTREAM -> 502;
+                case REFUSED, UNREADABLE -> 422;
+            };
+            return new Outcome(refused(CaptureResult.failed(NAME, fileName, checksum, e.getMessage())), status);
+        }
+        List<CaptureFlag> flags = new ArrayList<>();
+        CaptureValues read = reading.fields();
+        ${entity}Entity entity = new ${entity}Entity();
+#foreach($field in $fields)
+#if($field.hasQr)
+        entity.${field.property} = exact(value(read, ${field.nameLiteral}, ${field.nameLiteral}, VALUES::${field.conversion}, true, flags), ${field.nameLiteral},
+                qr.get(${field.qrLiteral}), VALUES::${field.conversion}, flags);
+#else
+        entity.${field.property} = value(read, ${field.nameLiteral}, ${field.nameLiteral}, VALUES::${field.conversion}, true, flags);
+#end
+#end
+#foreach($relation in $relations)
+        ${relation.local}(entity, read, ${relation.nameLiteral}, flags);
+#end
+#if($hasRequired)
+        // What a ${entity} cannot be inserted without. Missing it is not a flag on a record - there can
+        // be no record - so the capture is refused with what was read, for the person to supply it (a
+        // supplier not registered yet) and capture again.
+        List<String> absent = new ArrayList<>();
+#foreach($field in $fields)
+#if($field.required)
+        if (entity.${field.property} == null) {
+            absent.add(${field.nameLiteral});
+        }
+#end
+#end
+#foreach($relation in $relations)
+#if($relation.required)
+        if (entity.${relation.property} == null) {
+            absent.add(${relation.nameLiteral});
+        }
+#end
+#end
+        if (!absent.isEmpty()) {
+            return new Outcome(refused(CaptureResult.rejected(NAME, fileName, checksum, reading,
+                    "a ${entity} cannot be created without " + String.join(", ", absent) + ", which the document did not give", flags)), 400);
+        }
+#end
+#if($hasItems)
+        List<gen.${javaGenFolderName}.data.${javaItemPerspective}.${itemEntity}Entity> lines = new ArrayList<>();
+        int skipped = 0;
+        for (CaptureValues line : reading.items()) {
+            String at = "items[" + (lines.size() + skipped + 1) + "]";
+            gen.${javaGenFolderName}.data.${javaItemPerspective}.${itemEntity}Entity child =
+                    new gen.${javaGenFolderName}.data.${javaItemPerspective}.${itemEntity}Entity();
+#foreach($field in $itemFields)
+            child.${field.property} = value(line, ${field.nameLiteral}, at + "." + ${field.nameLiteral}, VALUES::${field.conversion}, false, flags);
+#end
+#foreach($relation in $itemRelations)
+            ${relation.local}(child, line, at + "." + ${relation.nameLiteral}, flags);
+#end
+#if($hasItemRequired)
+            // A line that lacks what a ${itemEntity} cannot be inserted without is left out and flagged:
+            // one unreadable line must not cost the whole document.
+            if (#foreach($field in $itemFields)#if($field.required)child.${field.property} == null || #end#end#foreach($relation in $itemRelations)#if($relation.required)child.${relation.property} == null || #end#end false) {
+                flags.add(CaptureFlag.of(at, CaptureFlag.Reason.LINE_SKIPPED, null, "the line was not created: a value it requires was not read"));
+                skipped++;
+                continue;
+            }
+#end
+            // A line carries one confidence for all its values.
+            if (line.confidence("") != CaptureConfidence.HIGH) {
+                flags.add(CaptureFlag.of(at, CaptureFlag.Reason.LINE, null, "read with " + line.confidence("")
+                                                                                              .name()
+                                                                                              .toLowerCase(java.util.Locale.ROOT)
+                        + " confidence"));
+            }
+            lines.add(child);
+        }
+#end
+#if($hasAttachment)
+        // The stored file outlives a rolled-back unit of work, so its path is kept to remove it then.
+        String[] stored = new String[1];
+#end
+        ${entity}Entity saved;
+        try {
+            saved = UnitOfWork.call(() -> {
+                ${entity}Repository repository = new ${entity}Repository();
+                // The rules a person creating the record would meet, on the record as its defaults and
+                // calculations complete it.
+                gen.${javaGenFolderName}.api.${javaPerspective}.${entity}Controller.validate(repository.calculatedForCreate(entity));
+                ${entity}Entity parent = repository.save(entity);
+#if($hasItems)
+                for (gen.${javaGenFolderName}.data.${javaItemPerspective}.${itemEntity}Entity child : lines) {
+                    child.${itemBackRef} = parent.${keyProperty};
+                    new gen.${javaGenFolderName}.data.${javaItemPerspective}.${itemEntity}Repository().save(child);
+                }
+#end
+#if($hasAttachment)
+                Attachments.Attachment file = Attachments.store("${attachmentEntity}", fileName == null ? "capture" : fileName,
+                        contentType == null ? "application/octet-stream" : contentType, content);
+                stored[0] = file.path();
+                gen.${javaGenFolderName}.data.${javaAttachmentPerspective}.${attachmentEntity}Entity kept =
+                        new gen.${javaGenFolderName}.data.${javaAttachmentPerspective}.${attachmentEntity}Entity();
+                kept.FileName = file.fileName();
+                kept.ContentType = file.contentType();
+                kept.FileSize = file.size();
+                kept.StoragePath = file.path();
+                kept.Uuid = file.uuid();
+                kept.${attachmentBackRef} = parent.${keyProperty};
+                new gen.${javaGenFolderName}.data.${javaAttachmentPerspective}.${attachmentEntity}Repository().save(kept);
+#end
+                // Answer the record as this unit leaves it: a child row's save re-sums the parent's
+                // aggregates, which the instance save() returned does not carry.
+                return repository.findById(parent.${keyProperty});
+            });
+        } catch (RuntimeException e) {
+#if($hasAttachment)
+            if (stored[0] != null) {
+                try {
+                    Attachments.delete(stored[0]);
+                } catch (RuntimeException cleanup) {
+                    LOG.warn("Capture {}: the file stored for the refused record of [{}] could not be removed at [{}]", NAME, fileName, stored[0],
+                            cleanup);
+                }
+            }
+#end
+            ValidationException refusal = refusalIn(e);
+            if (refusal != null) {
+                // The entity's own rule, in the sentence authored for the person creating the record.
+                return new Outcome(refused(CaptureResult.rejected(NAME, fileName, checksum, reading, refusal.getMessage(), flags)), 400);
+            }
+            // Anything else is a fault, not a refusal: its text is for the log, never for the caller.
+            LOG.error("Capture {}: the record read from [{}] could not be saved - nothing was saved", NAME, fileName, e);
+            return new Outcome(refused(CaptureResult.rejected(NAME, fileName, checksum, reading, "the record could not be saved", flags)),
+                    500);
+        }
+#foreach($field in $compares)
+        compare(read, ${field.nameLiteral}, saved.${field.property}, VALUES::${field.conversion}, flags);
+#end
+        CaptureResult result = CaptureResult.captured(NAME, fileName, checksum, reading, saved.${keyProperty}, flags);
+        CaptureLedger.record(TABLE, result);
+        for (Hook hook : hooks) {
+            try {
+                hook.afterCapture(result, saved);
+            } catch (RuntimeException e) {
+                LOG.error("Capture {}: the post-capture hook [{}] failed on [{}] - the capture stays committed", NAME, hook.getClass()
+                                                                                                                         .getName(),
+                        fileName, e);
+            }
+        }
+        return new Outcome(result, 200);
+    }
+
+    /** The validation refusal a failed unit of work carries, or null when it failed for another reason. */
+    private static ValidationException refusalIn(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {
+            if (cause instanceof ValidationException refusal) {
+                return refusal;
+            }
+        }
+        return null;
+    }
+
+    private static CaptureResult refused(CaptureResult result) {
+        LOG.warn("Capture {}: [{}] {} - {}", NAME, result.getFileName(), result.getStatus(), result.getMessage());
+        CaptureLedger.record(TABLE, result);
+        return result;
+    }
+
+    /**
+     * One value the model read, converted to its field's type. A value not on the document, or one
+     * that does not convert, is left empty and flagged; one read without high confidence is kept and
+     * flagged.
+     */
+    private static <T> T value(CaptureValues read, String name, String label, Function<String, T> conversion, boolean ownConfidence,
+            List<CaptureFlag> flags) {
+        String raw = read.text(name);
+        if (raw == null) {
+            flags.add(CaptureFlag.of(label, CaptureFlag.Reason.MISSING, null, "not found on the document"));
+            return null;
+        }
+        T value;
+        try {
+            value = conversion.apply(raw);
+        } catch (IllegalArgumentException e) {
+            flags.add(CaptureFlag.of(label, CaptureFlag.Reason.UNREADABLE, raw, e.getMessage()));
+            return null;
+        }
+        if (ownConfidence && read.confidence(name) != CaptureConfidence.HIGH) {
+            flags.add(CaptureFlag.of(label, CaptureFlag.Reason.LOW_CONFIDENCE, raw, "read with " + read.confidence(name)
+                                                                                                         .name()
+                                                                                                         .toLowerCase(java.util.Locale.ROOT)
+                    + " confidence"));
+        }
+        return value;
+    }
+#if($hasQr)
+
+    /**
+     * A field the document's QR code carries: the code's value is the field's, whatever was read. A
+     * reading that differs is flagged; one the code confirms or supplies needs no review.
+     */
+    private static <T> T exact(T read, String name, String printed, Function<String, T> conversion, List<CaptureFlag> flags) {
+        if (printed == null) {
+            return read;
+        }
+        T value;
+        try {
+            value = conversion.apply(printed);
+        } catch (IllegalArgumentException e) {
+            LOG.warn("Capture {}: the QR part for [{}] holds [{}], which does not convert - the reading stands", NAME, name, printed, e);
+            return read;
+        }
+        if (value == null) {
+            return read;
+        }
+        flags.removeIf(flag -> name.equals(flag.getField()));
+        if (read != null && !same(read, value)) {
+            flags.add(CaptureFlag.of(name, CaptureFlag.Reason.QR_MISMATCH, String.valueOf(read),
+                    "the document's code says " + printed + "; the code's value was kept"));
+        }
+        return value;
+    }
+#end
+#if($hasCompares)
+
+    /**
+     * A value the entity calculates: what the document prints is compared with what the saved record
+     * holds, and a difference is flagged - the calculation is never overwritten.
+     */
+    private static <T> void compare(CaptureValues read, String name, T held, Function<String, T> conversion, List<CaptureFlag> flags) {
+        String raw = read.text(name);
+        if (raw == null) {
+            return;
+        }
+        T printed;
+        try {
+            printed = conversion.apply(raw);
+        } catch (IllegalArgumentException e) {
+            flags.add(CaptureFlag.of(name, CaptureFlag.Reason.UNREADABLE, raw, e.getMessage()));
+            return;
+        }
+        if (printed != null && !same(printed, held)) {
+            flags.add(CaptureFlag.of(name, CaptureFlag.Reason.MISMATCH, raw, "the document prints " + raw + ", the record holds " + held));
+        }
+    }
+#end
+#if($hasQr || $hasCompares)
+
+    private static boolean same(Object left, Object right) {
+        if (left instanceof BigDecimal a && right instanceof BigDecimal b) {
+            return a.compareTo(b) == 0;
+        }
+        return Objects.equals(left, right);
+    }
+#end
+#foreach($relation in $relations)
+
+    /** ${relation.name}: the ${relation.targetEntity} the document's keys identify, or none and a flag. */
+    private static void ${relation.local}(${entity}Entity row, CaptureValues read, String label, List<CaptureFlag> flags) {
+#captureMatch($relation)
+    }
+#end
+#foreach($relation in $itemRelations)
+
+    /** ${relation.name}: the ${relation.targetEntity} a line's keys identify, or none and a flag. */
+    private static void ${relation.local}(gen.${javaGenFolderName}.data.${javaItemPerspective}.${itemEntity}Entity row, CaptureValues read,
+            String label, List<CaptureFlag> flags) {
+#captureMatch($relation)
+    }
+#end
+}

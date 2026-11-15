@@ -65,6 +65,12 @@
             <artifactId>dirigible-components-engine-security</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.apache.velocity</groupId>
+            <artifactId>velocity-engine-core</artifactId>
+            <version>${velocity.version}</version>
+            <scope>test</scope>
+        </dependency>
         
         <!-- Libraries -->
         <dependency>

@@ -57,6 +57,8 @@ public class IntentModel {
     private List<InboundIntent> inbound = new ArrayList<>();
     /** File imports: an uploaded file (CSV, MT940, camt.053) read into the rows of an entity. */
     private List<ImportIntent> imports = new ArrayList<>();
+    /** Document captures: an uploaded scan or photo read by a vision model into a new record. */
+    private List<CaptureIntent> captures = new ArrayList<>();
     /** Outbound departures: a record emitted on a queue or a topic when an event fires. */
     private List<OutboundIntent> outbound = new ArrayList<>();
     /** Declared exports: a file in an exacting format over a query, recorded on a ledger per run. */
@@ -297,6 +299,14 @@ public class IntentModel {
 
     public void setExports(List<ExportIntent> exports) {
         this.exports = exports == null ? new ArrayList<>() : exports;
+    }
+
+    public List<CaptureIntent> getCaptures() {
+        return captures;
+    }
+
+    public void setCaptures(List<CaptureIntent> captures) {
+        this.captures = captures == null ? new ArrayList<>() : captures;
     }
 
     public List<ImportIntent> getImports() {

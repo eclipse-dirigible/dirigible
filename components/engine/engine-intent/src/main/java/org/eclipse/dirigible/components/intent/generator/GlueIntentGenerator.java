@@ -126,6 +126,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> inboundMessages = buildInboundMessages(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> inboundFiles = buildInboundFiles(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> imports = ImportSupport.buildImports(model, byName, compositionParents, settings, context);
+        List<Map<String, Object>> captures = CaptureSupport.build(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> outbound = buildOutbound(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> exports = ExportSupport.build(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> stepEvents = buildStepEvents(model, compositionParents, settings);
@@ -152,10 +153,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         if (triggers.isEmpty() && resolvers.isEmpty() && fieldLoaders.isEmpty() && assignees.isEmpty() && timerLoaders.isEmpty()
                 && waits.isEmpty() && aborts.isEmpty() && deleteAborts.isEmpty() && writers.isEmpty() && setters.isEmpty()
                 && notifications.isEmpty() && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty()
-                && inboundMessages.isEmpty() && inboundFiles.isEmpty() && imports.isEmpty() && outbound.isEmpty() && exports.isEmpty()
-                && stepEvents.isEmpty() && rollups.isEmpty() && expansions.isEmpty() && settlements.isEmpty() && generates.isEmpty()
-                && transitions.isEmpty() && printFeeders.isEmpty() && postings.isEmpty() && snapshots.isEmpty() && numbering.isEmpty()
-                && posts.isEmpty() && aggregates.isEmpty() && sends.isEmpty() && resolves.isEmpty()) {
+                && inboundMessages.isEmpty() && inboundFiles.isEmpty() && imports.isEmpty() && captures.isEmpty() && outbound.isEmpty()
+                && exports.isEmpty() && stepEvents.isEmpty() && rollups.isEmpty() && expansions.isEmpty() && settlements.isEmpty()
+                && generates.isEmpty() && transitions.isEmpty() && printFeeders.isEmpty() && postings.isEmpty() && snapshots.isEmpty()
+                && numbering.isEmpty() && posts.isEmpty() && aggregates.isEmpty() && sends.isEmpty() && resolves.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -183,6 +184,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("inboundMessages", inboundMessages);
         glue.put("inboundFiles", inboundFiles);
         glue.put("imports", imports);
+        glue.put("captures", captures);
         glue.put("outbound", outbound);
         glue.put("exports", exports);
         // One emitter per observed process-step moment, deduplicated across every notification and
