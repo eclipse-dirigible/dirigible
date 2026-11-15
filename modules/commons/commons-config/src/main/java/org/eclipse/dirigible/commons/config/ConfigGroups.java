@@ -42,7 +42,7 @@ public final class ConfigGroups {
     }
 
     private static final List<Rule> RULES = List.of( //
-            new Rule(ConfigGroup.AI, "INTENT_AI_"), //
+            new Rule(ConfigGroup.AI, "INTENT_AI_", "CAPTURE_"), //
             new Rule(ConfigGroup.DEVTOOLS, "JAVA_LSP_", "JAVA_DEBUG_", "TERMINAL_", "GRAALIUM_", "TSC_WATCH", "EXEC_COMMAND_",
                     "JAVASCRIPT_GRAALVM_DEBUGGER_PORT"), //
             new Rule(ConfigGroup.RUNTIMES, "JAVASCRIPT_", "JAVA_RECONCILE", "JAVA_CONTROLLER_", "DEPENDENCIES_", "MAVEN_", "NATIVE_APP",

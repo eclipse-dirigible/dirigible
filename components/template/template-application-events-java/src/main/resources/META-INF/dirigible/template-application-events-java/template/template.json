@@ -130,6 +130,13 @@
             "collection": "imports"
         },
         {
+            "location": "/template-application-events-java/events/Capture.java.template",
+            "action": "generate",
+            "rename": "gen/events/{{javaGenFolderName}}/{{className}}Capture.java",
+            "engine": "velocity",
+            "collection": "captures"
+        },
+        {
             "location": "/template-application-events-java/events/Outbound.java.template",
             "action": "generate",
             "rename": "gen/events/{{javaGenFolderName}}/{{className}}Publisher.java",

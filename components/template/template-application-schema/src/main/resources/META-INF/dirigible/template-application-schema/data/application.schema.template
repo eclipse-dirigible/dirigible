@@ -134,6 +134,102 @@
             },
 #end
 #end
+## An entity a document capture creates records of gets a sibling <TABLE>_CAPTURES ledger: one row per
+## capture attempt - captured, rejected or failed - with the file's name and checksum, the record it
+## created, the provider and model that read it, the tokens it cost, what it flagged for review and the
+## provider's raw answer. The generated capture is the only writer. Emitted before the base tables so
+## each entry is always comma-terminated.
+#foreach ($model in $models)
+#if($model.captureLedger == "true" && $model.type != "REPORT" && $model.type != "FILTER" && $model.type != "PROJECTION")
+            {
+                "name": "${tablePrefix}${model.dataName}_CAPTURES",
+                "type": "TABLE",
+                "columns": [
+                    {
+                        "type": "INTEGER",
+                        "primaryKey": true,
+                        "identity": true,
+                        "name": "Id"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 128,
+                        "name": "CaptureName"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 64,
+                        "nullable": true,
+                        "name": "RecordId"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 255,
+                        "nullable": true,
+                        "name": "FileName"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 64,
+                        "name": "Checksum"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 64,
+                        "nullable": true,
+                        "name": "Provider"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 128,
+                        "nullable": true,
+                        "name": "Model"
+                    },
+                    {
+                        "type": "INTEGER",
+                        "nullable": true,
+                        "name": "InputTokens"
+                    },
+                    {
+                        "type": "INTEGER",
+                        "nullable": true,
+                        "name": "OutputTokens"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 16,
+                        "name": "Status"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 2000,
+                        "nullable": true,
+                        "name": "Message"
+                    },
+                    {
+                        "type": "CLOB",
+                        "nullable": true,
+                        "name": "Flags"
+                    },
+                    {
+                        "type": "CLOB",
+                        "nullable": true,
+                        "name": "Answer"
+                    },
+                    {
+                        "type": "TIMESTAMP",
+                        "name": "CapturedAt"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 255,
+                        "nullable": true,
+                        "name": "CapturedBy"
+                    }
+                ]
+            },
+#end
+#end
 ## A multilingual entity gets a sibling <TABLE>_LANG translation table (the codbex convention):
 ## GUID pk, Id -> the base row, one column per translatable (string-typed, non-PK, non-FK,
 ## non-calculated, non-audit, not translatable=false) property NAMED AFTER THE PROPERTY (that is what the runtime

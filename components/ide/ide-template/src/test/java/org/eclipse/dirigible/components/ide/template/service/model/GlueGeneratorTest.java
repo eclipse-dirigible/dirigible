@@ -12,6 +12,10 @@ package org.eclipse.dirigible.components.ide.template.service.model;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -19,6 +23,9 @@ import java.util.Map;
 
 import org.eclipse.dirigible.components.ide.template.domain.GenerationTemplateMetadataSource;
 
+import org.apache.velocity.VelocityContext;
+import org.apache.velocity.app.VelocityEngine;
+import org.apache.velocity.runtime.RuntimeConstants;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -801,6 +808,151 @@ class GlueGeneratorTest {
         assertThat(contexts).as("roll-ups sharing a child, a relation and an event share one handler")
                             .hasSize(1);
         return contexts.get(0);
+    }
+
+    private static final Path CAPTURE_TEMPLATE = Path.of("../../template/template-application-events-java/src/main/resources/META-INF/"
+            + "dirigible/template-application-events-java/events/Capture.java.template");
+
+    /**
+     * A document capture (#8544) renders from the real {@code Capture.java.template}: the schema chain,
+     * both endpoints, the match method over the target's repository - of the capture's own model for a
+     * same-model relation, of the owner model's for a {@code crossModel} one - and the QR, attachment
+     * and compare pieces only when the capture declares them.
+     */
+    @Test
+    void aCaptureRendersItsSchemaEndpointsAndRelationMatchesFromTheRealTemplate() throws IOException {
+        Map<String, Object> full = capture("supplierInvoice", "SupplierInvoice");
+        full.put("hasQr", Boolean.TRUE);
+        full.put("qrPartsLiteral", "\"device\", \"total\"");
+        full.put("hasAttachment", Boolean.TRUE);
+        full.put("attachmentEntity", "InvoiceScan");
+        full.put("attachmentPerspective", "Invoice");
+        full.put("attachmentBackRef", "PurchaseInvoice");
+        full.put("hasCompares", Boolean.TRUE);
+        full.put("compares", List.of(Map.of("name", "total", "nameLiteral", "\"total\"", "property", "Total", "conversion", "decimal")));
+        full.put("hasItems", Boolean.TRUE);
+        full.put("itemEntity", "PurchaseInvoiceItem");
+        full.put("itemPerspective", "Invoice");
+        full.put("itemBackRef", "PurchaseInvoice");
+        full.put("schemaItems", List.of(schemaField("description", "STRING")));
+        full.put("itemFields", List.of(Map.of("name", "description", "nameLiteral", "\"description\"", "local", "valueItemDescription",
+                "property", "Description", "conversion", "text", "hasQr", Boolean.FALSE, "qrLiteral", "null")));
+        full.put("hasRelations", Boolean.TRUE);
+        full.put("relations", List.of(relation("Supplier", "Supplier", "Supplier", false, "")));
+        full.put("itemRelations", List.of(relation("Vendor", "Partner", "Partner", true, "partners")));
+
+        String java = renderCapture(full, Map.of("javaGenFolderName", "purchasing"));
+
+        assertThat(java).contains("package gen.events.purchasing;")
+                        .contains("public class SupplierInvoiceCapture {")
+                        .contains(".field(\"number\", CaptureType.STRING, null)")
+                        .contains(".item(\"description\", CaptureType.STRING, null)")
+                        .contains("@Post(\"/upload\")")
+                        .contains("@Get(\"/review/{id}\")")
+                        .contains("CaptureQr.read(contentType, content, \"*\", \"device\", \"total\")")
+                        .contains("Attachments.store(\"InvoiceScan\"")
+                        .contains("private static <T> void compare(")
+                        .contains("compare(read, \"total\", saved.Total, VALUES::decimal, flags);")
+                        .contains("new gen.purchasing.data.supplier.SupplierRepository().findAll(")
+                        .contains("new gen.partners.data.partner.PartnerRepository().findAll(");
+        assertThat(java).as("a same-model relation never reads another model's package")
+                        .doesNotContain("gen.purchasing.data.partner.PartnerRepository");
+    }
+
+    @Test
+    void aCaptureWithoutQrAttachmentOrComparesRendersNoneOfThem() throws IOException {
+        Map<String, Object> plain = capture("plainScan", "PlainScan");
+
+        String java = renderCapture(plain, Map.of("javaGenFolderName", "purchasing"));
+
+        assertThat(java).contains("@Post(\"/upload\")")
+                        .contains("@Get(\"/review/{id}\")")
+                        .contains(".field(\"number\", CaptureType.STRING, null)")
+                        .doesNotContain("CaptureQr.read(")
+                        .doesNotContain("Attachments.store(")
+                        .doesNotContain("void compare(")
+                        .doesNotContain(".item(");
+    }
+
+    private static Map<String, Object> capture(String name, String className) {
+        Map<String, Object> capture = new LinkedHashMap<>();
+        capture.put("name", name);
+        capture.put("nameLiteral", "\"" + name + "\"");
+        capture.put("className", className);
+        capture.put("entity", "PurchaseInvoice");
+        capture.put("perspective", "Invoice");
+        capture.put("keyProperty", "Id");
+        capture.put("table", "PURCHASING_PURCHASE_INVOICE");
+        capture.put("roles", "\"purchasing.PurchaseInvoice.FullAccess\"");
+        capture.put("readRoles", "\"purchasing.PurchaseInvoice.FullAccess\"");
+        capture.put("instructionsLiteral", "null");
+        capture.put("hasQr", Boolean.FALSE);
+        capture.put("qrSeparatorLiteral", "\"*\"");
+        capture.put("qrPartsLiteral", "");
+        capture.put("schemaFields", List.of(schemaField("number", "STRING")));
+        capture.put("schemaItems", List.of());
+        capture.put("fields", List.of(Map.of("name", "number", "nameLiteral", "\"number\"", "local", "valueNumber", "property", "Number",
+                "conversion", "text", "hasQr", Boolean.FALSE, "qrLiteral", "null")));
+        capture.put("compares", List.of());
+        capture.put("relations", List.of());
+        capture.put("itemRelations", List.of());
+        capture.put("hasRelations", Boolean.FALSE);
+        capture.put("hasCompares", Boolean.FALSE);
+        capture.put("hasItems", Boolean.FALSE);
+        capture.put("hasAttachment", Boolean.FALSE);
+        return capture;
+    }
+
+    private static Map<String, Object> schemaField(String name, String type) {
+        return Map.of("nameLiteral", "\"" + name + "\"", "type", type, "descriptionLiteral", "null");
+    }
+
+    private static Map<String, Object> relation(String name, String target, String perspective, boolean crossModel, String model) {
+        Map<String, Object> relation = new LinkedHashMap<>();
+        relation.put("name", name);
+        relation.put("nameLiteral", "\"" + name + "\"");
+        relation.put("local", "match" + name);
+        relation.put("property", name);
+        relation.put("targetEntity", target);
+        relation.put("crossModel", crossModel);
+        relation.put("targetModel", model);
+        relation.put("targetPerspective", perspective);
+        relation.put("targetKeyProperty", "Id");
+        relation.put("keys",
+                List.of(Map.of("key", "vatNumber", "schemaNameLiteral", "\"" + name + "_vatNumber\"", "byProperty", "VatNumber")));
+        return relation;
+    }
+
+    /** Renders the real capture template through Velocity, the engine template.json names for it. */
+    private static String renderCapture(Map<String, Object> capture, Map<String, Object> parameters) throws IOException {
+        String template = Files.readString(CAPTURE_TEMPLATE, StandardCharsets.UTF_8);
+        VelocityEngine velocity = new VelocityEngine();
+        velocity.setProperty(RuntimeConstants.VM_PERM_ALLOW_INLINE_REPLACE_GLOBAL, true);
+        velocity.init();
+        List<String> rendered = new ArrayList<>();
+        ModelTemplateRenderer velocityRenderer = new ModelTemplateRenderer(null, null) {
+            @Override
+            String render(GenerationTemplateMetadataSource source, String content, Map<String, Object> context) {
+                VelocityContext velocityContext = new VelocityContext();
+                context.forEach(velocityContext::put);
+                StringWriter writer = new StringWriter();
+                velocity.evaluate(velocityContext, writer, "Capture.java.template", content);
+                rendered.add(writer.toString());
+                return writer.toString();
+            }
+
+            @Override
+            String renderPath(String location, String rename, Map<String, Object> context) {
+                return rename;
+            }
+        };
+        GenerationTemplateMetadataSource source = new GenerationTemplateMetadataSource();
+        source.setLocation("/template-application-events-java/events/Capture.java.template");
+        source.setRename("gen/events/Capture.java");
+        new GlueGenerator(velocityRenderer).generate("captures", source, template, Map.of("captures", List.of(capture)),
+                new LinkedHashMap<>(parameters));
+        assertThat(rendered).hasSize(1);
+        return rendered.get(0);
     }
 
     private static Map<String, Object> boundArrival(String collection, Map<String, Object> arrival) throws IOException {

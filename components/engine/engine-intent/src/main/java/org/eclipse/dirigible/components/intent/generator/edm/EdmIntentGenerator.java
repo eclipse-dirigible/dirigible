@@ -32,6 +32,8 @@ import com.google.gson.GsonBuilder;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.ExportSupport;
+import org.eclipse.dirigible.components.intent.generator.CaptureSupport;
+import org.eclipse.dirigible.components.intent.generator.capture.CaptureIntentGenerator;
 import org.eclipse.dirigible.components.intent.generator.ImportSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
@@ -58,6 +60,7 @@ import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
 import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
 import org.eclipse.dirigible.components.intent.model.BannerIntent;
 import org.eclipse.dirigible.components.intent.model.BannerRelatedIntent;
+import org.eclipse.dirigible.components.intent.model.CaptureIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.LabelExpression;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
@@ -256,6 +259,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // project's .settings append for the deployment (access.extraRoles).
         PermissionSupport.Gates gates = PermissionSupport.gates(model, settings);
         Set<String> importTargets = ImportSupport.targets(model);
+        Set<String> captureTargets = CaptureSupport.targets(model);
         int perspectiveOrder = 1;
 
         for (EntityIntent entity : entities) {
@@ -507,6 +511,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // schema template generates and the generated import appends to.
             if (importTargets.contains(name)) {
                 entityMap.put("importLedger", "true");
+            }
+            // captureLedger: a document capture creates this entity's records, and every attempt -
+            // captured, rejected, failed - is recorded in a sibling <TABLE>_CAPTURES table the schema
+            // template generates and the generated capture appends to, with the provider, the model, the
+            // tokens and what it flagged for review.
+            if (captureTargets.contains(name)) {
+                entityMap.put("captureLedger", "true");
             }
             // dropped (#7635): the columns of former fields and relations a publish removes, data
             // included. A field simply deleted from the intent keeps its column and its values; this
@@ -1011,6 +1022,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             if (generates.hasUndo() && generates.readsReport()) {
                 labels.put(ReportItemsSupport.undoName(generates), ReportItemsSupport.undoLabel(generates));
+            }
+        }
+        for (CaptureIntent capture : model.getCaptures()) {
+            // A capture contributes two buttons: the upload on the list and the review on a record.
+            if (capture.getName() != null && !capture.getName()
+                                                     .isBlank()) {
+                labels.put(capture.getName(), CaptureSupport.label(capture));
+                labels.put(capture.getName() + CaptureIntentGenerator.REVIEW_SUFFIX, CaptureSupport.reviewLabel(capture));
             }
         }
         return labels;

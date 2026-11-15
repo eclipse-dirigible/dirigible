@@ -5186,6 +5186,101 @@ a header is a 1-based column number; an `mt940`/`camt053` source is one of the k
 another name); `transaction` needs `camt053: { records: transactions }`; `duplicateKey` lists mapped fields. Declare a `unique:` over the same fields too
 when two concurrent uploads of one statement must be impossible - the check runs before the write.
 
+### captures - a scanned document becomes a draft record
+
+**Use when:** a person photographs or scans a **printed document** (a supplier invoice, a receipt, a
+delivery note) and the app should read it into a new record for a person to review. `imports:` is for
+a file in an exact format that a parser reads; `captures:` is for print and handwriting that a vision
+model reads, so a value it could not read is expected and is flagged, never a refusal.
+
+```yaml
+captures:
+  - name: supplierInvoice
+    into: PurchaseInvoice            # the entity whose record the document becomes (local, not a composition child)
+    attachment: InvoiceScan          # optional: a `function: Attachment` composition child of `into` that keeps the file
+    instructions: "The supplier is the party that issued the document, not the one billed."
+    qr:                              # optional: the layout of the QR code the document carries (images only)
+      separator: "*"                 # default "*"
+      parts: [device, receipt, date, time, total]
+    fields:                          # what the model is asked to read
+      - { field: number, describe: "the supplier's own number of the document" }
+      - { field: issuedOn, qr: date }          # the code's date is exact and wins over the reading
+      - { field: net }
+      - { field: total, compare: true }        # calculated by the entity: compared, never written
+      - { field: Supplier, match: [registrationNumber, vatNumber] }   # a to-one relation found by natural keys
+    items:                           # optional: the document's lines
+      into: PurchaseInvoiceItem      # a composition child of `into`
+      fields:
+        - { field: description }
+        - { field: quantity }
+        - { field: price }
+```
+
+Each capture generates `gen/events/<module>/<Name>Capture.java`: an **upload** endpoint (`POST
+.../<Name>Capture/upload`, a multipart file or the raw body with `?fileName=`), gated by the entity's
+write role; a **review** endpoint (`GET .../<Name>Capture/review/{id}`, gated by the entity's read
+role) that answers the flags of the newest capture that created record `{id}`; a bean method
+`capture(fileName, bytes)` a job can call; and a `<Name>Capture.Hook` interface. Every attempt is
+recorded in the entity's `<TABLE>_CAPTURES` ledger (capture name, record id, file name, checksum,
+provider, model, input and output tokens, status, message, flags, the provider's raw answer, when, who).
+After the record is committed, every `@Component` implementing `<Name>Capture.Hook` in `custom/` is
+called with the result and the saved record; a failing hook is logged and does not undo the capture.
+
+**A miss is a flag, not a refusal.** The record is created in its initial status and each miss is a
+flag on it, served by the review endpoint. The reasons: `MISSING` (the value is not on the document),
+`LOW_CONFIDENCE` (the model was not sure; the value is kept), `UNREADABLE` (it does not convert to the
+field's type; the field stays empty), `NO_MATCH` and `AMBIGUOUS_MATCH` (a relation found no row or
+several), `QR_MISMATCH` (the reading differs from the document's code), `MISMATCH` (the printed value
+of a `compare:` field differs from the saved record's) and `LINE` (a line was read with less than high
+confidence). The record goes through the entity's own validation, as one a person creates would, and
+the capture never approves, posts or transitions it. Only a record that validation refuses is not
+created (REJECTED, 422). A provider that fails creates nothing (FAILED): 412 when no provider is
+configured, 502 when the provider is unreachable or errors, 422 when it refuses or the file is
+unreadable.
+
+**Relations.** A to-one relation is named in `fields:` with `match:`, the target's string fields the
+document carries. The model reads one value per key; the keys are tried in the declared order against
+the target's table, and the first that finds exactly one row sets the relation. Otherwise the relation
+stays empty and is flagged (`MISSING`, `NO_MATCH` or `AMBIGUOUS_MATCH`). A capture never creates the
+target. The target may belong to another model declared under `uses:` (`model:` on the relation); its
+fields are then checked at Generate.
+
+**`compare: true`** names a field the entity calculates or a roll-up maintains (a total, a VAT amount).
+The capture does not write it: it reads the printed value and compares it with what the saved record
+holds after its calculations, and a difference is a `MISMATCH` flag. A calculated field without
+`compare:` is refused, and so is `compare:` on a field nothing calculates and on a line field.
+
+**`qr:`.** The intent states the layout of the code (`separator`, the ordered `parts`); the platform
+decodes it, splits it and hands the parts to the model as known values. A field with `qr: <part>`
+takes the code's value, which is exact and wins over the reading; a reading that differs is flagged
+`QR_MISMATCH` and one the code confirms or supplies needs no review. A part that does not convert to
+the field's type is ignored and the reading stands. QR decoding applies to images only, not to a PDF.
+
+**Rules:** unique name; `into` is a local entity with a primary key that is not a composition child and
+extends nothing; `fields:` names at least one field of it, each once, never the primary key and only of
+type string, integer, decimal, date or boolean (a timestamp is refused); `match:` only on a relation,
+by string fields of the target; `qr:` only on a header field, naming a declared part, and not with
+`compare:`; the status relation and an item's back-reference are not read; `items.into` is a
+composition child of `into` and is not a file entity; `attachment` is a `function: Attachment` child of
+`into`. `describe:` replaces the field's label in what the model is told.
+
+**Configuration** (deployment, not intent): `DIRIGIBLE_CAPTURE_PROVIDER` (`anthropic`, the default, or
+the name of a `CaptureProvider` bean), `DIRIGIBLE_CAPTURE_API_KEY` (blank disables capture; uploads
+answer 412), `DIRIGIBLE_CAPTURE_MODEL` (the default is the most capable model; a cheaper one is a
+deployment decision made on measured accuracy), `DIRIGIBLE_CAPTURE_BASE_URL`,
+`DIRIGIBLE_CAPTURE_VERSION`, `DIRIGIBLE_CAPTURE_MAX_TOKENS`, `DIRIGIBLE_CAPTURE_INFERENCE_GEO` (pins
+the provider's processing region; unset by default) and `DIRIGIBLE_CAPTURE_MAX_FILE_SIZE` (bytes,
+default 10 MiB; larger uploads are refused before any provider call). Accepted files are jpeg, png,
+gif and webp images and PDF.
+
+**The document leaves the instance.** The uploaded file is sent to the configured provider, by default
+the Anthropic API, so say so plainly where the requirement concerns confidential or regulated
+documents. A self-hosted model plugs in as a client `@Component` implementing
+`org.eclipse.dirigible.sdk.capture.CaptureProvider`, selected with `DIRIGIBLE_CAPTURE_PROVIDER`.
+
+**Not supported in v1:** timestamp fields, nested collections, creating the targets of relations, and a
+review screen in the generated UI (the flags are served by the review endpoint only).
+
 ### outbound - the app raises an event for another system
 
 **Use when:** something **outside the app must be told** that a record happened, and it listens on a
@@ -5833,6 +5928,7 @@ or a seeded name.
 - "a redelivered or retried message must not land in the dead letters" -> **inbound `dedupe:`** on the arrival's unique, required identifier
 - "the arriving payload carries an array - an order with its lines, a request with its items - and each element is a child row" -> **an inbound `map:` collection** (`<oneToMany>: { from, max?, map }` onto a composition child; one arrival = one record + its children in one transaction = one process instance)
 - "upload a bank statement / a CSV / an MT940 or camt.053 file and turn its lines into records" -> **imports** (`format`, `encoding`, `csv:` locale rules, `map:`, `duplicateKey:` so a re-upload is refused; matching rules after the import are a `custom/` `<Name>Import.Hook`)
+- "photograph / scan a printed document (a supplier invoice, a receipt) and turn it into a draft record to review" -> **captures** (`into`, `attachment`, `qr:`, `fields` with `match:` for a relation and `compare: true` for a calculated total, `items`; a miss is a flag, never a refusal)
 - "keep a running count of children on the parent" -> **rollups**
 - "expand a from-to span into day/week/month child rows / loan installments / vacation day items" -> **expansions**
 - "compute days between two dates on the form (working days / months)" -> **calculated field with a date function**
