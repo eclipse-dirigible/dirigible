@@ -36,7 +36,6 @@ class AnthropicCaptureProviderTest {
 
     private HttpServer server;
     private final List<String> bodies = new ArrayList<>();
-    private final List<HttpExchange> exchanges = new ArrayList<>();
     private final List<String> paths = new ArrayList<>();
     private final List<String> apiKeys = new ArrayList<>();
     private final List<String> versions = new ArrayList<>();

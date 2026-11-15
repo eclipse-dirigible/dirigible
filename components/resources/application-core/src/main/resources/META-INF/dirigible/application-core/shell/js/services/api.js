@@ -164,7 +164,8 @@ App.services.api = {
       });
     } catch (e) {
       const err = new ApiError({ httpStatus: 0, errorType: 'NetworkError', errorMessage: e.message });
-      console.error(`[api] ${method} ${baseUrl}${url} failed:`, err.errorMessage);
+      // The URL is data, never the format string: a `%` in a path would otherwise be read as a directive.
+      console.error('[api] %s %s failed:', method, `${baseUrl}${url}`, err.errorMessage);
       App.services.recentFailures.record(method, `${baseUrl}${url}`, err);
       throw err;
     }
@@ -225,7 +226,7 @@ App.services.api = {
           requestId,
         });
 
-    console.error(`[api] ${method} ${baseUrl}${url} -> ${err.httpStatus} ${err.errorType}:`, err.errorMessage, err.errorCauses);
+    console.error('[api] %s %s -> %s %s:', method, `${baseUrl}${url}`, err.httpStatus, err.errorType, err.errorMessage, err.errorCauses);
     App.services.recentFailures.record(method, `${baseUrl}${url}`, err);
     throw err;
   },
