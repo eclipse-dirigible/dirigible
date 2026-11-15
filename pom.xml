@@ -124,6 +124,8 @@
         <maven-spotbugs-plugin.version>4.10.5.0</maven-spotbugs-plugin.version>
         <maven-formatter-plugin.version>2.29.0</maven-formatter-plugin.version>
         <maven-exec-plugin.version>3.7.0</maven-exec-plugin.version>
+        <maven-enforcer-plugin.version>3.5.0</maven-enforcer-plugin.version>
+        <maven.minimum.version>3.9.0</maven.minimum.version>
         <maven-git-commit-id-plugin.version>4.9.10</maven-git-commit-id-plugin.version>
         <maven-download-plugin.version>1.13.0</maven-download-plugin.version>
         <maven-dependency-plugin.version>3.11.0</maven-dependency-plugin.version>
@@ -298,6 +300,33 @@
 
     <build>
         <plugins>
+            <!-- First, so a too-old Maven is refused with a message of ours before any other plugin
+                 is resolved: exec-maven-plugin 3.7.0 needs Maven 3.9 and says so far less clearly. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <!-- The version is stated here, not in pluginManagement: the oss-parent declares this
+                     plugin at 1.2 in its own <plugins>, and an inherited declaration wins over a
+                     managed version. -->
+                <version>${maven-enforcer-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>enforce-maven-version</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireMavenVersion>
+                                    <version>[${maven.minimum.version},)</version>
+                                    <message>Eclipse Dirigible builds with Maven ${maven.minimum.version} or newer.</message>
+                                </requireMavenVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>pl.project13.maven</groupId>
                 <artifactId>git-commit-id-plugin</artifactId>
