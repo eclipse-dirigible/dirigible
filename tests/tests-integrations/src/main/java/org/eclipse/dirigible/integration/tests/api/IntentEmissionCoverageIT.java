@@ -3746,7 +3746,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         // #6336 pattern: the server-side regex check and the client-side HTML pattern attribute.
         String personController = contentOf("gen/emission/api/person/PersonController.java");
-        assertTrue(personController.contains(".matches(") && personController.contains("does not match the required pattern"),
+        assertTrue(personController.contains(".matches(") && personController.contains("FieldRefusals.pattern("),
                 "a field pattern must emit the server-side regex check in the REST controller");
         String personForm = contentOf("gen/emission/views/Person/Person-form.html");
         assertTrue(personForm.contains("pattern=\""), "a field pattern must reach the form input as an HTML pattern attribute");
@@ -6045,9 +6045,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(voucherView.contains("x-model=\"form.RefNumber\""),
                 "a user-entered documentTitle (no number series) must render an editable input on the document page");
         String voucherController = contentOf("gen/emission/api/voucher/VoucherController.java");
-        assertTrue(voucherController.contains("The 'RefNumber' property is required"),
+        assertTrue(java.util.regex.Pattern.compile("FieldRefusals\\.required\\([^;]*\"RefNumber\"")
+                                          .matcher(voucherController)
+                                          .find(),
                 "a plain required field keeps its REST create validation");
-        assertFalse(voucherController.contains("The 'Status' property is required"),
+        assertFalse(java.util.regex.Pattern.compile("FieldRefusals\\.required\\([^;]*\"Status\"")
+                                           .matcher(voucherController)
+                                           .find(),
                 "required + init must not demand the payload value - the DB default guarantees it");
         String voucherPage = contentOf("gen/emission/js/components/pages/Voucher/VoucherDocumentPage.js");
         assertTrue(voucherPage.contains("RefNumber: [{ rule: 'required'"), "the client schema keeps required for the user-entered title");

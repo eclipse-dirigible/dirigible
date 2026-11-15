@@ -77,6 +77,43 @@ class HarmoniaRefusalMessageIT {
         }
     }
 
+    /**
+     * #8596: a refusal the server resolved for the reader's language quotes the field's translated
+     * label, not its name - the body's {@code field} is what marks it, and the sentence is shown as the
+     * server wrote it.
+     */
+    @Test
+    void aTranslatedRefusalMarksTheFieldTheBodyNames() {
+        try (Context context = load()) {
+            applyWithField(context, 409, "Conflict", "Вече съществува доставка с този 'Номер за проследяване'", "TrackingNumber");
+            assertEquals("", saveFailureMessage(context), "a per-field refusal goes onto the field, not the banner");
+            assertEquals("Вече съществува доставка с този 'Номер за проследяване'", context.eval("js", "page.errors.TrackingNumber")
+                                                                                           .asString());
+        }
+    }
+
+    /**
+     * #8597: a {@code checks:} rule about one field marks it, though its authored sentence quotes none.
+     */
+    @Test
+    void aCheckRefusalAboutOneFieldMarksThatField() {
+        try (Context context = load()) {
+            applyWithField(context, 400, "BadRequest", "A delivery date cannot be in the past", "Date");
+            assertEquals("", saveFailureMessage(context));
+            assertEquals("A delivery date cannot be in the past", context.eval("js", "page.errors.Date")
+                                                                         .asString());
+        }
+    }
+
+    /** A field the form does not show (a hidden or calculated one) keeps the banner. */
+    @Test
+    void aRefusalAboutAFieldOutsideTheFormKeepsTheBanner() {
+        try (Context context = load()) {
+            applyWithField(context, 400, "BadRequest", "The total cannot be negative", "Total");
+            assertEquals("The total cannot be negative", saveFailureMessage(context));
+        }
+    }
+
     @Test
     void everyGeneratedWritePathQuotesTheRefusal() throws Exception {
         String documentPage = read(UI + "perspective/document/document-page.js.template");
@@ -102,6 +139,13 @@ class HarmoniaRefusalMessageIT {
     private static void apply(Context context, int status, String errorType, String message) {
         context.eval("js", "page.applyApiError({ isApiError: true, httpStatus: " + status + ", errorType: '" + errorType
                 + "', errorMessage: " + "'" + message.replace("'", "\\'") + "' }, { fallbackMessage: 'Could not save.' });");
+    }
+
+    private static void applyWithField(Context context, int status, String errorType, String message, String field) {
+        context.eval("js",
+                "page.applyApiError({ isApiError: true, httpStatus: " + status + ", errorType: '" + errorType + "', errorMessage: '"
+                        + message.replace("'", "\\'") + "', field: '" + field
+                        + "', messageKey: 'shipping:shipping-model.checks.Delivery_0' }, { fallbackMessage: 'Could not save.' });");
     }
 
     private static String saveFailureMessage(Context context) {

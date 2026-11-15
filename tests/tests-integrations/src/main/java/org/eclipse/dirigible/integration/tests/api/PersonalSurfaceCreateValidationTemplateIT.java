@@ -53,7 +53,7 @@ class PersonalSurfaceCreateValidationTemplateIT {
     /** The message is the power surface's, verbatim: one refusal, whichever door the caller used. */
     @Test
     void aSelfServiceSurfaceNamesTheMissingRequiredFieldExactlyAsThePowerSurfaceDoes() throws Exception {
-        String expected = "throw new ResponseStatusException(HttpStatus.BAD_REQUEST, \"The 'FromDate' property is required\");";
+        String expected = "throw org.eclipse.dirigible.sdk.db.FieldRefusals.required(null, \"FromDate\", \"FromDate\", null);";
         assertTrue(render("EntityController.java.template", context()).contains(expected), "the power surface's own refusal changed");
 
         for (String template : SELF_SERVICE_SURFACES) {
@@ -71,8 +71,9 @@ class PersonalSurfaceCreateValidationTemplateIT {
         for (String template : SELF_SERVICE_SURFACES) {
             String rendered = render(template, context());
 
-            assertTrue(rendered.contains("The 'Note' exceeds the maximum length of 40"), template + " must enforce the declared length");
-            assertTrue(rendered.contains("does not match the required pattern"), template + " must enforce the format pattern");
+            assertTrue(rendered.contains("FieldRefusals.tooLong(null, \"Note\", \"Note\", null, 40)"),
+                    template + " must enforce the declared length");
+            assertTrue(rendered.contains("FieldRefusals.pattern(null, \"Note\""), template + " must enforce the format pattern");
             assertTrue(rendered.contains("exactly one of FromDate / Note"), template + " must enforce the row-level check");
         }
     }
@@ -136,9 +137,10 @@ class PersonalSurfaceCreateValidationTemplateIT {
                 "EntityPartnerController.java.template")) {
             String rendered = render(template, context());
 
-            assertTrue(!rendered.contains("The 'Number' property is required"),
+            assertTrue(!rendered.contains("FieldRefusals.required(null, \"Number\""),
                     template + " must not demand the number it does not receive: " + rendered);
-            assertTrue(rendered.contains("The 'FromDate' property is required"), template + " must still demand what the caller does send");
+            assertTrue(rendered.contains("FieldRefusals.required(null, \"FromDate\""),
+                    template + " must still demand what the caller does send");
         }
     }
 
@@ -154,7 +156,8 @@ class PersonalSurfaceCreateValidationTemplateIT {
                 "EntityPartnerController.java.template")) {
             String rendered = render(template, context());
 
-            assertTrue(rendered.contains("The 'Title' property is required") && rendered.contains("if (entity.Title.length() > 60) {"),
+            assertTrue(
+                    rendered.contains("FieldRefusals.required(null, \"Title\"") && rendered.contains("if (entity.Title.length() > 60) {"),
                     template + " must check a required string's length without a second null guard: " + rendered);
             assertTrue(!rendered.contains("entity.Title != null && entity.Title.length()"),
                     template + " must not repeat the required check's null test: " + rendered);

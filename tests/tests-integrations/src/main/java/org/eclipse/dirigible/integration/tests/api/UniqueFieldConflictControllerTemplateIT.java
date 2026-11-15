@@ -59,10 +59,10 @@ import org.junit.jupiter.api.Test;
  *
  * <p>
  * The mapping is hand-written Java inside a Velocity template, so a test that restates its rule
- * cannot catch the rule being wrong. The JDK-only part of the rendered source - the map, the
- * discriminator and the matching - is therefore extracted, compiled and RUN here against real
- * exception chains. Rendering and compiling need nothing from a running instance, so this boots no
- * application context and uses its own engine instance, exactly like
+ * cannot catch the rule being wrong. The part of the rendered source that needs no Spring - the
+ * map, the discriminator and the matching - is therefore extracted, compiled and RUN here against
+ * real exception chains. Rendering and compiling need nothing from a running instance, so this
+ * boots no application context and uses its own engine instance, exactly like
  * {@code RoleScopedFieldControllerTemplateIT}, whose fixture shape this mirrors.
  */
 class UniqueFieldConflictControllerTemplateIT {
@@ -261,15 +261,15 @@ class UniqueFieldConflictControllerTemplateIT {
         String rendered = render(context);
 
         assertFalse(rendered.contains("duplicateOrRethrow"), "there is nothing to map: " + rendered);
-        assertFalse(rendered.contains("DUPLICATE_MESSAGES"), "and no map to carry");
+        assertFalse(rendered.contains("DUPLICATE_REFUSALS"), "and no map to carry");
         assertTrue(rendered.contains("${name}Entity saved = repository.save(entity);".replace("${name}", "PublicHoliday")),
                 "the unwrapped save must be the one emitted");
     }
 
     /**
      * The rendered mapping, compiled and loaded so a test runs it instead of restating its rule.
-     * Everything it needs beyond the JDK is the pair of Spring types {@code duplicateOrRethrow} answers
-     * with, which are stood in for locally.
+     * Everything it needs beyond the JDK and the client SDK (the refusal it answers with, #8596) is the
+     * pair of Spring types {@code duplicateOrRethrow} answers with, which are stood in for locally.
      */
     private static final class Mapping {
 
@@ -283,8 +283,8 @@ class UniqueFieldConflictControllerTemplateIT {
                     enum HttpStatus { CONFLICT }
 
                     static final class ResponseStatusException extends RuntimeException {
-                        ResponseStatusException(HttpStatus status, String reason) {
-                            super(reason);
+                        ResponseStatusException(HttpStatus status, String reason, Throwable cause) {
+                            super(reason, cause);
                         }
                     }
 
@@ -325,10 +325,10 @@ class UniqueFieldConflictControllerTemplateIT {
 
         /**
          * The rendered members from the duplicate map down to the end of {@code isConstraintViolation} -
-         * the whole mapping, and all of it JDK-only.
+         * the whole mapping, and none of it Spring.
          */
         private static String mappingSource(String rendered) {
-            int from = rendered.indexOf("    private static final Map<String, String> DUPLICATE_MESSAGES");
+            int from = rendered.indexOf("    private static final Map<String, java.util.function.Supplier<");
             assertTrue(from > 0, "the rendered controller carries no duplicate map: " + rendered);
             int last = rendered.indexOf("private static boolean isConstraintViolation(Throwable e) {", from);
             assertTrue(last > 0, "the rendered controller carries no constraint discriminator: " + rendered);
@@ -618,7 +618,7 @@ class UniqueFieldConflictControllerTemplateIT {
         String rendered = render(BASE + "EntityMyController.java.template", context);
 
         assertFalse(rendered.contains("duplicateOrRethrow"), "no write reaches a statement here: " + rendered);
-        assertFalse(rendered.contains("DUPLICATE_MESSAGES"), "and no map to carry: " + rendered);
+        assertFalse(rendered.contains("DUPLICATE_REFUSALS"), "and no map to carry: " + rendered);
     }
 
     /** An entity with no business key must come out of the self-service templates exactly as it did. */

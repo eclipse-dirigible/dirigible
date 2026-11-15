@@ -118,6 +118,19 @@ final class ModelTranslations {
             Map.entry("deleteReferencedByOthers", "This {entity} is referenced by other records and cannot be deleted"));
 
     /**
+     * The default-language texts of the refusals of one property's value (dirigible #8596) - a required
+     * value left out, a too long text, a value off its pattern, a repeated unique value - by their key
+     * under the catalog's {@code checks}. They are the ones
+     * {@code org.eclipse.dirigible.sdk.db.FieldRefusals} falls back to, written into the en-US catalog
+     * for a translator to copy into another language's.
+     */
+    static final List<Map.Entry<String, String>> FIELD_REFUSAL_MESSAGES = List.of( //
+            Map.entry("fieldRequired", "The '{label}' property is required"), //
+            Map.entry("fieldTooLong", "The '{label}' exceeds the maximum length of {length}"), //
+            Map.entry("fieldPattern", "The value of '{label}' does not match the required pattern '{pattern}'"), //
+            Map.entry("fieldDuplicate", "A {entity} with this '{label}' already exists"));
+
+    /**
      * The catalog key of a check's message (issue #7611): the one the generator recorded, or - for a
      * model written before it did - the same derivation it uses, the check's kind and position in its
      * entity's list.
@@ -365,7 +378,7 @@ final class ModelTranslations {
                 // The singular name feeds the form captions and the "New X" actions, the plural one
                 // the sidebar entries and the list titles. A model that carries its own labels wins;
                 // a hand-authored one gets them derived here.
-                String singular = strOr(entity, "entityLabel", NamingHelper.humanizeIdentifier(name));
+                String singular = entityLabel(entity);
                 texts.put(dataName, singular);
                 texts.put(dataName + "_plural", strOr(entity, "menuLabel", NamingHelper.pluralizeLabel(singular)));
             }
@@ -436,6 +449,7 @@ final class ModelTranslations {
         List<Map<String, Object>> entities = asMaps(model.get("entities"));
         if (!entities.isEmpty()) {
             DELETE_REFUSAL_MESSAGES.forEach(message -> messages.put(message.getKey(), message.getValue()));
+            FIELD_REFUSAL_MESSAGES.forEach(message -> messages.put(message.getKey(), message.getValue()));
         }
         for (Map<String, Object> entity : entities) {
             int index = -1;
@@ -501,6 +515,34 @@ final class ModelTranslations {
     }
 
     /**
+     * The default-language singular label the catalog writes an entity under
+     * ({@code <prefix>.t.<dataName>}): the model's own, else one derived from the name.
+     *
+     * @param entity the entity, carrying a name
+     * @return the label
+     */
+    static String entityLabel(Map<String, Object> entity) {
+        return strOr(entity, "entityLabel", NamingHelper.humanizeIdentifier(str(entity, "name")));
+    }
+
+    /**
+     * The default-language label the catalog writes a property under ({@code <prefix>.t.<dataName>}) -
+     * the one a generated refusal names the property by, too (dirigible #8596).
+     *
+     * @param property the property
+     * @return the label, or {@code null} when the property has none
+     */
+    static Object propertyLabel(Map<String, Object> property) {
+        if (ModelValues.truthy(property, "perspectiveLabel")) {
+            return property.get("perspectiveLabel");
+        }
+        if (ModelValues.truthy(property, "widgetLabel")) {
+            return property.get("widgetLabel");
+        }
+        return ModelValues.truthy(property, "name") ? property.get("name") : null;
+    }
+
+    /**
      * Collects the labels of a property list, preferring the perspective label, then the widget label,
      * then the property name.
      *
@@ -514,12 +556,9 @@ final class ModelTranslations {
                 if (ModelValues.truthy(property, "perspectiveHeader")) {
                     texts.put(str(property, "perspectiveName") + "pheader", property.get("perspectiveHeader"));
                 }
-                if (ModelValues.truthy(property, "perspectiveLabel")) {
-                    texts.put(dataName, property.get("perspectiveLabel"));
-                } else if (ModelValues.truthy(property, "widgetLabel")) {
-                    texts.put(dataName, property.get("widgetLabel"));
-                } else if (ModelValues.truthy(property, "name")) {
-                    texts.put(dataName, property.get("name"));
+                Object label = propertyLabel(property);
+                if (label != null) {
+                    texts.put(dataName, label);
                 }
                 // A boolean's own words for its two values (#8564), next to its label - only both,
                 // because the views fall back to the shared Yes / No for a property without them.

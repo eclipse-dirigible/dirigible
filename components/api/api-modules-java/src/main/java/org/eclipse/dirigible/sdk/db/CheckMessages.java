@@ -91,6 +91,23 @@ public final class CheckMessages {
     }
 
     /**
+     * The refusal of a failed check about one property - a {@code compare} or {@code requiredWhen}
+     * naming its {@code field:} (dirigible #8597) - its message resolved for the request's language.
+     *
+     * @param field the property the check is about
+     * @param catalogKey the message's fully qualified catalog key
+     * @param text the default-language text
+     * @param params the placeholder values, as alternating name and value
+     * @return the exception to throw - mapped to HTTP 400 carrying the key, the parameters and the
+     *         field
+     */
+    public static ValidationException fieldRefusal(String field, String catalogKey, String text, Object... params) {
+        Map<String, Object> values = params(params);
+        return new ValidationException(resolve(language(), CheckMessages::readCatalog, catalogKey, text, values), catalogKey, values,
+                field);
+    }
+
+    /**
      * The warning of a soft check, its message resolved for the request's language.
      *
      * @param code the warning's confirmation code

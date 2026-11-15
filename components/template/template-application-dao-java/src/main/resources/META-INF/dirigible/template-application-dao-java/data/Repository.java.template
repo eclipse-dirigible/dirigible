@@ -1566,16 +1566,28 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      */
 ## ponytail: read-then-act - two concurrent writers of case variants can both pass; a unique index on
 ## LOWER(column) would close it, which the schema model cannot express and H2 cannot build.
+## The refusal is resolved for the reader's language (#8596), like the controllers' duplicate answer.
+#set($refusalCatalog = "null")
+#if($messageCatalogJava)#set($refusalCatalog = $messageCatalogJava)#end
+#set($refusalEntityLabel = '"' + $name + '"')
+#if($entityLabelJava)#set($refusalEntityLabel = $entityLabelJava)#end
+#set($refusalEntityLabelKey = "null")
+#if($labelCatalogKeyJava)#set($refusalEntityLabelKey = $labelCatalogKeyJava)#end
     private void requireUniqueIgnoringCase(${name}Entity entity) {
 #foreach($property in $properties)
 #if($property.dataUniqueIgnoreCase)
+#set($refusalField = '"' + $property.name + '", "' + $property.name + '", null')
+#if($property.refusalFieldArgsJava)#set($refusalField = $property.refusalFieldArgsJava)#end
         if (entity.${property.name} != null && count(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
                                                                                                           .eqNormalized("${property.name}", entity.${property.name})
                                                                                                           .ne("${pkPropertyName}", entity.${pkPropertyName})) > 0) {
             ${name}Entity stored = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
             if (stored == null || !entity.${property.name}.equals(stored.${property.name})) {
+                org.eclipse.dirigible.sdk.db.ValidationException refusal = org.eclipse.dirigible.sdk.db.FieldRefusals.duplicate(${refusalCatalog},
+                        ${refusalEntityLabel}, ${refusalEntityLabelKey}, ${refusalField});
+                // The refusal rides as the cause, so the body carries its key and the field.
                 throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
-                        "A ${name} with this '${property.name}' already exists");
+                        refusal.getMessage(), refusal);
             }
         }
 #end
@@ -1753,7 +1765,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
             Object requiredValue = ${check.valueExpression};
             if ((${requiredGuard}) && (requiredValue == null || org.eclipse.dirigible.sdk.db.Normalize.isBlank(String.valueOf(requiredValue)))) {
-                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
+                throw #if($check.refusalJava)${check.refusalJava}#{else}org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava})#end;
             }
 #elseif($check.kind == "forbidWhen")
             // The reject-twin of requiredWhen (intent `checks: forbidWhen`), gated on the status at
@@ -1807,7 +1819,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             java.math.BigDecimal than = ${check.thanJavaExpression};
             if (entity.${check.field} != null && than != null
                     && !(new java.math.BigDecimal(entity.${check.field}.toString()).compareTo(than) ${check.op} 0)) {
-                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
+                throw #if($check.refusalJava)${check.refusalJava}#{else}org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava})#end;
             }
 #elseif($check.literalJavaExpression)
             if (entity.${check.field} != null
@@ -1816,7 +1828,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #else
                     && !(entity.${check.field}.compareTo(${check.literalJavaExpression}) ${check.op} 0)) {
 #end
-                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
+                throw #if($check.refusalJava)${check.refusalJava}#{else}org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava})#end;
             }
 #else
             if (entity.${check.field} != null && entity.${check.than} != null
@@ -1825,7 +1837,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #else
                     && !(entity.${check.field}.compareTo(entity.${check.than}) ${check.op} 0)) {
 #end
-                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
+                throw #if($check.refusalJava)${check.refusalJava}#{else}org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava})#end;
             }
 #end
 #elseif($check.kind == "itemsSumEqual")

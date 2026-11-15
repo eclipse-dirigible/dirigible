@@ -3246,6 +3246,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 }
                 checkMap.put("valueExpression", path.expression());
                 checkMap.put("label", path.label());
+                if (!check.getField()
+                          .contains(".")) {
+                    // The record's own property (#8597): its refusal names it, so a form marks the field.
+                    checkMap.put("field", IntentNaming.pascalCase(check.getField()));
+                }
                 List<Map<String, Object>> when = CheckSupport.conditionTerms(entity, byName, walker, check.getWhen());
                 if (when == null && check.getWhenAnyItem() == null) {
                     continue; // the parser already reported it
