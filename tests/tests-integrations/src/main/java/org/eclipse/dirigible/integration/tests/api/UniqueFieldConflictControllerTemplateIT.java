@@ -58,21 +58,34 @@ import org.junit.jupiter.api.Test;
  * matches every business key the entity has.
  *
  * <p>
- * The mapping is hand-written Java inside a Velocity template, so a test that restates its rule
- * cannot catch the rule being wrong. The part of the rendered source that needs no Spring - the
- * map, the discriminator and the matching - is therefore extracted, compiled and RUN here against
- * real exception chains. Rendering and compiling need nothing from a running instance, so this
- * boots no application context and uses its own engine instance, exactly like
- * {@code RoleScopedFieldControllerTemplateIT}, whose fixture shape this mirrors.
+ * The mapping lives ONCE, in the generated repository (#8661): the key map is rendered there and
+ * the platform's {@code JavaRepository} matches a violation against it on every write, so a
+ * generate action, a schedule and the three controller surfaces all refuse a collision with the
+ * same message. It used to be three hand-written copies in the controllers - which drifted (#7176)
+ * and which no other writer had, so a repeated generate action answered the driver's text as a 500.
+ * The rendered map is therefore extracted from the repository template, compiled into a
+ * {@code JavaRepository} and RUN here against real exception chains; the controllers are checked
+ * for handing their writes to it and carrying no copy of their own. Rendering and compiling need
+ * nothing from a running instance, so this boots no application context and uses its own engine
+ * instance, exactly like {@code RoleScopedFieldControllerTemplateIT}, whose fixture shape this
+ * mirrors.
  */
 class UniqueFieldConflictControllerTemplateIT {
 
     private static final String BASE = "/META-INF/dirigible/template-application-rest-java/api/";
     private static final String TEMPLATE = BASE + "EntityController.java.template";
+    private static final String REPOSITORY_TEMPLATE = "/META-INF/dirigible/template-application-dao-java/data/Repository.java.template";
+
+    /** What a controller write path hands a failure to: the repository's own mapping (#8661). */
+    private static final String HAND_OFF = "throw repository.duplicateKeyOr(e);";
 
     /** The two doors a person actually types into - #7137. */
     private static final List<String> SELF_SERVICE_SURFACES =
             List.of("EntityMyController.java.template", "EntityPartnerController.java.template");
+
+    /** Every surface a write reaches the entity through. */
+    private static final List<String> SURFACES =
+            List.of("EntityController.java.template", "EntityMyController.java.template", "EntityPartnerController.java.template");
 
     /** SQLSTATE 23505 - a uniqueness violation, which a primary-key collision also reports. */
     private static final String UNIQUE_VIOLATION = "23505";
@@ -172,20 +185,6 @@ class UniqueFieldConflictControllerTemplateIT {
                 "and a violation that neither reports 23505 nor says so in words is not a duplicate");
     }
 
-    /** The 500 in the report came from the write not being wrapped at all on either verb. */
-    @Test
-    void bothWritePathsRouteThroughTheMapping() throws Exception {
-        String rendered = render(context());
-
-        assertEquals(2, occurrences(rendered, "throw duplicateOrRethrow(e);"),
-                "create and update must both hand the violation to the mapping: " + rendered);
-        assertTrue(rendered.contains("saved = repository.save(entity);"), "the create must save inside the try");
-        assertTrue(rendered.contains("return repository.update(entity);"), "the update must run inside the try");
-        assertTrue(rendered.contains("if (isConstraintViolation(e) && isDuplicateViolation(e)) {"),
-                "the mapping must answer only for a UNIQUENESS violation: " + rendered);
-        assertNoUnresolvedReferences(rendered);
-    }
-
     /**
      * The same column appears in a foreign-key violation's text, and that is a different conflict - the
      * generated delete has its own answer for it. Answering it as a duplicate would name a field the
@@ -217,7 +216,6 @@ class UniqueFieldConflictControllerTemplateIT {
                         "duplicate key value violates unique constraint \"VACATIONS_PUBLIC_HOLIDAY_PUBLIC_HOLIDAY_DAY_OF_NOTICE_key\"",
                         UNIQUE_VIOLATION),
                 "the longer column must not be answered with the shorter one's message");
-        assertTrue(render(context).contains("Comparator.comparingInt(String::length)"), "the ordering must be part of the emitted map");
     }
 
     /** The composite-key mapping the single-column case joins must keep behaving as it did. */
@@ -231,61 +229,98 @@ class UniqueFieldConflictControllerTemplateIT {
                 mapping(context).answerFor("duplicate key value violates unique constraint \"PublicHoliday_Company_Day\"",
                         UNIQUE_VIOLATION),
                 "the authored message must still be the answer for the constraint the model named");
-        assertNoUnresolvedReferences(render(context));
+        assertNoUnresolvedReferences(render(REPOSITORY_TEMPLATE, context));
     }
 
     /**
-     * The mapping is hand-written Java inside a Velocity template, and nothing in the build compiles a
-     * rendered controller - a stray brace would only surface as a broken generated application. The
-     * compiler's PARSE phase is the gate that fits here: it reports the syntax of the rendered source
-     * without needing the SDK types it imports on the classpath.
+     * Every controller surface hands what its writes raised to the repository's mapping, and carries no
+     * copy of its own: three hand-written copies only stayed one behaviour while they stayed one text
+     * (#7176), and no copy at all reached the other writers - a generate action creating its second
+     * document for the same key answered 500 (#8661).
+     */
+    @Test
+    void everySurfaceHandsItsWritesToTheRepositorysMapping() throws Exception {
+        Map<String, Object> context = selfServiceContext();
+        context.put("uniqueConstraints", List.of(compositeKey()));
+
+        for (String template : SURFACES) {
+            String rendered = render(BASE + template, context);
+
+            assertEquals(2, occurrences(rendered, HAND_OFF), template + " must hand both the create and the update over: " + rendered);
+            assertFalse(rendered.contains("isDuplicateViolation"), template + " must carry no matcher of its own: " + rendered);
+            assertFalse(rendered.contains("DUPLICATE_REFUSALS"), template + " must carry no key map of its own: " + rendered);
+        }
+        assertTrue(render(TEMPLATE, context).contains("saved = repository.save(entity);"), "the create must save inside the try");
+        for (String template : SELF_SERVICE_SURFACES) {
+            String rendered = render(BASE + template, context);
+            assertTrue(rendered.contains("return scrub(repository.save(entity));"), template + " must save inside the try");
+            assertTrue(rendered.contains("return scrub(repository.update(entity));"), template + " must update inside the try");
+        }
+    }
+
+    /**
+     * The controllers are hand-written Java inside Velocity templates, and nothing in the build
+     * compiles a rendered controller - a stray brace would only surface as a broken generated
+     * application. The compiler's PARSE phase is the gate that fits here: it reports the syntax of the
+     * rendered source without needing the SDK types it imports on the classpath.
      */
     @Test
     void everyRenderedShapeIsSyntacticallyValidJava() throws Exception {
-        Map<String, Object> composite = context();
+        Map<String, Object> composite = selfServiceContext();
         composite.put("uniqueConstraints", List.of(compositeKey()));
-        Map<String, Object> noKey = context();
+        Map<String, Object> noKey = selfServiceContext();
         noKey.put("properties", List.of(primaryKey(), column("Name", "PUBLIC_HOLIDAY_NAME")));
+        Map<String, Object> readOnly = selfServiceContext();
+        readOnly.put("personalReadOnly", "true");
 
-        for (Map<String, Object> context : List.of(context(), composite, noKey)) {
-            assertEquals(List.of(), syntaxErrors(render(context)), "the rendered controller must parse as Java");
+        for (Map<String, Object> context : List.of(selfServiceContext(), composite, noKey, readOnly)) {
+            for (String template : SURFACES) {
+                assertEquals(List.of(), syntaxErrors(render(BASE + template, context)), template + " must parse as Java");
+            }
         }
     }
 
     /** An entity with no business key at all must come out exactly as it always did. */
     @Test
     void anEntityWithoutAnyBusinessKeyGetsNoneOfIt() throws Exception {
-        Map<String, Object> context = context();
+        Map<String, Object> context = selfServiceContext();
         context.put("properties", List.of(primaryKey(), column("Name", "PUBLIC_HOLIDAY_NAME")));
 
-        String rendered = render(context);
-
-        assertFalse(rendered.contains("duplicateOrRethrow"), "there is nothing to map: " + rendered);
-        assertFalse(rendered.contains("DUPLICATE_REFUSALS"), "and no map to carry");
-        assertTrue(rendered.contains("${name}Entity saved = repository.save(entity);".replace("${name}", "PublicHoliday")),
+        assertFalse(render(REPOSITORY_TEMPLATE, context).contains("duplicateKeys()"), "the repository has no key to map");
+        for (String template : SURFACES) {
+            assertFalse(render(BASE + template, context).contains("duplicateKeyOr"), template + " has nothing to hand over");
+        }
+        assertTrue(render(TEMPLATE, context).contains("PublicHolidayEntity saved = repository.save(entity);"),
                 "the unwrapped save must be the one emitted");
+        for (String template : SELF_SERVICE_SURFACES) {
+            assertTrue(render(BASE + template, context).contains("return scrub(repository.save(entity));"),
+                    template + " must keep the unwrapped save");
+        }
+    }
+
+    /** A see-only personal surface refuses every write with 403, so there is no collision to map. */
+    @Test
+    void aReadOnlyPersonalSurfaceGetsNoneOfIt() throws Exception {
+        Map<String, Object> context = selfServiceContext();
+        context.put("personalReadOnly", "true");
+
+        String rendered = render(BASE + "EntityMyController.java.template", context);
+
+        assertFalse(rendered.contains("duplicateKeyOr"), "no write reaches a statement here: " + rendered);
     }
 
     /**
-     * The rendered mapping, compiled and loaded so a test runs it instead of restating its rule.
-     * Everything it needs beyond the JDK and the client SDK (the refusal it answers with, #8596) is the
-     * pair of Spring types {@code duplicateOrRethrow} answers with, which are stood in for locally.
+     * The rendered key map, compiled into a {@code JavaRepository} and run through the platform's
+     * {@code duplicateKeyOr} - the very path every write of a generated repository takes - so a test
+     * runs the mapping instead of restating its rule.
      */
     private static final class Mapping {
 
         private static final String HARNESS = """
-                import java.util.List;
-                import java.util.Locale;
-                import java.util.Map;
+                public class DuplicateMapping extends org.eclipse.dirigible.components.data.store.java.repository.JavaRepository<Object> {
 
-                public class DuplicateMapping {
-
-                    enum HttpStatus { CONFLICT }
-
-                    static final class ResponseStatusException extends RuntimeException {
-                        ResponseStatusException(HttpStatus status, String reason, Throwable cause) {
-                            super(reason, cause);
-                        }
+                    public DuplicateMapping() {
+                        super(Object.class);
                     }
 
                     /** A Hibernate ConstraintViolationException stands in by the only thing the mapping reads: its name. */
@@ -295,11 +330,11 @@ class UniqueFieldConflictControllerTemplateIT {
                         }
                     }
 
-                    /** The message the mapping answers with, or null when it rethrew the violation untouched. */
+                    /** The message the mapping answers with, or null when it left the violation untouched. */
                     public static String answer(String hibernateMessage, String driverMessage, String sqlState) {
                         Throwable driver = driverMessage == null ? null : new java.sql.SQLException(driverMessage, sqlState);
                         RuntimeException violation = new StubConstraintViolationException(hibernateMessage, driver);
-                        RuntimeException answered = duplicateOrRethrow(violation);
+                        RuntimeException answered = new DuplicateMapping().duplicateKeyOr(violation);
                         return answered == violation ? null : answered.getMessage();
                     }
 
@@ -324,14 +359,16 @@ class UniqueFieldConflictControllerTemplateIT {
         }
 
         /**
-         * The rendered members from the duplicate map down to the end of {@code isConstraintViolation} -
-         * the whole mapping, and none of it Spring.
+         * The rendered members from the key map down to the end of the {@code duplicateKeys()} override.
          */
         private static String mappingSource(String rendered) {
-            int from = rendered.indexOf("    private static final Map<String, java.util.function.Supplier<");
-            assertTrue(from > 0, "the rendered controller carries no duplicate map: " + rendered);
-            int last = rendered.indexOf("private static boolean isConstraintViolation(Throwable e) {", from);
-            assertTrue(last > 0, "the rendered controller carries no constraint discriminator: " + rendered);
+            int from = rendered.indexOf(
+                    "    private static final java.util.Map<String, java.util.function.Supplier<org.eclipse.dirigible.sdk.db.ValidationException>> DUPLICATE_KEYS");
+            assertTrue(from > 0, "the rendered repository carries no key map: " + rendered);
+            int last = rendered.indexOf(
+                    "protected java.util.Map<String, java.util.function.Supplier<org.eclipse.dirigible.sdk.db.ValidationException>> duplicateKeys() {",
+                    from);
+            assertTrue(last > 0, "the rendered repository does not hand its key map to the platform: " + rendered);
             return rendered.substring(from, endOfBlock(rendered, rendered.indexOf('{', last)) + 1);
         }
 
@@ -426,15 +463,7 @@ class UniqueFieldConflictControllerTemplateIT {
     }
 
     private Mapping mapping(Map<String, Object> parameters) throws Exception {
-        return new Mapping(render(parameters));
-    }
-
-    private Mapping mapping(String location, Map<String, Object> parameters) throws Exception {
-        return new Mapping(render(location, parameters));
-    }
-
-    private String render(Map<String, Object> parameters) throws Exception {
-        return render(TEMPLATE, parameters);
+        return new Mapping(render(REPOSITORY_TEMPLATE, parameters));
     }
 
     private String render(String location, Map<String, Object> parameters) throws Exception {
@@ -449,7 +478,7 @@ class UniqueFieldConflictControllerTemplateIT {
 
     private static void assertNoUnresolvedReferences(String rendered) {
         for (String line : rendered.split("\n")) {
-            if (line.contains("messages.put") || line.contains("duplicateOrRethrow") || line.contains("already exists")) {
+            if (line.contains("refusals.put") || line.contains("already exists")) {
                 assertFalse(line.contains("${"), "an unresolved template reference survived: " + line);
             }
         }
@@ -512,145 +541,6 @@ class UniqueFieldConflictControllerTemplateIT {
         property.put("dataTypeJavaClass", "String");
         property.put("dataPrimaryKey", Boolean.FALSE);
         return property;
-    }
-
-    /**
-     * The same collision through a self-service door. #7108 taught the power controller to answer a
-     * duplicate with a 409 naming the field and #7110 copied the value validators onto the personal and
-     * partner surfaces - but not this mapping, so the surface a person actually types into still handed
-     * back the #7098 500 with the raw JDBC text. One refusal, whichever door the caller used.
-     */
-    @Test
-    void aSelfServiceSurfaceAnswersADuplicateExactlyAsThePowerSurfaceDoes() throws Exception {
-        for (String template : SELF_SERVICE_SURFACES) {
-            Mapping mapping = mapping(BASE + template, selfServiceContext());
-
-            assertEquals("A PublicHoliday with this 'Day' already exists", mapping.answerFor(POSTGRES_DUPLICATE, UNIQUE_VIOLATION),
-                    template + " must map the PostgreSQL duplicate to the message naming the field");
-            assertEquals("A PublicHoliday with this 'Day' already exists", mapping.answerFor(H2_DUPLICATE, UNIQUE_VIOLATION),
-                    template + " must map the H2 one too");
-        }
-    }
-
-    /**
-     * The anchoring #7138 fixed on the power surface, run against the self-service ones: the driver
-     * messages these surfaces actually see carry the statement Hibernate appends, whose column list
-     * names EVERY business key of the table. Fed the bare driver string a surface never sees, a matcher
-     * that reads the message whole passes - which is how the defect rode into two more copies (#7176).
-     */
-    @Test
-    void aSelfServiceCollisionIsNamedOnTheCollidedFieldEvenWithTheStatementAttached() throws Exception {
-        Map<String, Object> context = selfServiceContext();
-        context.put("properties", List.of(primaryKey(), uniqueDay(), unique("DayOfNotice", "PUBLIC_HOLIDAY_DAY_OF_NOTICE")));
-
-        for (String template : SELF_SERVICE_SURFACES) {
-            Mapping mapping = mapping(BASE + template, context);
-
-            assertEquals("A PublicHoliday with this 'Day' already exists",
-                    mapping.answerFor(POSTGRES_DUPLICATE + HIBERNATE_INSERT, POSTGRES_DUPLICATE, UNIQUE_VIOLATION),
-                    template + ": the statement's column list must not decide which field the collision is reported on");
-            assertEquals("A PublicHoliday with this 'DayOfNotice' already exists", mapping.answerFor(
-                    "ERROR: duplicate key value violates unique constraint \"VACATIONS_PUBLIC_HOLIDAY_PUBLIC_HOLIDAY_DAY_OF_NOTICE_key\""
-                            + HIBERNATE_INSERT,
-                    "ERROR: duplicate key value violates unique constraint \"VACATIONS_PUBLIC_HOLIDAY_PUBLIC_HOLIDAY_DAY_OF_NOTICE_key\"",
-                    UNIQUE_VIOLATION), template + ": the other field must be answered on its own collision");
-        }
-    }
-
-    /**
-     * A primary-key collision reports SQLSTATE 23505 and carries the same statement tail, so on the
-     * pre-anchoring matcher it came back as a duplicate of a business key the caller never wrote - on
-     * whichever surface still carried that matcher.
-     */
-    @Test
-    void aSelfServicePrimaryKeyCollisionIsNotAnsweredAsABusinessKeyDuplicate() throws Exception {
-        for (String template : SELF_SERVICE_SURFACES) {
-            Mapping mapping = mapping(BASE + template, selfServiceContext());
-
-            assertNull(mapping.answerFor(POSTGRES_PRIMARY_KEY + HIBERNATE_INSERT, POSTGRES_PRIMARY_KEY, UNIQUE_VIOLATION),
-                    template + ": a primary-key violation must be rethrown, not renamed after a business key");
-            assertNull(mapping.answerFor(POSTGRES_FOREIGN_KEY + HIBERNATE_INSERT, POSTGRES_FOREIGN_KEY, FOREIGN_KEY_VIOLATION),
-                    template + ": a missing reference must not be answered as a duplicate");
-        }
-    }
-
-    /** The 500 came from the write not being wrapped at all - on either verb, on either surface. */
-    @Test
-    void bothSelfServiceWritePathsRouteThroughTheMapping() throws Exception {
-        for (String template : SELF_SERVICE_SURFACES) {
-            String rendered = render(BASE + template, selfServiceContext());
-
-            assertEquals(2, occurrences(rendered, "throw duplicateOrRethrow(e);"),
-                    template + " must hand both the create and the update to the mapping: " + rendered);
-            assertTrue(rendered.contains("return scrub(repository.save(entity));"), template + " must save inside the try");
-            assertTrue(rendered.contains("return scrub(repository.update(entity));"), template + " must update inside the try");
-            assertTrue(rendered.contains("if (isConstraintViolation(e) && isDuplicateViolation(e)) {"),
-                    template + " must answer only for a UNIQUENESS violation: " + rendered);
-            assertNoUnresolvedReferences(rendered);
-        }
-    }
-
-    /**
-     * Same key, same words, and the same matcher reading them: three hand-written copies of the same
-     * Java only stay one behaviour if they stay one text. Comparing the emitted MESSAGES alone is what
-     * let #7174's anchoring land on the power surface while the two copies #7173 made kept the matcher
-     * it replaced (#7176) - the maps were identical the whole time. The whole mapping is compared here,
-     * from the map down to the end of the discriminator.
-     */
-    @Test
-    void everySurfaceCarriesTheSameMappingVerbatim() throws Exception {
-        Map<String, Object> context = selfServiceContext();
-        context.put("uniqueConstraints", List.of(compositeKey()));
-
-        String power = Mapping.mappingSource(render(TEMPLATE, context));
-        for (String template : SELF_SERVICE_SURFACES) {
-            assertEquals(power, Mapping.mappingSource(render(BASE + template, context)),
-                    template + " must carry the power surface's map AND matcher verbatim");
-        }
-    }
-
-    /** A see-only personal surface refuses every write with 403, so there is no collision to map. */
-    @Test
-    void aReadOnlyPersonalSurfaceGetsNoneOfIt() throws Exception {
-        Map<String, Object> context = selfServiceContext();
-        context.put("personalReadOnly", "true");
-
-        String rendered = render(BASE + "EntityMyController.java.template", context);
-
-        assertFalse(rendered.contains("duplicateOrRethrow"), "no write reaches a statement here: " + rendered);
-        assertFalse(rendered.contains("DUPLICATE_REFUSALS"), "and no map to carry: " + rendered);
-    }
-
-    /** An entity with no business key must come out of the self-service templates exactly as it did. */
-    @Test
-    void aSelfServiceSurfaceWithoutAnyBusinessKeyGetsNoneOfItEither() throws Exception {
-        Map<String, Object> context = selfServiceContext();
-        context.put("properties", List.of(primaryKey(), column("Name", "PUBLIC_HOLIDAY_NAME")));
-
-        for (String template : SELF_SERVICE_SURFACES) {
-            String rendered = render(BASE + template, context);
-
-            assertFalse(rendered.contains("duplicateOrRethrow"), template + " has nothing to map: " + rendered);
-            assertTrue(rendered.contains("return scrub(repository.save(entity));"),
-                    template + " must keep the unwrapped save: " + rendered);
-        }
-    }
-
-    /** The mapping is hand-written Java in a Velocity template on these surfaces too. */
-    @Test
-    void everyRenderedSelfServiceShapeIsSyntacticallyValidJava() throws Exception {
-        Map<String, Object> composite = selfServiceContext();
-        composite.put("uniqueConstraints", List.of(compositeKey()));
-        Map<String, Object> noKey = selfServiceContext();
-        noKey.put("properties", List.of(primaryKey(), column("Name", "PUBLIC_HOLIDAY_NAME")));
-        Map<String, Object> readOnly = selfServiceContext();
-        readOnly.put("personalReadOnly", "true");
-
-        for (Map<String, Object> context : List.of(selfServiceContext(), composite, noKey, readOnly)) {
-            for (String template : SELF_SERVICE_SURFACES) {
-                assertEquals(List.of(), syntaxErrors(render(BASE + template, context)), template + " must parse as Java");
-            }
-        }
     }
 
     /** The reported entity, owned by an identity - what the personal and partner templates ask for. */

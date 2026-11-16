@@ -27,6 +27,7 @@ import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.sdk.db.ConcurrentWriteException;
 import org.eclipse.dirigible.sdk.db.ConfirmationRequiredException;
 import org.eclipse.dirigible.sdk.db.DeleteRestrictionException;
+import org.eclipse.dirigible.sdk.db.DuplicateKeyException;
 import org.eclipse.dirigible.sdk.db.ValidationException;
 import org.eclipse.dirigible.sdk.db.Warning;
 import org.slf4j.Logger;
@@ -174,6 +175,15 @@ public class ControllerInvoker {
                 // A soft `severity: warn` check (#7466): the write is legitimate but must be confirmed
                 // first - neither a fault nor a refusal, so it is answered on its own status below.
                 throw confirmation;
+            }
+            if (cause instanceof DuplicateKeyException) {
+                // A write that collided with a business key (#8661): well-formed, refused only because
+                // another record holds the same key right now - a conflict with current state, answered
+                // with the key's authored message, whichever endpoint made the write.
+                LOGGER.debug("Controller [{}#{}] collided with a business key: {}", match.entry()
+                                                                                         .fqn(),
+                        method.getName(), cause.getMessage(), cause);
+                throw new ResponseStatusException(HttpStatus.CONFLICT, cause.getMessage(), cause);
             }
             if (cause instanceof ValidationException) {
                 // A client-side domain validation (a generated repository's checks: gate or capacity

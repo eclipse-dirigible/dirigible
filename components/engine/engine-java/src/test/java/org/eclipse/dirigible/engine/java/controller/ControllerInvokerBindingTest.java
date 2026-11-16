@@ -301,6 +301,31 @@ class ControllerInvokerBindingTest {
         }
     }
 
+    /**
+     * #8661: a write that collided with a business key is refused with the key's authored message and
+     * 409, whichever endpoint made it - a generate action's run as much as a REST create - never the
+     * driver's text as a 500.
+     */
+    @Test
+    void duplicate_key_exception_yields_409_with_the_authored_message() throws Exception {
+        ControllerEntry entry = consumer.build(loaded(Demo.class));
+        Route route = entry.routes()
+                           .stream()
+                           .filter(r -> r.method()
+                                         .getName()
+                                         .equals("duplicateKey"))
+                           .findFirst()
+                           .orElseThrow();
+
+        FakeResponse response = new FakeResponse();
+        invoker.invoke(new RouteMatch(entry, route, Map.of()), mockRequest(null), response);
+
+        assertEquals(HttpStatus.CONFLICT.value(), response.getStatus(), response.body());
+        Map<?, ?> body = new ObjectMapper().readValue(response.body(), Map.class);
+        assertEquals("This asset already has a depreciation document for this month", body.get("message"), response.body());
+        assertEquals("assets:assets-model.checks.Depreciation_Asset_Period", body.get("messageKey"), response.body());
+    }
+
     @Test
     void unconfirmed_warnings_yield_428_listing_them() throws Exception {
         ControllerEntry entry = consumer.build(loaded(Demo.class));
@@ -444,6 +469,15 @@ class ControllerInvokerBindingTest {
             org.eclipse.dirigible.sdk.db.ValidationException refusal = new org.eclipse.dirigible.sdk.db.ValidationException(
                     "A UoM with this 'Sap' already exists", "billing:billing-model.checks.fieldDuplicate", Map.of("label", "Sap"), "Sap");
             throw new org.springframework.web.server.ResponseStatusException(HttpStatus.CONFLICT, refusal.getMessage(), refusal);
+        }
+
+        @Get("/duplicate-key")
+        public String duplicateKey() {
+            org.eclipse.dirigible.sdk.db.ValidationException refusal =
+                    new org.eclipse.dirigible.sdk.db.ValidationException("This asset already has a depreciation document for this month",
+                            "assets:assets-model.checks.Depreciation_Asset_Period", Map.of(), null);
+            throw new org.eclipse.dirigible.sdk.db.DuplicateKeyException(refusal,
+                    new RuntimeException("could not execute statement [Unique index or primary key violation]"));
         }
 
         @Get("/warn-keyed")
