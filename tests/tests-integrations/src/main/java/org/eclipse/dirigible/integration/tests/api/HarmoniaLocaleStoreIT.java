@@ -10,14 +10,19 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 
 /**
  * The language a data request carries is the one the locale store settles on, never the saved
@@ -40,6 +45,12 @@ import org.junit.jupiter.api.Test;
 class HarmoniaLocaleStoreIT {
 
     private static final String SHELL_JS = "/META-INF/dirigible/application-core/shell/js/";
+
+    private static final String I18N_SCRIPT = "src=\"/services/web/application-core/shell/js/services/i18n.js\"";
+
+    private static final String LOCALE_SCRIPT = "src=\"/services/web/application-core/shell/js/stores/locale.js\"";
+
+    private static final String ALPINE_SCRIPT = "src=\"/webjars/alpinejs/dist/cdn.min.js\"";
 
     @Test
     void aSavedLanguageTheInstanceDoesNotOfferIsNeverSent() {
@@ -121,6 +132,33 @@ class HarmoniaLocaleStoreIT {
             assertEquals("bg-BG", eval(context, "i18next.language"));
             assertEquals("Създаване", eval(context, "T('application-core:shell.nav.create', 'Create')"));
         }
+    }
+
+    /**
+     * Every page that renders its labels through {@code i18n.js} also loads the locale store before
+     * Alpine starts (#8632): without the store {@code i18n.js} can only take the saved code, and the
+     * standalone pages (builder, capture, report file, form) rendered a language the instance no longer
+     * offered.
+     */
+    @Test
+    void everyPageTranslatingItsLabelsLoadsTheLocaleStore() {
+        List<String> pages = new ArrayList<>();
+        List<String> problems = new ArrayList<>();
+        for (Resource resource : resources("classpath*:META-INF/dirigible/**/*.html", "classpath*:META-INF/dirigible/**/*.html.template")) {
+            String page = read(resource);
+            int i18n = page.indexOf(I18N_SCRIPT);
+            if (i18n < 0) {
+                continue;
+            }
+            pages.add(resource.getFilename());
+            int locale = page.indexOf(LOCALE_SCRIPT);
+            int alpine = page.indexOf(ALPINE_SCRIPT);
+            if (locale < 0 || alpine < 0 || locale > alpine) {
+                problems.add(describe(resource));
+            }
+        }
+        assertTrue(pages.size() >= 8, "found too few pages loading i18n.js to trust the scan: " + pages);
+        assertTrue(problems.isEmpty(), "load i18n.js without the locale store before Alpine:\n  " + String.join("\n  ", problems));
     }
 
     private static int catalogRequests(Context context) {
@@ -225,6 +263,36 @@ class HarmoniaLocaleStoreIT {
             context.eval("js", source);
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to evaluate " + resource, ex);
+        }
+    }
+
+    private static List<Resource> resources(String... patterns) {
+        PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
+        List<Resource> resources = new ArrayList<>();
+        for (String pattern : patterns) {
+            try {
+                resources.addAll(List.of(resolver.getResources(pattern)));
+            } catch (IOException ex) {
+                throw new UncheckedIOException("Cannot resolve " + pattern, ex);
+            }
+        }
+        return resources;
+    }
+
+    private static String describe(Resource resource) {
+        try {
+            return resource.getURL()
+                           .toString();
+        } catch (IOException ex) {
+            throw new UncheckedIOException(ex);
+        }
+    }
+
+    private static String read(Resource resource) {
+        try (InputStream in = resource.getInputStream()) {
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            throw new UncheckedIOException("Failed to read " + describe(resource), ex);
         }
     }
 

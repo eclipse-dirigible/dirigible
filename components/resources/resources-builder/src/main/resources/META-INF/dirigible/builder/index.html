@@ -436,6 +436,8 @@
     <!-- 1. Shared Harmonia runtime (served from application-core) + local config (defer keeps order) -->
     <script src="/services/web/application-core/shell/js/app.js" defer></script>
     <script src="./js/config.js" defer></script>
+    <!-- The language the instance offers (#8632): the labels and Accept-Language follow it, never a saved one it does not. -->
+    <script src="/services/web/application-core/shell/js/stores/locale.js" defer></script>
     <script src="/services/web/application-core/shell/js/services/i18n.js" defer></script>
     <!-- Instance branding (the same DIRIGIBLE_BRANDING_* env vars as the AngularJS shell): the
          platform service sets top.PlatformBranding; the adapter applies the favicon/title and
