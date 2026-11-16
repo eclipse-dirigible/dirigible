@@ -3743,6 +3743,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String accountForm = contentOf("gen/emission/views/Account/Account-form.html");
         assertTrue(accountForm.contains("relatedPanel(r, id)") && accountForm.contains("openRow(row)"),
                 "the referenced entity's form must render one related panel per register, whose only row action opens the source record");
+        // ... and so does its list's details sheet (#8651), below the selected record's properties,
+        // keyed by the selected id so another row re-reads the register.
+        String accountListPage = contentOf("gen/emission/js/components/pages/Account/AccountManageListPage.js");
+        assertTrue(accountListPage.contains("App.relatedFor('Account')"),
+                "the referenced entity's list page must read its registers from the runtime registry");
+        String accountListView = contentOf("gen/emission/views/Account/Account-manage-list.html");
+        int accountSheet = accountListView.indexOf("x-h-sheet-overlay=\"detailsOpen\"");
+        int accountSheetPanel = accountListView.indexOf("x-data=\"relatedPanel(r, selectedId)\"");
+        assertTrue(accountSheet >= 0 && accountSheetPanel > accountSheet,
+                "the referenced entity's list must render one related panel per register inside its details sheet: " + accountListView);
+        assertTrue(accountListView.contains(":key=\"r.entity + ':' + selectedId\"") && accountListView.contains("openRow(row)"),
+                "the sheet's register must be keyed by the selected record and open the source record");
+        String entryManageListView = contentOf("gen/emission/views/Entry/Entry-manage-list.html");
+        assertFalse(entryListPage.contains("relatedFor") || entryManageListView.contains("relatedPanel"),
+                "a list whose entity declares no related: must render exactly as before");
 
         // #6336 pattern: the server-side regex check and the client-side HTML pattern attribute.
         String personController = contentOf("gen/emission/api/person/PersonController.java");

@@ -74,6 +74,13 @@ document.addEventListener('alpine:init', () => {
     // clicking the scrim has to clear the selection the same way closeDetails() does.
     detailsOpen: false,
 
+#if($relatedEntities && $relatedEntities.size() > 0)
+    // The read-only registers of the records REFERENCING ${name} (intent `related:`), shown in the
+    // sheet below the selected record's properties, as on its form page (#8651). Read where the sheet
+    // renders them, as the document page does, not when the component is built.
+    get relatedDefs() { return App.relatedFor('${name}'); },
+
+#end
     // Delete confirmation.
     deleteOpen: false,
     deleteTarget: null,
