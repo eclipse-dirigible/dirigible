@@ -34,7 +34,8 @@ import org.junit.jupiter.api.Test;
  * The race is made deterministic by evaluating the shipped {@code locale.js} and {@code api.js} in
  * a polyglot context over stubs of what they touch, with the languages response held back until the
  * test releases it: a data request issued before that must not leave before it, and must then carry
- * the settled language.
+ * the settled language. The labels {@code i18n.js} renders wait for the same settled language
+ * (#8632).
  */
 class HarmoniaLocaleStoreIT {
 
@@ -95,6 +96,38 @@ class HarmoniaLocaleStoreIT {
         }
     }
 
+    /**
+     * The labels follow the language the store settles on, not the saved code (#8632): the shipped
+     * catalogs carry a language whether or not the instance offers it, so {@code i18n.js} resolving the
+     * saved code against them rendered Bulgarian labels over English data and messages.
+     */
+    @Test
+    void labelsIgnoreASavedLanguageTheInstanceDoesNotOffer() {
+        try (Context context = load("bg", "stores/locale.js", "services/i18n.js")) {
+            assertEquals(0, catalogRequests(context), "the catalogs were requested before the supported set was known");
+
+            eval(context, "__releaseLanguages(['en']);");
+            assertEquals(0, catalogRequests(context), "the default language renders from the baked labels");
+            assertEquals("false", eval(context, "Alpine.store('i18n').ready"));
+            assertEquals("Create", eval(context, "T('application-core:shell.nav.create', 'Create')"));
+        }
+    }
+
+    @Test
+    void labelsFollowASavedLanguageTheInstanceOffers() {
+        try (Context context = load("bg", "stores/locale.js", "services/i18n.js")) {
+            eval(context, "__releaseLanguages(['en', 'bg']);");
+            assertEquals(1, catalogRequests(context));
+            assertEquals("bg-BG", eval(context, "i18next.language"));
+            assertEquals("Създаване", eval(context, "T('application-core:shell.nav.create', 'Create')"));
+        }
+    }
+
+    private static int catalogRequests(Context context) {
+        return context.eval("js", "__catalogRequests")
+                      .asInt();
+    }
+
     private static int count(Context context) {
         return context.eval("js", "__requests.length")
                       .asInt();
@@ -105,13 +138,19 @@ class HarmoniaLocaleStoreIT {
                       .toString();
     }
 
-    /**
-     * Evaluate the shipped store and fetch client over the stubs they touch - a document that records
-     * the {@code alpine:init} listener, an Alpine whose {@code store(name, value)} calls {@code init()}
-     * as Alpine does, a localStorage holding the saved language, and a fetch that records every data
-     * request and holds the languages response until released - then fire {@code alpine:init}.
-     */
     private static Context load(String savedLanguage) {
+        return load(savedLanguage, "stores/locale.js", "services/api.js");
+    }
+
+    /**
+     * Evaluate the given shipped shell scripts over the stubs they touch - a document that records the
+     * {@code alpine:init} listeners and loads a script at once, an Alpine whose
+     * {@code store(name, value)} calls {@code init()} as Alpine does, a localStorage holding the saved
+     * language, an i18next serving flat catalogs, and a fetch that answers the locales service with one
+     * Bulgarian label, records every data request and holds the languages response until released -
+     * then fire {@code alpine:init}.
+     */
+    private static Context load(String savedLanguage, String... scripts) {
         Context context = Context.newBuilder("js")
                                  .allowAllAccess(true)
                                  // See HarmoniaDateFormatIT: the interpreter-only notice corrupts the forked JVM's channel.
@@ -123,7 +162,9 @@ class HarmoniaLocaleStoreIT {
                         var __listeners = [];
                         var document = {
                           documentElement: { lang: '' },
-                          addEventListener: function (type, listener) { if (type === 'alpine:init') __listeners.push(listener); }
+                          addEventListener: function (type, listener) { if (type === 'alpine:init') __listeners.push(listener); },
+                          createElement: function () { return {}; },
+                          head: { appendChild: function (script) { Promise.resolve().then(function () { script.onload(); }); } }
                         };
                         var __stored = { 'codbex.harmonia.language': '%s' };
                         var localStorage = {
@@ -139,10 +180,27 @@ class HarmoniaLocaleStoreIT {
                           }
                         };
                         var App = { services: {}, config: { restBase: '/api' } };
+                        var i18next = {
+                          init: function (options) { i18next.language = options.lng; i18next.catalogs = options.resources; return Promise.resolve(); },
+                          lookup: function (key) {
+                            var parts = key.split(':');
+                            return ((i18next.catalogs[i18next.language] || {})[parts[0]] || {})[parts[1]];
+                          },
+                          exists: function (key) { return i18next.lookup(key) !== undefined; },
+                          t: function (key) { return i18next.lookup(key); },
+                          services: { formatter: { add: function () {} } }
+                        };
+                        var __catalogRequests = 0;
                         var __requests = [];
                         var __releaseLanguages;
                         var __failLanguages;
                         var fetch = function (url, init) {
+                          if (url.indexOf('/services/platform/extensions/locales') >= 0) {
+                            __catalogRequests++;
+                            var catalogs = { locales: [{ id: 'en-US' }, { id: 'bg-BG' }],
+                              translations: { 'bg-BG': { 'application-core': { 'shell.nav.create': 'Създаване' } } } };
+                            return Promise.resolve({ ok: true, json: function () { return Promise.resolve(catalogs); } });
+                          }
                           if (url.indexOf('/services/platform/languages') >= 0) {
                             return new Promise(function (resolve, reject) {
                               __releaseLanguages = function (codes) { resolve({ ok: true, json: function () { return Promise.resolve(codes); } }); };
@@ -154,8 +212,9 @@ class HarmoniaLocaleStoreIT {
                         };
                         """.formatted(
                         savedLanguage));
-        evalResource(context, SHELL_JS + "stores/locale.js");
-        evalResource(context, SHELL_JS + "services/api.js");
+        for (String script : scripts) {
+            evalResource(context, SHELL_JS + script);
+        }
         context.eval("js", "__listeners.forEach(function (listener) { listener(); });");
         return context;
     }

@@ -19,9 +19,9 @@
  * Generated views bind labels as `T('<project>:<tprefix>.t.<KEY>', 'English fallback')`. T() is
  * reactive through the Alpine `i18n` store: pages render the English fallback instantly and swap
  * to the translated labels the moment the catalogs finish loading. The current language is the
- * platform-wide locale flag (localStorage `codbex.harmonia.language`, a 2-letter code) resolved
- * against the registered locale ids (`en` -> `en-US`); anything a module has not translated falls
- * back through i18next's `fallbackLng` to English, so partial catalogs degrade gracefully.
+ * locale store's (stores/locale.js, a 2-letter code), resolved against the registered locale ids
+ * (`en` -> `en-US`); anything a module has not translated falls back through i18next's
+ * `fallbackLng` to English, so partial catalogs degrade gracefully.
  */
 (() => {
   const I18NEXT_WEBJAR = '/webjars/i18next/dist/umd/i18next.min.js';
@@ -141,11 +141,27 @@
   // catalogs, i18next not even loaded), true when the catalogs are live.
   let initPromise;
 
+  const alpineStarted = new Promise(resolve => document.addEventListener('alpine:init', resolve, { once: true }));
+
+  // The language the labels render in: the locale store's, once settled. The store checks the saved
+  // code against the languages the instance offers (DIRIGIBLE_APPLICATION_LANGUAGES) and the fetch
+  // client stamps the same value as Accept-Language, so the labels follow the data and the server's
+  // messages (#8632) - the registered catalogs alone cannot tell, since a language's catalogs ship
+  // whether or not the instance offers it. Awaiting alpine:init lets every listener register its
+  // store first. A standalone page that does not load the store has only the saved code to go by.
+  const currentLanguage = async () => {
+    await alpineStarted;
+    const locale = Alpine.store('locale');
+    if (!locale) {
+      try { return localStorage.getItem(STORAGE_KEY) || 'en'; } catch (e) { return 'en'; }
+    }
+    await locale.settled();
+    return locale.value || 'en';
+  };
+
   const init = async () => {
     try {
-      const code = (() => {
-        try { return localStorage.getItem(STORAGE_KEY) || 'en'; } catch (e) { return 'en'; }
-      })();
+      const code = await currentLanguage();
       // The default language renders entirely from the baked-in literals - no catalogs needed.
       if (DEFAULT_LOCALE.indexOf(code + '-') === 0) return false;
       const [data] = await Promise.all([fetchCatalogs(namespaces), loadScript(I18NEXT_WEBJAR)]);
