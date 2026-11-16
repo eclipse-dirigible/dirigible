@@ -880,6 +880,7 @@ document.addEventListener('alpine:init', () => {
 
     async save() {
       if (this.isPreview) return;
+      this.resetSaveOutcome();
       if (!this.validate()) {
         this.state = 'validation-error';
         // Name the failing fields in the visible summary - an invalid field the layout does not
