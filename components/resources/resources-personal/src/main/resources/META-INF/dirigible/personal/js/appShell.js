@@ -44,6 +44,9 @@ document.addEventListener('alpine:init', () => {
     // The currently hosted domain app (a perspective). When set, the iframe is shown instead of #app.
     hostedUrl: '',
     hostedId: '',
+    // The inner route the hosted app shows (without its leading slash), as last mirrored from it or
+    // sent to it - what an address naming the same app is compared with (#8638).
+    hostedInner: '',
     // Settings: the SETTING entities from every app (the 'settings' perspective group), surfaced as a
     // single footer entry + master-detail page (list left, the selected setting hosted in an iframe).
     settingsItems: [],
@@ -473,12 +476,15 @@ document.addEventListener('alpine:init', () => {
           const match = p.match(/^\/app\/([^/]+)(?:\/(.*))?$/);
           if (match) {
             const id = decodeURIComponent(match[1]);
-            const inner = match[2] ? '/' + match[2] : '';
-            // Only (re)point the iframe when the app changes - while the same app is hosted the iframe
-            // owns its inner route, so we must not reset its src (that would reload it and lose state).
+            const inner = match[2] || '';
+            // Only (re)point the iframe when the app changes - while the same app is hosted, resetting
+            // its src would reload it and lose its state. An address naming another page of that app
+            // (typed, pasted, or the browser's Back) routes it in place instead (#8638).
             if (this.hostedId !== id) {
               const item = this.findItem(id);
-              if (item) { this.hostedId = id; this.hostedUrl = this.appUrl(item, inner); }
+              if (item) { this.hostedId = id; this.hostedInner = inner; this.hostedUrl = this.appUrl(item, inner); }
+            } else if (inner !== this.hostedInner) {
+              this.routeHostedApp(inner);
             }
           } else {
             this.hostedId = '';
@@ -542,6 +548,7 @@ document.addEventListener('alpine:init', () => {
       if (this.hostedId !== item.id || this.settingsMode) {
         this.settingsMode = false;
         this.hostedId = item.id;
+        this.hostedInner = '';
         this.hostedUrl = this.appUrl(item, '');
         this.currentPath = '/app/' + encodeURIComponent(item.id);
         window.PineconeRouter.navigate('/app/' + encodeURIComponent(item.id));
@@ -555,6 +562,23 @@ document.addEventListener('alpine:init', () => {
     /** Signal the page of the hosted app that the user came back to it, so it re-reads (#8130). */
     reenterHostedApp() {
       if (this.hostedId && this.$refs.hostedFrame) App.pageReentered(this.$refs.hostedFrame.contentWindow);
+    },
+
+    /** Route the hosted app to the inner route its address names (#8638), in place, through its own router:
+     *  a dirty form's unsaved-changes guard then applies as for any navigation inside the app, and a
+     *  refused one leaves the form, whose router end mirrors its own address back. An app without that
+     *  router (or on another origin) has its src pointed at the route instead. */
+    routeHostedApp(inner) {
+      const item = this.findItem(this.hostedId);
+      if (!item) return;
+      this.hostedInner = inner;
+      const win = this.$refs.hostedFrame && this.$refs.hostedFrame.contentWindow;
+      let router = null;
+      try { router = win && win.PineconeRouter; } catch (e) { router = null; } // cross-origin guard
+      const url = this.appUrl(item, inner);
+      const hashAt = url.indexOf('#');
+      if (router) router.navigate(hashAt === -1 ? '/' : url.slice(hashAt + 1));
+      else this.hostedUrl = url;
     },
 
     /** Build the iframe src for a perspective, overriding its hash with `inner` (e.g. /SalesInvoice/42/edit). */
@@ -590,6 +614,7 @@ document.addEventListener('alpine:init', () => {
       let hash;
       try { hash = win.location.hash || ''; } catch (e) { return; } // cross-origin guard
       const inner = hash.replace(/^#\/?/, '');
+      this.hostedInner = inner;
       const top = '/app/' + encodeURIComponent(this.hostedId) + (inner ? '/' + inner : '');
       const newHash = '#' + top;
       if (window.location.hash !== newHash) {

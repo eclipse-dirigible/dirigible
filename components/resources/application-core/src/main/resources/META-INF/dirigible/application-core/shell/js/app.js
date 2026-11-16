@@ -199,13 +199,31 @@ App.leaveGuard = {
     }).then(() => { this.bypass = false; });
   },
 
+  // A page reads its route's params once, when it is rendered, and Pinecone keeps the rendered page of
+  // a route it navigates to again - so another record on the route on screen (/Order/1/edit to
+  // /Order/2/edit, typed into the address bar or sent by a hosting shell) kept showing the first one
+  // (#8638). Dropping the route's rendered page before the new context is assigned makes Pinecone
+  // render it anew for the new params (router 7.5.2 keeps the page on the route's template element).
+  // It runs from the guard's handler, once the guard lets the navigation through: Pinecone keeps one
+  // list of global handlers, and a refused navigation must keep the page it refused to leave.
+  renderAnew(context) {
+    const current = window.PineconeRouter.context;
+    if (!current || !current.route || !context.route || current.route.path !== context.route.path) return;
+    if (JSON.stringify(current.params || {}) === JSON.stringify(context.params || {})) return;
+    const element = context.route._template_element;
+    if (element && typeof element._x_PineconeRouter_undoTemplate === 'function') element._x_PineconeRouter_undoTemplate();
+  },
+
   install() {
     if (this.installed || !window.PineconeRouter || typeof window.PineconeRouter.settings !== 'function') return;
     this.installed = true;
     const guard = this;
     window.PineconeRouter.settings({
       globalHandlers: [(context) => {
-        if (guard.bypass || !guard.isDirty()) return;
+        if (guard.bypass || !guard.isDirty()) {
+          guard.renderAnew(context);
+          return;
+        }
         // Where the user wanted to go. The browser's Back button has already put that address in the
         // bar, query string and all - Pinecone's own context.path drops the query - so prefer it when
         // it is the same route; a programmatic navigate has not touched the bar yet.
