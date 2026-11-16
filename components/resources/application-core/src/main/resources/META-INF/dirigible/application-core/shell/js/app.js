@@ -203,7 +203,8 @@ App.leaveGuard = {
   // a route it navigates to again - so another record on the route on screen (/Order/1/edit to
   // /Order/2/edit, typed into the address bar or sent by a hosting shell) kept showing the first one
   // (#8638). Dropping the route's rendered page before the new context is assigned makes Pinecone
-  // render it anew for the new params (router 7.5.2 keeps the page on the route's template element).
+  // render it anew for the new params (the pinned router, 7.6.0, keeps the page on the route's
+  // template element).
   // It runs from the guard's handler, once the guard lets the navigation through: Pinecone keeps one
   // list of global handlers, and a refused navigation must keep the page it refused to leave.
   renderAnew(context) {
