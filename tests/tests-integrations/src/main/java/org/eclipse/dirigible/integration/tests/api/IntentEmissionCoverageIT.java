@@ -5427,6 +5427,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                     "the checkbox must sit in a plain box - x-h-field stretches a direct child to full width (#7103)");
         }
 
+        // An optional to-one picker can be emptied again (#8658): Harmonia's x-h-select clears on a
+        // re-click of the selected option only when its root carries data-clearable="true". Claim.Unit
+        // is optional on the power and the personal form; Claim.Person is required and keeps its value.
+        assertTrue(
+                Pattern.compile("<div x-h-select(?: class=\"flex-1\")? data-clearable=\"true\">\\s*<input x-h-select-input id=\"f_Unit\"")
+                       .matcher(claimPowerForm)
+                       .find(),
+                "an optional picker must be clearable on the power form (#8658)");
+        assertTrue(Pattern.compile("<div x-h-select(?: class=\"flex-1\")?>\\s*<input x-h-select-input id=\"f_Person\"")
+                          .matcher(claimPowerForm)
+                          .find(),
+                "a required picker must not be clearable on the power form (#8658)");
+        assertTrue(Pattern.compile("<div x-h-select data-clearable=\"true\">\\s*<input x-h-select-input x-model=\"form.Unit\"")
+                          .matcher(claimPersonalForm)
+                          .find(),
+                "an optional picker must be clearable on the personal form (#8658)");
+
         // documentItemsLayout: chat - the .model marker is resolved (body property from the child's
         // messageBody field), and the Harmonia document view + page render the items pane as an
         // x-h-bubble thread with an append-message composer instead of the editable table.
@@ -5582,7 +5599,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(rosterDoc.contains("x-h-calendar=\"itemsCalCfg\""), "the document's items pane must render as a calendar");
         assertTrue(rosterDoc.contains("onItemsEventClick") && rosterDoc.contains("onItemsDateClick"),
                 "the items calendar must be wired to the line dialog (edit on event, add on empty day)");
-        assertTrue(!rosterDoc.contains("x-for=\"col in tableColumns\""), "the items TABLE must be replaced, not rendered alongside");
+        assertTrue(!rosterDoc.contains("x-for=\"(col, ci) in tableColumns\""), "the items TABLE must be replaced, not rendered alongside");
         assertTrue(rosterDoc.contains("askDeleteDraft()"), "the line dialog must offer Delete - the calendar pane has no per-row menu");
         String rosterPage = contentOf("gen/emission/js/components/pages/Roster/RosterDocumentPage.js");
         assertTrue(rosterPage.contains("window.HarmoniaCalendar.events"), "the items events must come from the shared calendar mapping");
@@ -6166,21 +6183,24 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the source-row rule must narrow the item query itself, with the moment evaluated per run");
         assertTrue(billFromStay.contains("StayNightEntity srcItem : qualifying"),
                 "the clone loop must read the narrowed result, not the whole child set");
-        assertTrue(billFromStay.contains("would have no lines"),
+        assertTrue(billFromStay.contains("GenerateRefusals.noItemQualifies("),
                 "a rule that qualifies no row must refuse rather than commit a header with no lines");
         assertFalse(billFromStay.contains("java.util.List<Object> unqualified"),
                 "without refuse: an unqualified row is simply left out, so no second query collects them");
         // The other reading: the refusal names the rows, so the caller knows which of a hundred lines
         // to go and fix - the whole question they have.
         String checkedBillFromStay = contentOf("gen/events/emission/CheckedBillFromStayGenerate.java");
-        assertTrue(checkedBillFromStay.contains("\"Stay night carries no \\\"amount\\\" (StayNight \" + unqualified + \")\""),
+        assertTrue(
+                checkedBillFromStay.contains("GenerateRefusals.itemsRefused(")
+                        && checkedBillFromStay.contains("\"Stay night carries no \\\"amount\\\"\"")
+                        && checkedBillFromStay.contains("unqualified);"),
                 "refuse: must throw the authored message carrying the keys of the offending rows");
         // ...and both refusals are decided BEFORE the header is saved (#7224). The target's save
         // records the History create entry outside the unit of work (the document number too, before
         // #8113), so a refusal fired after it took the header back and left a spent number and a trail
         // row for a document that never existed - once per click.
         int billHeaderSave = billFromStay.indexOf("BillRepository().save(target)");
-        assertTrue(billHeaderSave > 0 && billFromStay.indexOf("would have no lines") < billHeaderSave,
+        assertTrue(billHeaderSave > 0 && billFromStay.indexOf("GenerateRefusals.noItemQualifies(") < billHeaderSave,
                 "the source-row rule must refuse before the header is saved, got: " + billFromStay);
         int checkedBillHeaderSave = checkedBillFromStay.indexOf("BillRepository().save(target)");
         assertTrue(checkedBillHeaderSave > 0 && checkedBillFromStay.indexOf("Stay night carries no \\\"amount\\\"") < checkedBillHeaderSave,
@@ -6236,8 +6256,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String promptedGenerate = contentOf("gen/events/emission/AddVoucherLineGenerate.java");
         assertTrue(promptedGenerate.contains("public java.util.Map<String, Object> values;"),
                 "a prompted create-from must accept the declared inputs in the posted body");
-        assertTrue(promptedGenerate.contains("missing required input [Amount]") && promptedGenerate.contains("Response.setStatus(400)"),
-                "a missing required prompt input must answer 400 before anything is written");
+        assertTrue(promptedGenerate.contains("FieldRefusals.required(REFUSAL_CATALOG, \"Amount\""),
+                "a missing required prompt input must answer 400, naming the input, before anything is written");
         assertTrue(promptedGenerate.contains("new java.math.BigDecimal(String.valueOf(raw))"),
                 "a decimal prompt input must convert to the generated entity's BigDecimal field");
         String promptedDescriptor = contentOf("add-voucher-line-generate-action.json");

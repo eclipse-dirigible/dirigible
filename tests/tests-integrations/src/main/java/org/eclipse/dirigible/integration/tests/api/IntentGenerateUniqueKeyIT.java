@@ -180,7 +180,7 @@ class IntentGenerateUniqueKeyIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(409)
                                                  .body("message", containsString("'Code' already exists"))
-                                                 .body("message", containsString("(from AssetPart [" + part + "])"))
+                                                 .body("message", containsString("(from Asset Part [" + part + "])"))
                                                  .body("field", equalTo("Code")),
                 TIMEOUT_SECONDS);
         assertCount("/label/LabelController?Asset=" + asset, 1);

@@ -347,16 +347,21 @@
           <table x-h-table x-list-columns data-borders="rows">
             <thead x-h-table-header>
               <tr x-h-table-row>
+## The first column - the record's number / title / name - stays in view while a wide list scrolls
+## sideways (#8660): its header and its cells are pinned to the start edge, as the row actions are to
+## the end one.
+#set($stickyStartDone = false)
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
+#if($stickyStartDone)#set($stickyStart = '')#else#set($stickyStart = ' data-sticky="start"')#set($stickyStartDone = true)#end
 ## The header reads the label, as the drawer, the forms and the Filter menu do (#8132) - the name
 ## showed raw wherever the catalog had no entry for the column, which is English.
 #if($property.widgetLabel)#set($hlabel = $property.widgetLabelJs)#else#set($hlabel = $property.name)#end
 #if($property.collectionColumn)
 ## A collection column (intent `list:` collection path, #8295) is not sortable: a plain header.
-                <th x-h-table-head scope="col"#visibleGate($property)><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${hlabel}')"></span></th>
+                <th x-h-table-head scope="col"${stickyStart}#visibleGate($property)><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${hlabel}')"></span></th>
 #else
-                <th x-h-table-head scope="col"#if($property.isNumberType && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS") class="text-right"#end#visibleGate($property) :aria-sort="ariaSort('${property.name}')">
+                <th x-h-table-head scope="col"${stickyStart}#if($property.isNumberType && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS") class="text-right"#end#visibleGate($property) :aria-sort="ariaSort('${property.name}')">
                   <button class="hbox #if($property.isNumberType && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS")w-full justify-end #{end}cursor-pointer items-center gap-1" @click="cycleSort('${property.name}')">
                     <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${hlabel}')"></span>
                     <svg x-h-lucide role="presentation" class="size-4"
@@ -377,14 +382,16 @@
 #end
                 <tr x-h-table-row data-hoverable="true" :data-state="isSelected(row) ? 'selected' : ''" @click="rowClicked($event, row)" style="cursor:pointer;">
 #set($treeColumnDone = false)
+#set($stickyStartDone = false)
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
+#if($stickyStartDone)#set($stickyStart = '')#else#set($stickyStart = ' data-sticky="start"')#set($stickyStartDone = true)#end
 #if($hierarchyProperty && !$treeColumnDone)
 #set($treeColumnDone = true)
                   <!-- The tree column: indent by depth, the expand chevron (or a spacer of its width on a
                        leaf, so siblings line up), the entity's icon, then the value as the flat table
                        prints it. In table mode the depth is 0 and the tree affordances are hidden. -->
-                  <td x-h-table-cell#visibleGate($property)>
+                  <td x-h-table-cell${stickyStart}#visibleGate($property)>
                     <div class="hbox items-center gap-1 min-w-0" :style="treeVisible ? 'padding-left: ' + (depth * 1.5) + 'rem' : ''">
                       <button type="button" x-h-button data-variant="transparent" data-size="icon-sm" class="shrink-0" x-show="treeVisible &amp;&amp; hasChildren"
                               data-row-control @click="toggleNode(row)" :aria-expanded="isCollapsed(row) ? 'false' : 'true'"
@@ -417,26 +424,26 @@
 #elseif($property.collectionColumn)
                   <!-- A collection column (intent `list:` collection path, #8295): the texts of the record's
                        child rows, one chip each, as the controller answers them. -->
-                  <td x-h-table-cell#visibleGate($property)><div class="hbox flex-wrap gap-1"><template x-for="(text, i) in (row.${property.name} || [])" :key="i"><span x-h-chip x-text="text"></span></template></div></td>
+                  <td x-h-table-cell${stickyStart}#visibleGate($property)><div class="hbox flex-wrap gap-1"><template x-for="(text, i) in (row.${property.name} || [])" :key="i"><span x-h-chip x-text="text"></span></template></div></td>
 #elseif($property.widgetType == "DOCUMENT_STATUS")
                   <!-- EntityStatus column: the resolved status name as a coloured badge pill. -->
-                  <td x-h-table-cell#visibleGate($property)><span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', row.${property.name}), row.${property.name})" x-show="lookupText('${property.name}', row.${property.name})" x-text="lookupText('${property.name}', row.${property.name})"></span></td>
+                  <td x-h-table-cell${stickyStart}#visibleGate($property)><span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', row.${property.name}), row.${property.name})" x-show="lookupText('${property.name}', row.${property.name})" x-text="lookupText('${property.name}', row.${property.name})"></span></td>
 #elseif($property.widgetType == "DROPDOWN")
-                  <td x-h-table-cell#visibleGate($property) x-text="lookupText('${property.name}', row.${property.name})"></td>
+                  <td x-h-table-cell${stickyStart}#visibleGate($property) x-text="lookupText('${property.name}', row.${property.name})"></td>
 #elseif($property.widgetType == "MULTISELECT")
-                  <td x-h-table-cell#visibleGate($property) x-text="multiLookupText('${property.name}', row.${property.name})"></td>
+                  <td x-h-table-cell${stickyStart}#visibleGate($property) x-text="multiLookupText('${property.name}', row.${property.name})"></td>
 #elseif($property.isDateType)
-                  <td x-h-table-cell#visibleGate($property) x-text="#emptyOpen($property, "row.${property.name}")displayValue(row.${property.name}, true)#emptyClose($property)"></td>
+                  <td x-h-table-cell${stickyStart}#visibleGate($property) x-text="#emptyOpen($property, "row.${property.name}")displayValue(row.${property.name}, true)#emptyClose($property)"></td>
 #elseif($property.isFloatType)
-                  <td x-h-table-cell class="text-right"#visibleGate($property) x-text="#emptyOpen($property, "row.${property.name}")formatNumber(row.${property.name}, '${property.formatPattern}')#emptyClose($property)"></td>
+                  <td x-h-table-cell${stickyStart} class="text-right"#visibleGate($property) x-text="#emptyOpen($property, "row.${property.name}")formatNumber(row.${property.name}, '${property.formatPattern}')#emptyClose($property)"></td>
 #elseif($property.isNumberType)
-                  <td x-h-table-cell class="text-right"#visibleGate($property) x-text="#emptyOpen($property, "row.${property.name}")displayValue(row.${property.name})#emptyClose($property)"></td>
+                  <td x-h-table-cell${stickyStart} class="text-right"#visibleGate($property) x-text="#emptyOpen($property, "row.${property.name}")displayValue(row.${property.name})#emptyClose($property)"></td>
 #elseif($property.numberStampOnIssue)
-                  <td x-h-table-cell#visibleGate($property) x-text="window.HarmoniaFormat.documentNumber(row.${property.name})"></td>
+                  <td x-h-table-cell${stickyStart}#visibleGate($property) x-text="window.HarmoniaFormat.documentNumber(row.${property.name})"></td>
 #elseif($property.booleanTrueKey)
-                  <td x-h-table-cell#visibleGate($property) x-text="booleanText(row.${property.name}, #booleanWords($property))"></td>
+                  <td x-h-table-cell${stickyStart}#visibleGate($property) x-text="booleanText(row.${property.name}, #booleanWords($property))"></td>
 #else
-                  <td x-h-table-cell#visibleGate($property) x-text="#emptyOpen($property, "row.${property.name}")displayValue(row.${property.name})#emptyClose($property)"></td>
+                  <td x-h-table-cell${stickyStart}#visibleGate($property) x-text="#emptyOpen($property, "row.${property.name}")displayValue(row.${property.name})#emptyClose($property)"></td>
 #end
 #end
 #end
@@ -682,8 +689,8 @@
                   <table x-h-table data-borders="rows">
                     <thead x-h-table-header>
                       <tr x-h-table-row>
-                        <template x-for="col in def.columns" :key="col.name">
-                          <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="columnHeader(col)"></th>
+                        <template x-for="(col, ci) in def.columns" :key="col.name">
+                          <th x-h-table-head scope="col" :data-sticky="ci === 0 ? 'start' : null" :class="col.number ? 'text-right' : ''" x-text="columnHeader(col)"></th>
                         </template>
                         <th x-h-table-head scope="col" data-col-actions data-sticky="end"></th>
                       </tr>
@@ -691,8 +698,8 @@
                     <tbody x-h-table-body>
                       <template x-for="row in rows" :key="row[def.primaryKey]">
                         <tr x-h-table-row data-hoverable="true">
-                          <template x-for="col in def.columns" :key="col.name">
-                            <td x-h-table-cell :class="col.number ? 'text-right' : ''">
+                          <template x-for="(col, ci) in def.columns" :key="col.name">
+                            <td x-h-table-cell :data-sticky="ci === 0 ? 'start' : null" :class="col.number ? 'text-right' : ''">
 #if($rendersCollectionColumns)
                               <template x-if="col.list"><div class="hbox flex-wrap gap-1"><template x-for="(text, i) in (row[col.name] || [])" :key="i"><span x-h-chip x-text="text"></span></template></div></template>
 #end

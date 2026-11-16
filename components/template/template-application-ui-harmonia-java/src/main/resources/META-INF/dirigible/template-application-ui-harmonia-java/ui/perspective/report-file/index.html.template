@@ -342,7 +342,7 @@
           <table x-h-table :data-borders="preview ? null : 'both'">
             <thead x-h-table-header>
               <tr x-h-table-row>
-                <template x-for="(col, i) in columns" :key="i"><th x-h-table-head scope="col" :class="alignClass(col)" x-text="col"></th></template>
+                <template x-for="(col, i) in columns" :key="i"><th x-h-table-head scope="col" :data-sticky="i === 0 ? 'start' : null" :class="alignClass(col)" x-text="col"></th></template>
               </tr>
             </thead>
             <tbody x-h-table-body>
@@ -351,13 +351,13 @@
 #if($drill)
                   <!-- Drill-down (#8374): the first cell opens the list of the records this row counts. -->
                   <template x-for="(col, ci) in columns" :key="ci">
-                    <td x-h-table-cell :class="alignClass(col)">
+                    <td x-h-table-cell :data-sticky="ci === 0 ? 'start' : null" :class="alignClass(col)">
                       <template x-if="ci === 0 && drillHref(row)"><a :href="drillHref(row)" target="_parent" class="font-medium underline" x-text="cellText(col, row)"></a></template>
                       <template x-if="!(ci === 0 && drillHref(row))"><span x-text="cellText(col, row)"></span></template>
                     </td>
                   </template>
 #else
-                  <template x-for="(col, ci) in columns" :key="ci"><td x-h-table-cell :class="alignClass(col)" x-text="cellText(col, row)"></td></template>
+                  <template x-for="(col, ci) in columns" :key="ci"><td x-h-table-cell :data-sticky="ci === 0 ? 'start' : null" :class="alignClass(col)" x-text="cellText(col, row)"></td></template>
 #end
                 </tr>
               </template>
@@ -368,7 +368,7 @@
             <tfoot x-h-table-footer x-show="showTotals">
               <tr x-h-table-row>
                 <template x-for="(col, ci) in columns" :key="ci">
-                  <td x-h-table-cell class="font-semibold" :class="alignClass(col)" x-text="ci === 0 ? T('application-core:shell.report.total', 'Total') : totalText(col)"></td>
+                  <td x-h-table-cell :data-sticky="ci === 0 ? 'start' : null" class="font-semibold" :class="alignClass(col)" x-text="ci === 0 ? T('application-core:shell.report.total', 'Total') : totalText(col)"></td>
                 </template>
               </tr>
             </tfoot>
