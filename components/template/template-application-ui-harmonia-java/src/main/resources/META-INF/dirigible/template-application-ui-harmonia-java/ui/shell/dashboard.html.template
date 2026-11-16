@@ -4,8 +4,8 @@
      model. Two card shapes, both composed from the card's own slots: a NUMBER tile (description =
      label, title = value, action = the icon in an avatar, footer = hint) and, for everything that
      carries content of its own - a top-N table, an embedded report preview, a custom page - the
-     reference's table-card shape (plain title over its description, a border-b header, flush
-     content, the navigation on a "View all" button). The blocks carry no headings - every tile names
+     reference's table-card shape (title over its description, a border-b header, flush
+     content; both the title - a button inside it - and a "View all" button open the report). The blocks carry no headings - every tile names
      itself, so a heading above them only repeats what the cards already say, and the reference's
      dashboard is likewise bare grids separated by the page's own gap. The KPI widgets are grouped
      by the shape they render as - scalars in one row, top-N tables in the next - because one grid
@@ -67,16 +67,16 @@
 
     <!-- Top-N lists: a table each, spanning the card edge to edge (x-h-card-content pads itself in
          Harmonia 3, so a full-bleed table is the flush modifier, not a cancelled padding). The card
-         is the reference's table-card shape verbatim (card.md, "Recent orders"): a plain title over
-         its description, the navigation on a labelled "View all" button rather than on the title
-         itself, and a border-b separating the header from the table that starts right below it.
-         Column alignment and number formatting come from the .report's own column metadata, so a
+         is the reference's table-card shape verbatim (card.md, "Recent orders"): a title over
+         its description, a labelled "View all" button, and a border-b separating the header from the table that starts right below it.
+         The title opens the report too, through a native button inside it (a @click on the div
+         would reach neither a keyboard nor a screen reader). Column alignment and number formatting come from the .report's own column metadata, so a
          numeric column right-aligns here exactly as it does on the report page. -->
     <div class="grid grid-cols-1 gap-4 lg:grid-cols-2" x-show="listKpis.length > 0" x-cloak>
       <template x-for="r in listKpis" :key="r.name">
         <div x-h-card class="overflow-hidden">
           <div x-h-card-header class="border-b">
-            <div x-h-card-title x-text="$store.reports.tileWidgetLabel(r)"></div>
+            <div x-h-card-title><button type="button" class="cursor-pointer text-left" @click="openReport(r)" x-text="$store.reports.tileWidgetLabel(r)"></button></div>
             <div x-h-card-description x-show="r.description" x-text="r.description"></div>
             <div x-h-card-action>
               <button x-h-button data-variant="outline" @click="openReport(r)"
@@ -142,8 +142,8 @@
   <!-- Reports without a KPI widget: a simplified preview of the report itself (first rows, no
        toolbar/pagination), embedded from the report's own generated page so the query, its
        parameters and its role gate stay in one place. The full report opens from the "View all"
-       button - the title is plain text, so the one way in is the one a keyboard reaches and a
-       screen reader announces; the description comes from the .report. The tile takes the shape of
+       button, or from the title: a native button inside the card title, so it is reachable by
+       keyboard and announced by a screen reader, unlike a @click on the title div; the description comes from the .report. The tile takes the shape of
        what the embedded page actually renders: a report declaring chart: draws a chart (the report
        page defaults to its chart surface), which is the reference's padded borderless card, while
        a report without one draws rows, which is the bordered full-bleed table card. -->
@@ -152,7 +152,7 @@
       <template x-for="r in reports" :key="r.url">
         <div x-h-card :class="r.chart ? '' : 'overflow-hidden'">
           <div x-h-card-header :class="r.chart ? '' : 'border-b'">
-            <div x-h-card-title x-text="$store.reports.tileLabel(r)"></div>
+            <div x-h-card-title><button type="button" class="cursor-pointer text-left" @click="openReport(r)" x-text="$store.reports.tileLabel(r)"></button></div>
             <div x-h-card-description x-show="r.description" x-text="r.description"></div>
             <div x-h-card-action>
               <button x-h-button data-variant="outline" @click="openReport(r)"

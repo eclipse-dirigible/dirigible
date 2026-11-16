@@ -931,6 +931,10 @@ document.addEventListener('alpine:init', () => {
 
     visibleReports() { return Alpine.store('reports').items.filter(r => this.inProjection(r.url)); },
     dashKpiReports() { return Alpine.store('reports').kpiReports().filter(r => this.inProjection(r.url)); },
+    // The KPI widgets split by the shape they render as: one grid holding both number tiles and the wide
+    // top-N tables leaves holes around the tables, so the dashboard lays each kind out in its own grid.
+    summaryKpis() { return this.dashKpiReports().filter(r => r.widget.kind !== 'list'); },
+    listKpis() { return this.dashKpiReports().filter(r => r.widget.kind === 'list'); },
     dashPreviewReports() { return Alpine.store('reports').previewReports().filter(r => this.inProjection(r.url)); },
 
     /** Settings entities scoped to the projection: those of a group the projection lists (a group
