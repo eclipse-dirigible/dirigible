@@ -70,7 +70,8 @@ table[data-list-columns] > tbody > tr > td > [data-slot="badge"] {
   text-overflow: ellipsis;
 }
 
-/* The drag grip on a header's right edge. */
+/* The drag grip on a header's right edge. Stacked at 0, under a pinned (data-sticky) header's 1: a
+   column scrolled under the pinned first column (#8660) must not lay its grip over that header. */
 table[data-list-columns] [data-col-grip] {
   position: absolute;
   top: 0;
@@ -80,7 +81,7 @@ table[data-list-columns] [data-col-grip] {
   cursor: col-resize;
   touch-action: none;
   user-select: none;
-  z-index: 1;
+  z-index: 0;
 }
 table[data-list-columns] [data-col-grip]:hover,
 table[data-list-columns] [data-col-grip]:focus-visible,

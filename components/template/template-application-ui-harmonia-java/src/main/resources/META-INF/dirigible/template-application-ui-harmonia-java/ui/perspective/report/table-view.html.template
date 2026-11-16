@@ -60,23 +60,28 @@
       <table x-h-table data-borders="both">
         <thead x-h-table-header>
           <tr x-h-table-row>
+## The first column stays in view while a wide list scrolls sideways (#8660): pinned to the start edge.
+#set($stickyStartDone = false)
 #foreach($property in $properties)
-            <th x-h-table-head scope="col"#if($property.isNumberType) class="text-right"#end>#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end</th>
+#if($stickyStartDone)#set($stickyStart = '')#else#set($stickyStart = ' data-sticky="start"')#set($stickyStartDone = true)#end
+            <th x-h-table-head scope="col"${stickyStart}#if($property.isNumberType) class="text-right"#end>#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end</th>
 #end
           </tr>
         </thead>
         <tbody x-h-table-body>
           <template x-for="(row, i) in rows" :key="i">
             <tr x-h-table-row data-hoverable="true">
+#set($stickyStartDone = false)
 #foreach($property in $properties)
+#if($stickyStartDone)#set($stickyStart = '')#else#set($stickyStart = ' data-sticky="start"')#set($stickyStartDone = true)#end
 #if($property.isFloatType)
-              <td x-h-table-cell class="text-right" x-text="displayNumber(row.${property.name}, '${property.formatPattern}')"></td>
+              <td x-h-table-cell${stickyStart} class="text-right" x-text="displayNumber(row.${property.name}, '${property.formatPattern}')"></td>
 #elseif($property.isNumberType)
-              <td x-h-table-cell class="text-right" x-text="row.${property.name}"></td>
+              <td x-h-table-cell${stickyStart} class="text-right" x-text="row.${property.name}"></td>
 #elseif($property.booleanTrueKey)
-              <td x-h-table-cell x-text="booleanText(row.${property.name}, ['$projectName:${tprefix}.${property.booleanTrueKey}', '${property.booleanTrueTextJs}', '$projectName:${tprefix}.${property.booleanFalseKey}', '${property.booleanFalseTextJs}'])"></td>
+              <td x-h-table-cell${stickyStart} x-text="booleanText(row.${property.name}, ['$projectName:${tprefix}.${property.booleanTrueKey}', '${property.booleanTrueTextJs}', '$projectName:${tprefix}.${property.booleanFalseKey}', '${property.booleanFalseTextJs}'])"></td>
 #else
-              <td x-h-table-cell x-text="row.${property.name}"></td>
+              <td x-h-table-cell${stickyStart} x-text="row.${property.name}"></td>
 #end
 #end
             </tr>

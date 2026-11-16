@@ -538,20 +538,20 @@
       <table x-h-table data-borders="rows" class="w-full">
         <thead x-h-table-header>
           <tr x-h-table-row>
-            <template x-for="col in tableColumns" :key="col.name"><th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label)"></th></template>
+            <template x-for="(col, ci) in tableColumns" :key="col.name"><th x-h-table-head scope="col" :data-sticky="ci === 0 ? 'start' : null" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label)"></th></template>
             <th x-h-table-head scope="col" data-col-actions data-sticky="end" x-show="!isPreview"></th>
           </tr>
         </thead>
         <tbody x-h-table-body>
           <template x-for="(row, idx) in items" :key="row[itemsDef.primaryKey] != null ? row[itemsDef.primaryKey] : idx">
             <tr x-h-table-row data-hoverable="true">
-              <template x-for="col in tableColumns" :key="col.name">
+              <template x-for="(col, ci) in tableColumns" :key="col.name">
                 <!-- x-h-table-cell bakes whitespace-nowrap; a sentence-long item name is NORMAL
                      invoice data, so text cells wrap - AT WORD BOUNDARIES, inside a bounded block.
                      (overflow-wrap:anywhere on the cell let the column collapse to ~one character
                      per line: it reduces the column's min-content to a single character. The block's
                      break-word keeps min-content = the longest word; max-width caps the paragraph.) -->
-                <td x-h-table-cell :class="col.number ? 'text-right' : ''">
+                <td x-h-table-cell :data-sticky="ci === 0 ? 'start' : null" :class="col.number ? 'text-right' : ''">
                   <template x-if="col.number"><span x-text="cellDisplay(col, row)"></span></template>
                   <template x-if="!col.number">
                     <div style="white-space: normal; overflow-wrap: break-word; max-width: 28rem;" x-text="cellDisplay(col, row)"></div>
@@ -681,8 +681,8 @@
             <table x-h-table data-borders="rows">
               <thead x-h-table-header>
                 <tr x-h-table-row>
-                  <template x-for="col in def.columns" :key="col.name">
-                    <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label || col.name)"></th>
+                  <template x-for="(col, ci) in def.columns" :key="col.name">
+                    <th x-h-table-head scope="col" :data-sticky="ci === 0 ? 'start' : null" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label || col.name)"></th>
                   </template>
                   <th x-h-table-head scope="col" data-col-actions data-sticky="end" x-show="((!isPreview || def.locksWithMaster === false) && !isForbidden('delete')) || rows.some(r => $store.processTasks.getTasks(r).length)"></th>
                 </tr>
@@ -690,8 +690,8 @@
               <tbody x-h-table-body>
                 <template x-for="row in rows" :key="row[def.primaryKey]">
                   <tr x-h-table-row data-hoverable="true">
-                    <template x-for="col in def.columns" :key="col.name">
-                      <td x-h-table-cell :class="col.number ? 'text-right' : ''">
+                    <template x-for="(col, ci) in def.columns" :key="col.name">
+                      <td x-h-table-cell :data-sticky="ci === 0 ? 'start' : null" :class="col.number ? 'text-right' : ''">
 #if($rendersCollectionColumns)
                         <template x-if="col.list"><div class="hbox flex-wrap gap-1"><template x-for="(text, i) in (row[col.name] || [])" :key="i"><span x-h-chip x-text="text"></span></template></div></template>
 #end
@@ -755,8 +755,8 @@
             <table x-h-table data-borders="rows">
               <thead x-h-table-header>
                 <tr x-h-table-row>
-                  <template x-for="col in def.columns" :key="col.name">
-                    <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="columnHeader(col)"></th>
+                  <template x-for="(col, ci) in def.columns" :key="col.name">
+                    <th x-h-table-head scope="col" :data-sticky="ci === 0 ? 'start' : null" :class="col.number ? 'text-right' : ''" x-text="columnHeader(col)"></th>
                   </template>
                   <th x-h-table-head scope="col" data-col-actions data-sticky="end"></th>
                 </tr>
@@ -764,8 +764,8 @@
               <tbody x-h-table-body>
                 <template x-for="row in rows" :key="row[def.primaryKey]">
                   <tr x-h-table-row data-hoverable="true">
-                    <template x-for="col in def.columns" :key="col.name">
-                      <td x-h-table-cell :class="col.number ? 'text-right' : ''">
+                    <template x-for="(col, ci) in def.columns" :key="col.name">
+                      <td x-h-table-cell :data-sticky="ci === 0 ? 'start' : null" :class="col.number ? 'text-right' : ''">
 #if($rendersCollectionColumns)
                         <template x-if="col.list"><div class="hbox flex-wrap gap-1"><template x-for="(text, i) in (row[col.name] || [])" :key="i"><span x-h-chip x-text="text"></span></template></div></template>
 #end

@@ -121,12 +121,15 @@
           <table x-h-table x-list-columns data-borders="rows">
             <thead x-h-table-header>
               <tr x-h-table-row>
+## The first column stays in view while a wide list scrolls sideways (#8660): pinned to the start edge.
+#set($stickyStartDone = false)
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
+#if($stickyStartDone)#set($stickyStart = '')#else#set($stickyStart = ' data-sticky="start"')#set($stickyStartDone = true)#end
 ## The header reads the label, as the drawer, the forms and the Filter menu do (#8132) - the name
 ## showed raw wherever the catalog had no entry for the column, which is English.
 #if($property.widgetLabel)#set($hlabel = $property.widgetLabelJs)#else#set($hlabel = $property.name)#end
-                <th x-h-table-head scope="col" data-hoverable="true" data-activable="true"#if($property.isFloatType) class="text-right"#end#visibleGate($property) :aria-sort="ariaSort('${property.name}')">
+                <th x-h-table-head scope="col"${stickyStart} data-hoverable="true" data-activable="true"#if($property.isFloatType) class="text-right"#end#visibleGate($property) :aria-sort="ariaSort('${property.name}')">
                   <!-- A real button sorts, so the header is reachable and operable from the keyboard (#7645). -->
                   <button type="button" class="hbox w-full cursor-pointer items-center justify-between" @click="cycleSort('${property.name}')">
                     <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${hlabel}')"></span>
@@ -145,25 +148,27 @@
               </tr>
               <template x-for="row in paginatedItems" :key="row.${primaryKeysString}">
                 <tr x-h-table-row data-hoverable="true" :data-state="isSelected(row) ? 'selected' : ''" @click="selectRow(row)" style="cursor:pointer;">
+#set($stickyStartDone = false)
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
+#if($stickyStartDone)#set($stickyStart = '')#else#set($stickyStart = ' data-sticky="start"')#set($stickyStartDone = true)#end
 #if($property.widgetType == "DOCUMENT_STATUS")
                   <!-- EntityStatus column: the resolved status name as a coloured badge pill. -->
-                  <td x-h-table-cell#visibleGate($property)><span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', row.${property.name}), row.${property.name})" x-show="lookupText('${property.name}', row.${property.name})" x-text="lookupText('${property.name}', row.${property.name})"></span></td>
+                  <td x-h-table-cell${stickyStart}#visibleGate($property)><span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', row.${property.name}), row.${property.name})" x-show="lookupText('${property.name}', row.${property.name})" x-text="lookupText('${property.name}', row.${property.name})"></span></td>
 #elseif($property.widgetType == "DROPDOWN")
-                  <td x-h-table-cell#visibleGate($property) x-text="lookupText('${property.name}', row.${property.name})"></td>
+                  <td x-h-table-cell${stickyStart}#visibleGate($property) x-text="lookupText('${property.name}', row.${property.name})"></td>
 #elseif($property.widgetType == "MULTISELECT")
-                  <td x-h-table-cell#visibleGate($property) x-text="multiLookupText('${property.name}', row.${property.name})"></td>
+                  <td x-h-table-cell${stickyStart}#visibleGate($property) x-text="multiLookupText('${property.name}', row.${property.name})"></td>
 #elseif($property.isDateType)
-                  <td x-h-table-cell#visibleGate($property) x-text="#emptyOpen($property, "row.${property.name}")displayValue(row.${property.name}, true)#emptyClose($property)"></td>
+                  <td x-h-table-cell${stickyStart}#visibleGate($property) x-text="#emptyOpen($property, "row.${property.name}")displayValue(row.${property.name}, true)#emptyClose($property)"></td>
 #elseif($property.isFloatType)
-                  <td x-h-table-cell class="text-right"#visibleGate($property) x-text="#emptyOpen($property, "row.${property.name}")formatNumber(row.${property.name}, '${property.formatPattern}')#emptyClose($property)"></td>
+                  <td x-h-table-cell${stickyStart} class="text-right"#visibleGate($property) x-text="#emptyOpen($property, "row.${property.name}")formatNumber(row.${property.name}, '${property.formatPattern}')#emptyClose($property)"></td>
 #elseif($property.numberStampOnIssue)
-                  <td x-h-table-cell#visibleGate($property) x-text="window.HarmoniaFormat.documentNumber(row.${property.name})"></td>
+                  <td x-h-table-cell${stickyStart}#visibleGate($property) x-text="window.HarmoniaFormat.documentNumber(row.${property.name})"></td>
 #elseif($property.booleanTrueKey)
-                  <td x-h-table-cell#visibleGate($property) x-text="booleanText(row.${property.name}, #booleanWords($property))"></td>
+                  <td x-h-table-cell${stickyStart}#visibleGate($property) x-text="booleanText(row.${property.name}, #booleanWords($property))"></td>
 #else
-                  <td x-h-table-cell#visibleGate($property) x-text="#emptyOpen($property, "row.${property.name}")displayValue(row.${property.name})#emptyClose($property)"></td>
+                  <td x-h-table-cell${stickyStart}#visibleGate($property) x-text="#emptyOpen($property, "row.${property.name}")displayValue(row.${property.name})#emptyClose($property)"></td>
 #end
 #end
 #end

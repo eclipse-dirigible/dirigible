@@ -242,8 +242,8 @@
         <table x-h-table data-borders="rows">
           <thead x-h-table-header>
             <tr x-h-table-row>
-              <template x-for="col in tableColumns()" :key="col.name">
-                <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label)"></th>
+              <template x-for="(col, ci) in tableColumns()" :key="col.name">
+                <th x-h-table-head scope="col" :data-sticky="ci === 0 ? 'start' : null" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label)"></th>
               </template>
               <th x-h-table-head scope="col"></th>
             </tr>
@@ -251,8 +251,8 @@
           <tbody x-h-table-body>
             <template x-for="row in items" :key="row[itemsDef.primaryKey]">
               <tr x-h-table-row data-hoverable="true" class="cursor-pointer" @click="itemRowClicked($event, row)">
-                <template x-for="col in tableColumns()" :key="col.name">
-                  <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="displayItem(row, col)"></td>
+                <template x-for="(col, ci) in tableColumns()" :key="col.name">
+                  <td x-h-table-cell :data-sticky="ci === 0 ? 'start' : null" :class="col.number ? 'text-right' : ''" x-text="displayItem(row, col)"></td>
                 </template>
                 <td x-h-table-cell class="text-right">
                   <button x-h-button data-variant="transparent" data-size="icon-sm"#if($immutableStatusProperty || $immutableAlways || $periodLock) x-show="mutable"#end aria-label="Delete" data-row-control @click="deleteItem(row)"><svg role="presentation" x-h-lucide data-lucide="trash-2"></svg></button>
