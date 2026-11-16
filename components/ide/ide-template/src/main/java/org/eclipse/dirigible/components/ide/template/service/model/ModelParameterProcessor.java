@@ -1994,6 +1994,8 @@ final class ModelParameterProcessor {
             Map<String, Object> panel = new LinkedHashMap<>();
             panel.put("name", child.get("name"));
             panel.put("label", strOr(child, "menuLabel", str(child, "name")));
+            // The catalog keys the panel's title (t.<DATA_NAME>_plural) and its columns are minted from.
+            panel.put("dataName", child.get("dataName"));
             panel.put("fkProperty", fkProperty);
             panel.put("apiPath",
                     "/" + NamingHelper.sanitizeJavaIdentifier(str(child, "perspectiveName")) + "/" + str(child, "name") + controllerSuffix);
@@ -2073,6 +2075,7 @@ final class ModelParameterProcessor {
             Map<String, Object> column = new LinkedHashMap<>();
             column.put("name", name);
             column.put("label", strOr(property, "widgetLabel", name));
+            column.put("dataName", property.get("dataName"));
             column.put("number", Boolean.TRUE.equals(property.get("isNumberType")));
             column.put("date", Boolean.TRUE.equals(property.get("isDateType")));
             columns.add(column);

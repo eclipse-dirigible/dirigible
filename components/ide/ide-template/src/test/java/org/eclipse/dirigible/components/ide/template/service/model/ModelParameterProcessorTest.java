@@ -2182,6 +2182,36 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * A scoped child panel carries the data names its title and column keys are minted from (#8634), so
+     * the my / partner pages translate them like the power pages do.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aScopedChildPanelCarriesTheDataNamesOfItsTranslationKeys() {
+        Map<String, Object> owner = property("Employee", "INTEGER");
+        owner.put("widgetType", "DROPDOWN");
+        owner.put("relationshipEntityName", "Employee");
+        owner.put("relationshipEntityPerspectiveName", "hr");
+        owner.put("relationshipPersonal", "true");
+        owner.put("relationshipIdentityProperty", "Email");
+        Map<String, Object> request = entity("VacationRequest", "hr", property("Id", "INTEGER"), owner);
+        Map<String, Object> note = property("Note", "VARCHAR");
+        note.put("dataName", "VACATION_DAY_NOTE");
+        Map<String, Object> day = entity("VacationDay", "hr", property("Id", "INTEGER"), note, compositionTo("VacationRequest", "hr"));
+        day.put("dataName", "HR_VACATION_DAY");
+
+        ModelParameterProcessor.process(model(request, day), javaParameters());
+
+        Map<String, Object> panel = (Map<String, Object>) ((List<Object>) request.get("myChildren")).get(0);
+        assertEquals("HR_VACATION_DAY", panel.get("dataName"));
+        Map<String, Object> column = ((List<Map<String, Object>>) panel.get("columns")).stream()
+                                                                                       .filter(c -> "Note".equals(c.get("name")))
+                                                                                       .findFirst()
+                                                                                       .orElseThrow();
+        assertEquals("VACATION_DAY_NOTE", column.get("dataName"));
+    }
+
+    /**
      * The inherited-lock metadata of a child entity.
      *
      * @param entity the child entity

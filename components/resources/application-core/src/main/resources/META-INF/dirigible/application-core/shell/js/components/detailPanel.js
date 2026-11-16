@@ -270,9 +270,14 @@ function detailPanel(def, masterId, master) {
         );
       });
     },
+    // The Create dialog names what it adds, as the Edit / Preview dialogs do.
+    createTitle() {
+      const name = window.T ? T(this.def.tkey, this.def.label) : this.def.label;
+      return window.T ? T("application-core:shell.related.addNewNamed", "{{name}}: new record", { name }) : name + ": new record";
+    },
     addRow() {
       const q = "?" + this.masterQuery() + "&embedded=1&dialog=1";
-      this.openForm("/" + this.def.entity + "/create" + q, window.T ? T("application-core:shell.related.addNew", "Add new") : "Add new");
+      this.openForm("/" + this.def.entity + "/create" + q, this.createTitle());
     },
     editRow(row) {
       this.openForm("/" + this.def.entity + "/" + encodeURIComponent(row[this.def.primaryKey]) + "/edit?" + this.masterQuery() + "&embedded=1&dialog=1", window.T ? T(this.def.tkey, this.def.label) : this.def.label);
@@ -394,7 +399,7 @@ function detailPanel(def, masterId, master) {
         if (e.detail.time) val += "T" + e.detail.time;
         q += "&" + encodeURIComponent(cal.start) + "=" + encodeURIComponent(val);
       }
-      this.openForm("/" + this.def.entity + "/create" + q, window.T ? T("application-core:shell.related.addNew", "Add new") : "Add new");
+      this.openForm("/" + this.def.entity + "/create" + q, this.createTitle());
     },
 
     // --- files panel (files defs only) ----------------------------------------------------------

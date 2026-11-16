@@ -139,7 +139,7 @@ App.registerDetail('${masterEntity}', {
 #elseif($property.isNumberType)
     { name: '${property.name}', label: '${clabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', number: true#sensitiveMeta($property)#emptyMeta($property) },
 #else
-    { name: '${property.name}', label: '${clabel}'#if($property.numberStampOnIssue), documentNumber: true#end#sensitiveMeta($property)#boolMeta($property)#emptyMeta($property) },
+    { name: '${property.name}', label: '${clabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.numberStampOnIssue), documentNumber: true#end#sensitiveMeta($property)#boolMeta($property)#emptyMeta($property) },
 #end
 #end
 #end

@@ -141,6 +141,7 @@ document.addEventListener('alpine:init', () => {
         const last = segments[segments.length - 1];
         const action = last === 'create' ? (window.T ? T('application-core:shell.nav.create', 'Create') : 'Create')
                 : last === 'edit' ? (window.T ? T('application-core:shell.nav.edit', 'Edit') : 'Edit')
+                : last === 'preview' ? (window.T ? T('application-core:shell.nav.preview', 'Preview') : 'Preview')
                 : this.navLabel(last);
         crumbs.push({ label: action, route: null });
       }

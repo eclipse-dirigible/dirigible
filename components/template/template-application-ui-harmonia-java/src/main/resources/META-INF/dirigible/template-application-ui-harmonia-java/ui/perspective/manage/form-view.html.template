@@ -561,7 +561,7 @@
                record reads as one card (issue #7491). -->
           <div x-h-separator data-orientation="horizontal"></div>
           <div class="hbox items-center gap-2">
-            <h3 x-h-text.h4 x-text="d.label"></h3>
+            <h3 x-h-text.h4 x-text="T(d.tkey, d.label)"></h3>
             <span x-h-badge data-variant="outline" x-show="rows.length" x-text="rows.length"></span>
             <div class="ml-auto hbox items-center gap-2">
               <!-- Refresh (#7612): the rows a server-side chain writes behind the panel's back - the Snapshot
