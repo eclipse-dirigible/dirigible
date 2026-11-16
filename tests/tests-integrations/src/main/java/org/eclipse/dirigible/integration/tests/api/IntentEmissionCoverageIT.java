@@ -6148,21 +6148,24 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the source-row rule must narrow the item query itself, with the moment evaluated per run");
         assertTrue(billFromStay.contains("StayNightEntity srcItem : qualifying"),
                 "the clone loop must read the narrowed result, not the whole child set");
-        assertTrue(billFromStay.contains("would have no lines"),
+        assertTrue(billFromStay.contains("GenerateRefusals.noItemQualifies("),
                 "a rule that qualifies no row must refuse rather than commit a header with no lines");
         assertFalse(billFromStay.contains("java.util.List<Object> unqualified"),
                 "without refuse: an unqualified row is simply left out, so no second query collects them");
         // The other reading: the refusal names the rows, so the caller knows which of a hundred lines
         // to go and fix - the whole question they have.
         String checkedBillFromStay = contentOf("gen/events/emission/CheckedBillFromStayGenerate.java");
-        assertTrue(checkedBillFromStay.contains("\"Stay night carries no \\\"amount\\\" (StayNight \" + unqualified + \")\""),
+        assertTrue(
+                checkedBillFromStay.contains("GenerateRefusals.itemsRefused(")
+                        && checkedBillFromStay.contains("\"Stay night carries no \\\"amount\\\"\"")
+                        && checkedBillFromStay.contains("unqualified);"),
                 "refuse: must throw the authored message carrying the keys of the offending rows");
         // ...and both refusals are decided BEFORE the header is saved (#7224). The target's save
         // records the History create entry outside the unit of work (the document number too, before
         // #8113), so a refusal fired after it took the header back and left a spent number and a trail
         // row for a document that never existed - once per click.
         int billHeaderSave = billFromStay.indexOf("BillRepository().save(target)");
-        assertTrue(billHeaderSave > 0 && billFromStay.indexOf("would have no lines") < billHeaderSave,
+        assertTrue(billHeaderSave > 0 && billFromStay.indexOf("GenerateRefusals.noItemQualifies(") < billHeaderSave,
                 "the source-row rule must refuse before the header is saved, got: " + billFromStay);
         int checkedBillHeaderSave = checkedBillFromStay.indexOf("BillRepository().save(target)");
         assertTrue(checkedBillHeaderSave > 0 && checkedBillFromStay.indexOf("Stay night carries no \\\"amount\\\"") < checkedBillHeaderSave,
@@ -6218,8 +6221,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String promptedGenerate = contentOf("gen/events/emission/AddVoucherLineGenerate.java");
         assertTrue(promptedGenerate.contains("public java.util.Map<String, Object> values;"),
                 "a prompted create-from must accept the declared inputs in the posted body");
-        assertTrue(promptedGenerate.contains("missing required input [Amount]") && promptedGenerate.contains("Response.setStatus(400)"),
-                "a missing required prompt input must answer 400 before anything is written");
+        assertTrue(promptedGenerate.contains("FieldRefusals.required(REFUSAL_CATALOG, \"Amount\""),
+                "a missing required prompt input must answer 400, naming the input, before anything is written");
         assertTrue(promptedGenerate.contains("new java.math.BigDecimal(String.valueOf(raw))"),
                 "a decimal prompt input must convert to the generated entity's BigDecimal field");
         String promptedDescriptor = contentOf("add-voucher-line-generate-action.json");

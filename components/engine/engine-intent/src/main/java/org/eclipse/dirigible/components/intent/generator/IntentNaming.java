@@ -50,6 +50,19 @@ public final class IntentNaming {
     }
 
     /**
+     * The key, under the model catalog's {@code checks}, of a create-from's authored
+     * {@code items: refuse:} sentence (dirigible #8646): {@code checked-bill-from-stay} ->
+     * {@code checkedBillFromStayItemsRefused}. One rule for the {@code .model} that writes the sentence
+     * into the catalog and the {@code .glue} whose generated code resolves it.
+     *
+     * @param name the create-from's name
+     * @return the key
+     */
+    public static String generateItemsRefusedKey(String name) {
+        return camelCase(pascalIdentifier(name)) + "ItemsRefused";
+    }
+
+    /**
      * The i18n catalog key of a custom action's label: {@code <project>:<model>-model.actions.<name>} -
      * the same {@code <model>-model} namespace the generated translation catalog is emitted under
      * (mirrors the template engine's translation prefix for the {@code .model} file).

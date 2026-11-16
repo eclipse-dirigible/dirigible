@@ -45,6 +45,7 @@ import org.eclipse.dirigible.components.intent.generator.NotificationSupport;
 import org.eclipse.dirigible.components.intent.generator.ResolvePathSupport;
 import org.eclipse.dirigible.components.intent.generator.ScheduleSupport;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
+import org.eclipse.dirigible.components.intent.model.GeneratesItemsIntent;
 import org.eclipse.dirigible.components.intent.model.TransitionIntent;
 import org.eclipse.dirigible.components.intent.generator.IntentSettings;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
@@ -966,6 +967,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (!customActionLabels.isEmpty()) {
             body.put("customActionLabels", customActionLabels);
         }
+        // A create-from's authored `items: refuse:` sentences (#8646), by their key under the catalog's
+        // checks: the translate action folds them into the en catalog, so the refusal a run answers is
+        // translated like a check's.
+        Map<String, String> generateRefusals = buildGenerateRefusals(model);
+        if (!generateRefusals.isEmpty()) {
+            body.put("generateRefusals", generateRefusals);
+        }
         // BPM user-task labels (the processes' userTask steps), keyed by the authored step name -
         // the same convention as customActionLabels. The translate action folds this map into the
         // generated en catalog's processes section, and the Harmonia template bakes the reverse
@@ -1033,6 +1041,24 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
         }
         return labels;
+    }
+
+    /**
+     * The authored {@code items: refuse:} sentences of the create-froms, by the key the generated run
+     * resolves them under ({@link IntentNaming#generateItemsRefusedKey}) - only for a rule that
+     * refuses, the same condition {@code GlueIntentGenerator} emits the sentence on.
+     */
+    private static Map<String, String> buildGenerateRefusals(IntentModel model) {
+        Map<String, String> refusals = new LinkedHashMap<>();
+        for (GeneratesIntent generates : model.getGenerates()) {
+            GeneratesItemsIntent items = generates.getItems();
+            if (generates.getName() != null && !generates.getName()
+                                                         .isBlank()
+                    && items != null && items.hasWhere() && items.hasRefuse()) {
+                refusals.put(IntentNaming.generateItemsRefusedKey(generates.getName()), items.getRefuse());
+            }
+        }
+        return refusals;
     }
 
     /**
@@ -5800,10 +5826,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      */
     // The singular "rollupGuard" is no longer emitted (#7448 made it a list) but stays here so an .edm
     // authored before that keeps round-tripping as an object rather than a JSON string.
-    private static final Set<String> STRUCTURED_ATTRIBUTES =
-            Set.of("rollupGuards", "rollupGuard", "checks", "labelParts", "aggregateKeys", "groupingKeys", "relatedEntities",
-                    "scopedCalendars", "agreeGuards", "lifecycleStatusNameList", "duplicateReset", "duplicateDefaults", "lookupColumns",
-                    "languages", "widgets", "customActionLabels", "processTaskLabels", "singleFlags", "reports", "collectionColumns");
+    private static final Set<String> STRUCTURED_ATTRIBUTES = Set.of("rollupGuards", "rollupGuard", "checks", "labelParts", "aggregateKeys",
+            "groupingKeys", "relatedEntities", "scopedCalendars", "agreeGuards", "lifecycleStatusNameList", "duplicateReset",
+            "duplicateDefaults", "lookupColumns", "languages", "widgets", "customActionLabels", "generateRefusals", "processTaskLabels",
+            "singleFlags", "reports", "collectionColumns");
 
     /**
      * Compact, non-HTML-escaping JSON for the structured {@code .edm} attributes. Compact so the value
