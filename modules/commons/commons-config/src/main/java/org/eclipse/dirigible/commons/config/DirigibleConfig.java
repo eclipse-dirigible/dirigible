@@ -651,6 +651,17 @@ public enum DirigibleConfig {
     MESSAGING_LISTENER_CONNECTIONS("DIRIGIBLE_MESSAGING_LISTENER_CONNECTIONS", "shared"),
 
     /**
+     * The deployment identity in the client ids of the shared listener connections (#8655): with it the
+     * client-Java listeners connect as {@code dirigible-java-<prefix>-tenant-<tenantId>} and
+     * {@code dirigible-java-<prefix>-global}. A JMS client id is unique per broker, and every
+     * application has a {@code default-tenant} - so two applications on one broker that claim the same
+     * id refuse each other, and the one that connects second silently keeps that scope's Java listeners
+     * unsubscribed. Set a different value per application. Unset, {@link #APP_ID} is used; with neither
+     * set the ids carry no prefix, as before, which is right for one application on its own broker.
+     */
+    MESSAGING_CLIENT_ID_PREFIX("DIRIGIBLE_MESSAGING_CLIENT_ID_PREFIX", null),
+
+    /**
      * Seconds an armed act-as (delegated entry) state survives before it expires on its own. The window
      * is absolute - it starts at arming and is never renewed by activity - so a state left armed and
      * forgotten stops hiding the real identity's world on its own.
