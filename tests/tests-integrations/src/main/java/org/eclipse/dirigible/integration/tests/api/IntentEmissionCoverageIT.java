@@ -4048,9 +4048,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // place it can be created. Asserted here as well as at runtime so a regression says WHICH
         // layer dropped it.
         assertTrue(schema.contains("\"PartyCode_Party_Code\""), "the composite business key must be emitted into the schema: " + schema);
+        // The authored conflict message is the repository's (#8661), so every writer answers with it.
+        assertTrue(
+                contentOf("gen/emission/data/partycode/PartyCodeRepository.java").contains(
+                        "This \\\"code\\\" is already registered for the party"),
+                "the generated repository must carry the authored conflict message");
         String partyCodeController = contentOf("gen/emission/api/partycode/PartyCodeController.java");
-        assertTrue(partyCodeController.contains("This \\\"code\\\" is already registered for the party"),
-                "the generated controller must carry the authored conflict message");
         // entity-level orderBy (#7727): the declared row order has to reach BOTH query shapes of the
         // list endpoint - the paged read and the filtered search - because an unordered page is free
         // to be a different slice on every call, so ordering it after the fact orders the wrong rows.
