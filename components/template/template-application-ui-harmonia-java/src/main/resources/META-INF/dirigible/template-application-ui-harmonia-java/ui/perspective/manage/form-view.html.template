@@ -411,8 +411,10 @@
         </template>
         <template x-if="!isContextLocked('${property.name}')">
 #if($lookup)
+## min-w-0 on the select (here and on the subset row below): a flex item never shrinks below its content, so
+## a long selected label would widen the row and push the buttons off the form instead of truncating (#8659).
         <div class="hbox gap-1 items-center">
-          <div x-h-select class="flex-1">
+          <div x-h-select class="flex-1 min-w-0">
             <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" :disabled="isPreview#if($fixed) || isEdit#end" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
             <div x-h-select-content>
               <div x-h-select-search data-filter="contains"#if(!($property.widgetLeafOnly && $property.widgetHierarchyProperty)) @input.debounce.300ms="searchPicker('${property.name}', $event.target.value)"#end></div>
@@ -450,7 +452,7 @@
              deliberately no "New" button - the add-dialog return path writes a single value, and a
              lookup this widget targets is curated, not grown mid-form. -->
         <div class="hbox gap-1 items-center">
-          <div x-h-select class="flex-1">
+          <div x-h-select class="flex-1 min-w-0">
             <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" :disabled="isPreview" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
             <div x-h-select-content>
               <div x-h-select-search data-filter="contains"#if(!($property.widgetLeafOnly && $property.widgetHierarchyProperty)) @input.debounce.300ms="searchPicker('${property.name}', $event.target.value)"#end></div>
