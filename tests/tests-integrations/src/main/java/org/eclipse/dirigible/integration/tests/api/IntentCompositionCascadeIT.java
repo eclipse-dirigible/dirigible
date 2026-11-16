@@ -15,6 +15,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -137,6 +138,24 @@ class IntentCompositionCascadeIT extends IntegrationTest {
               - { name: fleetLegCount, entity: TripLeg, via: Fleet, field: legCount }
             """;
 
+    /**
+     * A translator's overlay, through which the refusal of the trip's delete reads in Bulgarian
+     * (#8635).
+     */
+    private static final String BG_OVERLAY = """
+            {
+              "cascade-model": {
+                "t": {
+                  "CASCADE_TRIP": "Пътуване",
+                  "CASCADE_TRIP_COPY": "Печатно копие"
+                },
+                "checks": {
+                  "deleteHasChildren": "{entity} все още има записи {children} - първо изтрийте тях"
+                }
+              }
+            }
+            """;
+
     @Autowired
     private IRepository repository;
 
@@ -149,6 +168,8 @@ class IntentCompositionCascadeIT extends IntegrationTest {
     @Test
     void deleting_a_master_deletes_what_it_owns_and_a_refusal_leaves_the_whole_chain_standing() {
         generateProject();
+        assertTheCatalogCarriesTheChildrenRefusal();
+        writeFile("i18n/bg-BG/cascade.model.json", BG_OVERLAY);
         publishProject();
         synchronizationProcessor.forceProcessSynchronizers();
 
@@ -207,6 +228,14 @@ class IntentCompositionCascadeIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(400)
                                                  .body(containsString("still has Trip Copy records")));
+        // ...in the reader's language, both entities named by their translated labels (#8635).
+        restAssuredExecutor.execute(() -> given().header("Accept-Language", "bg-BG")
+                                                 .when()
+                                                 .delete(TRIPS + "/" + refusing)
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("message", equalTo("Пътуване все още има записи Печатно копие - първо изтрийте тях"))
+                                                 .body("messageKey", equalTo(PROJECT + ":cascade-model.checks.deleteHasChildren")));
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(TRIPS + "/" + refusing)
                                                  .then()
@@ -233,6 +262,15 @@ class IntentCompositionCascadeIT extends IntegrationTest {
         assertGone(TRIPS + "/" + refusing);
         assertLegsOfTrip(refusing, 0);
         assertFleetCount(fleet, 2);
+    }
+
+    /** #8635: the en-US catalog carries the refusal's sentence, for a translator to copy. */
+    private void assertTheCatalogCarriesTheChildrenRefusal() {
+        String catalog = new String(repository.getResource(PROJECT_PATH + "/i18n/en-US/cascade.model.json")
+                                              .getContent(),
+                StandardCharsets.UTF_8);
+        assertTrue(catalog.contains("\"deleteHasChildren\": \"This {entity} still has {children} records - delete those first\""),
+                "the en-US catalog must carry the children refusal: " + catalog);
     }
 
     private void assertLegsOfTrip(int trip, int expected) {
@@ -318,12 +356,16 @@ class IntentCompositionCascadeIT extends IntegrationTest {
     }
 
     private void writeIntent() {
-        String path = PROJECT_PATH + "/app.intent";
+        writeFile("app.intent", INTENT_YAML);
+    }
+
+    private void writeFile(String fileName, String content) {
+        String path = PROJECT_PATH + "/" + fileName;
         IResource existing = repository.getResource(path);
         if (existing.exists()) {
-            existing.setContent(INTENT_YAML.getBytes(StandardCharsets.UTF_8));
+            existing.setContent(content.getBytes(StandardCharsets.UTF_8));
         } else {
-            repository.createResource(path, INTENT_YAML.getBytes(StandardCharsets.UTF_8));
+            repository.createResource(path, content.getBytes(StandardCharsets.UTF_8));
         }
     }
 

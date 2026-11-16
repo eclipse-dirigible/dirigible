@@ -196,8 +196,9 @@ not as an apology.
   the children it owns.** `cascade` (the default, no key needed) deletes them with it, in the same
   transaction and through their own repository, so each child's delete event fires and every roll-up
   over the child relinquishes what it counted. `refuse` rejects the master's delete while any child
-  exists ("This Sales Order still has Sales Order Item records - delete those first"), for a document
-  whose lines must be removed deliberately. Every `refuse` is checked BEFORE the first cascade runs, so
+  exists ("This Sales Order still has Sales Order Item records - delete those first", a 400 in the
+  reader's language: the sentence is `checks.deleteHasChildren` of the model catalog, the entities are
+  named by their `t.<TABLE>` labels, #8635), for a document whose lines must be removed deliberately. Every `refuse` is checked BEFORE the first cascade runs, so
   a refusal never arrives after a cascading sibling's rows are already deleted. There is no third option: a header that leaves its lines
   behind leaves rows pointing at an id that no longer exists - invisible in the UI, since no parent page
   renders them, and still counted by every report and roll-up over the child. Declare it on the

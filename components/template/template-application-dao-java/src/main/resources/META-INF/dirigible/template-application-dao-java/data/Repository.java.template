@@ -2386,14 +2386,16 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         // a refusing child declared after a cascading one only spoke up once the earlier child's rows
         // were already deleted: the unit of work rolls those rows back, but the change history is
         // written on its own connection by design - so the trail permanently recorded deletes of lines
-        // that still exist (#7143).
+        // that still exist (#7143). The refusal is resolved for the reader's language (#8635).
+#set($refusalEntityLabel = '"' + $name + '"')
+#if($entityLabelJava)#set($refusalEntityLabel = $entityLabelJava)#end
 #foreach($owned in $compositionChildren)
 #if($owned.refuse == "true")
         if (!new gen.${javaGenFolderName}.data.${owned.javaChildPerspective}.${owned.childEntity}Repository()
                 .findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${owned.fkProperty}", id))
                 .isEmpty()) {
-            throw new org.eclipse.dirigible.sdk.db.ValidationException(
-                    "This ${entityLabel} still has ${owned.childLabel} records - delete those first");
+            throw org.eclipse.dirigible.sdk.db.DeleteRefusals.hasChildren(messageCatalog(), ${refusalEntityLabel}, labelCatalogKey(),
+                    ${owned.childLabelJava}, ${owned.childLabelKeyJava});
         }
 #end
 #end
