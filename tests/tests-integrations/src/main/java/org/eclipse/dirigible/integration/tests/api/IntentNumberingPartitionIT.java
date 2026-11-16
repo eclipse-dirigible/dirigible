@@ -255,7 +255,8 @@ class IntentNumberingPartitionIT extends IntegrationTest {
 
         // The create-from saves its header inside its own unit of work: Trip 2 maps the taken ref A, Trip 1
         // a fresh one with an amount past the column.
-        refuse(CLAIM_FROM_TRIP, "{\"id\":2}", 500);
+        // A taken ref is the key's 409 here too, as on every surface above (#8661) - it used to be a 500.
+        refuse(CLAIM_FROM_TRIP, "{\"id\":2}", 409);
         refuse(CLAIM_FROM_TRIP, "{\"id\":1,\"values\":{\"Amount\":" + OVERFLOW + "}}", 500);
         assertEquals(first + 4, sequenceOf(create(CLAIMS, "{\"Ref\":\"E\"}", 1)), "a create-from the database refused spent a number");
     }

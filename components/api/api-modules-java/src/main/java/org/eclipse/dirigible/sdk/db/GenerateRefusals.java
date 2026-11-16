@@ -202,13 +202,14 @@ public final class GenerateRefusals {
 
     /**
      * The refusal of a target line, naming the source row it was mapped from. The target's own refusal
-     * stays the cause, and its key, parameters and field are the ones the error body carries.
+     * stays the cause, and its key, parameters and field are the ones the error body carries. A line
+     * that collided with a business key stays a {@link DuplicateKeyException}.
      *
      * @param catalog the intent's model catalog, or {@code null}
      * @param refused the target line's refusal
      * @param item the source's item entity
      * @param id the source row's key
-     * @return the exception to throw - mapped to HTTP 400
+     * @return the exception to throw - mapped to HTTP 400, or to 409 for a business-key collision
      */
     public static ValidationException fromItem(String catalog, ValidationException refused, Label item, Object id) {
         return fromItem(CheckMessages.language(), CheckMessages::readCatalog, catalog, refused, item, id);
@@ -287,8 +288,9 @@ public final class GenerateRefusals {
             Label item, Object id) {
         Map<String, Object> params =
                 CheckMessages.params("message", refused.getMessage(), "item", label(language, catalogs, item), "id", id);
-        return new ValidationException(CheckMessages.resolve(language, catalogs, checkKey(catalog, FROM_ITEM_KEY), FROM_ITEM_TEXT, params),
-                refused);
+        String message = CheckMessages.resolve(language, catalogs, checkKey(catalog, FROM_ITEM_KEY), FROM_ITEM_TEXT, params);
+        return refused instanceof DuplicateKeyException duplicate ? new DuplicateKeyException(message, duplicate)
+                : new ValidationException(message, refused);
     }
 
     static ValidationException reportValueNotWhole(String language, CheckMessages.CatalogReader catalogs, String catalog, String column,

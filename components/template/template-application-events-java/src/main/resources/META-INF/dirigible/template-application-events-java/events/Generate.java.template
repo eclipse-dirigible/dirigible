@@ -682,7 +682,8 @@ public class ${className}Generate {
                 } catch (org.eclipse.dirigible.sdk.db.ValidationException ex) {
                     // Name the SOURCE line the refused one was mapped from. The target's own message says
                     // which value is missing; without the row it came from, a document of a hundred lines
-                    // leaves the caller nothing to go and fix (#7069).
+                    // leaves the caller nothing to go and fix (#7069). A line colliding with a business key
+                    // stays the conflict it is - a 409, as the header's own collision is (#8661).
                     throw org.eclipse.dirigible.sdk.db.GenerateRefusals.fromItem(REFUSAL_CATALOG, ex, ${fromItemEntityLabelJava},
                             srcItem.${fromItemPk});
                 }

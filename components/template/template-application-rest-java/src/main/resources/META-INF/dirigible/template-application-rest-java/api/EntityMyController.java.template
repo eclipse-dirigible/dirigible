@@ -5,7 +5,8 @@ package gen.${javaGenFolderName}.api.${javaPerspectiveName};
 ## letting the driver's text out as a 500 (#7137). Either kind of key earns the mapping: a composite
 ## `unique:` the model NAMED, or a single-column `unique: true`, which is a column-level UNIQUE the
 ## SCHEMA leaves for the database to name - the name every dialect generates is built from the
-## column, which is the handle the mapping keys on.
+## column, which is the handle the mapping keys on. The mapping is the repository's (#8661), so
+## every surface and every other writer answers a collision with the same refusal.
 #foreach($property in $properties)
 #if($property.dataUnique)
 #set($hasUniqueColumns = "true")
@@ -290,7 +291,7 @@ public class ${name}MyController {
         try {
             return scrub(repository.save(entity));
         } catch (RuntimeException e) {
-            throw duplicateOrRethrow(e);
+            throw repository.duplicateKeyOr(e);
         }
 #else
         return scrub(repository.save(entity));
@@ -320,7 +321,7 @@ public class ${name}MyController {
             });
         } catch (RuntimeException e) {
             // Outside the unit: a duplicate business key is raised by its commit.
-            throw duplicateOrRethrow(e);
+            throw repository.duplicateKeyOr(e);
         }
 #else
         return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
@@ -392,7 +393,7 @@ public class ${name}MyController {
         try {
             return scrub(repository.update(entity));
         } catch (RuntimeException e) {
-            throw duplicateOrRethrow(e);
+            throw repository.duplicateKeyOr(e);
         }
 #else
         return scrub(repository.update(entity));
@@ -1254,154 +1255,6 @@ public class ${name}MyController {
     }
 #end
 
-#if($hasDuplicateKeys)
-    /**
-     * The business keys of ${name}, keyed by the name the database puts into the violation it raises -
-     * a composite key by the constraint name the model emitted (so this map and the schema cannot
-     * drift), a single-column {@code unique} by its column name, which is what every dialect builds
-     * its own generated constraint name out of ("VACATIONS_PUBLIC_HOLIDAY_PUBLIC_HOLIDAY_DAY_key").
-     * Iterated longest key first, so a column whose name is a prefix of a longer one still answers
-     * with its own message rather than the shorter key's. The power surface's map verbatim - the same
-     * collision has to read the same whichever surface the caller wrote through.
-     */
-    private static final Map<String, java.util.function.Supplier<org.eclipse.dirigible.sdk.db.ValidationException>> DUPLICATE_REFUSALS = duplicateRefusals();
-
-## The refusals of one property's value are resolved for the reader's language (#8596): the model's
-## catalog, the entity's label and its key - each as the processor derived it, else the bare names.
-#set($refusalCatalog = "null")
-#if($messageCatalogJava)#set($refusalCatalog = $messageCatalogJava)#end
-#set($refusalEntityLabel = '"' + $name + '"')
-#if($entityLabelJava)#set($refusalEntityLabel = $entityLabelJava)#end
-#set($refusalEntityLabelKey = "null")
-#if($labelCatalogKeyJava)#set($refusalEntityLabelKey = $labelCatalogKeyJava)#end
-    private static Map<String, java.util.function.Supplier<org.eclipse.dirigible.sdk.db.ValidationException>> duplicateRefusals() {
-        Map<String, java.util.function.Supplier<org.eclipse.dirigible.sdk.db.ValidationException>> refusals = new java.util.TreeMap<>(java.util.Comparator.comparingInt(String::length)
-                                                                                   .reversed()
-                                                                                   .thenComparing(java.util.Comparator.naturalOrder()));
-#if($uniqueConstraints)
-#foreach($uniqueConstraint in $uniqueConstraints)
-#if($uniqueConstraint.messageCatalogKeyJavaLiteral)
-        refusals.put("${uniqueConstraint.nameJavaLiteral}".toUpperCase(Locale.ROOT),
-                () -> org.eclipse.dirigible.sdk.db.CheckMessages.refusal("${uniqueConstraint.messageCatalogKeyJavaLiteral}", "${uniqueConstraint.messageJavaLiteral}"));
-#else
-        refusals.put("${uniqueConstraint.nameJavaLiteral}".toUpperCase(Locale.ROOT), () -> new org.eclipse.dirigible.sdk.db.ValidationException("${uniqueConstraint.messageJavaLiteral}"));
-#end
-#end
-#end
-#foreach($property in $properties)
-#if($property.dataUnique)
-#set($refusalField = '"' + $property.name + '", "' + $property.name + '", null')
-#if($property.refusalFieldArgsJava)#set($refusalField = $property.refusalFieldArgsJava)#end
-        refusals.put("${property.dataName}".toUpperCase(Locale.ROOT), () -> org.eclipse.dirigible.sdk.db.FieldRefusals.duplicate(${refusalCatalog},
-                ${refusalEntityLabel}, ${refusalEntityLabelKey}, ${refusalField}));
-#end
-#end
-        return java.util.Collections.unmodifiableMap(refusals);
-    }
-
-    /**
-     * The markers the drivers append the executed statement to their message behind - Hibernate's
-     * "[insert into ...]" and H2's "SQL statement:". Everything from there on is the SQL, not the
-     * violation.
-     */
-    private static final List<String> STATEMENT_MARKERS = List.of("SQL STATEMENT:", "[INSERT ", "[UPDATE ", "[DELETE ", "[MERGE ");
-
-    /**
-     * A write that collided with one of those keys is a conflict the caller can act on - answered with
-     * the message that names the field - and anything else is rethrown untouched. Matching is on the
-     * key name inside the driver's message, which is the only handle the database gives back; every
-     * dialect names the violated constraint there.
-     */
-    private static RuntimeException duplicateOrRethrow(RuntimeException e) {
-        if (isConstraintViolation(e) && isDuplicateViolation(e)) {
-            org.eclipse.dirigible.sdk.db.ValidationException refusal = duplicateRefusalFor(violationText(e));
-            if (refusal != null) {
-                // The refusal rides as the cause, so the body carries its key and the field (#8596).
-                return new ResponseStatusException(HttpStatus.CONFLICT, refusal.getMessage(), refusal);
-            }
-        }
-        return e;
-    }
-
-    /**
-     * The refusal of the business key the given violation names, resolved for the reader's language, or
-     * {@code null} when it names none of them - a primary key, or a uniqueness constraint of another table.
-     */
-    private static org.eclipse.dirigible.sdk.db.ValidationException duplicateRefusalFor(String violation) {
-        if (violation == null) {
-            return null;
-        }
-        String upper = violation.toUpperCase(Locale.ROOT);
-        for (Map.Entry<String, java.util.function.Supplier<org.eclipse.dirigible.sdk.db.ValidationException>> constraint : DUPLICATE_REFUSALS.entrySet()) {
-            if (upper.contains(constraint.getKey())) {
-                return constraint.getValue()
-                                 .get();
-            }
-        }
-        return null;
-    }
-
-    /**
-     * The text of the violation the database raised: the message of the INNERMOST
-     * {@code java.sql.SQLException} in the chain - the one that carries the constraint name and the
-     * Detail line - with the statement the driver appends to it cut off.
-     * <p>
-     * Anchoring the match there is load-bearing, not tidiness. Hibernate re-reports the failure with
-     * the executed SQL attached ("... [insert into PRODUCT (PRODUCT_CODE, PRODUCT_NAME, ...)]") and H2
-     * appends its own "SQL statement:" block, so a message read whole lists EVERY column of the table:
-     * a collision on one unique field would be answered with the message of another, and a
-     * primary-key violation - SQLSTATE 23505 as well - with a business key's.
-     */
-    private static String violationText(Throwable e) {
-        String text = null;
-        for (Throwable cause = e; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {
-            if (cause instanceof java.sql.SQLException && cause.getMessage() != null) {
-                text = cause.getMessage();
-            }
-        }
-        if (text == null) {
-            text = e.getMessage();
-        }
-        return text == null ? null : withoutStatement(text);
-    }
-
-    /** The message up to the first statement marker in it, which is where the column list starts. */
-    private static String withoutStatement(String message) {
-        String upper = message.toUpperCase(Locale.ROOT);
-        int cut = message.length();
-        for (String marker : STATEMENT_MARKERS) {
-            int at = upper.indexOf(marker);
-            if (at >= 0 && at < cut) {
-                cut = at;
-            }
-        }
-        return message.substring(0, cut);
-    }
-
-    /**
-     * Whether the violation is specifically about UNIQUENESS. A column name matches the text of a
-     * foreign-key violation too ("Key (COMPANY_ID)=(5) is not present in table ..."), which is a
-     * different conflict and must not be answered as a duplicate. Every supported dialect either
-     * reports SQLSTATE 23505 or says so in words - PostgreSQL "duplicate key value violates unique
-     * constraint", H2 "Unique index or primary key violation", MySQL "Duplicate entry", Oracle
-     * "unique constraint (...) violated" - and says it in the violation itself, so the words are read
-     * off the same anchored text the key match uses rather than off the statement appended to it.
-     */
-    private static boolean isDuplicateViolation(Throwable e) {
-        for (Throwable cause = e; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {
-            if (cause instanceof java.sql.SQLException sqlException && "23505".equals(sqlException.getSQLState())) {
-                return true;
-            }
-        }
-        String violation = violationText(e);
-        if (violation == null) {
-            return false;
-        }
-        String upper = violation.toUpperCase(Locale.ROOT);
-        return upper.contains("DUPLICATE") || upper.contains("UNIQUE");
-    }
-
-#end
     /** Whether a persistence failure is (caused by) a database constraint violation. */
     private static boolean isConstraintViolation(Throwable e) {
         for (Throwable cause = e; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {

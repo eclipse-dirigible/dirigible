@@ -18,12 +18,14 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import org.eclipse.dirigible.components.base.spring.BeanProvider;
 import org.eclipse.dirigible.components.data.store.java.store.JavaEntityStore;
 import org.eclipse.dirigible.sdk.db.ConcurrentWriteException;
 import org.eclipse.dirigible.sdk.db.DeleteRefusals;
 import org.eclipse.dirigible.sdk.db.DeleteRestrictionException;
+import org.eclipse.dirigible.sdk.db.DuplicateKeyException;
 import org.eclipse.dirigible.sdk.db.TargetAgreementRule;
 import org.eclipse.dirigible.sdk.db.TargetDeleteRule;
 import org.eclipse.dirigible.sdk.db.ValidationException;
@@ -86,7 +88,11 @@ public abstract class JavaRepository<T> {
      * @return the saved entity (with any generated identifier populated)
      */
     public T save(T entity) {
-        return store().save(entity);
+        try {
+            return store().save(entity);
+        } catch (RuntimeException e) {
+            throw duplicateKeyOr(e);
+        }
     }
 
     /**
@@ -100,7 +106,11 @@ public abstract class JavaRepository<T> {
      * @return the saved entity (with any generated identifier populated)
      */
     public T save(T entity, String eventTopic) {
-        return store().save(entity, eventTopic);
+        try {
+            return store().save(entity, eventTopic);
+        } catch (RuntimeException e) {
+            throw duplicateKeyOr(e);
+        }
     }
 
     /**
@@ -114,7 +124,11 @@ public abstract class JavaRepository<T> {
      * @return the saved entity (with any generated identifier populated)
      */
     public T save(T entity, String eventTopic, List<DomainEvent> additionalEvents) {
-        return store().save(entity, eventTopic, additionalEvents);
+        try {
+            return store().save(entity, eventTopic, additionalEvents);
+        } catch (RuntimeException e) {
+            throw duplicateKeyOr(e);
+        }
     }
 
     /**
@@ -125,7 +139,11 @@ public abstract class JavaRepository<T> {
      */
     public T update(T entity) {
         requireTargetAgreement(entity);
-        return store().update(entity);
+        try {
+            return store().update(entity);
+        } catch (RuntimeException e) {
+            throw duplicateKeyOr(e);
+        }
     }
 
     /**
@@ -138,7 +156,11 @@ public abstract class JavaRepository<T> {
      */
     public T update(T entity, String eventTopic) {
         requireTargetAgreement(entity);
-        return store().update(entity, eventTopic);
+        try {
+            return store().update(entity, eventTopic);
+        } catch (RuntimeException e) {
+            throw duplicateKeyOr(e);
+        }
     }
 
     /**
@@ -153,7 +175,11 @@ public abstract class JavaRepository<T> {
      */
     public T update(T entity, String eventTopic, List<DomainEvent> additionalEvents) {
         requireTargetAgreement(entity);
-        return store().update(entity, eventTopic, additionalEvents);
+        try {
+            return store().update(entity, eventTopic, additionalEvents);
+        } catch (RuntimeException e) {
+            throw duplicateKeyOr(e);
+        }
     }
 
     /**
@@ -171,7 +197,11 @@ public abstract class JavaRepository<T> {
      */
     public int updateProperty(Object id, String property, Object value) {
         requireTargetAgreement(id, Map.of(property, value == null ? NULL : value));
-        return store().updateProperty(entityClass, id, property, value);
+        try {
+            return store().updateProperty(entityClass, id, property, value);
+        } catch (RuntimeException e) {
+            throw duplicateKeyOr(e);
+        }
     }
 
     /**
@@ -192,7 +222,11 @@ public abstract class JavaRepository<T> {
         // both, and its recalculation path reaches the plain write through `super` precisely to bypass
         // the semantics it adds. Re-dispatching here would drag them back in.
         requireTargetAgreement(id, values);
-        return store().updateProperties(entityClass, id, values, null);
+        try {
+            return store().updateProperties(entityClass, id, values, null);
+        } catch (RuntimeException e) {
+            throw duplicateKeyOr(e);
+        }
     }
 
     /**
@@ -214,7 +248,11 @@ public abstract class JavaRepository<T> {
      */
     public int updateProperties(Object id, Map<String, Object> values, String eventTopic) {
         requireTargetAgreement(id, values);
-        return store().updateProperties(entityClass, id, values, eventTopic);
+        try {
+            return store().updateProperties(entityClass, id, values, eventTopic);
+        } catch (RuntimeException e) {
+            throw duplicateKeyOr(e);
+        }
     }
 
     /**
@@ -232,7 +270,11 @@ public abstract class JavaRepository<T> {
      */
     public int updateProperties(Object id, Map<String, Object> values, String eventTopic, List<DomainEvent> additionalEvents) {
         requireTargetAgreement(id, values);
-        return store().updateProperties(entityClass, id, values, eventTopic, additionalEvents);
+        try {
+            return store().updateProperties(entityClass, id, values, eventTopic, additionalEvents);
+        } catch (RuntimeException e) {
+            throw duplicateKeyOr(e);
+        }
     }
 
     /**
@@ -731,6 +773,36 @@ public abstract class JavaRepository<T> {
      */
     public DeleteRestrictionException referencedByOthers() {
         return DeleteRefusals.referencedByOthers(messageCatalog(), label(), labelCatalogKey());
+    }
+
+    /**
+     * The refusal of each business key of this entity, by the name the database puts into the violation
+     * it raises - a composite key by the constraint name the model emitted, a single-column
+     * {@code unique} by its column name (dirigible #8661). A generated repository answers its model's
+     * keys; a write colliding with one of them is refused with that key's message rather than the
+     * driver's text, whoever made the write - a REST create, a generate action, a schedule.
+     *
+     * @return the refusals by key name; empty - the default - when the entity declares no business key
+     */
+    protected Map<String, Supplier<ValidationException>> duplicateKeys() {
+        return Map.of();
+    }
+
+    /**
+     * The refusal a failed write is answered with when it collided with one of this entity's business
+     * keys, else the failure itself. Every write of this repository already answers so; a caller that
+     * runs the write inside its own unit of work - where the collision may surface only as the unit
+     * commits - hands the failure of the unit here.
+     *
+     * @param failure what the write raised
+     * @return a {@link DuplicateKeyException} carrying the key's refusal, or {@code failure} unchanged
+     */
+    public RuntimeException duplicateKeyOr(RuntimeException failure) {
+        if (failure instanceof DuplicateKeyException) {
+            return failure;
+        }
+        ValidationException refusal = DuplicateKeys.refusalFor(failure, duplicateKeys());
+        return refusal == null ? failure : new DuplicateKeyException(refusal, failure);
     }
 
     /** This entity as a refusal names it - {@code ExpenseCategoryEntity} reads "Expense Category". */

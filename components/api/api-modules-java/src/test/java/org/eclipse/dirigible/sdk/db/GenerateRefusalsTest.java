@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.sdk.db;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
@@ -115,6 +116,20 @@ class GenerateRefusalsTest {
         assertEquals("Полето 'Сума' е задължително (from Stay Night [4])",
                 GenerateRefusals.fromItem(null, CATALOGS, CATALOG, line, NIGHT, 4)
                                 .getMessage());
+    }
+
+    @Test
+    void aLineThatCollidedWithABusinessKeyStaysADuplicate() {
+        DuplicateKeyException line = new DuplicateKeyException(
+                new ValidationException("Code is already used", "hotel:hotel-model.checks.codeUnique", Map.of(), "Code"),
+                new IllegalStateException("unique index violated"));
+
+        ValidationException refusal = GenerateRefusals.fromItem(null, CATALOGS, CATALOG, line, NIGHT, 4);
+
+        assertInstanceOf(DuplicateKeyException.class, refusal);
+        assertEquals("Code is already used (from Stay Night [4])", refusal.getMessage());
+        assertEquals("hotel:hotel-model.checks.codeUnique", refusal.getMessageKey());
+        assertEquals("Code", refusal.getField());
     }
 
     @Test
