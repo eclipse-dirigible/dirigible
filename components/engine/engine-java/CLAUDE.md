@@ -173,6 +173,9 @@ instantiate client classes.
   `offlineDurableSubscriberTimeout` (7 days, set in `MessagingConfig`) — the consumer cannot
   unsubscribe on its own, because `onClassUnloaded` fires for a *replaced* class as well as a deleted
   one, and a class deleted while the server was down is never reported at all.
+  **The shared client ids carry the deployment's identity** (#8655, `DIRIGIBLE_MESSAGING_CLIENT_ID_PREFIX`,
+  else `DIRIGIBLE_APP_ID`): two applications on one broker no longer claim one `dirigible-java-tenant-default-tenant`;
+  unset, the ids are unprefixed as before. `.claude/docs/messaging.md` has the reclaim and the refusal report.
   **The subscriptions of a scope share one connection** (#7875, `DIRIGIBLE_MESSAGING_LISTENER_CONNECTIONS`,
   default `shared`): one client-id connection per tenant plus one for the global destinations, every
   subscription a session on it, so an instance holds `tenants + 2` connections however many handlers

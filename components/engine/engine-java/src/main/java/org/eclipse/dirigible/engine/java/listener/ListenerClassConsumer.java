@@ -11,6 +11,8 @@ package org.eclipse.dirigible.engine.java.listener;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.time.Clock;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -25,6 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
 import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.context.OriginatingUser;
 import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
@@ -53,6 +56,7 @@ import org.springframework.stereotype.Component;
 import jakarta.annotation.PreDestroy;
 import jakarta.jms.Connection;
 import jakarta.jms.Destination;
+import jakarta.jms.InvalidClientIDException;
 import jakarta.jms.InvalidDestinationException;
 import jakarta.jms.JMSException;
 import jakarta.jms.Message;
@@ -144,6 +148,17 @@ import jakarta.jms.Topic;
  * mode's identity of each of its durable subscriptions is queued, and {@link #reconcile()}
  * unsubscribes it on its own connection, one client id at a time; a client id still held elsewhere
  * (the previous instance of a rolling deploy) is refused and stays queued for the next pass.
+ *
+ * <p>
+ * <b>The shared client ids carry the deployment's identity</b> (#8655,
+ * {@link DirigibleConfig#MESSAGING_CLIENT_ID_PREFIX}, else {@link DirigibleConfig#APP_ID}). A
+ * client id is unique per broker and every application has a {@code default-tenant}, so two
+ * applications on one broker used to claim {@code dirigible-java-tenant-default-tenant} and
+ * {@code dirigible-java-global} alike: whichever connected second was refused for as long as the
+ * other ran, and kept that scope's listeners unsubscribed. With a prefix the ids differ per
+ * application, the durable subscriptions the unprefixed ids registered are reclaimed like a mode
+ * switch's, and a refusal of a shared connection's client id stays visible at WARN - every
+ * {@link #CLIENT_ID_REFUSAL_REPORT_INTERVAL} - naming the setting that ends it.
  */
 @Component
 @Order(500)
@@ -159,6 +174,13 @@ public class ListenerClassConsumer
     private static final String SHARED_CONNECTION_LABEL = "<shared connection>";
 
     private static final String GLOBAL_SCOPE = "all tenants (global destination)";
+
+    /**
+     * How often a shared connection whose client id another connection holds is reported again at WARN
+     * (#8655). Not once and then DEBUG, as other refusals are: a client id another application holds is
+     * not transient, and its whole scope stays unsubscribed for as long as it lasts.
+     */
+    static final Duration CLIENT_ID_REFUSAL_REPORT_INTERVAL = Duration.ofMinutes(10);
 
     private final ComponentContainer componentContainer;
     private final ActiveMQConnectionArtifactsFactory connectionFactory;
@@ -211,6 +233,14 @@ public class ListenerClassConsumer
     /** The client ids whose refusal to reclaim was already reported, so a retry logs at DEBUG. */
     private final Set<String> reportedReclaimFailures = ConcurrentHashMap.newKeySet();
 
+    /**
+     * scope → when the refusal of its shared connection's client id was last reported at WARN (#8655).
+     */
+    private final Map<String, Long> clientIdRefusalsReportedAt = new ConcurrentHashMap<>();
+
+    /** The clock of {@link #CLIENT_ID_REFUSAL_REPORT_INTERVAL}; replaced by the tests only. */
+    private Clock clock = Clock.systemUTC();
+
     @Autowired
     public ListenerClassConsumer(ComponentContainer componentContainer, ActiveMQConnectionArtifactsFactory connectionFactory,
             TenantContext tenantContext, TenantPropertyManager tenantPropertyManager, @DefaultTenant Tenant defaultTenant,
@@ -224,6 +254,11 @@ public class ListenerClassConsumer
         this.tenantConfigurationService = tenantConfigurationService;
         this.destinationNameManager = destinationNameManager;
         this.connectionMode = connectionMode;
+    }
+
+    /** For the tests of the client-id refusal report. */
+    void setClock(Clock clock) {
+        this.clock = clock;
     }
 
     @Override
@@ -436,8 +471,11 @@ public class ListenerClassConsumer
 
     /**
      * Queue the identity the other connection mode gives each durable subscription of a scope that has
-     * just been subscribed, unless it was reclaimed already. Runs in the scope's tenant context, so the
-     * subscription name resolves exactly as the subscribe did.
+     * just been subscribed, unless it was reclaimed already - and, while a client-id prefix is in
+     * effect (#8655), the identity the unprefixed shared client id gave it. Runs in the scope's tenant
+     * context, so the subscription name resolves exactly as the subscribe did. The subscription names
+     * derive from this deployment's own handlers and destinations, so a reclaim under an unprefixed
+     * client id another application still uses never touches that application's subscriptions.
      *
      * @param subscriptions the scope's subscriptions, all of them open
      * @param tenantId the tenant, or {@code null} for the global destinations
@@ -449,10 +487,17 @@ public class ListenerClassConsumer
             }
             String name = durableSubscriptionId(subscription.label(), destinationNameManager.toTenantName(subscription.destination()));
             String previousClientId = connectionMode == ListenerConnectionMode.SHARED ? name : sharedClientId(tenantId);
-            DurableIdentity previous = new DurableIdentity(previousClientId, name);
-            if (!reclaimed.contains(previous)) {
-                pendingReclaims.add(previous);
+            queueReclaim(new DurableIdentity(previousClientId, name));
+            String prefix = clientIdPrefix();
+            if (prefix != null) {
+                queueReclaim(new DurableIdentity(sharedClientId(null, tenantId), name));
             }
+        }
+    }
+
+    private void queueReclaim(DurableIdentity previous) {
+        if (!reclaimed.contains(previous)) {
+            pendingReclaims.add(previous);
         }
     }
 
@@ -495,9 +540,9 @@ public class ListenerClassConsumer
         } catch (JMSException | RuntimeException e) {
             // RuntimeException: the connection factory reports a refused client id as an
             // IllegalStateException - the very case this retry exists for.
-            String message = "The durable subscription(s) " + subscriptionNames + " the previous listener connection mode registered under"
-                    + " client id [" + clientId + "] are not reclaimed yet - the client id or a subscription is still in use; retrying on"
-                    + " the next pass.";
+            String message = "The durable subscription(s) " + subscriptionNames + " a previous listener connection mode or client id"
+                    + " registered under client id [" + clientId + "] are not reclaimed yet - the client id or a subscription is still in"
+                    + " use; retrying on the next pass.";
             if (reportedReclaimFailures.add(clientId)) {
                 LOGGER.warn("{} {}", message, e.getMessage(), e);
             } else {
@@ -511,8 +556,8 @@ public class ListenerClassConsumer
     private void unsubscribe(Session session, DurableIdentity identity) throws JMSException {
         try {
             session.unsubscribe(identity.subscriptionName());
-            LOGGER.info("Reclaimed the durable subscription [{}] the previous listener connection mode registered under client id [{}].",
-                    identity.subscriptionName(), identity.clientId());
+            LOGGER.info("Reclaimed the durable subscription [{}] a previous listener connection mode or client id registered under client"
+                    + " id [{}].", identity.subscriptionName(), identity.clientId());
         } catch (InvalidDestinationException absent) {
             // The usual answer: the mode never changed, so there is nothing registered under it.
             LOGGER.debug("No durable subscription [{}] under client id [{}] to reclaim: {}", identity.subscriptionName(),
@@ -544,28 +589,62 @@ public class ListenerClassConsumer
                 sharedConnectionLost(clientId, tenantId, scope);
             }, clientId);
         } catch (RuntimeException e) {
-            reportFailure(SHARED_CONNECTION_LABEL, scope, e);
+            if (isClientIdTaken(e)) {
+                reportClientIdTaken(clientId, scope, e);
+            } else {
+                reportFailure(SHARED_CONNECTION_LABEL, scope, e);
+            }
             return null;
         }
         sharedConnections.put(clientId, connection);
         reportedFailures.remove(failureKey(SHARED_CONNECTION_LABEL, scope));
+        clientIdRefusalsReportedAt.remove(scope);
         LOGGER.info("Java listeners share the broker connection [{}] for {}.", clientId, scope);
         return connection;
     }
 
     /**
      * The client id of a scope's shared connection. Stable, so the durable subscriptions registered
-     * under it are resumed rather than replaced on every boot, and unique per scope - two tenants' or
-     * two instances' connections may not claim one id. Two deployments sharing one broker share the
-     * default tenant's id as well, but they already share that tenant's physical destinations, which is
-     * the older of the two collisions.
+     * under it are resumed rather than replaced on every boot, and unique per scope - two tenants'
+     * connections may not claim one id - and per deployment (#8655): every application has a
+     * {@code default-tenant} and global destinations, so on a broker several applications share, an id
+     * derived from the scope alone is claimed by each of them, and all but the first are refused for as
+     * long as it runs. The deployment's identity is {@link #clientIdPrefix()}; without one the id is
+     * the unprefixed one, as before.
      *
      * @param tenantId the tenant, or {@code null} for the global destinations
      * @return the client id
      */
     static String sharedClientId(String tenantId) {
-        String id = tenantId == null ? "dirigible-java-global" : "dirigible-java-tenant-" + tenantId;
-        return id.replaceAll("[^A-Za-z0-9._-]", "_");
+        return sharedClientId(clientIdPrefix(), tenantId);
+    }
+
+    /**
+     * The client id of a scope's shared connection under the given deployment identity.
+     *
+     * @param prefix the deployment identity, or {@code null} for the unprefixed id
+     * @param tenantId the tenant, or {@code null} for the global destinations
+     * @return the client id
+     */
+    static String sharedClientId(String prefix, String tenantId) {
+        String scope = tenantId == null ? "global" : "tenant-" + tenantId;
+        String id = (prefix == null ? "dirigible-java-" : "dirigible-java-" + prefix + "-") + scope;
+        return bounded(id.replaceAll("[^A-Za-z0-9._-]", "_"));
+    }
+
+    /**
+     * The deployment identity of the shared client ids:
+     * {@link DirigibleConfig#MESSAGING_CLIENT_ID_PREFIX}, else {@link DirigibleConfig#APP_ID}, else
+     * {@code null}.
+     *
+     * @return the prefix, or {@code null} when neither is set
+     */
+    static String clientIdPrefix() {
+        String prefix = DirigibleConfig.MESSAGING_CLIENT_ID_PREFIX.getStringValue();
+        if (prefix == null || prefix.isBlank()) {
+            prefix = DirigibleConfig.APP_ID.getStringValue();
+        }
+        return prefix == null || prefix.isBlank() ? null : prefix.trim();
     }
 
     /**
@@ -798,6 +877,42 @@ public class ListenerClassConsumer
     }
 
     /**
+     * Whether the broker refused a connection because another connection holds its client id: the
+     * {@link InvalidClientIDException} the connection factory wraps.
+     */
+    private static boolean isClientIdTaken(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {
+            if (cause instanceof InvalidClientIDException) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Report a shared connection refused because another connection holds its client id (#8655): at
+     * WARN, and again every {@link #CLIENT_ID_REFUSAL_REPORT_INTERVAL} while it lasts, naming the
+     * setting that ends it. A rolling deploy's previous instance frees the id within minutes; another
+     * application on the same broker never does.
+     */
+    private void reportClientIdTaken(String clientId, String scope, RuntimeException cause) {
+        reportedFailures.add(failureKey(SHARED_CONNECTION_LABEL, scope));
+        long now = clock.millis();
+        Long reportedAt = clientIdRefusalsReportedAt.get(scope);
+        String message = "The broker refuses the shared connection for " + scope + ": its client id [" + clientId
+                + "] is held by another connection. A rolling deploy's previous instance frees it within minutes; if it lasts, another"
+                + " application on the same broker claims the same id - set DIRIGIBLE_MESSAGING_CLIENT_ID_PREFIX (or DIRIGIBLE_APP_ID) to"
+                + " a different value in each application. None of this scope's Java listeners is subscribed until then; retrying on"
+                + " the next pass.";
+        if (reportedAt == null || now - reportedAt >= CLIENT_ID_REFUSAL_REPORT_INTERVAL.toMillis()) {
+            clientIdRefusalsReportedAt.put(scope, now);
+            LOGGER.warn("{} {}", message, cause.getMessage(), cause);
+        } else {
+            LOGGER.debug("{} {}", message, cause.getMessage(), cause);
+        }
+    }
+
+    /**
      * Report a refused subscription once, then quietly. It is a WARN and not an ERROR because it is now
      * transient by construction - the reconciliation timer retries it - and the repeats fall to DEBUG
      * because that timer would otherwise emit one line per subscription per tenant, forever, for a
@@ -832,11 +947,14 @@ public class ListenerClassConsumer
      * @return the durable subscription id
      */
     private static String durableSubscriptionId(String label, String destinationName) {
-        String id = ("dirigible-java-" + label + "-" + destinationName).replaceAll("[^A-Za-z0-9._-]", "_");
+        return bounded(("dirigible-java-" + label + "-" + destinationName).replaceAll("[^A-Za-z0-9._-]", "_"));
+    }
+
+    /** Keep an id within the broker's column width without letting two long ids collapse into one. */
+    private static String bounded(String id) {
         if (id.length() <= MAX_SUBSCRIPTION_ID_LENGTH) {
             return id;
         }
-        // Keep it within the broker's column width without letting two long ids collapse into one.
         String digest = Integer.toHexString(id.hashCode());
         return id.substring(0, MAX_SUBSCRIPTION_ID_LENGTH - digest.length() - 1) + "-" + digest;
     }
