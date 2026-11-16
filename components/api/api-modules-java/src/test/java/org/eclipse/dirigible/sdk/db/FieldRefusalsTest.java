@@ -31,6 +31,7 @@ class FieldRefusalsTest {
             CATALOG + ".checks.fieldRequired", "Полето '{label}' е задължително", //
             CATALOG + ".checks.fieldTooLong", "Полето '{label}' е по-дълго от {length} знака", //
             CATALOG + ".checks.fieldDuplicate", "Вече съществува {entity} с това '{label}'", //
+            CATALOG + ".checks.UoM_pattern_Sap", "{label}: три главни латински букви", //
             UOM_LABEL_KEY, "мерна единица", //
             SAP_LABEL_KEY, "САП код");
 
@@ -76,6 +77,30 @@ class FieldRefusalsTest {
                 "Sap", "SAP Code", SAP_LABEL_KEY, "pattern", "^[A-Z]{3}$");
 
         assertEquals("The value of 'САП код' does not match the required pattern '^[A-Z]{3}$'", refusal.getMessage());
+    }
+
+    /**
+     * dirigible #7749: a pattern with the author's message is refused with that message, in the
+     * reader's language, instead of the generic sentence quoting the regex.
+     */
+    @Test
+    void anAuthoredPatternMessageIsRefusedInTheReadersLanguage() {
+        ValidationException refusal = FieldRefusals.authoredPattern("bg", CATALOGS, CATALOG + ".checks.UoM_pattern_Sap",
+                "{label}: three capital Latin letters", "Sap", "SAP Code", SAP_LABEL_KEY, "^[A-Z]{3}$");
+
+        assertEquals("САП код: три главни латински букви", refusal.getMessage());
+        assertEquals(CATALOG + ".checks.UoM_pattern_Sap", refusal.getMessageKey());
+        assertEquals(Map.of("label", "САП код", "pattern", "^[A-Z]{3}$"), refusal.getMessageParams());
+        assertEquals("Sap", refusal.getField());
+    }
+
+    @Test
+    void anAuthoredPatternMessageKeepsItsDefaultTextWhereItIsNotTranslated() {
+        ValidationException refusal = FieldRefusals.authoredPattern(null, CATALOGS, CATALOG + ".checks.UoM_pattern_Sap",
+                "{label}: three capital Latin letters", "Sap", "SAP Code", SAP_LABEL_KEY, "^[A-Z]{3}$");
+
+        assertEquals("SAP Code: three capital Latin letters", refusal.getMessage());
+        assertEquals("Sap", refusal.getField());
     }
 
     /** A controller generated without a catalog refuses in the default text, still naming the field. */

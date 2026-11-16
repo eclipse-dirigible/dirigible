@@ -2029,6 +2029,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // Input-format regex (#6336): the generated controller rejects a non-matching value and the
             // form input carries it as an HTML pattern. String fields only - see validatePattern.
             p.put("widgetPattern", field.getPattern());
+            // What a value off it is refused with (#7749): a scalar, so it rides both the `.model` and the
+            // `.edm` twin; emitted only when authored, so a model without it is byte-identical.
+            if (notBlank(field.getPatternMessage())) {
+                p.put("widgetPatternMessage", field.getPatternMessage()
+                                                   .trim());
+            }
         } else if ("email".equalsIgnoreCase(field.getFormat())) {
             // format: email (#6463) is a preset over the same attribute - so the server-side check and the
             // client-side feedback are the ones the pattern machinery already provides, not a second path.

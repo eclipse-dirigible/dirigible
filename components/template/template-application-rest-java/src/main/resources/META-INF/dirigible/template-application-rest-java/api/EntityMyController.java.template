@@ -1154,7 +1154,11 @@ public class ${name}MyController {
 ## A format constraint describes what a value must look like WHEN THERE IS ONE - on an OPTIONAL
 ## property a blank string is "no value", exactly as on the power surface.
         if (entity.${property.name} != null#if($property.isRequiredProperty != "true") && !entity.${property.name}.toString().isBlank()#end && !entity.${property.name}.toString().matches("${property.widgetPatternJava}")) {
+#if($property.patternMessageArgsJava)
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.authoredPattern(${property.patternMessageArgsJava}, ${refusalField}, "${property.widgetPatternJava}");
+#else
             throw org.eclipse.dirigible.sdk.db.FieldRefusals.pattern(${refusalCatalog}, ${refusalField}, "${property.widgetPatternJava}");
+#end
         }
 #end
 #end

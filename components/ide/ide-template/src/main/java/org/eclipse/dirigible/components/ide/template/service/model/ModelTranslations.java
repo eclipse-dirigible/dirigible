@@ -202,6 +202,23 @@ final class ModelTranslations {
     }
 
     /**
+     * The catalog key of the message a value off a property's {@code pattern} is refused with (intent
+     * {@code patternMessage:}, #7749).
+     *
+     * @param entity the entity
+     * @param property the property
+     * @return the key, relative to the catalog's {@code checks} sub-object; {@code null} when the
+     *         property has no pattern or no message for it
+     */
+    static String patternMessageKey(Map<String, Object> entity, Map<String, Object> property) {
+        String message = str(property, "widgetPatternMessage");
+        if (!ModelValues.truthy(property, "widgetPattern") || message == null || message.isBlank()) {
+            return null;
+        }
+        return str(entity, "name") + "_pattern_" + str(property, "name");
+    }
+
+    /**
      * The catalog key of the refusal of a derived total its column cannot hold (#8096).
      *
      * @param entity the entity
@@ -437,9 +454,10 @@ final class ModelTranslations {
 
     /**
      * Collects the user-facing messages of the entities' checks, business keys, picker rules (issue
-     * #7611), fixed relations (#7903), bounded derived totals (#8096) and delete refusals (#8569), in
-     * the default language, keyed as the generated code resolves them - so a language catalog
-     * translates a refusal, a warning or a picker hint exactly as it translates a label.
+     * #7611), fixed relations (#7903), bounded derived totals (#8096), field pattern messages (#7749)
+     * and delete refusals (#8569), in the default language, keyed as the generated code resolves them -
+     * so a language catalog translates a refusal, a warning or a picker hint exactly as it translates a
+     * label.
      *
      * @param model the entity model
      * @return key to default-language message, in model order
@@ -479,6 +497,10 @@ final class ModelTranslations {
                     if (fixedKey != null) {
                         messages.put(fixedKey, property.get(flag + "Message"));
                     }
+                }
+                String patternKey = patternMessageKey(entity, property);
+                if (patternKey != null) {
+                    messages.put(patternKey, property.get("widgetPatternMessage"));
                 }
                 String overflowKey = overflowMessageKey(entity, property);
                 if (overflowKey != null) {

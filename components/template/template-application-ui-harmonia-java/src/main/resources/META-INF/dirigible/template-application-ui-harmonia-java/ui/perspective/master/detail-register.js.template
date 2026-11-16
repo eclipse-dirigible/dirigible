@@ -19,10 +19,12 @@
 #macro(dependsOnMeta $property)#if($property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl), dependsOn: { property: '${property.widgetDependsOnProperty}', #if($property.widgetDependsOnHeader)header: true, #{end}#if($property.widgetDependsOnValueFrom)valueFrom: '${property.widgetDependsOnValueFrom}', #{end}#if($property.widgetDependsOnValueBy)valueBy: { path: '${property.widgetDependsOnValueBy}', header: #if($property.widgetDependsOnValueByHeader)true#{else}false#end, #if($property.widgetDependsOnValueByUrl)url: '${property.widgetDependsOnValueByUrl}', #{end}cases: ${property.widgetDependsOnValueCases}#if($property.widgetDependsOnValueDefault), deflt: '${property.widgetDependsOnValueDefault}'#end }, #end#if($property.widgetDependsOnFilterBy)filterBy: '${property.widgetDependsOnFilterBy}', #{end}url: '${property.widgetDependsOnControllerUrl}' }#end#end
 ## Input-format regex (intent field `pattern:`): the item dialog binds it as the input's HTML pattern.
 ## Pre-rendered as a JS literal by ModelParameterProcessor (a regex's backslashes must survive it).
+## The author's message for a value off it (`patternMessage:`, #7749) rides as patternTkey / patternMessage,
+## the input's hint.
 ## The column length (#8135): the item dialog binds it as the text input's maxlength - a string column with
 ## a declared length, the set the controller refuses past.
 #macro(maxLengthMeta $property)#if($property.dataTypeJavaClass == "String" && $property.dataLength && "$property.dataLength" != "" && $property.dataTypeJava != "time"), maxLength: ${property.dataLength}#end#end
-#macro(patternMeta $property)#if($property.widgetPatternJs), pattern: ${property.widgetPatternJs}#end#end
+#macro(patternMeta $property)#if($property.widgetPatternJs), pattern: ${property.widgetPatternJs}#if($property.patternMessageTkey), patternTkey: '${property.patternMessageTkey}', patternMessage: '${property.widgetPatternMessageJs}'#end#end#end
 ## Input normalization (intent field `normalize:`, #7726): the item dialog applies it on blur, as the
 ## server does on save. Pre-rendered as a JS function by ModelParameterProcessor.
 #macro(normalizeMeta $property)#if($property.normalizeJs), normalize: ${property.normalizeJs}#end#end

@@ -519,6 +519,13 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   The generated REST controller rejects a non-matching value with 400 and the form input carries it as an HTML
   `pattern`. **String/text only** - on a numeric field the same underlying attribute is the DISPLAY format, so a
   regex there is rejected. The regex must compile.
+- `patternMessage` (beside a `pattern`) - **what a value off the pattern is refused with** (#7749), instead of
+  the generic sentence that quotes the regex: say what the rule MEANS.
+  `- { name: registrationNumber, type: string, length: 13, pattern: '^([0-9]{9}|[0-9]{10}|[0-9]{13})$', patternMessage: "The {label} has 9, 10 or 13 digits" }`
+  The controllers' 400 carries it (naming the field, so the form marks it) and the form input shows it as its
+  hint. It seeds the en-US catalog under `checks.<Entity>_pattern_<field>`, so `i18n/<locale>/<model>.model.json`
+  translates it like a `checks:` message; `{label}` is the field's translated label, `{pattern}` the regex.
+  Requires `pattern` (a `format: email` field keeps its own message); refused blank.
 - `normalize` (on a `string`/`text` field) - **what the value becomes before it is validated and stored** (#7726):
   `- { name: phone, type: string, length: 20, normalize: [strip: " -()"], pattern: '^\+[1-9][0-9]{6,14}$' }`
   stores a pasted `+359 898 123 456` or `+359-898-123-456` as `+359898123456` instead of refusing it. Transforms:

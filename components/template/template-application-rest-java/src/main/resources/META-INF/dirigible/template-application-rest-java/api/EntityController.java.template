@@ -1830,7 +1830,11 @@ public class ${name}Controller {
 ## address). The Harmonia form already posts '' as null, but a direct REST caller may send ''.
 ## A REQUIRED property keeps the strict check: blank is not a legal value there.
         if (entity.${property.name} != null#if($property.isRequiredProperty != "true") && !entity.${property.name}.toString().isBlank()#end && !entity.${property.name}.toString().matches("${property.widgetPatternJava}")) {
+#if($property.patternMessageArgsJava)
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.authoredPattern(${property.patternMessageArgsJava}, ${refusalField}, "${property.widgetPatternJava}");
+#else
             throw org.eclipse.dirigible.sdk.db.FieldRefusals.pattern(${refusalCatalog}, ${refusalField}, "${property.widgetPatternJava}");
+#end
         }
 #end
 #end

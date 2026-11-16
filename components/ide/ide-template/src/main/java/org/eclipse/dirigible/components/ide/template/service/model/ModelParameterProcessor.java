@@ -604,7 +604,10 @@ final class ModelParameterProcessor {
      * {@code entityLabelJava} is the entity's default-language label, and each property's
      * {@code refusalFieldArgsJava} its name, its label and the label's catalog key. A check about one
      * property of the record gets a {@code refusalJava} that names it (#8597), so the error body
-     * carries the field a form marks; any other check's refuses as before.
+     * carries the field a form marks; any other check's refuses as before. A property whose pattern
+     * carries the author's message (intent {@code patternMessage:}, #7749) gets
+     * {@code patternMessageArgsJava}, the message's catalog key and default text, and the form-side
+     * {@code patternMessageTkey} / {@code widgetPatternMessageJs}.
      *
      * @param entity the entity
      * @param parameters the generation parameters (project name and model file path)
@@ -632,6 +635,17 @@ final class ModelParameterProcessor {
                     "\"" + JavaLiterals.escape(name) + "\", \"" + JavaLiterals.escape(label == null ? name : label.toString()) + "\", "
                             + (catalog == null || propertyDataName == null ? "null"
                                     : "\"" + JavaLiterals.escape(catalog + ".t." + propertyDataName) + "\""));
+            // The author's message for a value off the pattern (#7749): its catalog key and its
+            // default-language text, for the controllers' refusal and the form inputs' hint.
+            String patternKey = ModelTranslations.patternMessageKey(entity, property);
+            if (patternKey != null) {
+                String message = str(property, "widgetPatternMessage").trim();
+                String catalogKey = ModelTranslations.catalogKey(parameters, ModelTranslations.CHECKS_CATALOG + "." + patternKey);
+                property.put("patternMessageArgsJava", (catalog == null ? "null" : "\"" + JavaLiterals.escape(catalogKey) + "\"") + ", \""
+                        + JavaLiterals.escape(message) + "\"");
+                property.put("patternMessageTkey", JsLiterals.escape(catalogKey));
+                property.put("widgetPatternMessageJs", JsLiterals.escape(message));
+            }
         }
         for (Map<String, Object> check : asMaps(entity.get("checks"))) {
             String args = str(check, "messageArgsJava");

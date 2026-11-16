@@ -64,6 +64,37 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * #7749: a pattern carrying the author's message refuses with it - the controllers get its catalog
+     * key and default text, the forms the key and the JS-escaped text - and the message seeds the en-US
+     * catalog under {@code checks}. A pattern without a message gets none of them.
+     */
+    @Test
+    void aPatternMessageIsHandedToTheControllersTheFormsAndTheCatalog() {
+        Map<String, Object> registration = property("RegistrationNumber", "VARCHAR");
+        registration.put("widgetPattern", "^([0-9]{9}|[0-9]{10}|[0-9]{13})$");
+        registration.put("widgetPatternMessage", "EIK: 9, 10 or 13 digits - the \"Bulstat\" isn't optional");
+        Map<String, Object> code = property("Code", "VARCHAR");
+        code.put("widgetPattern", "^[A-Z]{3}$");
+        Map<String, Object> customer = entity("Customer", "Customers", property("Id", "INTEGER"), registration, code);
+        Map<String, Object> model = model(customer);
+        Map<String, Object> parameters = javaParameters();
+        parameters.put("filePath", "customers.model");
+
+        ModelParameterProcessor.process(model, parameters);
+
+        assertEquals("\"bookstore:customers-model.checks.Customer_pattern_RegistrationNumber\", "
+                + "\"EIK: 9, 10 or 13 digits - the \\\"Bulstat\\\" isn't optional\"", registration.get("patternMessageArgsJava"));
+        assertEquals("bookstore:customers-model.checks.Customer_pattern_RegistrationNumber", registration.get("patternMessageTkey"));
+        assertEquals("EIK: 9, 10 or 13 digits - the \"Bulstat\" isn\\'t optional", registration.get("widgetPatternMessageJs"));
+        assertFalse(code.containsKey("patternMessageArgsJava"), "a pattern without a message keeps the generic refusal");
+        assertFalse(code.containsKey("patternMessageTkey"));
+
+        Map<String, Object> catalog = ModelTranslations.checkMessages(model);
+        assertEquals("EIK: 9, 10 or 13 digits - the \"Bulstat\" isn't optional", catalog.get("Customer_pattern_RegistrationNumber"));
+        assertFalse(catalog.containsKey("Customer_pattern_Code"));
+    }
+
+    /**
      * #8096: a bounded derived total refuses in the reader's language - the repository's requireFits
      * hands {@code CheckMessages} the key the en-US catalog writes the message under, which names the
      * largest value the column holds. An unmarked decimal is not bounded.

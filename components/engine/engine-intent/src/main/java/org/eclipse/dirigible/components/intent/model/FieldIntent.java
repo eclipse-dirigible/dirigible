@@ -251,6 +251,17 @@ public class FieldIntent {
     private String pattern;
 
     /**
+     * Optional message a {@link #pattern} refusal reads as
+     * ({@code patternMessage: "9, 10 or 13 digits"}, dirigible #7749), instead of the generic sentence
+     * that quotes the regex. The generated controllers answer a value off the pattern with it (a 400
+     * naming the field), and the form inputs carry it as their hint. It seeds the en-US catalog entry
+     * {@code checks.<Entity>_pattern_<field>}, so it is translated like a {@code checks:} message; it
+     * may name the field as {@code {label}} and the regex as {@code {pattern}}. Requires
+     * {@code pattern}; refused blank.
+     */
+    private String patternMessage;
+
+    /**
      * Optional normalization of a {@code string} / {@code text} value before it is validated and stored
      * (#7726): {@code trim}, {@code strip: <chars>}, {@code upper}, {@code lower}, {@code emptyToNull}
      * (#8492, a blank result is stored as NULL, so an optional unique key holds any number). A pasted
@@ -304,6 +315,14 @@ public class FieldIntent {
 
     public String getPattern() {
         return pattern;
+    }
+
+    public String getPatternMessage() {
+        return patternMessage;
+    }
+
+    public void setPatternMessage(String patternMessage) {
+        this.patternMessage = patternMessage;
     }
 
     public String getName() {

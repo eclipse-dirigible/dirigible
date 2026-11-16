@@ -456,7 +456,7 @@
                     <p x-h-field-error x-show="s.promptShowsInvalid(col)" x-text="T('application-core:shell.apiErrors.field.Email', 'Enter a valid email address.')"></p>
                   </template>
                   <template x-if="!['DROPDOWN','NUMBER','CHECKBOX','DATE','MULTISELECT','EMAIL'].includes(col.widget)">
-                    <input x-h-input type="text" x-model="s.promptValues[col.name]" :pattern="col.pattern" :data-prompt-field="col.name" />
+                    <input x-h-input type="text" x-model="s.promptValues[col.name]" :pattern="col.pattern" :title="col.patternTkey ? T(col.patternTkey, col.patternMessage) : null" :data-prompt-field="col.name" />
                   </template>
                   <p x-h-field-description x-show="col.help" x-text="col.help"></p>
                 </div>
