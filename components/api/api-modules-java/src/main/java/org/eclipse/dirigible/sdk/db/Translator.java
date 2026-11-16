@@ -20,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Predicate;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -120,6 +121,34 @@ public final class Translator {
             }
         }
         return entity;
+    }
+
+    /**
+     * The ids of the base rows whose translation of a property, in the given language, satisfies a
+     * condition - what a search in the language the user reads matches against, beside the base column.
+     * The property is matched to its language-table column case-insensitively; a property the language
+     * table does not carry matches nothing.
+     *
+     * @param table the BASE table name (the language table is {@code <table>_LANG})
+     * @param language the language code or locale tag; null/blank matches nothing
+     * @param property the entity property whose translated value is tested
+     * @param condition the test applied to each non-null translated value
+     * @return the {@code Id} values of the matching language rows, as the database returned them
+     */
+    public static List<Object> idsWhere(String table, String language, String property, Predicate<String> condition) {
+        String lang = normalize(language);
+        List<Object> ids = new ArrayList<>();
+        if (lang == null) {
+            return ids;
+        }
+        for (Map<String, Object> row : readLanguageRows(table, lang)) {
+            Object translated = valueIgnoreCase(row, property);
+            Object id = valueIgnoreCase(row, ID_COLUMN);
+            if (translated != null && id != null && condition.test(String.valueOf(translated))) {
+                ids.add(id);
+            }
+        }
+        return ids;
     }
 
     /**

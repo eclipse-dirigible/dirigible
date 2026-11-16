@@ -2682,6 +2682,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     public List<${name}Entity> query(String hql, Map<String, Object> parameters) {
         return Translator.translateList(super.query(hql, parameters), User.getLanguage(), "${tablePrefix}${dataName}");
     }
+
+    @Override
+    public List<${name}Entity> query(String hql, Map<String, Object> parameters, int limit, int offset) {
+        // The generated controller's POST /search reads its page through this overload (#8633).
+        return Translator.translateList(super.query(hql, parameters, limit, offset), User.getLanguage(), "${tablePrefix}${dataName}");
+    }
 #end
 #if($documentMaster)
 
