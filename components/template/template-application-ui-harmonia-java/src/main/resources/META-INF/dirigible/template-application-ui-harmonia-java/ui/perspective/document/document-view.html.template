@@ -270,7 +270,7 @@
          change this", where the document is simply being read. An immutable document is always in
          preview (an immutable /edit route is forced into it by the page), so this is also its frozen
          header - the separate summary card of #7501 is gone. -->
-    <form @submit.prevent="save()" @focusout="validateOnBlur($event)" class="vbox gap-4 w-full">
+    <form @submit.prevent="save()" @focusout="validateOnBlur($event)" x-effect="dropStaleServerErrors()" class="vbox gap-4 w-full">
       <div x-show="saveFailureMessage || errors.__summary" x-h-alert data-variant="negative" role="alert">
         <svg x-h-icon data-icon="circle-error" role="img" aria-label="error"></svg>
         <div x-h-alert-title x-text="T('$projectName:${tprefix}.messages.error.saving', 'Could not save')"></div>

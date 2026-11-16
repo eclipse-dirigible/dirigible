@@ -740,6 +740,7 @@ document.addEventListener('alpine:init', () => {
 
     async save() {
       if (this.isPreview) return;
+      this.resetSaveOutcome();
       if (!this.validate()) {
         this.state = 'validation-error';
         // Name the failing fields in the visible summary - an invalid field the layout does not
@@ -853,6 +854,7 @@ document.addEventListener('alpine:init', () => {
     // identity/system/status fields are dropped from the cloned header.
     async duplicate() {
       if (this.id == null) return;
+      this.resetSaveOutcome();
       this.state = 'saving';
       try {
         const src = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id));
