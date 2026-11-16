@@ -222,12 +222,12 @@ public class InvoiceLineController {
                     case "LT" -> "e." + field + " < :" + paramName;
                     default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported operator: " + operator);
                 };
-                hql.append(first ? " where " : " and ").append(clause);
                 params.put(paramName, switch (operator) {
                     case "IN" -> value;
                     case "CONTAINS" -> containsPattern(field, value);
                     default -> coerceValue(field, value);
                 });
+                hql.append(first ? " where " : " and ").append(clause);
                 first = false;
             }
         }

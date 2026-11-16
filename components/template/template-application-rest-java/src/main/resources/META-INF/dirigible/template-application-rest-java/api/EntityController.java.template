@@ -1049,18 +1049,49 @@ public class ${name}Controller {
                     case "LT" -> "e." + field + " < :" + paramName;
                     default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported operator: " + operator);
                 };
-                hql.append(first ? " where " : " and ").append(clause);
                 params.put(paramName, switch (operator) {
                     case "IN" -> value;
                     case "CONTAINS" -> containsPattern(field, value);
                     default -> coerceValue(field, value);
                 });
+#if($multilingual == "true")
+                if ("CONTAINS".equals(operator)) {
+                    clause = orTranslationContains(clause, field, value, params);
+                }
+#end
+                hql.append(first ? " where " : " and ").append(clause);
                 first = false;
             }
         }
         return hql.toString();
     }
 
+#if($multilingual == "true")
+    /**
+     * ${name} is multilingual and its rows are read in the caller's language, so a CONTAINS also finds
+     * a row by its translation in that language (#8633): a picker typed into in the language it shows
+     * finds what it shows. The language table is not mapped, so the Translator answers the matching ids
+     * and they are bound as a list; none leaves the base condition as it is.
+     */
+    private static String orTranslationContains(String clause, String field, Object value, Map<String, Object> params) {
+        String text = value == null ? "" : String.valueOf(value)
+                                                 .toLowerCase(Locale.ROOT);
+        List<Object> ids = new java.util.ArrayList<>();
+        for (Object id : org.eclipse.dirigible.sdk.db.Translator.idsWhere("${tablePrefix}${dataName}", org.eclipse.dirigible.sdk.security.User.getLanguage(), field,
+                translated -> translated.toLowerCase(Locale.ROOT)
+                                        .contains(text))) {
+            // bound as the key's own type - the language table's Id is read as the database typed it
+            ids.add(#foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end.valueOf(String.valueOf(id)));
+        }
+        if (ids.isEmpty()) {
+            return clause;
+        }
+        String paramName = "p" + params.size();
+        params.put(paramName, ids);
+        return "(" + clause + " or e.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end in (:" + paramName + "))";
+    }
+
+#end
     /**
      * The LIKE pattern of a CONTAINS condition: the value lower-cased, its wildcards escaped with
      * {@code !}, between two {@code %}. Only a text field can be matched this way.
