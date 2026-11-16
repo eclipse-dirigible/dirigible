@@ -1477,6 +1477,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("itemWhere", "");
                 e.put("itemRefuse", "");
             }
+            putRefusalNames(g, e, model, context, projectName, crossModelSource, crossModel);
             if (g.readsReport()) {
                 ReportItemsSupport.put(g, e, source, byName, model);
             }
@@ -1488,12 +1489,64 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                         childAssignments(Map.of(), items.getDefaults(), "row", temporalKinds(line, null), relationProperties(line, null)));
             }
             e.put("hasPrompt", g.hasPrompt());
-            e.put("promptFields", promptFields(g, crossModel ? null : byName.get(g.getTo()), target, source));
+            e.put("promptFields", promptFields(g, crossModel ? null : byName.get(g.getTo()), target, source,
+                    refusalCatalog(model, context, projectName)));
             putLink(g, e, byName, compositionParents, model, target);
             putReversal(g, e, source, byName);
             out.add(e);
         }
         return out;
+    }
+
+    /**
+     * What a create-from's refusals are translated through (dirigible #8646), onto its glue entry: the
+     * intent's model catalog ({@code refusalCatalog}), the default-language labels of the source, the
+     * target, the source's item entity and the action, each beside the catalog key the en-US catalog
+     * writes it under ({@code ...LabelKey}), and the key of an authored {@code items: refuse:}
+     * sentence. An entity another model owns has its label in that model's catalog, which this one
+     * cannot name: its key stays empty, and the refusal names it by its English label.
+     */
+    private static void putRefusalNames(GeneratesIntent g, Map<String, Object> e, IntentModel model, IntentGenerationContext context,
+            String projectName, boolean crossModelSource, boolean crossModel) {
+        String catalog = refusalCatalog(model, context, projectName);
+        String tablePrefix = IntentNaming.upperSnake(modelBaseName(model, context));
+        e.put("refusalCatalog", catalog);
+        putEntityLabel(e, "fromEntity", g.getFrom(), crossModelSource ? null : catalog, tablePrefix);
+        putEntityLabel(e, "toEntity", g.getTo(), crossModel ? null : catalog, tablePrefix);
+        putEntityLabel(e, "fromItemEntity", String.valueOf(e.get("fromItemEntity")), crossModelSource ? null : catalog, tablePrefix);
+        e.put("actionLabel", IntentNaming.customActionLabel(g.getName(), g.getLabel()));
+        // Only an action with a button has a label in the catalog (EdmIntentGenerator's
+        // customActionLabels); an event-only one is named by its label alone.
+        e.put("actionLabelKey", g.hasButton() ? catalog + ".actions." + g.getName() : "");
+        e.put("itemRefuseKey", String.valueOf(e.get("itemRefuse"))
+                                     .isEmpty() ? "" : catalog + ".checks." + IntentNaming.generateItemsRefusedKey(g.getName()));
+    }
+
+    private static void putEntityLabel(Map<String, Object> e, String role, String entity, String catalog, String tablePrefix) {
+        boolean named = entity != null && !entity.isEmpty();
+        e.put(role + "Label", named ? IntentNaming.humanize(entity) : "");
+        e.put(role + "LabelKey", named && catalog != null ? catalog + ".t." + tablePrefix + "_" + IntentNaming.upperSnake(entity) : "");
+    }
+
+    /**
+     * The intent's model catalog, {@code <project>:<model>-model} - the namespace the generated en-US
+     * catalog of the {@code .model} is emitted under, the one an action's label is named in too
+     * ({@link IntentNaming#customActionTranslationKey}).
+     */
+    private static String refusalCatalog(IntentModel model, IntentGenerationContext context, String projectName) {
+        return projectName + ":" + modelBaseName(model, context) + "-model";
+    }
+
+    /**
+     * The model's base name: {@link IntentNaming#baseName} where a context carries the model, else its
+     * own name.
+     */
+    private static String modelBaseName(IntentModel model, IntentGenerationContext context) {
+        if (context != null && context.getModel() != null) {
+            return IntentNaming.baseName(context);
+        }
+        return model.getName() == null || model.getName()
+                                               .isBlank() ? "intent" : model.getName();
     }
 
     /**
@@ -1957,7 +2010,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * the owner model.
      */
     private static List<Map<String, Object>> promptFields(GeneratesIntent g, EntityIntent target,
-            CrossModelSupport.TargetInfo crossModelTarget, EntityIntent source) {
+            CrossModelSupport.TargetInfo crossModelTarget, EntityIntent source, String catalog) {
         List<Map<String, Object>> out = new ArrayList<>();
         if (!g.hasPrompt() || (target == null && crossModelTarget == null)) {
             return out;
@@ -1970,12 +2023,24 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             }
             String prop = IntentNaming.pascalCase(field);
             String type;
+            // The input's label and its catalog key, the ones a missing required input is refused with
+            // (dirigible #8646). A cross-model target's labels are in its own model's catalog, which this
+            // one cannot name: the input is named by its humanized name.
+            String label = IntentNaming.humanize(field);
+            String labelKey = "";
             if (target != null) {
                 FieldIntent targetField = fieldNamed(target, field);
-                if (targetField == null && toOneRelation(target, field) == null) {
+                RelationIntent relation = targetField == null ? toOneRelation(target, field) : null;
+                if (targetField == null && relation == null) {
                     continue; // parser already reported it
                 }
                 type = targetField == null ? "relation" : targetField.getType();
+                String authored = targetField != null ? targetField.getLabel() : relation.getLabel();
+                if (authored != null && !authored.isBlank()) {
+                    label = authored.trim();
+                }
+                labelKey = catalog + ".t." + IntentNaming.upperSnake(target.getName()) + "_"
+                        + IntentNaming.upperSnake(targetField != null ? targetField.getName() : relation.getName());
             } else {
                 type = crossModelPromptType(g, field, prop, crossModelTarget, problems);
                 if (type == null) {
@@ -1991,6 +2056,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // The conversion of the posted value to the field's type, as a reading (issue #7425).
             entry.put("reading", Readings.convert(type));
             entry.put("defaultProp", p.hasDefault() ? IntentNaming.pascalCase(p.getDefaultFrom()) : "");
+            entry.put("label", label);
+            entry.put("labelKey", labelKey);
             out.add(entry);
         }
         if (!problems.isEmpty()) {

@@ -182,6 +182,29 @@ class GlueGeneratesTest {
                 undo: delete
             """;
 
+    /**
+     * dirigible #8646: a create-from's refusals are translated through the intent's model catalog, so
+     * the glue entry names the catalog, the keys the en-US catalog writes the entities' and the
+     * action's labels under, and the key of the authored refuse: sentence.
+     */
+    @Test
+    void theRefusalNamesAreTheModelCatalogsKeys() {
+        String refusing = YAML.replace("      to: OrderItem\n      map:",
+                "      to: OrderItem\n      where:\n        - { field: amount, op: gt, value: 0 }\n"
+                        + "      refuse: A quote line carries no amount\n      map:");
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(refusing))
+                                                   .get(0);
+        assertEquals("sales:sales-model", g.get("refusalCatalog"));
+        assertEquals("Quote", g.get("fromEntityLabel"));
+        assertEquals("sales:sales-model.t.SALES_QUOTE", g.get("fromEntityLabelKey"));
+        assertEquals("Quote Item", g.get("fromItemEntityLabel"));
+        assertEquals("sales:sales-model.t.SALES_QUOTE_ITEM", g.get("fromItemEntityLabelKey"));
+        assertEquals("sales:sales-model.t.SALES_ORDER", g.get("toEntityLabelKey"));
+        assertEquals("Order From Quote", g.get("actionLabel"));
+        assertEquals("sales:sales-model.actions.order-from-quote", g.get("actionLabelKey"));
+        assertEquals("sales:sales-model.checks.orderFromQuoteItemsRefused", g.get("itemRefuseKey"));
+    }
+
     @Test
     void oneRowPerReportRowCarriesTheBackReferenceAndTheDeleteUndo() {
         Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(YEAR_OPEN))
@@ -1277,14 +1300,18 @@ class GlueGeneratesTest {
         assertEquals(true, g.get("hasPrompt"));
         List<Map<String, Object>> prompt = (List<Map<String, Object>>) g.get("promptFields");
         assertEquals(3, prompt.size());
+        // Each input carries the label and catalog key a missing required value is refused with (#8646).
+        String labels = "sales:sales-model.t.SALES_INVOICE_CUSTOMER_PAYMENT_";
         assertTrue(GlueRendering.rendered(prompt)
-                                .contains(Map.of("prop", "CustomerPayment", "required", true, "defaultProp", "", "expr",
+                                .contains(Map.of("prop", "CustomerPayment", "required", true, "defaultProp", "", "label",
+                                        "Customer Payment", "labelKey", labels + "CUSTOMER_PAYMENT", "expr",
                                         "Integer.valueOf(new java.math.BigDecimal(String.valueOf(raw)).intValue())")));
         assertTrue(GlueRendering.rendered(prompt)
-                                .contains(Map.of("prop", "Amount", "required", true, "defaultProp", "", "expr",
-                                        "new java.math.BigDecimal(String.valueOf(raw))")));
+                                .contains(Map.of("prop", "Amount", "required", true, "defaultProp", "", "label", "Amount", "labelKey",
+                                        labels + "AMOUNT", "expr", "new java.math.BigDecimal(String.valueOf(raw))")));
         assertTrue(GlueRendering.rendered(prompt)
-                                .contains(Map.of("prop", "Note", "required", false, "defaultProp", "", "expr", "String.valueOf(raw)")));
+                                .contains(Map.of("prop", "Note", "required", false, "defaultProp", "", "label", "Note", "labelKey",
+                                        labels + "NOTE", "expr", "String.valueOf(raw)")));
     }
 
     /**

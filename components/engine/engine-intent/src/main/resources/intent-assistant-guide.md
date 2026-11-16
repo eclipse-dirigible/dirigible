@@ -2851,6 +2851,9 @@ document says which it means:
 With it, an unqualified row stops the whole create-from with a 400 carrying that message and the
 keys of the offending rows - which of a hundred lines to go and fix is the caller's whole question.
 `refuse:` requires `where:`; without conditions no row is ever unqualified.
+The message is translated like a check's: it is written into the model's en-US catalog under
+`checks.<action>ItemsRefused`, and a language catalog translates it under the same key - as it does
+the create-from's other refusals (no row qualifies, a missing required `prompt:` input).
 
 **A rule that qualifies no row refuses either way.** An invoice with no lines is not the invoice
 that was asked for, and it is the harder failure to notice - it exists and counts as the period's
