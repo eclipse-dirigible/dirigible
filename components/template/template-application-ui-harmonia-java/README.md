@@ -148,7 +148,8 @@ A `.model` entity may declare `relatedEntities` — read-only registers of the r
 **reference** it (a project-month's timesheet lines, a customer's invoices, an account's journal
 entries). Each entity that declares any emits one `<Entity>.related.js` calling
 `App.registerRelated(<entity>, def)`, and its form / document pages render one shared
-`relatedPanel` per entry off `App.relatedFor(<entity>)`.
+`relatedPanel` per entry off `App.relatedFor(<entity>)` - as does its list's details sheet, below
+the selected record's properties, keyed by the selected id so another row re-reads it (#8651).
 
 Three things about it are deliberate and easy to get wrong:
 

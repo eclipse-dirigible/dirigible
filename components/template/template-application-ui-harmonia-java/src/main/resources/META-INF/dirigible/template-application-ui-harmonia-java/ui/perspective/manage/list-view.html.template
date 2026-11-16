@@ -661,6 +661,79 @@
 #end
 #end
             </div>
+#if($relatedEntities && $relatedEntities.size() > 0)
+
+          <!-- ===== Related registers (#8651): the records that REFERENCE the selected one, read-only,
+               below its properties - the same panel its form page renders. Only for a saved record,
+               and keyed by its id, so selecting another row re-reads the register instead of showing
+               the previous record's rows. ===== -->
+          <template x-for="r in (selectedId != null ? relatedDefs : [])" :key="r.entity + ':' + selectedId">
+            <div x-data="relatedPanel(r, selectedId)" class="vbox gap-4 w-full">
+              <div x-h-separator data-orientation="horizontal"></div>
+              <div class="hbox items-center gap-2">
+                <h3 x-h-text.h4 x-text="title"></h3>
+                <span x-h-badge data-variant="outline" x-show="rows.length" x-text="rows.length"></span>
+              </div>
+              <div class="vbox gap-4">
+                <div x-show="state === 'loading'"><div x-h-spinner></div></div>
+                <div x-show="state === 'error'" x-h-text.muted x-text="error"></div>
+                <div x-show="state === 'empty'" x-h-text.muted x-text="T('$projectName:${tprefix}.messages.noData', 'No records yet.')"></div>
+                <div x-show="state === 'default'" x-h-table-container.scroll style="max-height: 320px">
+                  <table x-h-table data-borders="rows">
+                    <thead x-h-table-header>
+                      <tr x-h-table-row>
+                        <template x-for="col in def.columns" :key="col.name">
+                          <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="columnHeader(col)"></th>
+                        </template>
+                        <th x-h-table-head scope="col" data-col-actions data-sticky="end"></th>
+                      </tr>
+                    </thead>
+                    <tbody x-h-table-body>
+                      <template x-for="row in rows" :key="row[def.primaryKey]">
+                        <tr x-h-table-row data-hoverable="true">
+                          <template x-for="col in def.columns" :key="col.name">
+                            <td x-h-table-cell :class="col.number ? 'text-right' : ''">
+#if($rendersCollectionColumns)
+                              <template x-if="col.list"><div class="hbox flex-wrap gap-1"><template x-for="(text, i) in (row[col.name] || [])" :key="i"><span x-h-chip x-text="text"></span></template></div></template>
+#end
+                              <template x-if="col.number"><span x-text="cellValue(col, row)"></span></template>
+                              <template x-if="!col.number#if($rendersCollectionColumns) &amp;&amp; !col.list#end">
+                                <div style="white-space: normal; overflow-wrap: break-word; max-width: 28rem;" x-text="cellValue(col, row)"></div>
+                              </template>
+                            </td>
+                          </template>
+                          <td x-h-table-cell data-row-actions data-sticky="end">
+                            <button type="button" x-h-button data-variant="transparent" data-size="sm" @click="openRow(row)" :aria-label="T('$projectName:${tprefix}.defaults.open', 'Open')"><svg role="presentation" x-h-lucide data-lucide="external-link"></svg></button>
+                            <!-- The row's record's own actions (#8118), beside Open - only when it has any. -->
+                            <template x-if="rowActions(row).length || rowDestructiveActions(row).length">
+                              <span class="inline-flex">
+                                <button type="button" x-h-button data-variant="transparent" data-size="sm" x-h-menu-trigger.dropdown aria-label="Row actions"><svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg></button>
+                                <ul x-h-menu data-align="bottom-end">
+                                  <template x-for="action in rowActions(row)" :key="action.id">
+                                    <li x-h-menu-item @click="runRowAction(action, row)"
+                                        x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></li>
+                                  </template>
+                                  <!-- The destructive ones (#8364) last, after a separator, in red. -->
+                                  <template x-if="rowActions(row).length &amp;&amp; rowDestructiveActions(row).length">
+                                    <li x-h-menu-separator></li>
+                                  </template>
+                                  <template x-for="action in rowDestructiveActions(row)" :key="action.id">
+                                    <li x-h-menu-item data-variant="negative" @click="runRowAction(action, row)"
+                                        x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></li>
+                                  </template>
+                                </ul>
+                              </span>
+                            </template>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </template>
+#end
         </div>
 
         <!-- The way back out of the record, where the reference app puts it: one footer control,
