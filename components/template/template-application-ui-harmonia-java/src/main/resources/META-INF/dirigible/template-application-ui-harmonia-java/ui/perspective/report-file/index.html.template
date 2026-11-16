@@ -81,6 +81,11 @@
          the shell that embeds it. */
       html, body { height: 100%; background-color: var(--background); color: var(--foreground); }
       [x-cloak] { display: none !important; }
+      /* On a phone the first column scrolls with the others (#8676), as in the shell's app.css: its
+         nowrap text, pinned, could take the whole table. */
+      @media (width < 48rem) {
+        th[data-sticky="start"], td[data-sticky="start"] { position: static; }
+      }
     </style>
   </head>
   <body class="vbox size-full" x-data="reportPage" x-cloak>

@@ -11,6 +11,7 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -27,6 +28,9 @@ import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.openqa.selenium.Dimension;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WrapsDriver;
+import org.openqa.selenium.chromium.HasCdp;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import com.codeborne.selenide.Selenide;
@@ -49,6 +53,12 @@ import com.codeborne.selenide.WebDriverRunner;
  * header and its cell sit at the container's start edge and are the elements on top across their
  * whole width (no scrolled cell and no column's resize grip over them), with an opaque background
  * in the light and the dark theme.
+ *
+ * <p>
+ * #8676: on a phone (390 px) the first column is not pinned, since pinned at its own width it took
+ * most of a list and the whole of a panel, register or report table; the cells left pinned leave at
+ * least half of each table to the scrolling columns, and every one of those can be scrolled into
+ * view.
  */
 class StickyColumnsHarmoniaIT extends UserInterfaceIntegrationTest {
 
@@ -63,6 +73,8 @@ class StickyColumnsHarmoniaIT extends UserInterfaceIntegrationTest {
             "/services/ide/intent/generate?workspace=" + WORKSPACE + "&project=" + PROJECT + "&path=app.intent";
     private static final String APP = "/services/web/" + PROJECT + "/gen/freight/index.html#";
     private static final String REPORT_PAGE = "/services/web/" + PROJECT + "/gen/shipmentsbyroute/reports/ShipmentsByRoute/index.html";
+    private static final String CUSTOMER_REPORT_PAGE =
+            "/services/web/" + PROJECT + "/gen/shipmentsbycustomer/reports/ShipmentsByCustomer/index.html";
     private static final String API = "/services/java/" + PROJECT + "/gen/freight/api";
 
     private static final String LIST_MENU = "[x-data=\"ShipmentManageListPage\"] td[data-row-actions] button[aria-label=\"Row actions\"]";
@@ -78,6 +90,11 @@ class StickyColumnsHarmoniaIT extends UserInterfaceIntegrationTest {
     private static final String REPORT = "body";
 
     private static final String FIRST_COLUMN_PINNED = "scrolled=true;head=pinned;cell=pinned";
+
+    /** A phone's viewport, in CSS px. */
+    private static final int PHONE_WIDTH = 390;
+
+    private static final int PHONE_HEIGHT = 844;
 
     private static final String INTENT_YAML = """
             name: freight
@@ -120,6 +137,10 @@ class StickyColumnsHarmoniaIT extends UserInterfaceIntegrationTest {
               - name: ShipmentsByRoute
                 source: Shipment
                 dimensions: [number, customer, carrier, origin, destination, route, reference, notes]
+                measures: ["count(*)"]
+              - name: ShipmentsByCustomer
+                source: Shipment
+                dimensions: [customer, carrier, origin, destination]
                 measures: ["count(*)"]
             """;
 
@@ -204,6 +225,40 @@ class StickyColumnsHarmoniaIT extends UserInterfaceIntegrationTest {
                     return 'scrolled=' + (container.scrollLeft > 0) + ';head=' + h + ';cell=' + d;
                     """;
 
+    /**
+     * The first table under {@code arguments[0]} that has a {@code data-sticky="start"} cell, on a
+     * phone: {@code ok} when the cells pinned in its first body row leave at least half of the
+     * container to the scrolling columns and every other cell of that row is the element hit at its
+     * centre at some scroll position; otherwise what is wrong.
+     */
+    private static final String ROOM_TO_SCROLL =
+            """
+                    var first = Array.from(document.querySelectorAll(arguments[0] + ' td[data-sticky="start"]')).find(c => c.checkVisibility());
+                    if (!first) return 'no-first-cell:' + window.innerWidth + 'px';
+                    var container = first.closest('[data-slot="table-container"]');
+                    if (!container) return 'no-container';
+                    if (container.scrollWidth <= container.clientWidth + 1) return 'no-overflow:' + container.scrollWidth + '/' + container.clientWidth;
+                    first.scrollIntoView({ block: 'center', inline: 'nearest' });
+                    var cells = Array.from(first.closest('tr').cells).filter(c => c.checkVisibility());
+                    var pinned = cells.filter(c => getComputedStyle(c).position === 'sticky');
+                    var scrolling = cells.filter(c => pinned.indexOf(c) < 0);
+                    var free = container.clientWidth - pinned.reduce((sum, c) => sum + c.getBoundingClientRect().width, 0);
+                    var reached = new Set();
+                    for (var s = 0; s <= container.scrollWidth; s += 8) {
+                      container.scrollLeft = s;
+                      scrolling.forEach(c => {
+                        var r = c.getBoundingClientRect();
+                        var hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+                        if (hit && (hit === c || c.contains(hit))) reached.add(c);
+                      });
+                    }
+                    container.scrollLeft = 0;
+                    if (reached.size === scrolling.length && free * 2 >= container.clientWidth) return 'ok';
+                    return 'window=' + window.innerWidth + ';container=' + container.clientWidth + ';pinned=' + pinned.length
+                        + ';first=' + Math.round(first.getBoundingClientRect().width) + ';free=' + Math.round(free)
+                        + ';reached=' + reached.size + '/' + scrolling.length;
+                    """;
+
     /** The number of open row menus under {@code arguments[0]}. */
     private static final String OPEN_MENUS = """
             return String(Array.from(document.querySelectorAll(arguments[0] + ' td[data-row-actions] [x-h-menu]'))
@@ -278,6 +333,32 @@ class StickyColumnsHarmoniaIT extends UserInterfaceIntegrationTest {
         assertEquals(FIRST_COLUMN_PINNED, firstColumnAtEnd(REPORT), "scrolled to the end, the report's first column must stay in view");
     }
 
+    @Test
+    void on_a_phone_the_first_column_leaves_room_to_scroll() {
+        generateAndPublish();
+        create("/shipment/ShipmentController", shipment("SH-1"));
+        int shipment = create("/shipment/ShipmentController", shipment("SH-2"));
+        create("/shipment/ParcelController", "{\"Shipment\":" + shipment + ",\"Description\":\"" + text("Pallet", 500)
+                + "\",\"Handling\":\"" + text("Keep dry", 500) + "\",\"Remarks\":\"" + text("Fragile", 500) + "\"}");
+        create("/ticket/TicketController", "{\"Shipment\":" + shipment + ",\"Subject\":\"" + text("Late pickup", 500) + "\",\"Details\":\""
+                + text("Driver delayed", 500) + "\",\"Resolution\":\"" + text("Rebooked", 500) + "\"}");
+
+        ide.openHomePage();
+        emulateViewport(PHONE_WIDTH, PHONE_HEIGHT);
+        browser.openPath(APP + "/Shipment");
+        String list = roomToScroll(LIST);
+        browser.openPath(APP + "/Shipment/" + shipment + "/edit");
+        String panel = roomToScroll(PANEL);
+        String register = roomToScroll(REGISTER);
+        browser.openPath(CUSTOMER_REPORT_PAGE);
+        String report = roomToScroll(REPORT);
+
+        assertAll(() -> assertEquals("ok", list, "on a phone the list's first column must leave room to scroll the others"),
+                () -> assertEquals("ok", panel, "on a phone the composition panel's first column must leave room to scroll the others"),
+                () -> assertEquals("ok", register, "on a phone the register's first column must leave room to scroll the others"),
+                () -> assertEquals("ok", report, "on a phone the report's first column must leave room to scroll the others"));
+    }
+
     /** Signs in, narrows the window to 1280 px and opens the page. */
     private void openNarrow(String path) {
         ide.openHomePage();
@@ -286,6 +367,27 @@ class StickyColumnsHarmoniaIT extends UserInterfaceIntegrationTest {
                        .window()
                        .setSize(new Dimension(1280, 900));
         browser.openPath(path);
+    }
+
+    /**
+     * CDP's viewport override for the browser's tab - a desktop Chrome window does not narrow below 500
+     * px; {@code 0 x 0} restores the window's own.
+     */
+    private static void emulateViewport(int width, int height) {
+        WebDriver driver = WebDriverRunner.getWebDriver();
+        while (driver instanceof WrapsDriver wrapper) {
+            driver = wrapper.getWrappedDriver();
+        }
+        if (width == 0) {
+            ((HasCdp) driver).executeCdpCommand("Emulation.clearDeviceMetricsOverride", Map.of());
+        } else {
+            ((HasCdp) driver).executeCdpCommand("Emulation.setDeviceMetricsOverride",
+                    Map.of("width", width, "height", height, "deviceScaleFactor", 1, "mobile", false));
+        }
+    }
+
+    private static String roomToScroll(String root) {
+        return poll(ROOM_TO_SCROLL, "ok", root);
     }
 
     private static String firstColumnAtEnd(String root) {
@@ -379,6 +481,7 @@ class StickyColumnsHarmoniaIT extends UserInterfaceIntegrationTest {
 
     @AfterEach
     void cleanup() {
+        emulateViewport(0, 0);
         WebDriverRunner.getWebDriver()
                        .manage()
                        .window()

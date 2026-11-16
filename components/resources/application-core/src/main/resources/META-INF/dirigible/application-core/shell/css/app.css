@@ -70,6 +70,17 @@ table[data-list-columns] > tbody > tr > td > [data-slot="badge"] {
   text-overflow: ellipsis;
 }
 
+/* Below Harmonia's md breakpoint (a phone) the first column scrolls with the others (#8676). Pinned
+   (#8660) it keeps its own width - 12rem in a list, up to 28rem in a panel, unbounded nowrap in a
+   report - and on a phone that is most of the table, or all of it, with nothing left to scroll the
+   other columns into. The row actions (data-sticky="end", 3.5rem) stay pinned. */
+@media (width < 48rem) {
+  th[data-sticky="start"],
+  td[data-sticky="start"] {
+    position: static;
+  }
+}
+
 /* The drag grip on a header's right edge. Stacked at 0, under a pinned (data-sticky) header's 1: a
    column scrolled under the pinned first column (#8660) must not lay its grip over that header. */
 table[data-list-columns] [data-col-grip] {
