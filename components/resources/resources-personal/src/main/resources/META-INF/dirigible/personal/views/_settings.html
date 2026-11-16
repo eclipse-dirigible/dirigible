@@ -6,11 +6,17 @@
   while visible - an inline x-show=display:none block measures 0x0 and ignores data-size). No own
   x-data: it inherits the shell's `app` component (settingsItems / selectSetting / settingsUrl).
 -->
-<div x-h-split class="flex-1" data-orientation="horizontal" data-variant="border">
+<!-- vbox wrapper so the split fills #app, as in the application shell (issue #6334): #app is a block
+     container, so `flex-1` on a bare split is inert and the split takes its content's height - which a
+     long settings list then pushed past the window (#8636). -->
+<div class="vbox size-full">
+<div x-h-split class="flex-1 min-h-0" data-orientation="horizontal" data-variant="border">
   <div x-h-split-panel data-size="25%" data-min="200">
-    <div class="vbox gap-2 p-3">
+    <!-- The list scrolls inside its own panel (#8636): unbounded, a long list overflowed into the page
+         both columns share, and an entry picked low in it opened its setting above the visible area. -->
+    <div class="vbox gap-2 p-3 size-full min-h-0">
       <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.configAll', 'Configuration and nomenclature across all applications.')"></span>
-      <ul x-h-list :aria-label="T('application-core:shell.settings.title', 'Settings')">
+      <ul x-h-list class="flex-1 overflow-auto" :aria-label="T('application-core:shell.settings.title', 'Settings')">
         <!-- Region & Language: a built-in settings entry (not from an app) - the platform-wide
              data-language preference. Selecting it renders the local detail page on the right. -->
         <li x-h-list-item>
@@ -180,4 +186,5 @@
     <iframe x-show="settingsUrl" :src="settingsUrl" title="Settings"
             style="position:absolute; inset:0; width:100%; height:100%; border:0;"></iframe>
   </div>
+</div>
 </div>

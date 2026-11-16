@@ -13,11 +13,13 @@
      every other view routed into #app (_dashboard/_inbox/_documents/_reports) and the per-project
      settings view. -->
 <div class="vbox size-full">
-<div x-h-split class="flex-1" data-orientation="horizontal" data-variant="border">
+<div x-h-split class="flex-1 min-h-0" data-orientation="horizontal" data-variant="border">
   <div x-h-split-panel data-size="25%" data-min="200">
-    <div class="vbox gap-2 p-3">
+    <!-- The list scrolls inside its own panel (#8636): unbounded, a long list overflowed into the page
+         both columns share, and an entry picked low in it opened its setting above the visible area. -->
+    <div class="vbox gap-2 p-3 size-full min-h-0">
       <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.configAll', 'Configuration and nomenclature across all applications.')"></span>
-      <ul x-h-list :aria-label="T('application-core:shell.settings.title', 'Settings')">
+      <ul x-h-list class="flex-1 overflow-auto" :aria-label="T('application-core:shell.settings.title', 'Settings')">
         <!-- Region & Language: a built-in settings entry (not from an app) - the platform-wide
              data-language preference. Selecting it renders the local detail page on the right. -->
         <li x-h-list-item>
