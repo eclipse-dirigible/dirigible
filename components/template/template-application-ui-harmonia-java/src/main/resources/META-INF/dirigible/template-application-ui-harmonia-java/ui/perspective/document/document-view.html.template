@@ -331,8 +331,10 @@
 #if($lookup)
         <!-- Non-setting association: combobox + Add new (opens the target's own create page in an iframe
              dialog) + Refresh, all on one full-width row. -->
+## data-clearable (#8658): an optional picker is cleared by re-clicking its selected option; a
+## required one keeps its value. Both branches.
         <div class="hbox gap-1 items-center">
-          <div x-h-select class="flex-1">
+          <div x-h-select class="flex-1"#if($property.isRequiredProperty != "true") data-clearable="true"#end>
             <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" :disabled="isPreview#if($fixed) || isEdit#end" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
             <div x-h-select-content>
               <div x-h-select-search data-filter="contains"#if(!($property.widgetLeafOnly && $property.widgetHierarchyProperty)) @input.debounce.300ms="searchPicker('${property.name}', $event.target.value)"#end></div>
@@ -347,7 +349,7 @@
           <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="!isPreview#if($fixed) &amp;&amp; !isEdit#end" aria-label="Refresh" @click="loadOptions()"><svg role="presentation" x-h-lucide data-lucide="refresh-cw" class="size-4"></svg></button>
         </div>
 #else
-        <div x-h-select>
+        <div x-h-select#if($property.isRequiredProperty != "true") data-clearable="true"#end>
           <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#else :disabled="isPreview#if($fixed) || isEdit#end"#end :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
           <div x-h-select-content>
             <div x-h-select-search data-filter="contains"#if(!($property.widgetLeafOnly && $property.widgetHierarchyProperty)) @input.debounce.300ms="searchPicker('${property.name}', $event.target.value)"#end></div>
@@ -991,7 +993,8 @@
               <label x-h-label><span x-text="T(col.tkey, col.label)"></span><span x-show="col.required &amp;&amp; !col.readonly &amp;&amp; col.widget !== 'CHECKBOX'" class="text-negative"> *</span></label>
               <template x-if="!col.readonly && col.widget === 'DROPDOWN'">
                 <div>
-                  <div x-h-select>
+                  <!-- An optional column's picker is cleared by re-clicking its selected option (#8658). -->
+                  <div x-h-select :data-clearable="col.required ? null : 'true'">
                     <input x-h-select-input x-model="draft[col.name]" :aria-invalid="draftFieldError === col.name" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select...', { name: '' })" />
                     <div x-h-select-content>
                       <div x-h-select-search data-filter="contains"></div>

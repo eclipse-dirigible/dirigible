@@ -404,7 +404,8 @@
                     <label x-h-label x-text="col.tkey ? T(col.tkey, col.label) : col.label"></label>
                   </template>
                   <template x-if="col.widget === 'DROPDOWN'">
-                    <div x-h-select>
+                    <!-- An optional input's picker is cleared by re-clicking its selected option (#8658). -->
+                    <div x-h-select :data-clearable="col.required ? null : 'true'">
                       <input x-h-select-input x-model="s.promptValues[col.name]" :placeholder="T('application-core:shell.customActions.promptSelect', 'Select...')" />
                       <div x-h-select-content>
                         <div x-h-select-search data-filter="contains"></div>
