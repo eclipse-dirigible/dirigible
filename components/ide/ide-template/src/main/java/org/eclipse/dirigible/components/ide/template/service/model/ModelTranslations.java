@@ -108,14 +108,16 @@ final class ModelTranslations {
     /**
      * The default-language texts of a delete refusal (dirigible #8569), by their key under the
      * catalog's {@code checks}, in catalog order: the sentence naming every kind of referencing record,
-     * the way one kind is written into it, and the sentence for references no delete rule counts. They
-     * are the ones {@code org.eclipse.dirigible.sdk.db.DeleteRefusals} falls back to, written into the
-     * en-US catalog for a translator to copy into another language's.
+     * the way one kind is written into it, the sentence for references no delete rule counts, and the
+     * sentence refusing a master that still has composition children (dirigible #8635). They are the
+     * ones {@code org.eclipse.dirigible.sdk.db.DeleteRefusals} falls back to, written into the en-US
+     * catalog for a translator to copy into another language's.
      */
     static final List<Map.Entry<String, String>> DELETE_REFUSAL_MESSAGES = List.of( //
             Map.entry("deleteReferenced", "This {entity} is referenced by {references} and cannot be deleted"), //
             Map.entry("deleteReference", "{count} {label} record(s)"), //
-            Map.entry("deleteReferencedByOthers", "This {entity} is referenced by other records and cannot be deleted"));
+            Map.entry("deleteReferencedByOthers", "This {entity} is referenced by other records and cannot be deleted"), //
+            Map.entry("deleteHasChildren", "This {entity} still has {children} records - delete those first"));
 
     /**
      * The default-language texts of the refusals of one property's value (dirigible #8596) - a required

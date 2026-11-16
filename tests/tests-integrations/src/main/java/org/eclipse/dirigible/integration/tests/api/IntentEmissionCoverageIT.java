@@ -3930,7 +3930,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // entities, in the repository, so it holds for a reaction and a cascade too, not only for REST.
         assertTrue(
                 entryRepository.contains("if (!new gen.emission.data.entry.EntryCopyRepository()")
-                        && entryRepository.contains("still has Entry Copy records - delete those first"),
+                        && entryRepository.contains("DeleteRefusals.hasChildren(messageCatalog(), \"Entry\", labelCatalogKey(),")
+                        && entryRepository.contains("\"Entry Copy\", \""),
                 "whenMasterDeleted: refuse must reject the master's delete while children exist, got: " + entryRepository);
         assertFalse(entryRepository.contains("EntryCopyOwner.delete("),
                 "a refusing child must not be cascaded into, got: " + entryRepository);
@@ -3939,7 +3940,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // every line and only THEN refused. The unit of work brings the rows back, but History writes on
         // its own raw-JDBC connection by design, so the trail permanently recorded deletes of lines that
         // still exist (#7143).
-        assertTrue(entryRepository.indexOf("still has Entry Copy records") < entryRepository.indexOf("EntryLineOwner.delete(EntryLineRow)"),
+        assertTrue(entryRepository.indexOf("DeleteRefusals.hasChildren(") < entryRepository.indexOf("EntryLineOwner.delete(EntryLineRow)"),
                 "a whenMasterDeleted refusal must be checked before the first cascade runs, got: " + entryRepository);
         // Secondary, same cascade: a document line's delete calls the master's recalculate(fk), so
         // sweeping N lines away with their master issued N reads, N targeted updates and N SYSTEM
