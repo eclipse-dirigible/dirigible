@@ -9763,7 +9763,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             context.eval("js",
                     "var pages = {}; var window = this; var localStorage = { getItem: () => null };"
                             + " var document = { addEventListener: (event, callback) => callback() };"
-                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; } };"
+                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; }, store: () => undefined };"
                             + " window.HarmoniaFormat = { value: (v) => String(v), documentNumber: (v) => v };");
             context.eval("js", classpathResource("/META-INF/dirigible/application-core/shell/js/components/pages/basePage.js"));
             context.eval("js", pageScript);
