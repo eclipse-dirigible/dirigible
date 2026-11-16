@@ -332,8 +332,8 @@
         <table x-h-table data-borders="rows">
           <thead x-h-table-header>
             <tr x-h-table-row>
-              <template x-for="col in tableColumns()" :key="col.name">
-                <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label)"></th>
+              <template x-for="(col, ci) in tableColumns()" :key="col.name">
+                <th x-h-table-head scope="col" :data-sticky="ci === 0 ? 'start' : null" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label)"></th>
               </template>
 #if(!$documentItemsReadOnly)
               <th x-h-table-head scope="col"></th>
@@ -343,8 +343,8 @@
           <tbody x-h-table-body>
             <template x-for="row in items" :key="row[itemsDef.primaryKey]">
               <tr x-h-table-row data-hoverable="true" class="cursor-pointer" @click="itemRowClicked($event, row)">
-                <template x-for="col in tableColumns()" :key="col.name">
-                  <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="displayItem(row, col)"></td>
+                <template x-for="(col, ci) in tableColumns()" :key="col.name">
+                  <td x-h-table-cell :data-sticky="ci === 0 ? 'start' : null" :class="col.number ? 'text-right' : ''" x-text="displayItem(row, col)"></td>
                 </template>
 #if(!$documentItemsReadOnly)
                 <td x-h-table-cell class="text-right">
@@ -428,16 +428,16 @@
                   <table x-h-table data-borders="rows">
                     <thead x-h-table-header>
                       <tr x-h-table-row>
-                        <template x-for="col in child.columns" :key="col.name">
-                          <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="col.label"></th>
+                        <template x-for="(col, ci) in child.columns" :key="col.name">
+                          <th x-h-table-head scope="col" :data-sticky="ci === 0 ? 'start' : null" :class="col.number ? 'text-right' : ''" x-text="col.label"></th>
                         </template>
                       </tr>
                     </thead>
                     <tbody x-h-table-body>
                       <template x-for="row in child.rows" :key="row.Id">
                         <tr x-h-table-row data-hoverable="true" class="cursor-pointer" @click="editChild(child, row.Id)">
-                          <template x-for="col in child.columns" :key="col.name">
-                            <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="displayChild(child, row, col)"></td>
+                          <template x-for="(col, ci) in child.columns" :key="col.name">
+                            <td x-h-table-cell :data-sticky="ci === 0 ? 'start' : null" :class="col.number ? 'text-right' : ''" x-text="displayChild(child, row, col)"></td>
                           </template>
                         </tr>
                       </template>

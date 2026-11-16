@@ -5579,7 +5579,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(rosterDoc.contains("x-h-calendar=\"itemsCalCfg\""), "the document's items pane must render as a calendar");
         assertTrue(rosterDoc.contains("onItemsEventClick") && rosterDoc.contains("onItemsDateClick"),
                 "the items calendar must be wired to the line dialog (edit on event, add on empty day)");
-        assertTrue(!rosterDoc.contains("x-for=\"col in tableColumns\""), "the items TABLE must be replaced, not rendered alongside");
+        assertTrue(!rosterDoc.contains("x-for=\"(col, ci) in tableColumns\""), "the items TABLE must be replaced, not rendered alongside");
         assertTrue(rosterDoc.contains("askDeleteDraft()"), "the line dialog must offer Delete - the calendar pane has no per-row menu");
         String rosterPage = contentOf("gen/emission/js/components/pages/Roster/RosterDocumentPage.js");
         assertTrue(rosterPage.contains("window.HarmoniaCalendar.events"), "the items events must come from the shared calendar mapping");

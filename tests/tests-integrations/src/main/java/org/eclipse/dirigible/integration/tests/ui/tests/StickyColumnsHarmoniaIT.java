@@ -33,16 +33,24 @@ import com.codeborne.selenide.Selenide;
 import com.codeborne.selenide.WebDriverRunner;
 
 /**
- * #8372: a generated table keeps each row's actions on screen when its columns scroll sideways.
+ * A generated table keeps its row's identity and its row's actions on screen when its columns
+ * scroll sideways.
  *
  * <p>
- * The row-actions column is pinned with Harmonia's {@code data-sticky="end"}. On a 1280 px window a
- * list of eight long text columns, a composition panel and a {@code related:} register of 500
- * character values all scroll sideways; at either end of that scroll the row's actions button lies
- * inside the table container's visible rect and is the element on top at its centre (not a scrolled
- * cell), and a real click on the list's and the panel's "..." opens that row's menu.
+ * #8372: the row-actions column is pinned with Harmonia's {@code data-sticky="end"}. On a 1280 px
+ * window a list of eight long text columns, a composition panel and a {@code related:} register of
+ * 500 character values all scroll sideways; at either end of that scroll the row's actions button
+ * lies inside the table container's visible rect and is the element on top at its centre (not a
+ * scrolled cell), and a real click on the list's and the panel's "..." opens that row's menu.
+ *
+ * <p>
+ * #8660: the first column - the record's number or name - is pinned with
+ * {@code data-sticky="start"} on the same tables and on the report table. Scrolled to the end, its
+ * header and its cell sit at the container's start edge and are the elements on top across their
+ * whole width (no scrolled cell and no column's resize grip over them), with an opaque background
+ * in the light and the dark theme.
  */
-class StickyRowActionsHarmoniaIT extends UserInterfaceIntegrationTest {
+class StickyColumnsHarmoniaIT extends UserInterfaceIntegrationTest {
 
     private static final long POLL_TIMEOUT_MILLIS = 60_000;
 
@@ -54,6 +62,7 @@ class StickyRowActionsHarmoniaIT extends UserInterfaceIntegrationTest {
     private static final String GENERATE_URL =
             "/services/ide/intent/generate?workspace=" + WORKSPACE + "&project=" + PROJECT + "&path=app.intent";
     private static final String APP = "/services/web/" + PROJECT + "/gen/freight/index.html#";
+    private static final String REPORT_PAGE = "/services/web/" + PROJECT + "/gen/shipmentsbyroute/reports/ShipmentsByRoute/index.html";
     private static final String API = "/services/java/" + PROJECT + "/gen/freight/api";
 
     private static final String LIST_MENU = "[x-data=\"ShipmentManageListPage\"] td[data-row-actions] button[aria-label=\"Row actions\"]";
@@ -62,6 +71,13 @@ class StickyRowActionsHarmoniaIT extends UserInterfaceIntegrationTest {
 
     private static final String AT_START = "inside=true;onTop=true;scrolled=false";
     private static final String AT_END = "inside=true;onTop=true;scrolled=true";
+
+    private static final String LIST = "[x-data=\"ShipmentManageListPage\"]";
+    private static final String PANEL = "[x-data^=\"detailPanel\"]";
+    private static final String REGISTER = "[x-data^=\"relatedPanel\"]";
+    private static final String REPORT = "body";
+
+    private static final String FIRST_COLUMN_PINNED = "scrolled=true;head=pinned;cell=pinned";
 
     private static final String INTENT_YAML = """
             name: freight
@@ -100,6 +116,11 @@ class StickyRowActionsHarmoniaIT extends UserInterfaceIntegrationTest {
                   - { name: resolution, type: string, length: 1000 }
                 relations:
                   - { name: shipment, kind: manyToOne, to: Shipment }
+            reports:
+              - name: ShipmentsByRoute
+                source: Shipment
+                dimensions: [number, customer, carrier, origin, destination, route, reference, notes]
+                measures: ["count(*)"]
             """;
 
     /**
@@ -143,6 +164,46 @@ class StickyRowActionsHarmoniaIT extends UserInterfaceIntegrationTest {
                     return onTop.length + '/' + items.length;
                     """;
 
+    /**
+     * The first table under {@code arguments[0]} that shows a {@code data-sticky="start"} cell, its
+     * container scrolled to the end: {@code scrolled=<scrollLeft > 0>;head=<state>;cell=<state>}, a
+     * state being {@code pinned} when the first column's header / first cell starts at the container's
+     * start edge and is the element hit across its whole width (bar its own resize grip at the end), or
+     * what is wrong with it. A background that is not opaque would let the scrolled values show
+     * through, so it is reported too.
+     */
+    private static final String FIRST_COLUMN_AT_END =
+            """
+                    var cell = Array.from(document.querySelectorAll(arguments[0] + ' td[data-sticky="start"]')).find(c => c.checkVisibility());
+                    if (!cell) return 'no-pinned-cell:' + document.querySelectorAll(arguments[0] + ' td[data-sticky]').length + ' sticky cells';
+                    var head = cell.closest('table').querySelector('thead th[data-sticky="start"]');
+                    if (!head) return 'no-pinned-head';
+                    var container = cell.closest('[data-slot="table-container"]');
+                    if (!container) return 'no-container';
+                    if (container.scrollWidth <= container.clientWidth + 1) return 'no-overflow:' + container.scrollWidth + '/' + container.clientWidth;
+                    function state(el) {
+                      el.scrollIntoView({ block: 'center', inline: 'nearest' });
+                      container.scrollLeft = container.scrollWidth;
+                      var c = container.getBoundingClientRect();
+                      var r = el.getBoundingClientRect();
+                      if (Math.abs(r.left - (c.left + container.clientLeft)) > 1) return 'left=' + Math.round(r.left - c.left);
+                      var bg = getComputedStyle(el).backgroundColor;
+                      var probe = document.createElement('canvas').getContext('2d');
+                      probe.fillStyle = bg;
+                      probe.fillRect(0, 0, 1, 1);
+                      if (probe.getImageData(0, 0, 1, 1).data[3] !== 255) return 'background=' + bg;
+                      var y = r.top + r.height / 2;
+                      for (var x = r.left + 1; x < r.right - 8; x += 2) {
+                        var hit = document.elementFromPoint(x, y);
+                        if (!hit || !(hit === el || el.contains(hit))) return 'covered@' + Math.round(x - r.left) + ':' + (hit ? hit.tagName + '.' + (hit.getAttribute('data-col-grip') !== null ? 'grip' : hit.className) : 'null');
+                      }
+                      return 'pinned';
+                    }
+                    var h = state(head);
+                    var d = state(cell);
+                    return 'scrolled=' + (container.scrollLeft > 0) + ';head=' + h + ';cell=' + d;
+                    """;
+
     /** The number of open row menus under {@code arguments[0]}. */
     private static final String OPEN_MENUS = """
             return String(Array.from(document.querySelectorAll(arguments[0] + ' td[data-row-actions] [x-h-menu]'))
@@ -168,6 +229,11 @@ class StickyRowActionsHarmoniaIT extends UserInterfaceIntegrationTest {
 
         assertEquals(AT_START, actionsAt(LIST_MENU, "start"), "at the start of the scroll the list row's \"...\" must be on screen");
         assertEquals(AT_END, actionsAt(LIST_MENU, "end"), "at the end of the scroll the list row's \"...\" must be on screen");
+        Selenide.executeJavaScript("Harmonia.setColorScheme('light')");
+        assertEquals(FIRST_COLUMN_PINNED, firstColumnAtEnd(LIST), "scrolled to the end, the list's first column must stay in view");
+        Selenide.executeJavaScript("Harmonia.setColorScheme('dark')");
+        assertEquals(FIRST_COLUMN_PINNED, firstColumnAtEnd(LIST), "in the dark theme the list's first column must stay in view too");
+        Selenide.executeJavaScript("Harmonia.setColorScheme('auto')");
         firstVisible(LIST_MENU).click();
         assertEquals("1", poll(OPEN_MENUS, "1", "[x-data=\"ShipmentManageListPage\"]"),
                 "a click on the pinned \"...\" must open the row's menu");
@@ -190,6 +256,8 @@ class StickyRowActionsHarmoniaIT extends UserInterfaceIntegrationTest {
         assertEquals(AT_START, actionsAt(PANEL_MENU, "start"),
                 "at the start of the scroll the composition row's \"...\" must be on screen");
         assertEquals(AT_END, actionsAt(PANEL_MENU, "end"), "at the end of the scroll the composition row's \"...\" must be on screen");
+        assertEquals(FIRST_COLUMN_PINNED, firstColumnAtEnd(PANEL),
+                "scrolled to the end, the composition panel's first column must stay in view");
         firstVisible(PANEL_MENU).click();
         assertEquals("1", poll(OPEN_MENUS, "1", "[x-data^=\"detailPanel\"]"),
                 "a click on the pinned \"...\" must open the panel row's menu");
@@ -197,6 +265,17 @@ class StickyRowActionsHarmoniaIT extends UserInterfaceIntegrationTest {
 
         assertEquals(AT_START, actionsAt(REGISTER_OPEN, "start"), "at the start of the scroll the register row's Open must be on screen");
         assertEquals(AT_END, actionsAt(REGISTER_OPEN, "end"), "at the end of the scroll the register row's Open must be on screen");
+        assertEquals(FIRST_COLUMN_PINNED, firstColumnAtEnd(REGISTER), "scrolled to the end, the register's first column must stay in view");
+    }
+
+    @Test
+    void a_report_tables_first_column_stays_in_view() {
+        generateAndPublish();
+        create("/shipment/ShipmentController", shipment("SH-1"));
+        create("/shipment/ShipmentController", shipment("SH-2"));
+        openNarrow(REPORT_PAGE);
+
+        assertEquals(FIRST_COLUMN_PINNED, firstColumnAtEnd(REPORT), "scrolled to the end, the report's first column must stay in view");
     }
 
     /** Signs in, narrows the window to 1280 px and opens the page. */
@@ -207,6 +286,10 @@ class StickyRowActionsHarmoniaIT extends UserInterfaceIntegrationTest {
                        .window()
                        .setSize(new Dimension(1280, 900));
         browser.openPath(path);
+    }
+
+    private static String firstColumnAtEnd(String root) {
+        return poll(FIRST_COLUMN_AT_END, FIRST_COLUMN_PINNED, root);
     }
 
     private String actionsAt(String selector, String end) {
