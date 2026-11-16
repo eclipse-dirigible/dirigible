@@ -5424,6 +5424,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                     "the checkbox must sit in a plain box - x-h-field stretches a direct child to full width (#7103)");
         }
 
+        // An optional to-one picker can be emptied again (#8658): Harmonia's x-h-select clears on a
+        // re-click of the selected option only when its root carries data-clearable="true". Claim.Unit
+        // is optional on the power and the personal form; Claim.Person is required and keeps its value.
+        assertTrue(
+                Pattern.compile("<div x-h-select(?: class=\"flex-1\")? data-clearable=\"true\">\\s*<input x-h-select-input id=\"f_Unit\"")
+                       .matcher(claimPowerForm)
+                       .find(),
+                "an optional picker must be clearable on the power form (#8658)");
+        assertTrue(Pattern.compile("<div x-h-select(?: class=\"flex-1\")?>\\s*<input x-h-select-input id=\"f_Person\"")
+                          .matcher(claimPowerForm)
+                          .find(),
+                "a required picker must not be clearable on the power form (#8658)");
+        assertTrue(Pattern.compile("<div x-h-select data-clearable=\"true\">\\s*<input x-h-select-input x-model=\"form.Unit\"")
+                          .matcher(claimPersonalForm)
+                          .find(),
+                "an optional picker must be clearable on the personal form (#8658)");
+
         // documentItemsLayout: chat - the .model marker is resolved (body property from the child's
         // messageBody field), and the Harmonia document view + page render the items pane as an
         // x-h-bubble thread with an append-message composer instead of the editable table.

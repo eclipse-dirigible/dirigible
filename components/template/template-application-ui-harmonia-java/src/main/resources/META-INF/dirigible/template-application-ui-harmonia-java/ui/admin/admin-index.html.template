@@ -100,7 +100,8 @@
                             <span class="opacity-50 text-xs" x-show="p.fk" x-text="'-> ' + p.fk"></span>
                         </label>
                         <template x-if="p.lookup">
-                            <div x-h-select>
+                            <!-- An optional column's picker is cleared by re-clicking its selected option (#8658). -->
+                            <div x-h-select :data-clearable="p.required ? null : 'true'">
                                 <input x-h-select-input :id="'a_' + p.name" x-model="draft[p.name]" :disabled="p.readonly" :placeholder="'Select ' + p.name + '...'" />
                                 <div x-h-select-content>
                                     <div x-h-select-search data-filter="contains"></div>

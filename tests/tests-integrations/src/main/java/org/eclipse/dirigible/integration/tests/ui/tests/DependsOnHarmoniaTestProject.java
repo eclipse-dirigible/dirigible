@@ -82,6 +82,7 @@ class DependsOnHarmoniaTestProject extends BaseTestProject {
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.BUTTON, HtmlAttribute.ROLE, "combobox", "Bulgaria");
 
         verifyUnsavedChangesGuard();
+        verifyOptionalPickerClears();
 
         // City depends on Country: opening it now must offer only Bulgaria's cities. The offered
         // options are asserted on the option element itself, not on a <span>: since Harmonia 2.7 an
@@ -93,6 +94,31 @@ class DependsOnHarmoniaTestProject extends BaseTestProject {
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.ROLE, "option", "Sofia");
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.ROLE, "option", "Varna");
         browser.assertElementDoesNotExistsByTypeAndContainsText(HtmlElementType.SPAN, "Milano");
+    }
+
+    /**
+     * An optional picker can be emptied again (dirigible #8658).
+     *
+     * <p>
+     * Harmonia's x-h-select clears its value on a re-click of the selected option only when the root
+     * carries {@code data-clearable="true"}; without it a picked value could only be replaced, never
+     * removed, and the user had to discard the whole form. City is optional, so the generated form
+     * marks its picker clearable.
+     */
+    private void verifyOptionalPickerClears() {
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.BUTTON, HtmlAttribute.ROLE, "combobox", "Select City...");
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.ROLE, "option", "Sofia");
+        browser.assertElementExistByAttributePatternAndText(HtmlElementType.BUTTON, HtmlAttribute.ROLE, "combobox", "Sofia");
+
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.BUTTON, HtmlAttribute.ROLE, "combobox", "Sofia");
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.ROLE, "option", "Sofia");
+
+        // The trigger is back on its placeholder: the value is gone, not merely re-picked.
+        browser.assertElementExistByAttributePatternAndText(HtmlElementType.BUTTON, HtmlAttribute.ROLE, "combobox", "Select City...");
+        // ...and only that value: Country is still picked. The browser finder reloads the page when an
+        // element does not show up in time, which would also put City back on its placeholder - a
+        // reload empties Country as well, so this is what proves the placeholder came from the clear.
+        browser.assertElementExistByAttributePatternAndText(HtmlElementType.BUTTON, HtmlAttribute.ROLE, "combobox", "Bulgaria");
     }
 
     /**
