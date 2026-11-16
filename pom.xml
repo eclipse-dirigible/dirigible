@@ -205,7 +205,7 @@
         <flexmark.version>0.64.8</flexmark.version>
 
         <!-- JDBC -->
-        <ngdbc.version>2.30.11</ngdbc.version>
+        <ngdbc.version>2.30.12</ngdbc.version>
         <snowflake.version>4.4.1</snowflake.version>
         <mssql.version>13.6.2.jre11</mssql.version>
         <mysql.version>8.4.0</mysql.version>
