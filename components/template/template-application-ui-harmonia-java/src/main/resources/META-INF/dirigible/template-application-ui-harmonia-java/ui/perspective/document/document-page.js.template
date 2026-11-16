@@ -625,9 +625,11 @@ document.addEventListener('alpine:init', () => {
 
     // "Add new <related>" from a header FK combobox: open the target's own create page in the shared
     // related-create iframe dialog; on save, reload that field's options and select the new record.
-    // The new row is listed even when the picker's narrowing leaves it out, and remembered so a
-    // failed save of the header says it was already saved (#7725).
-    addRelated(field, controllerUrl, entity) {
+    // appUrl is the target app's raw web index.html - never the controller URL, whose gen folder is
+    // the sanitized one a hyphenated model's web assets do not live under (#8657). The new row is
+    // listed even when the picker's narrowing leaves it out, and remembered so a failed save of the
+    // header says it was already saved (#7725).
+    addRelated(field, appUrl, entity) {
       const lookups = {
 #foreach($property in $properties)
 #if($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.widgetDropdownControllerUrl)
@@ -635,7 +637,7 @@ document.addEventListener('alpine:init', () => {
 #end
 #end
       };
-      Alpine.store('related').create(App.utils.relatedCreateUrl(controllerUrl, entity), T('$projectName:${tprefix}.defaults.newTitle', 'New {{name}}', { name: entity }), async (id) => {
+      Alpine.store('related').create(App.utils.relatedCreateUrl(appUrl, entity), T('$projectName:${tprefix}.defaults.newTitle', 'New {{name}}', { name: entity }), async (id) => {
         await this.loadOptions();
         if (id == null) return;
         const option = await this.adoptCreatedOption(this['options' + field], id, lookups[field]);
@@ -1234,10 +1236,11 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    // "Add new <related>" from an item-dialog FK combobox.
+    // "Add new <related>" from an item-dialog FK combobox, on the target app's own page (the lookup's
+    // appUrl, not its controller url - see addRelated).
     addRelatedItem(col) {
       if (!col.lookup) return;
-      Alpine.store('related').create(App.utils.relatedCreateUrl(col.lookup.url, col.lookup.entity), T('$projectName:${tprefix}.defaults.newTitle', 'New {{name}}', { name: col.lookup.entity }), async (id) => {
+      Alpine.store('related').create(App.utils.relatedCreateUrl(col.lookup.appUrl, col.lookup.entity), T('$projectName:${tprefix}.defaults.newTitle', 'New {{name}}', { name: col.lookup.entity }), async (id) => {
         delete this.itemOptions[col.name];
         // Drop a Depends-On-filtered set so the just-created record is selectable even off-filter.
         delete this.draftOptions[col.name];
