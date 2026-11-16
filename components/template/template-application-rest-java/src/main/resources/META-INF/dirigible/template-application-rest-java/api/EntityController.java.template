@@ -42,7 +42,11 @@ package gen.${javaGenFolderName}.api.${javaPerspectiveName};
 ## exactly these columns by design (#7620).
 #set($systemOwnedOnCreate = [])
 #set($reportedOnCreate = [])
+#set($generatedKey = false)
 #foreach($property in $properties)
+#if($property.dataPrimaryKey && $property.dataAutoIncrement)
+#set($generatedKey = $property)
+#end
 #if(!$property.dataPrimaryKey && !$property.numberStampOnIssue && !$property.numberStampOnCreate && ($property.isReadOnlyProperty || ($property.aggregate && !$property.calculatedPropertyExpressionUpdate && !$property.calculatedActionOnUpdate)))
 #set($ignore = $systemOwnedOnCreate.add($property))
 ## A date is dropped but not reported: the form's round-trip is lossy (whole minutes, midnight), so a
@@ -69,7 +73,7 @@ import org.eclipse.dirigible.sdk.http.PathParam;
 import org.eclipse.dirigible.sdk.http.Post;
 import org.eclipse.dirigible.sdk.http.Put;
 import org.eclipse.dirigible.sdk.http.QueryParam;
-#if($reportedOnCreate.size() > 0)
+#if($reportedOnCreate.size() > 0 || $generatedKey)
 import org.eclipse.dirigible.sdk.log.Logger;
 import org.eclipse.dirigible.sdk.log.Logging;
 #end
@@ -93,8 +97,8 @@ public class ${name}Controller {
 
     private static final Set<String> FILTER_FIELDS = Set.of(#foreach($property in $properties)"${property.name}"#if($foreach.hasNext), #end#end);
 
-#if($reportedOnCreate.size() > 0)
-    /** Reports a system-owned column a create carried a value for - see dropSystemOwnedOnCreate. */
+#if($reportedOnCreate.size() > 0 || $generatedKey)
+    /** Reports a system-owned column or a primary key a create carried - see dropSystemOwnedOnCreate. */
     private static final Logger LOG = Logging.getLogger("gen.${javaGenFolderName}.api.${javaPerspectiveName}.${name}Controller");
 
 #end
@@ -426,6 +430,10 @@ public class ${name}Controller {
 #else
 #if($needsRoles)
         checkPermissions("write");
+#end
+#if($generatedKey)
+        // First, before anything reads the record: the key is the database's (#8103).
+        dropClientPrimaryKey(entity);
 #end
 #if($masterLock)
         requireMasterMutable(entity.${masterLock.fkProperty});
@@ -1619,6 +1627,24 @@ public class ${name}Controller {
     }
 #end
 #end
+
+#end
+#if($generatedKey)
+    /**
+     * Drops the primary key a create carried (#8103): the database assigns it, so the row is created
+     * under a new key and the answer names it. Kept, a key under the IDENTITY strategy turned the insert
+     * into a merge of a detached entity - a 500; honoured, it would leave the sequence behind it for the
+     * next ordinary create. Dropped before the checks, which tell this row from a stored one by its key:
+     * a client's key would hide a duplicate from the soft duplicate check and a single flag's holder
+     * from the takeover.
+     */
+    private static void dropClientPrimaryKey(${name}Entity entity) {
+        if (entity.${generatedKey.name} != null) {
+            LOG.warn("A create of ${name} carried its primary key ${generatedKey.name}={} - discarded. The key is"
+                    + " assigned by the database, never from the request.", entity.${generatedKey.name});
+            entity.${generatedKey.name} = null;
+        }
+    }
 
 #end
 #if($systemOwnedOnCreate.size() > 0)
