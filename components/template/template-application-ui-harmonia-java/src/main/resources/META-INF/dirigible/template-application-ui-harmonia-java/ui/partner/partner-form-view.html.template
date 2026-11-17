@@ -223,7 +223,7 @@
         <template x-for="child in children" :key="child.name">
           <div x-h-card x-show="visibleWhenHolds(child.visibleWhen, form)">
             <div x-h-card-header class="hbox items-center">
-              <span x-h-card-title x-text="child.label"></span>
+              <span x-h-card-title x-text="T(child.tkey, child.label)"></span>
               <div class="flex-1"></div>
               <button x-h-button data-variant="primary" data-size="sm" x-show="!child.readOnly" @click="addChild(child)">
                 <svg role="presentation" x-h-lucide data-lucide="plus"></svg>
@@ -244,7 +244,7 @@
                     <thead x-h-table-header>
                       <tr x-h-table-row>
                         <template x-for="(col, ci) in child.columns" :key="col.name">
-                          <th x-h-table-head scope="col" :data-sticky="ci === 0 ? 'start' : null" :class="col.number ? 'text-right' : ''" x-text="col.label"></th>
+                          <th x-h-table-head scope="col" :data-sticky="ci === 0 ? 'start' : null" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label)"></th>
                         </template>
                       </tr>
                     </thead>

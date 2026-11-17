@@ -13,6 +13,7 @@
       "other": "Other",
       "create": "Create",
       "edit": "Edit",
+      "preview": "Preview",
       "home": "Home",
       "my": "My",
       "administration": "Administration",
@@ -461,6 +462,7 @@
     },
     "related": {
       "addNew": "Add new",
+      "addNewNamed": "{{name}}: new record",
       "savedOne": "{{saved}} was saved; this record was not. It stays selected - correct this record and save again instead of creating it anew.",
       "savedMany": "{{saved}} were saved; this record was not. They stay selected - correct this record and save again instead of creating them anew."
     },
