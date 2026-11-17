@@ -211,7 +211,7 @@ public class ${className}Resolve implements MessageHandler {
                 // delays the announcement instead of losing it. Inside the try on purpose - a status the
                 // record could not take is not a transition, so a rejected move must announce nothing,
                 // and a rejected write records no event either.
-                repository.updateProperties(id, java.util.Map.of("${statusProperty}", status),
+                repository.updateAuthored(id, java.util.Map.of("${statusProperty}", status),
                         "${projectName}-${perspective}-${entity}-transitioned");
             } catch (org.eclipse.dirigible.sdk.db.ValidationException rejected) {
                 // The record cannot take this status where it currently stands - an unmodeled lifecycle

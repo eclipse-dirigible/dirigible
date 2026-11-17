@@ -1233,7 +1233,7 @@ class IntentEngineIT extends IntegrationTest {
         // its "-transitioned" topic to the write itself, so the flip and its announcement commit
         // together through the outbox - never a bare publish beside the write.
         int result = onlyIndexOf(lookup, "repository.updateProperties(id, values)");
-        int routing = onlyIndexOf(lookup, "repository.updateProperties(id, java.util.Map.of(\"Status\", status)");
+        int routing = onlyIndexOf(lookup, "repository.updateAuthored(id, java.util.Map.of(\"Status\", status)");
         assertTrue(result < routing, "the resolved relation and the trace must be persisted BEFORE the routing status is attempted");
         assertTrue(lookup.contains("-Fine-Fine-transitioned\");"), "the routing write must carry the -transitioned topic into the outbox");
         assertFalse(lookup.contains("Producer.sendToTopic"),
@@ -1427,8 +1427,10 @@ class IntentEngineIT extends IntegrationTest {
                 "the setter should be generated as a Flowable JavaDelegate");
         assertTrue(activate.contains("import gen.members.data.member.MemberEntity") && activate.contains("execution.getVariable(\"Id\")"),
                 "the setter should import the entity from its real Java package and read the PK process variable");
-        assertTrue(activate.contains("repository.updateProperty(((Number) key).intValue(), \"Status\", \"ACTIVE\")"),
-                "the setter should persist the field via the targeted single-column updateProperty");
+        assertTrue(
+                activate.contains(
+                        "repository.updateAuthored(((Number) key).intValue(), java.util.Collections.singletonMap(\"Status\", \"ACTIVE\"))"),
+                "the setter should persist the field via the targeted authored write (the field and the audit columns)");
         assertFalse(activate.contains("updateWithoutEvent"),
                 "the setter must NOT full-row merge (updateWithoutEvent) - that reverts concurrent writes to other columns");
         assertTrue(codeOf("gen/events/members/MemberApprovalReject.java").contains("\"Status\", \"REJECTED\""),
@@ -1837,7 +1839,7 @@ class IntentEngineIT extends IntegrationTest {
                 "the {error} setter should read the published failure message");
         assertFalse(setter.contains("\"{error}\""), "the {error} token must never be written as a literal");
         String relationSetter = codeOf("gen/events/provisioning/TenantProvisioningMarkFailed.java");
-        assertTrue(relationSetter.contains("updateProperty") && relationSetter.contains(", \"Status\", 3)"),
+        assertTrue(relationSetter.contains("updateAuthored") && relationSetter.contains("singletonMap(\"Status\", 3)"),
                 "the relation setter keeps assigning the unquoted seed id");
     }
 
@@ -4242,8 +4244,8 @@ class IntentEngineIT extends IntegrationTest {
         // recorded in the outbox by one statement pair inside the unit's own transaction.
         // (the create-from's body is a create(Integer sourceId) method both the button endpoint and an
         // event trigger call - hence sourceId rather than the posted request's id, since #6711.)
-        assertTrue(generate.contains("updateProperties(sourceId, java.util.Map.of(\"Status\", 3),"),
-                "the source status must be flipped with the targeted updateProperties write");
+        assertTrue(generate.contains("updateAuthored(sourceId, java.util.Map.of(\"Status\", 3),"),
+                "the source status must be flipped with the targeted updateAuthored write");
         // Anchored on the topic ARGUMENT, not the bare word: the explanatory comments around the flip
         // name "-transitioned" too, and a comment must not stand in for the announcement.
         assertTrue(generate.contains(TRANSITIONED_PUBLISH), "it should announce the source's -transitioned channel");
@@ -4260,7 +4262,7 @@ class IntentEngineIT extends IntegrationTest {
         // enforces, so a move the graph does not declare must throw with nothing yet created - flipping
         // afterwards left a committed document behind whose source never transitioned, and the guard on
         // the back-reference then made a redelivery return that document instead of repairing the flip.
-        int flip = generate.indexOf("updateProperties(sourceId, java.util.Map.of(\"Status\", 3),");
+        int flip = generate.indexOf("updateAuthored(sourceId, java.util.Map.of(\"Status\", 3),");
         int save = generate.indexOf("Repository().save(target)");
         assertTrue(flip < save, "the source flip must precede the target save, got flip@" + flip + " save@" + save);
 
@@ -5079,7 +5081,7 @@ class IntentEngineIT extends IntegrationTest {
                 "a boolean editable should be coerced with Boolean.valueOf");
         // The coerced key is hoisted into a local rather than inlined into the call, because the reload
         // that builds the published payload needs the same id - so both halves are asserted.
-        assertTrue(writer.contains("Object id = ((Number) key).intValue();") && writer.contains("repository.updateProperties(id, values)"),
+        assertTrue(writer.contains("Object id = ((Number) key).intValue();") && writer.contains("repository.updateAuthored(id, values)"),
                 "the writer must persist the edited columns in one targeted multi-column write");
         assertFalse(writer.contains("updateWithoutEvent"),
                 "the writer must NOT full-row merge (updateWithoutEvent) - that reverts concurrent writes to unedited columns");
@@ -5092,7 +5094,7 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(writer.contains("Producer.sendToTopicDurable(\"" + PROJECT + "-SalesOrder-SalesOrder-updated\", payload)"),
                 "the writer must publish the entity's -updated topic, got: " + writer);
         assertTrue(writer.contains("Process.executeAfterCommit("), "the publish must be deferred to after the BPMN chain commits");
-        int write = writer.indexOf("repository.updateProperties(id, values)");
+        int write = writer.indexOf("repository.updateAuthored(id, values)");
         // the LAST load: the first is the pre-write one the edits are validated on (#7552)
         int reload = writer.lastIndexOf("repository.findById(id)");
         assertTrue(write > 0 && write < reload, "the payload must be re-loaded AFTER the write, not from a pre-write snapshot");
@@ -5317,7 +5319,7 @@ class IntentEngineIT extends IntegrationTest {
                 "the chosen id arrives as the FK's own process variable");
         assertTrue(writer.contains("values.put(\"Driver\", DriverValue instanceof Number ? ((Number) DriverValue).intValue()"),
                 "the FK is the target's integer key, so it rides the Writer's existing integer coercion: " + writer);
-        assertTrue(writer.contains("Object id = ((Number) key).intValue();") && writer.contains("repository.updateProperties(id, values)"),
+        assertTrue(writer.contains("Object id = ((Number) key).intValue();") && writer.contains("repository.updateAuthored(id, values)"),
                 "the picked relation is persisted by the same targeted multi-column write as any other editable");
 
         // The task form's own runtime: the picker is registered so the options are loaded from that

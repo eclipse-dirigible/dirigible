@@ -52,7 +52,7 @@ public class ${className} implements TaskListener {
                     task.getTaskDefinitionKey(), key, status, from);
             return;
         }
-        int updated = repository.updateProperty(((Number) key).${keyAccessor}(), "${field}", to);
+        int updated = repository.updateAuthored(((Number) key).${keyAccessor}(), java.util.Map.of("${field}", to));
         if (updated == 0) {
             return;
         }

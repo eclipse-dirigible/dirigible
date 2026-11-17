@@ -611,6 +611,7 @@ public class BpmService {
         if (key != null && user != null) {
             writable = writable == null ? new HashMap<>() : writable;
             writable.put(BpmProviderFlowable.COMPLETED_BY_PREFIX + key, user);
+            writable.put(BpmProviderFlowable.LAST_COMPLETED_BY, user);
         }
         bpmProviderFlowable.getTaskService()
                            .completeTask(taskId, writable);
