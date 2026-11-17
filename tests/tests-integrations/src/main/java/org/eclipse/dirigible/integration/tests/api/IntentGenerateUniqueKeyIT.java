@@ -10,6 +10,8 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
@@ -44,7 +46,8 @@ import org.springframework.test.annotation.DirtiesContext;
  * through one. It now lives in the repository, so this runs the published application: the header's
  * composite {@code unique:} key on the second Depreciate of the same month, and a generated LINE's
  * {@code unique: true} field on the second run of an {@code items:} create-from - each refused, and
- * each leaving nothing of the refused run behind.
+ * each leaving nothing of the refused run behind. A case-insensitive key, which the repository
+ * checks before the write, refuses a generated line and a scheduled child the same way (#8669).
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentGenerateUniqueKeyIT extends IntegrationTest {
@@ -56,6 +59,7 @@ class IntentGenerateUniqueKeyIT extends IntegrationTest {
     private static final String EVENTS = "/services/java/" + PROJECT + "/gen/events/" + PROJECT;
     private static final String DEPRECIATE = EVENTS + "/DepreciationFromAssetGenerate/run";
     private static final String LABEL = EVENTS + "/LabelFromAssetGenerate/run";
+    private static final String BADGE = EVENTS + "/BadgeFromAssetGenerate/run";
     private static final String DUPLICATE_PERIOD = "This asset already has a depreciation document for this month";
     private static final long TIMEOUT_SECONDS = 90;
 
@@ -100,6 +104,33 @@ class IntentGenerateUniqueKeyIT extends IntegrationTest {
                 relations:
                   - { name: Label, kind: manyToOne, to: Label, composition: true, required: true }
 
+              - name: Badge
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, length: 100 }
+                relations:
+                  - { name: Asset, kind: manyToOne, to: Asset }
+
+              - name: BadgeLine
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: code, type: string, length: 50, unique: { ignoreCase: true } }
+                relations:
+                  - { name: Badge, kind: manyToOne, to: Badge, composition: true, required: true }
+
+              - name: Batch
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: Asset, kind: manyToOne, to: Asset }
+
+              - name: Tag
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: code, type: string, length: 50, unique: { ignoreCase: true } }
+                relations:
+                  - { name: Batch, kind: manyToOne, to: Batch }
+
             generates:
               - name: depreciation-from-asset
                 from: Asset
@@ -121,6 +152,35 @@ class IntentGenerateUniqueKeyIT extends IntegrationTest {
                   to: LabelLine
                   map:
                     code: code
+
+              - name: badge-from-asset
+                from: Asset
+                to: Badge
+                forEntity: Asset
+                map:
+                  name: name
+                  Asset: id
+                items:
+                  from: AssetPart
+                  to: BadgeLine
+                  map:
+                    code: code
+
+            schedules:
+              - name: monthly-kiln
+                cron: "0 0 3 1 1 ?"
+                entity: Asset
+                where: [ { field: name, op: eq, value: Kiln } ]
+                generate:
+                  to: Batch
+                  unique: [Asset]
+                  map: { Asset: id }
+                  children:
+                    - to: Tag
+                      parent: Batch
+                      forEach: { entity: AssetPart, match: { Asset: id } }
+                      map: { code: code }
+                      onRefused: skip
             """;
 
     @Autowired
@@ -184,6 +244,80 @@ class IntentGenerateUniqueKeyIT extends IntegrationTest {
                                                  .body("field", equalTo("Code")),
                 TIMEOUT_SECONDS);
         assertCount("/label/LabelController?Asset=" + asset, 1);
+    }
+
+    /**
+     * A case-insensitive key ({@code unique: { ignoreCase: true }}) is checked by the repository before
+     * the write, as no database constraint can enforce it. Its refusal is the one the column's own
+     * UNIQUE gets (#8669): a generated line that differs from a stored one only in letter case refuses
+     * the run naming its source line, as an exact repeat does - not with the bare HTTP answer only a
+     * controller understands.
+     */
+    @Test
+    void a_generated_line_colliding_with_a_case_insensitive_key_refuses_the_run_with_its_message() {
+        generateAndPublish();
+        int seed = create("/badge/BadgeController", "{\"Name\":\"seed\"}");
+        create("/badge/BadgeLineController", "{\"Badge\":" + seed + ",\"Code\":\"b-1\"}");
+        int asset = create("/asset/AssetController", "{\"Name\":\"Mill\",\"Period\":\"2026-11\"}");
+        int part = create("/asset/AssetPartController", "{\"Asset\":" + asset + ",\"Code\":\"B-1\"}");
+
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + asset + "}")
+                                                 .when()
+                                                 .post(BADGE)
+                                                 .then()
+                                                 .statusCode(409)
+                                                 .body("message", containsString("'Code' already exists"))
+                                                 .body("message", containsString("(from Asset Part [" + part + "])"))
+                                                 .body("field", equalTo("Code")),
+                TIMEOUT_SECONDS);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/badge/BadgeController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("findAll { it.Asset == " + asset + " }", hasSize(0)),
+                TIMEOUT_SECONDS);
+    }
+
+    /**
+     * A scheduled generate's child declared {@code onRefused: skip} skips a child that collides with a
+     * case-insensitive key, as it skips any other refusal (#8669), and keeps the parent and its other
+     * children - the refusal used to be an HTTP exception the job did not recognise, which rolled the
+     * whole source row back.
+     */
+    @Test
+    void a_scheduled_child_colliding_with_a_case_insensitive_key_is_skipped() {
+        generateAndPublish();
+        create("/tag/TagController", "{\"Code\":\"k-1\"}");
+        int asset = create("/asset/AssetController", "{\"Name\":\"Kiln\",\"Period\":\"2026-11\"}");
+        create("/asset/AssetPartController", "{\"Asset\":" + asset + ",\"Code\":\"K-1\"}");
+        create("/asset/AssetPartController", "{\"Asset\":" + asset + ",\"Code\":\"K-2\"}");
+
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("[]")
+                                                 .when()
+                                                 .post("/services/jobs/trigger/gen.events." + PROJECT + ".MonthlyKilnJob")
+                                                 .then()
+                                                 .statusCode(200),
+                TIMEOUT_SECONDS);
+
+        AtomicInteger batch = new AtomicInteger();
+        restAssuredExecutor.execute(() -> batch.set(given().when()
+                                                           .get(API + "/batch/BatchController")
+                                                           .then()
+                                                           .statusCode(200)
+                                                           .body("findAll { it.Asset == " + asset + " }", hasSize(1))
+                                                           .extract()
+                                                           .<Integer>path("find { it.Asset == " + asset + " }.Id")),
+                TIMEOUT_SECONDS);
+        // The refused child is left out; its sibling and the seed row stand.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/tag/TagController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("findAll { it.Batch == " + batch.get() + " }.Code", contains("K-2"))
+                                                 .body("Code", containsInAnyOrder("k-1", "K-2")),
+                TIMEOUT_SECONDS);
     }
 
     private void run(String endpoint, int source, int status) {

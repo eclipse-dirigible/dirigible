@@ -1589,9 +1589,10 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 
     /**
      * The case-insensitive keys (intent {@code unique: { ignoreCase: true }}, dirigible #8095): a value
-     * another ${name} holds in any letter case is answered 409 with the field's unique message, as the
-     * column's own UNIQUE answers an exact repeat. The value this row already stores is not refused
-     * again, so case-duplicates stored before the key was declared stay writable until one changes.
+     * another ${name} holds in any letter case is refused with a DuplicateKeyException carrying the
+     * field's unique message (a 409 over HTTP), as the column's own UNIQUE refuses an exact repeat.
+     * The value this row already stores is not refused again, so case-duplicates stored before the
+     * key was declared stay writable until one changes.
      */
 ## ponytail: read-then-act - two concurrent writers of case variants can both pass; a unique index on
 ## LOWER(column) would close it, which the schema model cannot express and H2 cannot build.
@@ -1612,11 +1613,10 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
                                                                                                           .ne("${pkPropertyName}", entity.${pkPropertyName})) > 0) {
             ${name}Entity stored = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
             if (stored == null || !entity.${property.name}.equals(stored.${property.name})) {
-                org.eclipse.dirigible.sdk.db.ValidationException refusal = org.eclipse.dirigible.sdk.db.FieldRefusals.duplicate(${refusalCatalog},
-                        ${refusalEntityLabel}, ${refusalEntityLabelKey}, ${refusalField});
-                // The refusal rides as the cause, so the body carries its key and the field.
-                throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
-                        refusal.getMessage(), refusal);
+                // The refusal the column's own UNIQUE gets (#8669), so every writer - controller, generate
+                // action, job - sees the same refusal, with its key and field.
+                throw new org.eclipse.dirigible.sdk.db.DuplicateKeyException(org.eclipse.dirigible.sdk.db.FieldRefusals.duplicate(${refusalCatalog},
+                        ${refusalEntityLabel}, ${refusalEntityLabelKey}, ${refusalField}));
             }
         }
 #end
