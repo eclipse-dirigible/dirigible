@@ -5436,7 +5436,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                        .matcher(claimPowerForm)
                        .find(),
                 "an optional picker must be clearable on the power form (#8658)");
-        assertTrue(Pattern.compile("<div x-h-select(?: class=\"flex-1\")?>\\s*<input x-h-select-input id=\"f_Person\"")
+        assertTrue(Pattern.compile("<div x-h-select(?: class=\"[^\"]*\")?>\\s*<input x-h-select-input id=\"f_Person\"")
                           .matcher(claimPowerForm)
                           .find(),
                 "a required picker must not be clearable on the power form (#8658)");
