@@ -28,6 +28,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.openqa.selenium.By;
+import org.openqa.selenium.Keys;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -187,24 +188,35 @@ class TenantUsersSettingsIT extends KeycloakUserInterfaceIntegrationTest {
                                                       .status("REMOVED"));
         row(ANN).shouldNot(Condition.exist, WAIT);
 
-        // 8. the only owner giving up the role: warned in the dialog, refused by the platform, nothing
-        // published
+        // 8. the only owner giving up the role: warned in the dialog, refused by the platform in the
+        // dialog itself (#8691), nothing published
         openMenu(OWNER, "edit");
         Selenide.$(By.id("tenant-users-edit-dialog"))
                 .shouldBe(Condition.visible, WAIT);
         Selenide.$("#tenant-users-edit-dialog label[data-role='Owner']")
                 .click();
-        Selenide.$("#tenant-users-edit-dialog [role='alert']")
-                .shouldHave(Condition.text("without an owner"), WAIT);
+        SelenideElement caution = Selenide.$("#tenant-users-edit-dialog [x-h-alert][data-variant='warning']")
+                                          .shouldBe(Condition.visible, WAIT)
+                                          .shouldHave(Condition.text("without an owner"));
+        assertAlertForm(caution, "warning", "Check before you continue");
         Selenide.$(By.id("tenant-users-edit-save"))
                 .click();
-        Awaitility.await()
-                  .pollInSameThread()
-                  .atMost(WAIT)
-                  .pollInterval(Duration.ofMillis(250))
-                  .until(() -> String.valueOf(Selenide.<Object>executeJavaScript("return Alpine.store('tenantUsers').error;"))
-                                     .contains("only owner"));
+        SelenideElement refusal = Selenide.$(By.id("tenant-users-edit-refusal"))
+                                          .shouldBe(Condition.visible, WAIT)
+                                          .shouldHave(Condition.text("only owner"));
+        assertAlertForm(refusal, "negative", "Roles not changed");
+        Selenide.$(By.id("tenant-users-refusal"))
+                .shouldNotBe(Condition.visible);
         assertTrue(drainQueue(QUEUE).isEmpty(), "a refused change publishes nothing");
+
+        // closing the dialog takes its refusal with it: it does not reappear on the page
+        Selenide.actions()
+                .sendKeys(Keys.ESCAPE)
+                .perform();
+        Selenide.$(By.id("tenant-users-edit-dialog"))
+                .shouldNotBe(Condition.visible, WAIT);
+        Selenide.$(By.id("tenant-users-refusal"))
+                .shouldNotBe(Condition.visible);
     }
 
     /**
@@ -238,10 +250,11 @@ class TenantUsersSettingsIT extends KeycloakUserInterfaceIntegrationTest {
                     .setValue("seat.refused@example.com");
             Selenide.$(By.id("tenant-users-invite-button"))
                     .click();
-            Selenide.$("#tenant-users-invite-dialog [role='alert']")
-                    .shouldHave(Condition.text(
-                            "Every seat of this tenant is taken. Remove someone to free a seat, or ask your administrator for more seats."),
-                            WAIT);
+            SelenideElement refusal = Selenide.$(By.id("tenant-users-invite-refusal"))
+                                              .shouldHave(Condition.text(
+                                                      "Every seat of this tenant is taken. Remove someone to free a seat, or ask your administrator for more seats."),
+                                                      WAIT);
+            assertAlertForm(refusal, "negative", "Invitation not sent");
             assertTrue(drainQueue(QUEUE).isEmpty(), "a refused invitation publishes nothing");
         } finally {
             pushSnapshot(mvc, tenant.getId(), 101, user(OWNER).revision(101)
@@ -270,6 +283,18 @@ class TenantUsersSettingsIT extends KeycloakUserInterfaceIntegrationTest {
 
     private static SelenideElement row(String email) {
         return Selenide.$("#tenant-users-table tr[data-user='" + email + "']");
+    }
+
+    /**
+     * Asserts Harmonia's documented variant form of an alert (#8691): the variant, its icon and a
+     * title. A description alone renders muted whatever the variant.
+     */
+    private static void assertAlertForm(SelenideElement alert, String variant, String title) {
+        alert.shouldHave(Condition.attribute("data-variant", variant));
+        alert.$("svg")
+             .should(Condition.exist);
+        alert.$("[data-slot='alert-title']")
+             .shouldHave(Condition.exactText(title));
     }
 
     /** Opens a row's action menu and picks an item. */

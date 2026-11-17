@@ -32,6 +32,28 @@ What a module stylesheet legitimately owns is layout and non-colour affordance -
 the drag-grip and overflow rules already in `app.css` - and even there a colour value is written as
 `var(--token)`, never as a literal.
 
+### An alert is icon, title, description (normative)
+
+**Every `x-h-alert` uses Harmonia's documented variant form: the variant's icon, an
+`x-h-alert-title`, then the `x-h-alert-description`.** A variant colours only the icon and the title;
+`x-h-alert-description` is always `text-muted-foreground`, so a description-only alert renders as
+muted help text whatever its `data-variant` - a refusal then reads as a hint (#8691). The icon per
+variant:
+
+| `data-variant` | Icon |
+|---|---|
+| `information` | `<svg x-h-lucide role="presentation" data-lucide="info"></svg>` |
+| `warning` | `<svg x-h-lucide role="presentation" data-lucide="circle-alert"></svg>` |
+| `negative` | `<svg x-h-lucide role="presentation" data-lucide="circle-x"></svg>` |
+| `positive` | `<svg x-h-lucide role="presentation" data-lucide="circle-check"></svg>` |
+
+The title names what happened ("Invitation not sent"), the description says why. No stylesheet is
+involved, per the colour rule above. The alerts that predate this rule (the shell views `_about`,
+`_documents`, `_issues`, `_print-templates`, `_report-issue`, `_tenant-export`, the admin, partner
+and personal shells, the database and monitoring views, `template-application-ui-harmonia-java`)
+take the form when they are next touched; Settings → Users (`_tenant-users.html`) is the worked
+example.
+
 ### The Harmonia rules live upstream - the skill is the rule set
 
 **Do not write Harmonia markup from memory or from the examples already in this repo.** The single source of truth for every `x-h-*` directive, attribute, modifier, variant and utility class is the Harmonia skill, version-matched to `harmonia.version`:

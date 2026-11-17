@@ -291,6 +291,13 @@
         "Owner": "Full access to the application, and manages its users.",
         "User": "Full access to the application."
       },
+      "alert": {
+        "failed": "Not done",
+        "inviteRefused": "Invitation not sent",
+        "editRefused": "Roles not changed",
+        "removeRefused": "User not removed",
+        "caution": "Check before you continue"
+      },
       "empty": "Nobody has been invited yet",
       "emptyHint": "Use Invite people to add the first person.",
       "statusColumn": "Status",
