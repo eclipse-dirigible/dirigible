@@ -34,6 +34,7 @@
         <module>core/core-tenants-provisioning</module>
 		<module>core/core-tenants-users</module>
 		<module>core/core-tenants-clients</module>
+		<module>core/core-tenants-webhooks</module>
         <module>core/core-tracing</module>
         <module>core/core-java</module>
         <module>core/core-liquibase</module>
@@ -1691,6 +1692,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-core-tenants-clients</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-core-tenants-webhooks</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

@@ -321,6 +321,15 @@ public class EntityIntent {
     private List<String> phases = new ArrayList<>();
 
     /**
+     * The entity events a tenant's external system may subscribe to as webhooks (#8689): any of
+     * {@code created}, {@code updated}, {@code deleted} and {@code transitioned}. The Java DAO template
+     * renders them into a {@code <Entity>.webhooks.json} descriptor the platform's webhook registry
+     * validates a subscription against, so an internal channel never becomes a public contract by
+     * accident. Absent (the default) - no event of the entity is exposed, and nothing is generated.
+     */
+    private List<String> webhooks = new ArrayList<>();
+
+    /**
      * On a {@code function: Snapshot} child only: the fixed print-template language its generated
      * copies are rendered in (a {@code languages:} code, e.g. {@code bg}). Mutually exclusive with
      * {@link #languageFrom}; absent both, the mint falls back to the first entry of the tenant-resolved
@@ -705,6 +714,19 @@ public class EntityIntent {
 
     public void setPhases(List<String> phases) {
         this.phases = phases;
+    }
+
+    /**
+     * Gets the entity events exposed as webhooks.
+     *
+     * @return the actions, never null
+     */
+    public List<String> getWebhooks() {
+        return webhooks == null ? List.of() : webhooks;
+    }
+
+    public void setWebhooks(List<String> webhooks) {
+        this.webhooks = webhooks;
     }
 
     public List<UniqueIntent> getUnique() {

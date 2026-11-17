@@ -131,6 +131,11 @@
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-data-store-java</artifactId>
         </dependency>
+        <!-- Tenant webhook subscriptions: recorded with data-store-java's event outbox -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-core-tenants-webhooks</artifactId>
+        </dependency>
     </dependencies>
 
     <properties>

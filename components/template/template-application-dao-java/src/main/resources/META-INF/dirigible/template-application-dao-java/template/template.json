@@ -25,6 +25,13 @@
             "collection": "daoModels"
         },
         {
+            "location": "/template-application-dao-java/data/webhooks.json.template",
+            "action": "generate",
+            "rename": "gen/{{javaGenFolderName}}/data/{{javaPerspectiveName}}/{{name}}.webhooks.json",
+            "engine": "velocity",
+            "collection": "webhookModels"
+        },
+        {
             "location": "/template-application-dao-java/project.json.template",
             "action": "generate",
             "rename": "project.json",

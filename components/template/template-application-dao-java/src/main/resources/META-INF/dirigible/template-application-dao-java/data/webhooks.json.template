@@ -1,0 +1,18 @@
+{
+    "entity": "${name}",
+    "idProperty": "${webhookIdProperty}",
+#if($webhookUuidProperty && $webhookUuidProperty != "")
+    "uuidProperty": "${webhookUuidProperty}",
+#end
+#if($webhookStatusProperty && $webhookStatusProperty != "")
+    "statusProperty": "${webhookStatusProperty}",
+#end
+    "events": [
+#foreach($action in $webhooks.split(","))
+        {
+            "action": "${action}",
+            "type": "${projectName}-${perspectiveName}-${name}#if($action != "created")-${action}#end"
+        }#if($foreach.hasNext),#end
+#end
+    ]
+}

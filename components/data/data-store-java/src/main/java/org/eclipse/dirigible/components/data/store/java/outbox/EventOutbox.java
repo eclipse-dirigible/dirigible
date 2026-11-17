@@ -25,6 +25,7 @@ import org.eclipse.dirigible.components.data.store.java.repository.DomainEvent;
 import org.hibernate.Session;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 /**
@@ -62,8 +63,25 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
 
     private final EventOutboxStore store;
 
-    EventOutbox(EventOutboxStore store) {
+    /** What records more rows with the events, in the same transaction - e.g. webhook deliveries. */
+    private final ObjectProvider<OutboxRecordingParticipant> participantProvider;
+
+    /** The participants, resolved on first use: none of them is needed to construct the outbox. */
+    private volatile List<OutboxRecordingParticipant> participants;
+
+    EventOutbox(EventOutboxStore store, ObjectProvider<OutboxRecordingParticipant> participantProvider) {
         this.store = store;
+        this.participantProvider = participantProvider;
+    }
+
+    private List<OutboxRecordingParticipant> participants() {
+        List<OutboxRecordingParticipant> resolved = participants;
+        if (resolved == null) {
+            resolved = participantProvider.orderedStream()
+                                          .toList();
+            participants = resolved;
+        }
+        return resolved;
     }
 
     /**
@@ -92,6 +110,15 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
         session.doWork(connection -> {
             for (PendingEvent event : pending) {
                 store.insert(connection, event, relayTakesOverAt);
+            }
+            List<OutboxRecordingParticipant> recording = participants();
+            if (!recording.isEmpty()) {
+                List<OutboxEntry> entries = pending.stream()
+                                                   .map(event -> new OutboxEntry(event.id(), event.topic(), event.payload()))
+                                                   .toList();
+                for (OutboxRecordingParticipant participant : recording) {
+                    participant.recorded(connection, entries);
+                }
             }
         });
         return new Batch(this, pending);
@@ -126,8 +153,9 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
     }
 
     /**
-     * Makes sure the current tenant's outbox table exists. Called before the write transaction opens so
-     * that the table's DDL never runs inside it.
+     * Makes sure the current tenant's outbox table exists, and lets every
+     * {@link OutboxRecordingParticipant} prepare. Called before the write transaction opens so that no
+     * table's DDL ever runs inside it.
      *
      * @throws IllegalStateException if the table is missing and cannot be created
      */
@@ -137,6 +165,7 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to prepare the event outbox table [" + EventOutboxStore.TABLE_NAME + "]", ex);
         }
+        participants().forEach(OutboxRecordingParticipant::prepare);
     }
 
     /**

@@ -1760,6 +1760,22 @@ from the consumer's side there.
 `calculatedOnCreate` expression, a `calculatedActionOnCreate` action, a `number:` stamp, a document's
 own totals. Those are in the row the create event carries; a phase is for what a listener adds after.
 
+### webhooks - the events a tenant's external system may subscribe to
+
+**Use when:** another system (a scheduling tool, an accounting package) must learn that a record
+changed without polling - the tenant's provisioning system registers a webhook subscription for it.
+Only the declared events can be subscribed to; nothing is exposed by default.
+
+```yaml
+  - name: VacationRequest
+    webhooks: [created, transitioned]   # any of created, updated, deleted, transitioned
+```
+
+`transitioned` needs a `function: EntityStatus` relation (the status a transition or a workflow setter
+moves). Each value once. A delivery carries the record's id, its `Uuid` and its status only - the
+receiver reads the rest back through its integration client - so this key says nothing about which
+fields are shared.
+
 ### function - the entity's presentation role (explicit template selection)
 
 **Use when:** you want to state *explicitly* how an entity (or a field / relation) is presented, instead
