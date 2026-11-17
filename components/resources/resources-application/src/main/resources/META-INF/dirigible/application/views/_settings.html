@@ -5,43 +5,53 @@
   Settings master-detail for the application shell, Pinecone-routed into #app (so the split is laid out
   while visible - an inline x-show=display:none block measures 0x0 and ignores data-size). No own
   x-data: it inherits the shell's `app` component (settingsItems / selectSetting / settingsUrl).
+  Same shape as the generated application's Settings (settings.html.template): the list is grouped with
+  x-h-list-header, carries no title of its own (the shell's breadcrumb names the page), and below 1024px
+  (isSmallScreen) the two panels take turns - the list until a row is picked, then the detail with a back
+  control. An app's setting entity stays an iframe: the shell cannot inline another project's fragment,
+  which needs that app's own scripts, stores and i18n.
 -->
 <!-- vbox wrapper so the split fills #app (issue #6334): #app is a block container, so `flex-1` on a
-     bare split is inert and the split collapses to its content height - the 75% panel then stretched
+     bare split is inert and the split collapses to its content height - the detail panel then stretched
      only that far and the absolutely-positioned setting iframe rendered in a short box. Wrapping the
      split in `vbox size-full` (a flex column at #app's full height) lets `flex-1` fill it, matching
      every other view routed into #app (_dashboard/_inbox/_documents/_reports) and the per-project
      settings view. -->
 <div class="vbox size-full">
-<div x-h-split class="flex-1 min-h-0" data-orientation="horizontal" data-variant="border">
-  <div x-h-split-panel data-size="25%" data-min="200">
+<div x-h-split class="flex-1 min-h-0" data-orientation="horizontal" data-variant="border" data-key="dirigible-shell-settings-split">
+  <div x-h-split-panel data-size="30%" data-min="20%" :data-hidden="isSmallScreen && !!settingsSelected">
     <!-- The list scrolls inside its own panel (#8636): unbounded, a long list overflowed into the page
          both columns share, and an entry picked low in it opened its setting above the visible area. -->
-    <div class="vbox gap-2 p-3 size-full min-h-0">
-      <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.configAll', 'Configuration and nomenclature across all applications.')"></span>
+    <div class="vbox size-full min-w-0 min-h-0">
       <ul x-h-list class="flex-1 overflow-auto" :aria-label="T('application-core:shell.settings.title', 'Settings')">
+
+        <li x-h-list-header x-text="T('application-core:shell.settings.preferences', 'Preferences')"></li>
         <!-- Region & Language: a built-in settings entry (not from an app) - the platform-wide
              data-language preference. Selecting it renders the local detail page on the right. -->
         <li x-h-list-item>
-          <button x-h-list-item-button :aria-current="isSettingActive({ id: 'region-language' })" @click="selectSetting({ id: 'region-language' })">
+          <button x-h-list-item-button class="gap-3 px-4 py-3" :aria-current="isSettingActive({ id: 'region-language' })" @click="selectSetting({ id: 'region-language' })">
             <svg role="presentation" x-h-lucide data-lucide="globe"></svg>
-            <span x-text="T('application-core:shell.settings.regionLanguage', 'Region & Language')"></span>
+            <span class="flex-1 truncate text-left" x-text="T('application-core:shell.settings.regionLanguage', 'Region & Language')"></span>
           </button>
         </li>
+
+        <!-- The tenant's own sections. Tenant Configuration and Document Numbering are always present,
+             so the header is too; Users, Print Templates and Data export each carry their store's gate. -->
+        <li x-h-list-header x-text="T('application-core:shell.settings.tenant', 'Tenant')"></li>
         <!-- Tenant Configuration: a built-in settings entry (not from an app) - the predefined,
              per-tenant-overridable properties (branding). Selecting it renders the local detail on the right. -->
         <li x-h-list-item>
-          <button x-h-list-item-button :aria-current="isSettingActive({ id: 'tenant-configuration' })" @click="selectSetting({ id: 'tenant-configuration' })">
+          <button x-h-list-item-button class="gap-3 px-4 py-3" :aria-current="isSettingActive({ id: 'tenant-configuration' })" @click="selectSetting({ id: 'tenant-configuration' })">
             <svg role="presentation" x-h-lucide data-lucide="sliders-horizontal"></svg>
-            <span x-text="T('application-core:shell.settings.tenantConfig', 'Tenant Configuration')"></span>
+            <span class="flex-1 truncate text-left" x-text="T('application-core:shell.settings.tenantConfig', 'Tenant Configuration')"></span>
           </button>
         </li>
         <!-- Document Numbering: a built-in settings entry - the per-tenant document-number counters
              (engine-numbering). Selecting it renders the local detail on the right. -->
         <li x-h-list-item>
-          <button x-h-list-item-button :aria-current="isSettingActive({ id: 'document-numbering' })" @click="selectSetting({ id: 'document-numbering' })">
+          <button x-h-list-item-button class="gap-3 px-4 py-3" :aria-current="isSettingActive({ id: 'document-numbering' })" @click="selectSetting({ id: 'document-numbering' })">
             <svg role="presentation" x-h-lucide data-lucide="hash"></svg>
-            <span x-text="T('application-core:shell.settings.numbering', 'Document Numbering')"></span>
+            <span class="flex-1 truncate text-left" x-text="T('application-core:shell.settings.numbering', 'Document Numbering')"></span>
           </button>
         </li>
         <!-- Users: a built-in entry for the owners of the current tenant (#7498) - who belongs to the tenant,
@@ -49,9 +59,9 @@
              enables it and the caller holds the owner role; the section is the shared fragment the
              tenantUsers store fetches. -->
         <li x-h-list-item x-show="$store.tenantUsers && $store.tenantUsers.visible" x-cloak>
-          <button x-h-list-item-button :aria-current="isSettingActive({ id: 'tenant-users' })" @click="selectSetting({ id: 'tenant-users' })">
+          <button x-h-list-item-button class="gap-3 px-4 py-3" :aria-current="isSettingActive({ id: 'tenant-users' })" @click="selectSetting({ id: 'tenant-users' })">
             <svg role="presentation" x-h-lucide data-lucide="users"></svg>
-            <span x-text="T('application-core:shell.settings.tenantUsers', 'Users')"></span>
+            <span class="flex-1 truncate text-left" x-text="T('application-core:shell.settings.tenantUsers', 'Users')"></span>
           </button>
         </li>
         <!-- Print Templates: a built-in entry for the layouts each document type prints with (#7755) - the
@@ -59,9 +69,9 @@
              those who may change the tenant configuration, once a published application declares a
              document type with templates; the section is the shared fragment the printTemplates store fetches. -->
         <li x-h-list-item x-show="$store.printTemplates && $store.printTemplates.visible" x-cloak>
-          <button x-h-list-item-button :aria-current="isSettingActive({ id: 'print-templates' })" @click="selectSetting({ id: 'print-templates' })">
+          <button x-h-list-item-button class="gap-3 px-4 py-3" :aria-current="isSettingActive({ id: 'print-templates' })" @click="selectSetting({ id: 'print-templates' })">
             <svg role="presentation" x-h-lucide data-lucide="printer"></svg>
-            <span x-text="T('application-core:shell.settings.printTemplates', 'Print Templates')"></span>
+            <span class="flex-1 truncate text-left" x-text="T('application-core:shell.settings.printTemplates', 'Print Templates')"></span>
           </button>
         </li>
         <!-- Data export: a built-in entry for the owners of the current tenant (#8566) - one archive of
@@ -69,230 +79,269 @@
              when the platform enables it and answers the caller; the section is the shared fragment the
              tenantExport store fetches. -->
         <li x-h-list-item x-show="$store.tenantExport && $store.tenantExport.visible" x-cloak>
-          <button x-h-list-item-button :aria-current="isSettingActive({ id: 'tenant-export' })" @click="selectSetting({ id: 'tenant-export' })">
+          <button x-h-list-item-button class="gap-3 px-4 py-3" :aria-current="isSettingActive({ id: 'tenant-export' })" @click="selectSetting({ id: 'tenant-export' })">
             <svg role="presentation" x-h-lucide data-lucide="archive"></svg>
-            <span x-text="T('application-core:shell.settings.tenantExport', 'Data export')"></span>
+            <span class="flex-1 truncate text-left" x-text="T('application-core:shell.settings.tenantExport', 'Data export')"></span>
           </button>
         </li>
+
+        <!-- The apps' own setting entities, each opening that app's generated list in the detail iframe. -->
+        <li x-h-list-header x-show="visibleSettingsItems().length > 0" x-cloak
+            x-text="T('application-core:shell.settings.configuration', 'Configuration')"></li>
         <template x-for="item in visibleSettingsItems()" :key="item.id">
           <li x-h-list-item>
-            <button x-h-list-item-button :aria-current="isSettingActive(item)" @click="selectSetting(item)">
-              <svg role="presentation" x-h-lucide data-lucide="settings"></svg>
-              <span x-text="item.tkey ? T(item.tkey, item.label) : item.label"></span>
+            <button x-h-list-item-button class="gap-3 px-4 py-3" :aria-current="isSettingActive(item)" @click="selectSetting(item)">
+              <template x-if="isSvgIcon(item.icon)"><svg x-h-icon :data-link="item.icon" class="size-4" role="presentation"></svg></template>
+              <template x-if="isImageIcon(item.icon)"><img :src="item.icon" alt="" class="size-4" /></template>
+              <template x-if="!isSvgIcon(item.icon) && !isImageIcon(item.icon)"><svg role="presentation" x-h-lucide :data-lucide="item.icon || 'settings'"></svg></template>
+              <span class="flex-1 truncate text-left" x-text="item.tkey ? T(item.tkey, item.label) : item.label"></span>
             </button>
           </li>
         </template>
       </ul>
     </div>
   </div>
-  <div x-h-split-panel data-size="75%" style="position: relative;">
-    <div x-show="!settingsUrl && settingsSelected !== 'region-language' && settingsSelected !== 'tenant-configuration' && settingsSelected !== 'document-numbering' && settingsSelected !== 'tenant-users' && settingsSelected !== 'print-templates' && settingsSelected !== 'tenant-export'" x-h-info-page class="p-4">
-      <div x-h-info-page-header>
-        <div x-h-info-page-media.icon><svg x-h-icon data-icon="circle-info" role="img" aria-label="info"></svg></div>
-        <div x-h-info-page-title x-text="T('application-core:shell.settings.selectSetting', 'Select a setting')"></div>
-        <div x-h-info-page-description x-text="T('application-core:shell.settings.selectSettingHint', 'Choose a configuration entity on the left to manage it here.')"></div>
+  <div x-h-split-panel data-min="40%" :data-hidden="isSmallScreen && !settingsSelected">
+    <div class="vbox size-full min-w-0">
+
+      <!-- Compact only: the list is hidden while something is selected, so the way back is here - and
+           with it the name of what is open, which the hidden list would otherwise be the only thing saying. -->
+      <div x-h-toolbar data-size="sm" data-variant="transparent" x-show="isSmallScreen && settingsSelected" x-cloak>
+        <button x-h-button data-variant="transparent" data-size="icon-sm"
+                :aria-label="T('application-core:shell.settings.backToList', 'Back to the settings list')"
+                @click="settingsBack()">
+          <svg role="presentation" x-h-lucide data-lucide="arrow-left"></svg>
+        </button>
+        <span x-h-toolbar-title class="truncate" x-text="settingsSelectedLabel"></span>
       </div>
-    </div>
-    <!-- Region & Language detail: rendered locally (no iframe) - the platform-wide language
-         preference (localStorage codbex.harmonia.language, sent as Accept-Language by every app's
-         fetch client). Offered codes are the PLATFORM's set (DIRIGIBLE_APPLICATION_LANGUAGES,
-         default en,bg) - never per-module; modules missing a platform language are listed as
-         warnings (their untranslated content falls back to the default language). -->
-    <div x-show="settingsSelected === 'region-language'" class="size-full overflow-auto">
-      <div class="vbox gap-4 p-4" style="max-width: 40rem;">
-        <div class="vbox gap-1">
-          <span class="text-lg font-medium" x-text="T('application-core:shell.settings.regionLanguage', 'Region & Language')"></span>
-          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.rlDescription', 'One preference for the whole stack: the user interface, the data and document printing all follow the selected language. Content a module has not translated yet falls back to the default language.')"></span>
-        </div>
-        <div class="vbox gap-1">
-          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.language', 'Language')"></span>
-          <div x-h-select>
-            <input x-h-select-input x-model="language" :placeholder="T('application-core:shell.settings.language', 'Language')" />
-            <div x-h-select-content>
-              <div x-h-select-list>
-                <template x-for="opt in languageOptions()" :key="opt.value">
-                  <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
-                </template>
-              </div>
+
+      <!-- The detail area: the panes below share it one at a time, and the app iframe lies over it. -->
+      <div class="vbox flex-1 min-h-0" style="position: relative;">
+        <div class="hbox size-full items-center justify-center p-4" x-show="!settingsSelected" x-cloak>
+          <div x-h-info-page>
+            <div x-h-info-page-header>
+              <div x-h-info-page-media.icon><svg role="presentation" x-h-lucide data-lucide="settings"></svg></div>
+              <div x-h-info-page-title x-text="T('application-core:shell.settings.selectSetting', 'Select a setting')"></div>
+              <div x-h-info-page-description x-text="T('application-core:shell.settings.selectSettingHint', 'Choose a configuration entity on the left to manage it here.')"></div>
             </div>
           </div>
         </div>
-        <!-- Display formats: instance-wide patterns for dates, timestamps and floating-point numbers,
-             persisted per user in localStorage (like the language flag) and applied across every app on
-             this origin. Number pattern controls the grouping/decimal separators; each field keeps its
-             own decimal count. Apply reloads so all views re-format at once. -->
-        <div class="vbox gap-1">
-          <span class="text-base font-medium" x-text="T('application-core:shell.settings.formats', 'Display formats')"></span>
-          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.formatsHint', 'Patterns for dates, timestamps and numbers across all applications. The number pattern sets the grouping and decimal separators; each field keeps its own number of decimals.')"></span>
-        </div>
-        <div class="vbox gap-1">
-          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.dateFormat', 'Date format')"></span>
-          <input x-h-input x-model="$store.formats.date" placeholder="yyyy-MM-dd" />
-        </div>
-        <div class="vbox gap-1">
-          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.timestampFormat', 'Timestamp format')"></span>
-          <input x-h-input x-model="$store.formats.dateTime" placeholder="yyyy-MM-dd HH:mm:ss" />
-        </div>
-        <div class="vbox gap-1">
-          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.numberFormat', 'Number format')"></span>
-          <input x-h-input x-model="$store.formats.number" placeholder="### ### ### ##0.00" />
-        </div>
-        <div class="hbox gap-2">
-          <button x-h-button data-variant="primary" @click="$store.formats.apply()" x-text="T('application-core:shell.settings.apply', 'Apply')"></button>
-          <button x-h-button data-variant="outline" @click="$store.formats.reset()" x-text="T('application-core:shell.settings.resetDefaults', 'Reset to defaults')"></button>
-        </div>
-        <template x-if="languageWarnings().length > 0">
-          <div class="vbox gap-2">
-            <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.missingTranslations', 'Incomplete translations')"></span>
-            <template x-for="warn in languageWarnings()" :key="warn.app">
-              <div x-h-alert data-variant="warning" role="alert">
-                <div x-h-alert-description class="vbox gap-1">
-                  <p x-show="warn.screens.length > 0"
-                     x-text="T('application-core:shell.settings.missingScreens', '{{app}} has no {{missing}} translation of its screens - its labels show in the default language.', { app: warn.app, missing: warn.screens.join(', ') })"></p>
-                  <p x-show="warn.data.length > 0"
-                     x-text="T('application-core:shell.settings.missingData', '{{app}} does not provide {{missing}} data - its lists and documents show the default-language values (for example statuses and types). Declare languages: in its intent once the data is translated.', { app: warn.app, missing: warn.data.join(', ') })"></p>
+        <!-- Region & Language detail: rendered locally (no iframe) - the platform-wide language
+             preference (localStorage codbex.harmonia.language, sent as Accept-Language by every app's
+             fetch client). Offered codes are the PLATFORM's set (DIRIGIBLE_APPLICATION_LANGUAGES,
+             default en,bg) - never per-module; modules missing a platform language are listed as
+             warnings (their untranslated content falls back to the default language). The language
+             card alone is hidden when the platform configures a single language - there is then nothing
+             to choose; the display formats are always offered. -->
+        <div class="vbox flex-1 min-h-0 overflow-auto p-4" x-show="settingsSelected === 'region-language'" x-cloak>
+          <div class="vbox" x-show="languageOptions().length > 1" x-cloak>
+            <h2 x-h-text.h5 x-text="T('application-core:shell.settings.regionLanguage', 'Region & Language')"></h2>
+            <p x-h-text.muted x-text="T('application-core:shell.settings.rlDescription', 'One preference for the whole stack: the user interface, the data and document printing all follow the selected language. Content a module has not translated yet falls back to the default language.')"></p>
+            <div x-h-card class="mt-4 w-full overflow-hidden">
+              <ul x-h-list>
+                <li x-h-list-item class="gap-3 px-4 py-3">
+                  <p class="flex-1 text-base font-medium" x-text="T('application-core:shell.settings.language', 'Language')"></p>
+                  <div x-h-select class="flex-1" style="max-width: 14rem">
+                    <input x-h-select-input x-model="language" :aria-label="T('application-core:shell.settings.language', 'Language')" />
+                    <div x-h-select-content>
+                      <div x-h-select-list>
+                        <template x-for="opt in languageOptions()" :key="opt.value">
+                          <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <!-- Display formats: instance-wide patterns for dates, timestamps and floating-point numbers,
+               persisted per user in localStorage (like the language flag) and applied across every app on
+               this origin. Number pattern controls the grouping/decimal separators; each field keeps its
+               own decimal count. Apply reloads so all views re-format at once. -->
+          <div class="vbox" :class="languageOptions().length > 1 ? 'mt-8' : ''">
+            <h2 x-h-text.h5 x-text="T('application-core:shell.settings.formats', 'Display formats')"></h2>
+            <p x-h-text.muted x-text="T('application-core:shell.settings.formatsHint', 'Patterns for dates, timestamps and numbers across all applications. The number pattern sets the grouping and decimal separators; each field keeps its own number of decimals.')"></p>
+            <div x-h-card class="mt-4 w-full overflow-hidden">
+              <ul x-h-list>
+                <li x-h-list-item class="gap-3 px-4 py-3">
+                  <p class="flex-1 text-base font-medium" x-text="T('application-core:shell.settings.dateFormat', 'Date format')"></p>
+                  <input x-h-input class="flex-1" style="max-width: 14rem" x-model="$store.formats.date"
+                         placeholder="yyyy-MM-dd" :aria-label="T('application-core:shell.settings.dateFormat', 'Date format')" />
+                </li>
+                <li x-h-list-item class="gap-3 px-4 py-3">
+                  <p class="flex-1 text-base font-medium" x-text="T('application-core:shell.settings.timestampFormat', 'Timestamp format')"></p>
+                  <input x-h-input class="flex-1" style="max-width: 14rem" x-model="$store.formats.dateTime"
+                         placeholder="yyyy-MM-dd HH:mm:ss" :aria-label="T('application-core:shell.settings.timestampFormat', 'Timestamp format')" />
+                </li>
+                <li x-h-list-item class="gap-3 px-4 py-3">
+                  <p class="flex-1 text-base font-medium" x-text="T('application-core:shell.settings.numberFormat', 'Number format')"></p>
+                  <input x-h-input class="flex-1" style="max-width: 14rem" x-model="$store.formats.number"
+                         placeholder="### ### ### ##0.00" :aria-label="T('application-core:shell.settings.numberFormat', 'Number format')" />
+                </li>
+              </ul>
+              <div x-h-card-footer class="hbox justify-end gap-2 border-t pt-4">
+                <button x-h-button data-variant="outline" @click="$store.formats.reset()"
+                        x-text="T('application-core:shell.settings.resetDefaults', 'Reset to defaults')"></button>
+                <button x-h-button data-variant="primary" @click="$store.formats.apply()"
+                        x-text="T('application-core:shell.settings.apply', 'Apply')"></button>
+              </div>
+            </div>
+          </div>
+          <template x-if="languageWarnings().length > 0">
+            <div class="vbox gap-2 mt-8">
+              <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.missingTranslations', 'Incomplete translations')"></span>
+              <template x-for="warn in languageWarnings()" :key="warn.app">
+                <div x-h-alert data-variant="warning" role="alert">
+                  <div x-h-alert-description class="vbox gap-1">
+                    <p x-show="warn.screens.length > 0"
+                       x-text="T('application-core:shell.settings.missingScreens', '{{app}} has no {{missing}} translation of its screens - its labels show in the default language.', { app: warn.app, missing: warn.screens.join(', ') })"></p>
+                    <p x-show="warn.data.length > 0"
+                       x-text="T('application-core:shell.settings.missingData', '{{app}} does not provide {{missing}} data - its lists and documents show the default-language values (for example statuses and types). Declare languages: in its intent once the data is translated.', { app: warn.app, missing: warn.data.join(', ') })"></p>
+                  </div>
                 </div>
+              </template>
+            </div>
+          </template>
+        </div>
+        <!-- Tenant Configuration detail: rendered locally (no iframe) - the predefined, per-tenant
+             overridable properties (branding for now), read from and written to the platform endpoint
+             /services/core/configurations/tenant. An empty value means the property is not overridden and
+             falls back to the platform default. -->
+        <div x-show="settingsSelected === 'tenant-configuration'" class="flex-1 min-h-0 overflow-auto">
+          <div class="vbox gap-4 p-4" style="max-width: 40rem;">
+            <div class="vbox">
+              <h2 x-h-text.h5 x-text="T('application-core:shell.settings.tenantConfig', 'Tenant Configuration')"></h2>
+              <p x-h-text.muted x-text="T('application-core:shell.settings.tenantConfigHint', 'Per-tenant overrides for the predefined properties, by group. Leave a value empty to fall back to the platform value shown as its placeholder.')"></p>
+            </div>
+            <template x-if="tenantConfigError">
+              <div x-h-alert data-variant="warning" role="alert">
+                <div x-h-alert-description
+                     x-text="tenantConfigError === 'forbidden' ? T('application-core:shell.settings.tenantConfigForbidden', 'You do not have permission to view or change the tenant configuration.') : T('application-core:shell.settings.tenantConfigFailed', 'Something went wrong. Please try again.')"></div>
               </div>
             </template>
-          </div>
-        </template>
-      </div>
-    </div>
-    <!-- Tenant Configuration detail: rendered locally (no iframe) - the predefined, per-tenant
-         overridable properties (branding for now), read from and written to the platform endpoint
-         /services/core/configurations/tenant. An empty value means the property is not overridden and
-         falls back to the platform default. -->
-    <div x-show="settingsSelected === 'tenant-configuration'" class="size-full overflow-auto">
-      <div class="vbox gap-4 p-4" style="max-width: 40rem;">
-        <div class="vbox gap-1">
-          <span class="text-lg font-medium" x-text="T('application-core:shell.settings.tenantConfig', 'Tenant Configuration')"></span>
-          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.tenantConfigHint', 'Per-tenant overrides for the predefined properties, by group. Leave a value empty to fall back to the platform value shown as its placeholder.')"></span>
-        </div>
-        <template x-if="tenantConfigError">
-          <div x-h-alert data-variant="warning" role="alert">
-            <div x-h-alert-description
-                 x-text="tenantConfigError === 'forbidden' ? T('application-core:shell.settings.tenantConfigForbidden', 'You do not have permission to view or change the tenant configuration.') : T('application-core:shell.settings.tenantConfigFailed', 'Something went wrong. Please try again.')"></div>
-          </div>
-        </template>
-        <template x-if="tenantConfigLoading">
-          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.loading', 'Loading...')"></span>
-        </template>
-        <template x-if="!tenantConfigLoading && tenantConfigError !== 'forbidden'">
-          <div class="vbox gap-4">
-            <template x-for="group in tenantConfigGroups" :key="group.group">
-              <div class="vbox gap-3">
-                <span class="text-base font-medium" x-text="tenantConfigGroupLabel(group)"></span>
-                <template x-for="entry in group.entries" :key="entry.key">
-                  <div class="vbox gap-1">
-                    <span x-h-text.muted class="text-sm" x-text="tenantConfigLabel(entry.key)"></span>
-                    <template x-if="entry.kind === 'boolean'">
-                      <div x-h-select>
-                        <input x-h-select-input x-model="entry.value" :aria-label="tenantConfigLabel(entry.key)" />
-                        <div x-h-select-content>
-                          <div x-h-select-list>
-                            <div x-h-select-option="tenantConfigDefaultLabel(entry)" data-value=""></div>
-                            <div x-h-select-option="T('application-core:shell.settings.tenantConfigOn', 'On')" data-value="true"></div>
-                            <div x-h-select-option="T('application-core:shell.settings.tenantConfigOff', 'Off')" data-value="false"></div>
+            <template x-if="tenantConfigLoading">
+              <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.loading', 'Loading...')"></span>
+            </template>
+            <template x-if="!tenantConfigLoading && tenantConfigError !== 'forbidden'">
+              <div class="vbox gap-4">
+                <template x-for="group in tenantConfigGroups" :key="group.group">
+                  <div class="vbox gap-3">
+                    <span class="text-base font-medium" x-text="tenantConfigGroupLabel(group)"></span>
+                    <template x-for="entry in group.entries" :key="entry.key">
+                      <div class="vbox gap-1">
+                        <span x-h-text.muted class="text-sm" x-text="tenantConfigLabel(entry.key)"></span>
+                        <template x-if="entry.kind === 'boolean'">
+                          <div x-h-select>
+                            <input x-h-select-input x-model="entry.value" :aria-label="tenantConfigLabel(entry.key)" />
+                            <div x-h-select-content>
+                              <div x-h-select-list>
+                                <div x-h-select-option="tenantConfigDefaultLabel(entry)" data-value=""></div>
+                                <div x-h-select-option="T('application-core:shell.settings.tenantConfigOn', 'On')" data-value="true"></div>
+                                <div x-h-select-option="T('application-core:shell.settings.tenantConfigOff', 'Off')" data-value="false"></div>
+                              </div>
+                            </div>
                           </div>
-                        </div>
+                        </template>
+                        <template x-if="entry.kind !== 'boolean'">
+                          <input x-h-input x-model="entry.value" :placeholder="entry.defaultValue || entry.key" :aria-label="tenantConfigLabel(entry.key)" />
+                        </template>
                       </div>
                     </template>
-                    <template x-if="entry.kind !== 'boolean'">
-                      <input x-h-input x-model="entry.value" :placeholder="entry.defaultValue || entry.key" :aria-label="tenantConfigLabel(entry.key)" />
+                  </div>
+                </template>
+                <div class="hbox gap-2">
+                  <button x-h-button data-variant="primary" @click="saveTenantConfig()" x-text="T('application-core:shell.settings.save', 'Save')"></button>
+                  <button x-h-button data-variant="outline" @click="loadTenantConfig()" x-text="T('application-core:shell.settings.reload', 'Reload')"></button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+        <!-- Document Numbering detail: rendered locally - the tenant's number series from
+             /services/core/numbering. Each series is declared by a published module's .numbers artefact
+             (one row per partition when the intent partitions it, e.g. per company); the tenant edits
+             the SHAPE (prefix + total width) and the NEXT value here. An annual restart is exactly
+             this: set the prefix and the next value in January. -->
+        <div x-show="settingsSelected === 'document-numbering'" class="flex-1 min-h-0 overflow-auto">
+          <div class="vbox gap-4 p-4" style="max-width: 40rem;">
+            <div class="vbox">
+              <h2 x-h-text.h5 x-text="T('application-core:shell.settings.numbering', 'Document Numbering')"></h2>
+              <p x-h-text.muted x-text="T('application-core:shell.settings.numberingHint', 'Each document series\' prefix, total width and next value for this tenant. A number is the prefix plus the sequence zero-padded to the total width; sequences run continuously - to restart numbering (e.g. each January), set the prefix and the next value here.')"></p>
+            </div>
+            <template x-if="numberingError">
+              <div x-h-alert data-variant="warning" role="alert">
+                <div x-h-alert-description
+                     x-text="numberingError === 'forbidden' ? T('application-core:shell.settings.numberingForbidden', 'You do not have permission to view or change document numbering.') : T('application-core:shell.settings.numberingFailed', 'Something went wrong. Please try again.')"></div>
+              </div>
+            </template>
+            <template x-if="numberingLoading">
+              <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.loading', 'Loading...')"></span>
+            </template>
+            <template x-if="!numberingLoading && numberingError !== 'forbidden' && numbering.length === 0">
+              <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.numberingEmpty', 'No number series declared yet. A series appears here once a published application declares it.')"></span>
+            </template>
+            <template x-if="!numberingLoading && numberingError !== 'forbidden' && numbering.length > 0">
+              <div class="vbox gap-4">
+                <div class="hbox gap-2">
+                  <button x-h-button data-variant="outline" data-size="sm" @click="loadNumbering()" x-text="T('application-core:shell.settings.reload', 'Reload')"></button>
+                </div>
+                <template x-for="row in numbering" :key="row.series + '|' + row.partition">
+                  <div class="vbox gap-1">
+                    <span class="text-sm font-medium" x-text="numberingLabel(row)"></span>
+                    <!-- Save sits ON the row (a real suite has dozens of series - one button below the
+                         whole list is off-screen); it lights up only when the row's edits differ from
+                         what was loaded, and only what changed is written. -->
+                    <div class="hbox gap-2 items-end">
+                      <div class="vbox" style="width: 10rem;">
+                        <span x-h-text.muted class="text-xs" x-text="T('application-core:shell.settings.numberingPrefix', 'Prefix')"></span>
+                        <input x-h-input x-model="row.prefix" />
+                      </div>
+                      <div class="vbox" style="width: 7rem;">
+                        <span x-h-text.muted class="text-xs" x-text="T('application-core:shell.settings.numberingSize', 'Total width')"></span>
+                        <input x-h-input type="number" min="1" max="40" x-model="row.size" />
+                      </div>
+                      <!-- The base row of a PARTITIONED series is only the shape template new partitions
+                           inherit - allocation always draws from a partition row - so it offers no Next. -->
+                      <template x-if="!numberingIsShapeTemplate(row)">
+                        <div class="vbox" style="width: 9rem;">
+                          <span x-h-text.muted class="text-xs" x-text="T('application-core:shell.settings.numberingNext', 'Next')"></span>
+                          <input x-h-input type="number" min="1" x-model="row.next" />
+                        </div>
+                      </template>
+                      <button x-h-button data-variant="primary" data-size="sm"
+                              :disabled="row.saving || !numberingDirty(row)"
+                              @click="saveNumberingRow(row)"
+                              x-text="T('application-core:shell.settings.save', 'Save')"></button>
+                      <template x-if="row.saved">
+                        <span class="text-sm" x-text="T('application-core:shell.settings.numberingSaved', 'Saved')"></span>
+                      </template>
+                    </div>
+                    <template x-if="!numberingIsShapeTemplate(row)">
+                      <span x-h-text.muted class="text-sm"
+                            x-text="T('application-core:shell.settings.numberingExample', 'Next number:') + ' ' + numberingExample(row)"></span>
+                    </template>
+                    <template x-if="numberingIsShapeTemplate(row)">
+                      <span x-h-text.muted class="text-sm"
+                            x-text="T('application-core:shell.settings.numberingShapeTemplate', 'Counters live on the per-partition rows below; a new partition appears on its first use, inheriting this shape and its starting counter.')"></span>
                     </template>
                   </div>
                 </template>
               </div>
             </template>
-            <div class="hbox gap-2">
-              <button x-h-button data-variant="primary" @click="saveTenantConfig()" x-text="T('application-core:shell.settings.save', 'Save')"></button>
-              <button x-h-button data-variant="outline" @click="loadTenantConfig()" x-text="T('application-core:shell.settings.reload', 'Reload')"></button>
-            </div>
           </div>
-        </template>
-      </div>
-    </div>
-    <!-- Document Numbering detail: rendered locally - the tenant's number series from
-         /services/core/numbering. Each series is declared by a published module's .numbers artefact
-         (one row per partition when the intent partitions it, e.g. per company); the tenant edits
-         the SHAPE (prefix + total width) and the NEXT value here. An annual restart is exactly
-         this: set the prefix and the next value in January. -->
-    <div x-show="settingsSelected === 'document-numbering'" class="size-full overflow-auto">
-      <div class="vbox gap-4 p-4" style="max-width: 40rem;">
-        <div class="vbox gap-1">
-          <span class="text-lg font-medium" x-text="T('application-core:shell.settings.numbering', 'Document Numbering')"></span>
-          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.numberingHint', 'Each document series\' prefix, total width and next value for this tenant. A number is the prefix plus the sequence zero-padded to the total width; sequences run continuously - to restart numbering (e.g. each January), set the prefix and the next value here.')"></span>
         </div>
-        <template x-if="numberingError">
-          <div x-h-alert data-variant="warning" role="alert">
-            <div x-h-alert-description
-                 x-text="numberingError === 'forbidden' ? T('application-core:shell.settings.numberingForbidden', 'You do not have permission to view or change document numbering.') : T('application-core:shell.settings.numberingFailed', 'Something went wrong. Please try again.')"></div>
-          </div>
-        </template>
-        <template x-if="numberingLoading">
-          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.loading', 'Loading...')"></span>
-        </template>
-        <template x-if="!numberingLoading && numberingError !== 'forbidden' && numbering.length === 0">
-          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.numberingEmpty', 'No number series declared yet. A series appears here once a published application declares it.')"></span>
-        </template>
-        <template x-if="!numberingLoading && numberingError !== 'forbidden' && numbering.length > 0">
-          <div class="vbox gap-4">
-            <div class="hbox gap-2">
-              <button x-h-button data-variant="outline" data-size="sm" @click="loadNumbering()" x-text="T('application-core:shell.settings.reload', 'Reload')"></button>
-            </div>
-            <template x-for="row in numbering" :key="row.series + '|' + row.partition">
-              <div class="vbox gap-1">
-                <span class="text-sm font-medium" x-text="numberingLabel(row)"></span>
-                <!-- Save sits ON the row (a real suite has dozens of series - one button below the
-                     whole list is off-screen); it lights up only when the row's edits differ from
-                     what was loaded, and only what changed is written. -->
-                <div class="hbox gap-2 items-end">
-                  <div class="vbox" style="width: 10rem;">
-                    <span x-h-text.muted class="text-xs" x-text="T('application-core:shell.settings.numberingPrefix', 'Prefix')"></span>
-                    <input x-h-input x-model="row.prefix" />
-                  </div>
-                  <div class="vbox" style="width: 7rem;">
-                    <span x-h-text.muted class="text-xs" x-text="T('application-core:shell.settings.numberingSize', 'Total width')"></span>
-                    <input x-h-input type="number" min="1" max="40" x-model="row.size" />
-                  </div>
-                  <!-- The base row of a PARTITIONED series is only the shape template new partitions
-                       inherit - allocation always draws from a partition row - so it offers no Next. -->
-                  <template x-if="!numberingIsShapeTemplate(row)">
-                    <div class="vbox" style="width: 9rem;">
-                      <span x-h-text.muted class="text-xs" x-text="T('application-core:shell.settings.numberingNext', 'Next')"></span>
-                      <input x-h-input type="number" min="1" x-model="row.next" />
-                    </div>
-                  </template>
-                  <button x-h-button data-variant="primary" data-size="sm"
-                          :disabled="row.saving || !numberingDirty(row)"
-                          @click="saveNumberingRow(row)"
-                          x-text="T('application-core:shell.settings.save', 'Save')"></button>
-                  <template x-if="row.saved">
-                    <span class="text-sm" x-text="T('application-core:shell.settings.numberingSaved', 'Saved')"></span>
-                  </template>
-                </div>
-                <template x-if="!numberingIsShapeTemplate(row)">
-                  <span x-h-text.muted class="text-sm"
-                        x-text="T('application-core:shell.settings.numberingExample', 'Next number:') + ' ' + numberingExample(row)"></span>
-                </template>
-                <template x-if="numberingIsShapeTemplate(row)">
-                  <span x-h-text.muted class="text-sm"
-                        x-text="T('application-core:shell.settings.numberingShapeTemplate', 'Counters live on the per-partition rows below; a new partition appears on its first use, inheriting this shape and its starting counter.')"></span>
-                </template>
-              </div>
-            </template>
-          </div>
-        </template>
+        <!-- Users detail: the shared fragment of the tenantUsers store (application-core/shell/views/_tenant-users.html). -->
+        <div x-show="settingsSelected === 'tenant-users'" class="flex-1 min-h-0 overflow-auto" x-html="$store.tenantUsers ? $store.tenantUsers.markup : ''"></div>
+        <!-- Print Templates detail: the shared fragment of the printTemplates store (application-core/shell/views/_print-templates.html). -->
+        <div x-show="settingsSelected === 'print-templates'" class="flex-1 min-h-0 overflow-auto" x-html="$store.printTemplates ? $store.printTemplates.markup : ''"></div>
+        <!-- Data export detail: the shared fragment of the tenantExport store (application-core/shell/views/_tenant-export.html). -->
+        <div x-show="settingsSelected === 'tenant-export'" class="flex-1 min-h-0 overflow-auto" x-html="$store.tenantExport ? $store.tenantExport.markup : ''"></div>
+        <iframe data-settings-frame x-show="settingsUrl" x-init="if (settingsUrl) $el.src = settingsUrl" title="Settings"
+                @load="onIframeLoad($event, true)"
+                style="position:absolute; inset:0; width:100%; height:100%; border:0;"></iframe>
       </div>
     </div>
-    <!-- Users detail: the shared fragment of the tenantUsers store (application-core/shell/views/_tenant-users.html). -->
-    <div x-show="settingsSelected === 'tenant-users'" class="size-full overflow-auto" x-html="$store.tenantUsers ? $store.tenantUsers.markup : ''"></div>
-    <!-- Print Templates detail: the shared fragment of the printTemplates store (application-core/shell/views/_print-templates.html). -->
-    <div x-show="settingsSelected === 'print-templates'" class="size-full overflow-auto" x-html="$store.printTemplates ? $store.printTemplates.markup : ''"></div>
-    <!-- Data export detail: the shared fragment of the tenantExport store (application-core/shell/views/_tenant-export.html). -->
-    <div x-show="settingsSelected === 'tenant-export'" class="size-full overflow-auto" x-html="$store.tenantExport ? $store.tenantExport.markup : ''"></div>
-    <iframe x-show="settingsUrl" :src="settingsUrl" title="Settings"
-            style="position:absolute; inset:0; width:100%; height:100%; border:0;"></iframe>
   </div>
 </div>
 </div>
