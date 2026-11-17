@@ -5201,6 +5201,9 @@ public final class IntentParser {
                 if (!isBlank(field.getPattern())) {
                     validatePattern("entity [" + name + "] field [" + field.getName() + "]", field, issues);
                 }
+                if (field.getPatternMessage() != null) {
+                    validatePatternMessage("entity [" + name + "] field [" + field.getName() + "]", field, issues);
+                }
                 if (!isBlank(field.getFormat())) {
                     validateFormat("entity [" + name + "] field [" + field.getName() + "]", field, issues);
                 }
@@ -8800,6 +8803,22 @@ public final class IntentParser {
             java.util.regex.Pattern.compile(field.getPattern()); // lgtm[java/regex-injection]
         } catch (java.util.regex.PatternSyntaxException ex) {
             issues.add(subject + " `pattern` is not a valid regular expression: " + ex.getDescription());
+        }
+    }
+
+    /**
+     * A field's {@code patternMessage} (#7749): what a value off its {@code pattern} is refused with,
+     * instead of the generic sentence that quotes the regex. Refused blank, and without a
+     * {@code pattern} to refuse by - it would never be shown.
+     */
+    private static void validatePatternMessage(String subject, FieldIntent field, List<String> issues) {
+        if (field.getPatternMessage()
+                 .isBlank()) {
+            issues.add(subject + " `patternMessage` is blank - remove it to keep the generic pattern message");
+        }
+        if (isBlank(field.getPattern())) {
+            issues.add(subject
+                    + " declares `patternMessage` without a `pattern` - the message is what a value off the pattern is refused with");
         }
     }
 

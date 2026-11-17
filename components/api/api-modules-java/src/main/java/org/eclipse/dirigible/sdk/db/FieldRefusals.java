@@ -106,6 +106,33 @@ public final class FieldRefusals {
     }
 
     /**
+     * The refusal of a value that does not match its pattern, in the words the model's author gave it
+     * (intent {@code patternMessage:}, dirigible #7749) instead of the generic sentence that quotes the
+     * regex. The message may name the property as {@code {label}} and the regex as {@code {pattern}}.
+     *
+     * @param messageKey the fully qualified catalog key of the author's message, or {@code null} for
+     *        the default-language text
+     * @param message the author's message in the default language
+     * @param field the property
+     * @param label the property's default-language label
+     * @param labelKey the fully qualified catalog key of that label, or {@code null}
+     * @param pattern the regular expression the value must match
+     * @return the exception to throw - mapped to HTTP 400 carrying the key, the parameters and the
+     *         field
+     */
+    public static ValidationException authoredPattern(String messageKey, String message, String field, String label, String labelKey,
+            String pattern) {
+        return authoredPattern(CheckMessages.language(), CheckMessages::readCatalog, messageKey, message, field, label, labelKey, pattern);
+    }
+
+    static ValidationException authoredPattern(String language, CheckMessages.CatalogReader catalogs, String messageKey, String message,
+            String field, String label, String labelKey, String pattern) {
+        Map<String, Object> values =
+                CheckMessages.params("label", CheckMessages.resolve(language, catalogs, labelKey, label, Map.of()), "pattern", pattern);
+        return new ValidationException(CheckMessages.resolve(language, catalogs, messageKey, message, values), messageKey, values, field);
+    }
+
+    /**
      * The refusal of a value another record already holds under a {@code unique: true} - the reason a
      * generated controller answers its {@code 409 Conflict} with.
      *

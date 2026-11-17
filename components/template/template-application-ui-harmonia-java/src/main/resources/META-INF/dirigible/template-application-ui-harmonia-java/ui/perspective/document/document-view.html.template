@@ -420,9 +420,9 @@
           <div x-h-week-picker-popup x-model="form.${property.name}"></div>
         </div>
 #elseif($property.widgetType == "EMAIL")
-        <input x-h-input type="email" id="f_${property.name}" x-model="form.${property.name}"#emptyPlaceholder($property)#maxLength($property) :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#{else}${fixedRo}#end#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
+        <input x-h-input type="email" id="f_${property.name}" x-model="form.${property.name}"#emptyPlaceholder($property)#maxLength($property) :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#{else}${fixedRo}#end#if($property.widgetPattern) pattern="${property.widgetPattern}"#if($property.patternMessageTkey) :title="T('${property.patternMessageTkey}', '${property.widgetPatternMessageJs}')"#end#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
 #else
-        <input x-h-input type="text" id="f_${property.name}" x-model="form.${property.name}"#emptyPlaceholder($property)#maxLength($property) :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#{else}${fixedRo}#end#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
+        <input x-h-input type="text" id="f_${property.name}" x-model="form.${property.name}"#emptyPlaceholder($property)#maxLength($property) :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#{else}${fixedRo}#end#if($property.widgetPattern) pattern="${property.widgetPattern}"#if($property.patternMessageTkey) :title="T('${property.patternMessageTkey}', '${property.widgetPatternMessageJs}')"#end#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
 #end
 #end
         <p x-h-field-error x-show="errors.${property.name}" x-text="errors.${property.name}"></p>
@@ -1060,7 +1060,7 @@
                 </div>
               </template>
               <template x-if="!col.readonly && !['DROPDOWN','MULTISELECT','NUMBER','CHECKBOX','DATE','DATETIME-LOCAL'].includes(col.widget)">
-                <input x-h-input type="text" x-model="draft[col.name]" :maxlength="col.maxLength" :pattern="col.pattern" @blur="if (col.normalize) draft[col.name] = col.normalize(draft[col.name])" :aria-invalid="draftFieldError === col.name" />
+                <input x-h-input type="text" x-model="draft[col.name]" :maxlength="col.maxLength" :pattern="col.pattern" :title="col.patternTkey ? T(col.patternTkey, col.patternMessage) : null" @blur="if (col.normalize) draft[col.name] = col.normalize(draft[col.name])" :aria-invalid="draftFieldError === col.name" />
               </template>
               <p x-h-field-description x-show="col.maxLength && String(draft[col.name] ?? '').length >= col.maxLength" x-text="T('$projectName:${tprefix}.messages.maxLengthReached', 'Maximum {{count}} characters', { count: col.maxLength })"></p>
               <!-- A read-only column (calculated / intent readOnly) is a VALUE, not a control: the

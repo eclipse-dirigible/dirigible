@@ -14,6 +14,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
@@ -108,6 +109,13 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
                   - { name: id,        type: integer, primaryKey: true, generated: true }
                   - { name: sap,       type: string, length: 6, required: true, unique: true, label: SAP Code }
                   - { name: numerator, type: decimal, precision: 18, scale: 2 }
+                  - name: code
+                    type: string
+                    length: 3
+                    label: Unit code
+                    pattern: '^[A-Z]{3}$'
+                    patternMessage: "The {label} is three capital letters"
+                  - { name: region,    type: string, length: 2, pattern: '^[A-Z]{2}$' }
 
               - name: InvoiceItem
                 fields:
@@ -197,6 +205,44 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
                                                                     .body("field", equalTo("Sap"));
         refused(UOMS, "{\"Sap\":\"KG\",\"Numerator\":1}", "en", 409).body("message",
                 equalTo("A " + uomLabel + " with this 'SAP Code' already exists"));
+    }
+
+    /**
+     * dirigible #7749: a pattern carrying the author's message refuses with it - seeded into the en-US
+     * catalog, translated by the language catalog, naming its field - while a pattern without one keeps
+     * the generic sentence.
+     */
+    @Test
+    void a_pattern_refusal_reads_as_its_authors_message() {
+        generateProject();
+        JsonObject checks = generatedCatalog().getAsJsonObject("checks");
+        assertEquals("The {label} is three capital letters", checks.get("Uom_pattern_Code")
+                                                                   .getAsString());
+        assertFalse(checks.has("Uom_pattern_Region"), "a pattern without a message seeds no entry");
+        writeResource(PROJECT_PATH + "/i18n/bg-BG/checkmsg.model.json", """
+                {
+                  "checkmsg-model": {
+                    "checks": { "Uom_pattern_Code": "Кодът на единицата е от три главни латински букви" }
+                  }
+                }
+                """);
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        refused(UOMS, "{\"Sap\":\"M\",\"Numerator\":1,\"Code\":\"kg1\"}", "en", 400)
+                                                                                    .body("message", equalTo(
+                                                                                            "The Unit code is three capital letters"))
+                                                                                    .body("messageKey",
+                                                                                            equalTo(CATALOG + "Uom_pattern_Code"))
+                                                                                    .body("field", equalTo("Code"));
+        refused(UOMS, "{\"Sap\":\"M\",\"Numerator\":1,\"Code\":\"kg1\"}", "bg", 400).body("message",
+                equalTo("Кодът на единицата е от три главни латински букви"))
+                                                                                    .body("field", equalTo("Code"));
+        refused(UOMS, "{\"Sap\":\"M\",\"Numerator\":1,\"Region\":\"bg\"}", "en", 400).body("message",
+                equalTo("The value of 'Region' does not match the required pattern '^[A-Z]{2}$'"))
+                                                                                     .body("messageKey", equalTo(CATALOG + "fieldPattern"))
+                                                                                     .body("field", equalTo("Region"));
+        create(UOMS, "{\"Sap\":\"M\",\"Numerator\":1,\"Code\":\"KGM\",\"Region\":\"BG\"}", null, "en");
     }
 
     @Test
