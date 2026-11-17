@@ -182,7 +182,7 @@
         <ftpserver.version>1.2.1</ftpserver.version>
 
         <!-- ActiveMQ -->
-        <activemq.version>6.2.10</activemq.version>
+        <activemq.version>6.4.0</activemq.version>
 
         <!-- RabbitMQ Java client: ahead of the version Spring Boot manages (5.30.0), for its security fixes -->
         <amqp-client.version>5.37.1</amqp-client.version>
