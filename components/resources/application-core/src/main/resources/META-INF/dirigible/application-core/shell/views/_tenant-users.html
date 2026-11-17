@@ -18,7 +18,8 @@
   browser tests: tenant-users-page, tenant-users-invite-open, tenant-users-invite-dialog, tenant-users-email,
   tenant-users-roles (tiles: tenant-users-invite-role-<role>), tenant-users-invite-button, tenant-users-table (rows tr[data-user], badges [data-role][data-state],
   [data-pending], [data-failure]), tenant-users-edit-dialog (tiles: tenant-users-edit-role-<role>), tenant-users-edit-save,
-  tenant-users-remove-dialog, tenant-users-remove-confirm, tenant-users-seats (with data-taken / data-limit).
+  tenant-users-remove-dialog, tenant-users-remove-confirm, tenant-users-seats (with data-taken / data-limit), and the refusal
+  alerts tenant-users-refusal (page), tenant-users-invite-refusal, tenant-users-edit-refusal, tenant-users-remove-refusal (dialogs).
 -->
 <div id="tenant-users-page" class="vbox gap-4 p-4">
   <div class="hbox items-center gap-2">
@@ -39,7 +40,10 @@
     </button>
   </div>
 
-  <div x-show="$store.tenantUsers.error" x-cloak x-h-alert data-variant="warning" role="alert">
+  <div x-show="$store.tenantUsers.error && !$store.tenantUsers.inviteOpen && !$store.tenantUsers.edit && !$store.tenantUsers.removeTarget" x-cloak
+       x-h-alert data-variant="negative" role="alert" id="tenant-users-refusal">
+    <svg x-h-lucide role="presentation" data-lucide="circle-x"></svg>
+    <div x-h-alert-title x-text="$store.tenantUsers.t('shell.tenantUsers.alert.failed', 'Not done')"></div>
     <div x-h-alert-description x-text="$store.tenantUsers.error"></div>
   </div>
 
@@ -194,7 +198,9 @@
             </template>
           </div>
         </div>
-        <div x-show="$store.tenantUsers.error" x-cloak x-h-alert data-variant="warning" role="alert">
+        <div x-show="$store.tenantUsers.error" x-cloak x-h-alert data-variant="negative" role="alert" id="tenant-users-invite-refusal">
+          <svg x-h-lucide role="presentation" data-lucide="circle-x"></svg>
+          <div x-h-alert-title x-text="$store.tenantUsers.t('shell.tenantUsers.alert.inviteRefused', 'Invitation not sent')"></div>
           <div x-h-alert-description x-text="$store.tenantUsers.error"></div>
         </div>
       </div>
@@ -240,10 +246,19 @@
                 x-text="$store.tenantUsers.t('shell.tenantUsers.noChange', 'No change yet')"></span>
         </div>
         <div x-show="$store.tenantUsers.editLeavesNoOwner" x-cloak x-h-alert data-variant="warning" role="alert">
+          <svg x-h-lucide role="presentation" data-lucide="circle-alert"></svg>
+          <div x-h-alert-title x-text="$store.tenantUsers.t('shell.tenantUsers.alert.caution', 'Check before you continue')"></div>
           <div x-h-alert-description x-text="$store.tenantUsers.t('shell.tenantUsers.noOwnerLeft', 'The tenant would be left without an owner. The provisioning system decides, and will refuse it.')"></div>
         </div>
         <div x-show="$store.tenantUsers.isSelf($store.tenantUsers.edit) && $store.tenantUsers.rolesRemoved.length > 0" x-cloak x-h-alert data-variant="warning" role="alert">
+          <svg x-h-lucide role="presentation" data-lucide="circle-alert"></svg>
+          <div x-h-alert-title x-text="$store.tenantUsers.t('shell.tenantUsers.alert.caution', 'Check before you continue')"></div>
           <div x-h-alert-description x-text="$store.tenantUsers.t('shell.tenantUsers.selfDemotion', 'These are your own roles. Removing one takes effect at your next sign-in.')"></div>
+        </div>
+        <div x-show="$store.tenantUsers.error" x-cloak x-h-alert data-variant="negative" role="alert" id="tenant-users-edit-refusal">
+          <svg x-h-lucide role="presentation" data-lucide="circle-x"></svg>
+          <div x-h-alert-title x-text="$store.tenantUsers.t('shell.tenantUsers.alert.editRefused', 'Roles not changed')"></div>
+          <div x-h-alert-description x-text="$store.tenantUsers.error"></div>
         </div>
       </div>
       <div x-h-dialog-footer>
@@ -265,10 +280,19 @@
       </div>
       <div x-h-dialog-content class="vbox gap-3">
         <div x-show="$store.tenantUsers.isSelf($store.tenantUsers.removeTarget)" x-cloak x-h-alert data-variant="warning" role="alert">
+          <svg x-h-lucide role="presentation" data-lucide="circle-alert"></svg>
+          <div x-h-alert-title x-text="$store.tenantUsers.t('shell.tenantUsers.alert.caution', 'Check before you continue')"></div>
           <div x-h-alert-description x-text="$store.tenantUsers.t('shell.tenantUsers.selfRemoval', 'This is you. You lose access to this tenant at your next sign-in.')"></div>
         </div>
         <div x-show="$store.tenantUsers.removeLeavesNoOwner" x-cloak x-h-alert data-variant="warning" role="alert">
+          <svg x-h-lucide role="presentation" data-lucide="circle-alert"></svg>
+          <div x-h-alert-title x-text="$store.tenantUsers.t('shell.tenantUsers.alert.caution', 'Check before you continue')"></div>
           <div x-h-alert-description x-text="$store.tenantUsers.t('shell.tenantUsers.noOwnerLeft', 'The tenant would be left without an owner. The provisioning system decides, and will refuse it.')"></div>
+        </div>
+        <div x-show="$store.tenantUsers.error" x-cloak x-h-alert data-variant="negative" role="alert" id="tenant-users-remove-refusal">
+          <svg x-h-lucide role="presentation" data-lucide="circle-x"></svg>
+          <div x-h-alert-title x-text="$store.tenantUsers.t('shell.tenantUsers.alert.removeRefused', 'User not removed')"></div>
+          <div x-h-alert-description x-text="$store.tenantUsers.error"></div>
         </div>
       </div>
       <div x-h-dialog-footer>

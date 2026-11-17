@@ -236,8 +236,10 @@ document.addEventListener('alpine:init', () => {
       this.showInvite();
     },
 
+    /** Closes the invite dialog; a refusal shown in a dialog belonged to it, so closing clears it rather than leaving it on the page. */
     closeInvite() {
       this.inviteOpen = false;
+      this.error = '';
     },
 
     showInvite() {
@@ -256,6 +258,7 @@ document.addEventListener('alpine:init', () => {
 
     closeEdit() {
       this.edit = null;
+      this.error = '';
     },
 
     openRemove(user) {
@@ -265,6 +268,7 @@ document.addEventListener('alpine:init', () => {
 
     closeRemove() {
       this.removeTarget = null;
+      this.error = '';
     },
 
     /** Opens the invite dialog filled from a failed row, so the owner can send the invitation again. */
