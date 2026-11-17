@@ -33,7 +33,7 @@ public class InvoiceLineController {
 
     private static final Set<String> FILTER_FIELDS = Set.of("Id", "Description", "Quantity", "UnitPrice", "VatRate", "VatAmount");
 
-    /** Reports a system-owned column a create carried a value for - see dropSystemOwnedOnCreate. */
+    /** Reports a system-owned column or a primary key a create carried - see dropSystemOwnedOnCreate. */
     private static final Logger LOG = Logging.getLogger("gen.money.api.invoiceline.InvoiceLineController");
 
     private final InvoiceLineRepository repository;
@@ -98,6 +98,8 @@ public class InvoiceLineController {
     @Documentation("Create InvoiceLine")
     public InvoiceLineEntity create(@Body InvoiceLineEntity entity) {
         checkPermissions("write");
+        // First, before anything reads the record: the key is the database's (#8103).
+        dropClientPrimaryKey(entity);
         // The checks read the record as the write will store it - its calculated fields computed, not
         // taken from the payload (#7544). What is persisted is still computed by the repository.
         InvoiceLineEntity checked = repository.calculatedForCreate(entity);
@@ -222,12 +224,12 @@ public class InvoiceLineController {
                     case "LT" -> "e." + field + " < :" + paramName;
                     default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported operator: " + operator);
                 };
-                hql.append(first ? " where " : " and ").append(clause);
                 params.put(paramName, switch (operator) {
                     case "IN" -> value;
                     case "CONTAINS" -> containsPattern(field, value);
                     default -> coerceValue(field, value);
                 });
+                hql.append(first ? " where " : " and ").append(clause);
                 first = false;
             }
         }
@@ -318,6 +320,22 @@ public class InvoiceLineController {
     /** The write gate every write endpoint applies - and what GET /access answers as {@code write}. */
     private static boolean mayWrite() {
         return isInAnyRole("sample-intent-money.InvoiceLine.InvoiceLineFullAccess");
+    }
+
+    /**
+     * Drops the primary key a create carried (#8103): the database assigns it, so the row is created
+     * under a new key and the answer names it. Kept, a key under the IDENTITY strategy turned the insert
+     * into a merge of a detached entity - a 500; honoured, it would leave the sequence behind it for the
+     * next ordinary create. Dropped before the checks, which tell this row from a stored one by its key:
+     * a client's key would hide a duplicate from the soft duplicate check and a single flag's holder
+     * from the takeover.
+     */
+    private static void dropClientPrimaryKey(InvoiceLineEntity entity) {
+        if (entity.Id != null) {
+            LOG.warn("A create of InvoiceLine carried its primary key Id={} - discarded. The key is"
+                    + " assigned by the database, never from the request.", entity.Id);
+            entity.Id = null;
+        }
     }
 
     /**

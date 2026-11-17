@@ -26,6 +26,7 @@ class DeleteRefusalsTest {
 
     private static final String CATALOG = "products:products-model";
     private static final String PRODUCT_LABEL_KEY = CATALOG + ".t.PRODUCT";
+    private static final String PRODUCT_PRICE_LABEL_KEY = CATALOG + ".t.PRODUCT_PRICE";
     private static final List<DeleteRefusals.Reference> REFERENCES =
             List.of(new DeleteRefusals.Reference("Product Cost", "products:products-model.t.PRODUCT_COST", 1),
                     new DeleteRefusals.Reference("Stock Movement", "inventory:inventory-model.t.STOCK_MOVEMENT", 2));
@@ -34,7 +35,9 @@ class DeleteRefusalsTest {
             CATALOG + ".checks.deleteReferenced", "{entity} не може да бъде изтрит: използва се в {references}.", //
             CATALOG + ".checks.deleteReference", "{count} {label}", //
             CATALOG + ".checks.deleteReferencedByOthers", "{entity} се използва от други записи и не може да бъде изтрит", //
+            CATALOG + ".checks.deleteHasChildren", "{entity} все още има записи {children} - първо изтрийте тях", //
             PRODUCT_LABEL_KEY, "Продукт", //
+            PRODUCT_PRICE_LABEL_KEY, "Цени на продукта", //
             "inventory:inventory-model.t.STOCK_MOVEMENT", "Складови движения");
 
     private static final CheckMessages.CatalogReader CATALOGS = (language, key) -> "bg".equals(language) ? BG.get(key) : null;
@@ -79,5 +82,20 @@ class DeleteRefusalsTest {
         DeleteRestrictionException refusal = DeleteRefusals.referencedByOthers("bg", CATALOGS, CATALOG, "Product", PRODUCT_LABEL_KEY);
         assertEquals("Продукт се използва от други записи и не може да бъде изтрит", refusal.getMessage());
         assertEquals(CATALOG + ".checks.deleteReferencedByOthers", refusal.getMessageKey());
+    }
+
+    /**
+     * dirigible #8635: a master that still has refusing children is refused in the reader's language.
+     */
+    @Test
+    void aMasterWithChildrenIsRefusedInTheReadersLanguage() {
+        assertEquals("This Product still has Product Price records - delete those first",
+                DeleteRefusals.hasChildren(null, CATALOGS, CATALOG, "Product", PRODUCT_LABEL_KEY, "Product Price", PRODUCT_PRICE_LABEL_KEY)
+                              .getMessage());
+        ValidationException refusal =
+                DeleteRefusals.hasChildren("bg", CATALOGS, CATALOG, "Product", PRODUCT_LABEL_KEY, "Product Price", PRODUCT_PRICE_LABEL_KEY);
+        assertEquals("Продукт все още има записи Цени на продукта - първо изтрийте тях", refusal.getMessage());
+        assertEquals(CATALOG + ".checks.deleteHasChildren", refusal.getMessageKey());
+        assertEquals(Map.of("entity", "Продукт", "children", "Цени на продукта"), refusal.getMessageParams());
     }
 }

@@ -20,6 +20,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
+import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
@@ -147,6 +149,8 @@ class BooleanWordsHarmoniaIT extends UserInterfaceIntegrationTest {
         assertTrue(sheet.contains("Active") && !sheet.matches("(?s).*\\b(true|false)\\b.*"),
                 "the record sheet must show the word, never true / false: " + sheet);
 
+        // The labels follow the language the instance offers, never a saved one it does not (#8632).
+        Configuration.set(DirigibleConfig.APPLICATION_LANGUAGES.getKey(), "en,bg");
         Selenide.executeJavaScript("localStorage.setItem('codbex.harmonia.language', 'bg');");
         browser.openPath(APP + "/Product");
         Selenide.refresh();
@@ -218,6 +222,7 @@ class BooleanWordsHarmoniaIT extends UserInterfaceIntegrationTest {
     @AfterEach
     void cleanup() {
         Selenide.executeJavaScript("localStorage.removeItem('codbex.harmonia.language');");
+        Configuration.remove(DirigibleConfig.APPLICATION_LANGUAGES.getKey());
         restAssuredExecutor.execute(() -> given().when()
                                                  .delete("/services/ide/publisher/" + WORKSPACE + "/" + PROJECT)
                                                  .then()

@@ -15,8 +15,9 @@
  * baseFormPage — mixin for form page components. Extends basePage — spread this
  * instead of basePage in form pages.
  *
- * Provides: errors, saveFailureMessage, loadFailureMessage, unmatchedCauses,
- *           fieldMap, clearError, validateOnBlur, scrollToSummary, navigateBack, refreshIcons,
+ * Provides: errors, saveFailureMessage, loadFailureMessage, unmatchedCauses, serverErrors,
+ *           fieldMap, clearError, resetSaveOutcome, dropStaleServerErrors, rememberServerErrors,
+ *           validateOnBlur, scrollToSummary, navigateBack, refreshIcons,
  *           applyApiError, mapCauses, applyLoadError, inlineCreated,
  *           adoptCreatedOption, rememberInlineCreated, savedAlongside,
  *           pickers, pickerRows, searchPicker.
@@ -42,11 +43,45 @@ function baseFormPage() {
     // rejection that names the property ("The 'TaxRate' property is required") in the user's
     // own vocabulary. Unmapped names are shown as the server wrote them.
     fieldLabels: {},
+    // The field errors the last refused save put on screen, each with the value it refused (#8637).
+    serverErrors: {},
 
     clearError(field) {
       if (this.errors[field]) this.errors[field] = '';
       if (this.errors.__summary) this.errors.__summary = '';
       this.unmatchedCauses = [];
+    },
+
+    // Called by a save before it validates, so each attempt shows only its own outcome (#8637): the
+    // previous refusal's sentence must not stay beside the next attempt's own summary.
+    resetSaveOutcome() {
+      this.saveFailureMessage = '';
+      this.unmatchedCauses = [];
+      this.serverErrors = {};
+    },
+
+    // A server field error is about the value the server refused, so it goes once the field holds
+    // another one (#8637) - whether or not the field has a client rule (a duplicate key has none, and
+    // validateOnBlur skips such a field). Bound as the form's x-effect, so it re-runs as those fields
+    // change; an error the client's own rules have since written is left to them.
+    dropStaleServerErrors() {
+      for (const [field, refused] of Object.entries(this.serverErrors)) {
+        if (JSON.stringify(this.form[field]) === refused.value) continue;
+        delete this.serverErrors[field];
+        if (this.errors[field] !== refused.message) continue;
+        this.errors[field] = '';
+        if (this.errors.__summary === refused.message) this.errors.__summary = '';
+      }
+    },
+
+    // Remember the field errors a refusal just set, with the values they are about.
+    rememberServerErrors() {
+      const remembered = {};
+      for (const [field, message] of Object.entries(this.errors)) {
+        if (field === '__summary' || !message) continue;
+        remembered[field] = { value: JSON.stringify(this.form[field]), message };
+      }
+      this.serverErrors = remembered;
     },
 
     // Re-checks the one field focus just left against the page's validationSchema(), so a required
@@ -76,6 +111,7 @@ function baseFormPage() {
     applyApiError(err, { fallbackMessage, formState } = {}) {
       if (err && err.isApiError && err.errorType === 'ValidationError') {
         this.mapCauses(err.errorCauses);
+        this.rememberServerErrors();
         this.state = 'validation-error';
         this.scrollToSummary();
         return;
@@ -88,6 +124,7 @@ function baseFormPage() {
       if (named) {
         const message = App.services.apiErrors.messageWithLabels(err, this.fieldLabels);
         this.errors = { [named]: message, __summary: message };
+        this.rememberServerErrors();
         this.state = 'validation-error';
         this.scrollToSummary();
         return;

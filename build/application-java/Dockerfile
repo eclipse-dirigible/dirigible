@@ -7,7 +7,10 @@ FROM amazoncorretto:21-alpine
 
 VOLUME /tmp
 
+# apk upgrade brings the base image's own packages (zlib, musl, openssl, ...) to the patch level of
+# the Alpine repository: the base image is rebuilt less often than its packages are fixed.
 RUN apk update && \
+    apk upgrade --no-cache && \
     apk add --no-cache \
     # Consolidating all apk adds to ensure one layer and the latest patches
     ttyd \

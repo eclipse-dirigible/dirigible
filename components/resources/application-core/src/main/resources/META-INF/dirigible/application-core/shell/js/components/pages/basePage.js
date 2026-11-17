@@ -50,19 +50,15 @@ function basePage() {
 
     /**
      * The collator every displayed-text ordering goes through - relation pickers (sortOptions) and a
-     * list sorted by a relation column (issue #7721). Locale-aware: the app's current language
-     * (localStorage, the same flag i18n and Accept-Language read) drives it, so a Bulgarian label list
-     * sorts in Bulgarian order, falling back to the runtime locale; numeric:true keeps "Item 2" before
-     * "Item 10", and sensitivity:'base' ignores case and accents.
+     * list sorted by a relation column (issue #7721). Locale-aware: the app's current language (the
+     * locale store, the same value i18n and Accept-Language follow - never a saved code the instance
+     * no longer offers, #8632) drives it, so a Bulgarian label list sorts in Bulgarian order, falling
+     * back to the runtime locale; numeric:true keeps "Item 2" before "Item 10", and sensitivity:'base'
+     * ignores case and accents.
      */
     textCollator() {
-      let locale;
-      try {
-        locale = window.localStorage.getItem('codbex.harmonia.language') || undefined;
-      } catch (e) {
-        locale = undefined;
-      }
-      return new Intl.Collator(locale, { numeric: true, sensitivity: 'base' });
+      const locale = window.Alpine && Alpine.store('locale');
+      return new Intl.Collator(locale ? locale.value : undefined, { numeric: true, sensitivity: 'base' });
     },
 
     /**

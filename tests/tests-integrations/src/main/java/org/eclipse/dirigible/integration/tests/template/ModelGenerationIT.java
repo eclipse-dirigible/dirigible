@@ -522,7 +522,7 @@ class ModelGenerationIT extends IntegrationTest {
             context.eval("js",
                     "var pages = {}; var window = this; var localStorage = { getItem: () => null };"
                             + " var document = { addEventListener: (event, callback) => callback() };"
-                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; } };"
+                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; }, store: () => undefined };"
                             + " window.HarmoniaFormat = { value: (v) => String(v) };");
             context.eval("js", basePage);
             context.eval("js", page);

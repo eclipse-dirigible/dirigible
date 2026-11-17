@@ -14,6 +14,17 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #set($hasSingleFlags = $singleFlags && $singleFlags.size() > 0)
 ## The case-insensitive keys (#8095): `unique: { ignoreCase: true }` fields.
 #set($hasUniqueIgnoringCase = false)
+## The business keys (#8661): a composite `unique:` or a `unique: true` field - a write colliding with one
+## is refused with its message by this repository, see duplicateKeys().
+#set($hasDuplicateKeys = false)
+#if($uniqueConstraints && !$uniqueConstraints.isEmpty())
+#set($hasDuplicateKeys = true)
+#end
+#foreach($property in $properties)
+#if($property.dataUnique)
+#set($hasDuplicateKeys = true)
+#end
+#end
 ## A document number drawn on create (#8113): save() runs the draw and the insert as one unit of work.
 #set($numbersOnCreate = false)
 #foreach ($property in $properties)
@@ -732,7 +743,16 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($hasSingleFlags || $documentItem || $preservedOnUpdate.size() > 0)
         // One unit with the header total(s) it moves - see save() (#8096) - and with the row lock the
         // carried-over system-owned columns are read under (#8109).
+#if($hasDuplicateKeys)
+        try {
+            return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updateInUnit(entity));
+        } catch (RuntimeException e) {
+            // A merge reaches the database when the unit commits, past the write that maps a collision.
+            throw duplicateKeyOr(e);
+        }
+#else
         return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updateInUnit(entity));
+#end
     }
 
     private ${name}Entity updateInUnit(${name}Entity entity) {
@@ -932,7 +952,16 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     public ${name}Entity updateWithoutEvent(${name}Entity entity) {
 #if($hasSingleFlags || $documentItem)
         // One unit with the header total(s) it moves - see save() (#8096).
+#if($hasDuplicateKeys)
+        try {
+            return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updateWithoutEventInUnit(entity));
+        } catch (RuntimeException e) {
+            // A merge reaches the database when the unit commits, past the write that maps a collision.
+            throw duplicateKeyOr(e);
+        }
+#else
         return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updateWithoutEventInUnit(entity));
+#end
     }
 
     private ${name}Entity updateWithoutEventInUnit(${name}Entity entity) {
@@ -1560,9 +1589,10 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 
     /**
      * The case-insensitive keys (intent {@code unique: { ignoreCase: true }}, dirigible #8095): a value
-     * another ${name} holds in any letter case is answered 409 with the field's unique message, as the
-     * column's own UNIQUE answers an exact repeat. The value this row already stores is not refused
-     * again, so case-duplicates stored before the key was declared stay writable until one changes.
+     * another ${name} holds in any letter case is refused with a DuplicateKeyException carrying the
+     * field's unique message (a 409 over HTTP), as the column's own UNIQUE refuses an exact repeat.
+     * The value this row already stores is not refused again, so case-duplicates stored before the
+     * key was declared stay writable until one changes.
      */
 ## ponytail: read-then-act - two concurrent writers of case variants can both pass; a unique index on
 ## LOWER(column) would close it, which the schema model cannot express and H2 cannot build.
@@ -1583,11 +1613,10 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
                                                                                                           .ne("${pkPropertyName}", entity.${pkPropertyName})) > 0) {
             ${name}Entity stored = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
             if (stored == null || !entity.${property.name}.equals(stored.${property.name})) {
-                org.eclipse.dirigible.sdk.db.ValidationException refusal = org.eclipse.dirigible.sdk.db.FieldRefusals.duplicate(${refusalCatalog},
-                        ${refusalEntityLabel}, ${refusalEntityLabelKey}, ${refusalField});
-                // The refusal rides as the cause, so the body carries its key and the field.
-                throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
-                        refusal.getMessage(), refusal);
+                // The refusal the column's own UNIQUE gets (#8669), so every writer - controller, generate
+                // action, job - sees the same refusal, with its key and field.
+                throw new org.eclipse.dirigible.sdk.db.DuplicateKeyException(org.eclipse.dirigible.sdk.db.FieldRefusals.duplicate(${refusalCatalog},
+                        ${refusalEntityLabel}, ${refusalEntityLabelKey}, ${refusalField}));
             }
         }
 #end
@@ -2386,14 +2415,16 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         // a refusing child declared after a cascading one only spoke up once the earlier child's rows
         // were already deleted: the unit of work rolls those rows back, but the change history is
         // written on its own connection by design - so the trail permanently recorded deletes of lines
-        // that still exist (#7143).
+        // that still exist (#7143). The refusal is resolved for the reader's language (#8635).
+#set($refusalEntityLabel = '"' + $name + '"')
+#if($entityLabelJava)#set($refusalEntityLabel = $entityLabelJava)#end
 #foreach($owned in $compositionChildren)
 #if($owned.refuse == "true")
         if (!new gen.${javaGenFolderName}.data.${owned.javaChildPerspective}.${owned.childEntity}Repository()
                 .findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${owned.fkProperty}", id))
                 .isEmpty()) {
-            throw new org.eclipse.dirigible.sdk.db.ValidationException(
-                    "This ${entityLabel} still has ${owned.childLabel} records - delete those first");
+            throw org.eclipse.dirigible.sdk.db.DeleteRefusals.hasChildren(messageCatalog(), ${refusalEntityLabel}, labelCatalogKey(),
+                    ${owned.childLabelJava}, ${owned.childLabelKeyJava});
         }
 #end
 #end
@@ -2472,6 +2503,58 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     @Override
     protected String labelCatalogKey() {
         return ${labelCatalogKeyJava};
+    }
+#end
+## The business keys (#7098, #7138, #8661): a write colliding with one of them is refused with the key's
+## message, as a 409, by whoever made it - the REST controllers, a generate action, a schedule - because
+## the mapping lives here, once, and not in each caller. Either kind of key earns it: a composite
+## `unique:` the model NAMED, or a single-column `unique: true`, a column-level UNIQUE the SCHEMA leaves
+## for the database to name - the name every dialect generates is built from the column.
+#if($hasDuplicateKeys)
+
+    /**
+     * The business keys of ${name}, keyed by the name the database puts into the violation it raises -
+     * a composite key by the constraint name the model emitted (so this map and the schema cannot
+     * drift), a single-column {@code unique} by its column name, which is what every dialect builds
+     * its own generated constraint name out of ("VACATIONS_PUBLIC_HOLIDAY_PUBLIC_HOLIDAY_DAY_key").
+     * Each refusal is resolved for the reader's language when it is raised (#8596).
+     */
+    private static final java.util.Map<String, java.util.function.Supplier<org.eclipse.dirigible.sdk.db.ValidationException>> DUPLICATE_KEYS = duplicateKeyRefusals();
+
+## The refusals of one property's value are resolved for the reader's language (#8596): the model's
+## catalog, the entity's label and its key - each as the processor derived it, else the bare names.
+#set($refusalCatalog = "null")
+#if($messageCatalogJava)#set($refusalCatalog = $messageCatalogJava)#end
+#set($refusalEntityLabel = '"' + $name + '"')
+#if($entityLabelJava)#set($refusalEntityLabel = $entityLabelJava)#end
+#set($refusalEntityLabelKey = "null")
+#if($labelCatalogKeyJava)#set($refusalEntityLabelKey = $labelCatalogKeyJava)#end
+    private static java.util.Map<String, java.util.function.Supplier<org.eclipse.dirigible.sdk.db.ValidationException>> duplicateKeyRefusals() {
+        java.util.Map<String, java.util.function.Supplier<org.eclipse.dirigible.sdk.db.ValidationException>> refusals = new java.util.HashMap<>();
+#if($uniqueConstraints)
+#foreach($uniqueConstraint in $uniqueConstraints)
+#if($uniqueConstraint.messageCatalogKeyJavaLiteral)
+        refusals.put("${uniqueConstraint.nameJavaLiteral}",
+                () -> org.eclipse.dirigible.sdk.db.CheckMessages.refusal("${uniqueConstraint.messageCatalogKeyJavaLiteral}", "${uniqueConstraint.messageJavaLiteral}"));
+#else
+        refusals.put("${uniqueConstraint.nameJavaLiteral}", () -> new org.eclipse.dirigible.sdk.db.ValidationException("${uniqueConstraint.messageJavaLiteral}"));
+#end
+#end
+#end
+#foreach($property in $properties)
+#if($property.dataUnique)
+#set($refusalField = '"' + $property.name + '", "' + $property.name + '", null')
+#if($property.refusalFieldArgsJava)#set($refusalField = $property.refusalFieldArgsJava)#end
+        refusals.put("${property.dataName}", () -> org.eclipse.dirigible.sdk.db.FieldRefusals.duplicate(${refusalCatalog},
+                ${refusalEntityLabel}, ${refusalEntityLabelKey}, ${refusalField}));
+#end
+#end
+        return java.util.Collections.unmodifiableMap(refusals);
+    }
+
+    @Override
+    protected java.util.Map<String, java.util.function.Supplier<org.eclipse.dirigible.sdk.db.ValidationException>> duplicateKeys() {
+        return DUPLICATE_KEYS;
     }
 #end
 #if($hasTargetDeleteRules)
@@ -2681,6 +2764,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     @Override
     public List<${name}Entity> query(String hql, Map<String, Object> parameters) {
         return Translator.translateList(super.query(hql, parameters), User.getLanguage(), "${tablePrefix}${dataName}");
+    }
+
+    @Override
+    public List<${name}Entity> query(String hql, Map<String, Object> parameters, int limit, int offset) {
+        // The generated controller's POST /search reads its page through this overload (#8633).
+        return Translator.translateList(super.query(hql, parameters, limit, offset), User.getLanguage(), "${tablePrefix}${dataName}");
     }
 #end
 #if($documentMaster)

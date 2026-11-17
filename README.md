@@ -102,7 +102,7 @@ not available in the releases.
 
 - [Git](http://git-scm.com/)
 - [Java JDK 21+](https://adoptopenjdk.net/)
-- [Maven 3.8.x](http://maven.apache.org/docs/3.8.8/release-notes.html)
+- [Maven 3.9.x](https://maven.apache.org/docs/3.9.16/release-notes.html) - 3.9 is the minimum, the build fails on 3.8
 - [esbuild](https://esbuild.github.io/getting-started/#install-esbuild) - `npm i -g esbuild`
 - [tsc](https://www.npmjs.com/package/typescript) - `npm i -g typescript`
 - [ttyd](https://github.com/tsl0922/ttyd)

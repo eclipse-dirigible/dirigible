@@ -108,14 +108,16 @@ final class ModelTranslations {
     /**
      * The default-language texts of a delete refusal (dirigible #8569), by their key under the
      * catalog's {@code checks}, in catalog order: the sentence naming every kind of referencing record,
-     * the way one kind is written into it, and the sentence for references no delete rule counts. They
-     * are the ones {@code org.eclipse.dirigible.sdk.db.DeleteRefusals} falls back to, written into the
-     * en-US catalog for a translator to copy into another language's.
+     * the way one kind is written into it, the sentence for references no delete rule counts, and the
+     * sentence refusing a master that still has composition children (dirigible #8635). They are the
+     * ones {@code org.eclipse.dirigible.sdk.db.DeleteRefusals} falls back to, written into the en-US
+     * catalog for a translator to copy into another language's.
      */
     static final List<Map.Entry<String, String>> DELETE_REFUSAL_MESSAGES = List.of( //
             Map.entry("deleteReferenced", "This {entity} is referenced by {references} and cannot be deleted"), //
             Map.entry("deleteReference", "{count} {label} record(s)"), //
-            Map.entry("deleteReferencedByOthers", "This {entity} is referenced by other records and cannot be deleted"));
+            Map.entry("deleteReferencedByOthers", "This {entity} is referenced by other records and cannot be deleted"), //
+            Map.entry("deleteHasChildren", "This {entity} still has {children} records - delete those first"));
 
     /**
      * The default-language texts of the refusals of one property's value (dirigible #8596) - a required
@@ -129,6 +131,26 @@ final class ModelTranslations {
             Map.entry("fieldTooLong", "The '{label}' exceeds the maximum length of {length}"), //
             Map.entry("fieldPattern", "The value of '{label}' does not match the required pattern '{pattern}'"), //
             Map.entry("fieldDuplicate", "A {entity} with this '{label}' already exists"));
+
+    /**
+     * The default-language texts of a create-from's refusals (dirigible #8646) - a source the report it
+     * reads cannot be run for, no row qualifying, a refused target line's source row, a report value
+     * the target cannot hold - by their key under the catalog's {@code checks}. They are the ones
+     * {@code org.eclipse.dirigible.sdk.db.GenerateRefusals} falls back to, written into the en-US
+     * catalog for a translator to copy into another language's.
+     */
+    static final List<Map.Entry<String, String>> GENERATE_REFUSAL_MESSAGES = List.of( //
+            Map.entry("generateReportValueMissing", "{entity} [{id}] has no {property}, which report {report} is run with as {parameter}"), //
+            Map.entry("generateNothingQualifies", "no row of report {report} qualifies for {action}, so there is nothing to generate"), //
+            Map.entry("generateNoItemQualifies",
+                    "no {item} row of the {entity} qualifies for {action}, so the {target} would have no lines"), //
+            Map.entry("generateNoReportRowQualifies",
+                    "no row of report {report} qualifies for {action}, so the {target} would have no lines"), //
+            Map.entry("generateFromItem", "{message} (from {item} [{id}])"), //
+            Map.entry("generateReportValueTooLarge", "report column [{column}] holds [{value}], too large to be read exactly"), //
+            Map.entry("generateReportValueNotWhole", "report column [{column}] holds [{value}], which is not a whole number"), //
+            Map.entry("generateReportValueRounding",
+                    "report column [{column}] holds [{value}], which a field of {scale} decimal places cannot hold without rounding"));
 
     /**
      * The catalog key of a check's message (issue #7611): the one the generator recorded, or - for a
@@ -437,9 +459,10 @@ final class ModelTranslations {
 
     /**
      * Collects the user-facing messages of the entities' checks, business keys, picker rules (issue
-     * #7611), fixed relations (#7903), bounded derived totals (#8096) and delete refusals (#8569), in
-     * the default language, keyed as the generated code resolves them - so a language catalog
-     * translates a refusal, a warning or a picker hint exactly as it translates a label.
+     * #7611), fixed relations (#7903), bounded derived totals (#8096), delete refusals (#8569) and
+     * create-from refusals (#8646), in the default language, keyed as the generated code resolves them
+     * - so a language catalog translates a refusal, a warning or a picker hint exactly as it translates
+     * a label.
      *
      * @param model the entity model
      * @return key to default-language message, in model order
@@ -450,6 +473,12 @@ final class ModelTranslations {
         if (!entities.isEmpty()) {
             DELETE_REFUSAL_MESSAGES.forEach(message -> messages.put(message.getKey(), message.getValue()));
             FIELD_REFUSAL_MESSAGES.forEach(message -> messages.put(message.getKey(), message.getValue()));
+            GENERATE_REFUSAL_MESSAGES.forEach(message -> messages.put(message.getKey(), message.getValue()));
+        }
+        // A create-from's authored refusal sentences (#8646), keyed by the intent.
+        Map<String, Object> generateRefusals = asMap(model.get("generateRefusals"));
+        if (generateRefusals != null) {
+            messages.putAll(generateRefusals);
         }
         for (Map<String, Object> entity : entities) {
             int index = -1;

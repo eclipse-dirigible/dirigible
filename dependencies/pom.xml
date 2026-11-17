@@ -32,11 +32,6 @@
             </dependency>
             <dependency>
                 <groupId>org.apache.activemq</groupId>
-                <artifactId>activemq-client-jakarta</artifactId>
-                <version>${activemq.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.activemq</groupId>
                 <artifactId>activemq-jdbc-store</artifactId>
                 <version>${activemq.version}</version>
             </dependency>

@@ -287,6 +287,8 @@
          namespace it needs and the one i18n.js always loads. A page that DID render module-authored
          labels would set App.config.projectName here first, as the task form and the report page do. -->
     <script>window.App = window.App || { config: {} }; App.config = App.config || {};</script>
+    <!-- The language the instance offers (#8632): the labels and Accept-Language follow it, never a saved one it does not. -->
+    <script src="/services/web/application-core/shell/js/stores/locale.js"></script>
     <script src="/services/web/application-core/shell/js/services/i18n.js"></script>
     <script>
       document.addEventListener('alpine:init', () => {

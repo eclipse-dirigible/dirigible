@@ -124,6 +124,8 @@
         <maven-spotbugs-plugin.version>4.10.5.0</maven-spotbugs-plugin.version>
         <maven-formatter-plugin.version>2.29.0</maven-formatter-plugin.version>
         <maven-exec-plugin.version>3.7.0</maven-exec-plugin.version>
+        <maven-enforcer-plugin.version>3.5.0</maven-enforcer-plugin.version>
+        <maven.minimum.version>3.9.0</maven.minimum.version>
         <maven-git-commit-id-plugin.version>4.9.10</maven-git-commit-id-plugin.version>
         <maven-download-plugin.version>1.13.0</maven-download-plugin.version>
         <maven-dependency-plugin.version>3.11.0</maven-dependency-plugin.version>
@@ -180,12 +182,15 @@
         <ftpserver.version>1.2.1</ftpserver.version>
 
         <!-- ActiveMQ -->
-        <activemq.version>6.1.0</activemq.version>
+        <activemq.version>6.2.10</activemq.version>
+
+        <!-- RabbitMQ Java client: ahead of the version Spring Boot manages (5.30.0), for its security fixes -->
+        <amqp-client.version>5.37.1</amqp-client.version>
 
         <!-- Maven Artifact Resolver (embedded for dynamic dependency resolution);
              maven-resolver-maven.version is the Maven line the resolver release pairs with -->
         <maven-resolver.version>1.9.27</maven-resolver.version>
-        <maven-resolver-maven.version>3.10.0</maven-resolver-maven.version>
+        <maven-resolver-maven.version>3.10.1</maven-resolver-maven.version>
 
         <!-- Camel -->
         <camel.version>4.23.0</camel.version>
@@ -205,14 +210,14 @@
         <flexmark.version>0.64.8</flexmark.version>
 
         <!-- JDBC -->
-        <ngdbc.version>2.30.11</ngdbc.version>
+        <ngdbc.version>2.30.12</ngdbc.version>
         <snowflake.version>4.4.1</snowflake.version>
         <mssql.version>13.6.2.jre11</mssql.version>
         <mysql.version>8.4.0</mysql.version>
 
         <!-- AWS SDK v2 - the single line every software.amazon.awssdk artifact in the fat jar
              carries, imported as a BOM below so no consumer pins its own. -->
-        <awssdk.version>2.57.12</awssdk.version>
+        <awssdk.version>2.59.0</awssdk.version>
 
         <!-- QLDB -->
         <qldb.driver.version>2.3.1</qldb.driver.version>
@@ -298,6 +303,33 @@
 
     <build>
         <plugins>
+            <!-- First, so a too-old Maven is refused with a message of ours before any other plugin
+                 is resolved: exec-maven-plugin 3.7.0 needs Maven 3.9 and says so far less clearly. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <!-- The version is stated here, not in pluginManagement: the oss-parent declares this
+                     plugin at 1.2 in its own <plugins>, and an inherited declaration wins over a
+                     managed version. -->
+                <version>${maven-enforcer-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>enforce-maven-version</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireMavenVersion>
+                                    <version>[${maven.minimum.version},)</version>
+                                    <message>Eclipse Dirigible builds with Maven ${maven.minimum.version} or newer.</message>
+                                </requireMavenVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>pl.project13.maven</groupId>
                 <artifactId>git-commit-id-plugin</artifactId>
@@ -1058,6 +1090,11 @@
                 <version>${spring.boot.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.rabbitmq</groupId>
+                <artifactId>amqp-client</artifactId>
+                <version>${amqp-client.version}</version>
             </dependency>
             <!-- The AWS SDK v2 line, for every module that reaches it: api-s3 through
                  s3-transfer-manager and api-qldb through the QLDB driver. Without it the two chains

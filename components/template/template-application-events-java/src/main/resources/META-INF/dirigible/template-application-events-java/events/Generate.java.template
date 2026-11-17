@@ -14,8 +14,8 @@ package gen.events.${javaGenFolderName};
             java.util.Map<String, Object> reportFilter = new java.util.LinkedHashMap<>();
 #foreach($p in $reportParameters)
             if (source.${p.property} == null) {
-                throw new org.eclipse.dirigible.sdk.db.ValidationException(
-                        "${fromEntity} [" + sourceId + "] has no ${p.property}, which report ${reportName} is run with as ${p.name}");
+                throw org.eclipse.dirigible.sdk.db.GenerateRefusals.reportValueMissing(REFUSAL_CATALOG, ${fromEntityLabelJava}, sourceId,
+                        "${p.property}", "${reportName}", "${p.name}");
             }
             reportFilter.put("${p.name}", source.${p.property});
 #end
@@ -166,6 +166,9 @@ import org.eclipse.dirigible.sdk.http.Response;
 @Component("${javaGenFolderName}_${className}Generate")
 #end
 public class ${className}Generate {
+
+    /** The model catalog this create-from's refusals are translated in (dirigible #8646). */
+    private static final String REFUSAL_CATALOG = ${refusalCatalogJava};
 #if($flipFollowsEvent)
 
     private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}Generate");
@@ -212,8 +215,8 @@ public class ${className}Generate {
         // defaults to a source property is checked in create(), once the default is applied.
         if (req.values == null || req.values.get("${p.prop}") == null
                 || String.valueOf(req.values.get("${p.prop}")).isBlank()) {
-            Response.setStatus(400);
-            return "{\"error\": \"missing required input [${p.prop}]\"}";
+            // A field refusal (#8646): answered 400 in the reader's language, naming the input it is about.
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required(REFUSAL_CATALOG, "${p.prop}", ${p.labelJava}, ${p.labelKeyJava});
         }
 #end
 #end
@@ -362,8 +365,7 @@ public class ${className}Generate {
             if (rows.isEmpty()) {
                 // A run that generates nothing is not the run that was asked for, and leaves nothing a
                 // second run could be refused over.
-                throw new org.eclipse.dirigible.sdk.db.ValidationException(
-                        "no row of report ${reportName} qualifies for ${name}, so there is nothing to generate");
+                throw org.eclipse.dirigible.sdk.db.GenerateRefusals.nothingQualifies(REFUSAL_CATALOG, "${reportName}", ${actionLabelJava});
             }
             java.util.List<gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity> saved = new java.util.ArrayList<>();
             for (gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity target : rows) {
@@ -491,16 +493,16 @@ public class ${className}Generate {
                 }
             }
             if (!unqualified.isEmpty()) {
-                throw new org.eclipse.dirigible.sdk.db.ValidationException(
-                        "${itemRefuseJavaLiteral} (${fromItemEntity} " + unqualified + ")");
+                throw org.eclipse.dirigible.sdk.db.GenerateRefusals.itemsRefused(${itemRefuseKeyJava}, "${itemRefuseJavaLiteral}",
+                        ${fromItemEntityLabelJava}, unqualified);
             }
     #end
             if (qualifying.isEmpty()) {
                 // Every row failed the rule, so the ${toEntity} would carry no lines at all. A document
                 // of no lines is not the document that was asked for, and it is the harder of the two
                 // failures to notice - it exists, it counts as the period's billing, and it is empty.
-                throw new org.eclipse.dirigible.sdk.db.ValidationException(
-                        "no ${fromItemEntity} row of the ${fromEntity} qualifies for ${name}, so the ${toEntity} would have no lines");
+                throw org.eclipse.dirigible.sdk.db.GenerateRefusals.noItemQualifies(REFUSAL_CATALOG, ${fromItemEntityLabelJava},
+                        ${fromEntityLabelJava}, ${actionLabelJava}, ${toEntityLabelJava});
             }
     #end
     #if($hasReportItems)
@@ -559,8 +561,8 @@ public class ${className}Generate {
             }
             if (reportLines.isEmpty()) {
                 // No row qualifies: a ${toEntity} of no lines is not the document that was asked for.
-                throw new org.eclipse.dirigible.sdk.db.ValidationException(
-                        "no row of report ${reportName} qualifies for ${name}, so the ${toEntity} would have no lines");
+                throw org.eclipse.dirigible.sdk.db.GenerateRefusals.noReportRowQualifies(REFUSAL_CATALOG, "${reportName}", ${actionLabelJava},
+                        ${toEntityLabelJava});
             }
     #end
     #foreach($load in $relationLoads)
@@ -596,7 +598,7 @@ public class ${className}Generate {
                 }
     #if($p.required && $p.defaultProp != "")
                 if (target.${p.prop} == null) {
-                    throw new org.eclipse.dirigible.sdk.db.ValidationException("missing required input [${p.prop}]");
+                    throw org.eclipse.dirigible.sdk.db.FieldRefusals.required(REFUSAL_CATALOG, "${p.prop}", ${p.labelJava}, ${p.labelKeyJava});
                 }
     #end
             }
@@ -680,9 +682,10 @@ public class ${className}Generate {
                 } catch (org.eclipse.dirigible.sdk.db.ValidationException ex) {
                     // Name the SOURCE line the refused one was mapped from. The target's own message says
                     // which value is missing; without the row it came from, a document of a hundred lines
-                    // leaves the caller nothing to go and fix (#7069).
-                    throw new org.eclipse.dirigible.sdk.db.ValidationException(
-                            ex.getMessage() + " (from ${fromItemEntity} [" + srcItem.${fromItemPk} + "])", ex);
+                    // leaves the caller nothing to go and fix (#7069). A line colliding with a business key
+                    // stays the conflict it is - a 409, as the header's own collision is (#8661).
+                    throw org.eclipse.dirigible.sdk.db.GenerateRefusals.fromItem(REFUSAL_CATALOG, ex, ${fromItemEntityLabelJava},
+                            srcItem.${fromItemPk});
                 }
             }
     #end
@@ -868,8 +871,7 @@ public class ${className}Generate {
         if (value instanceof Double || value instanceof Float) {
             double reading = ((Number) value).doubleValue();
             if (!(Math.abs(reading) < Math.pow(10, 15 - sourceScale))) {
-                throw new org.eclipse.dirigible.sdk.db.ValidationException(
-                        "report column [" + column + "] holds [" + value + "], too large to be read exactly");
+                throw org.eclipse.dirigible.sdk.db.GenerateRefusals.reportValueTooLarge(REFUSAL_CATALOG, column, value);
             }
             amount = java.math.BigDecimal.valueOf(reading);
         } else {
@@ -878,8 +880,7 @@ public class ${className}Generate {
         try {
             return amount.setScale(scale, java.math.RoundingMode.UNNECESSARY);
         } catch (ArithmeticException needsRounding) {
-            throw new org.eclipse.dirigible.sdk.db.ValidationException("report column [" + column + "] holds [" + amount.toPlainString()
-                    + "], which a field of " + scale + " decimal places cannot hold without rounding");
+            throw org.eclipse.dirigible.sdk.db.GenerateRefusals.reportValueRounding(REFUSAL_CATALOG, column, amount.toPlainString(), scale);
         }
     }
 
@@ -887,7 +888,7 @@ public class ${className}Generate {
     private static Integer integerCell(java.util.Map<String, Object> row, String column, int scale, int sourceScale) {
         Long value = longCell(row, column, scale, sourceScale);
         if (value != null && (value < Integer.MIN_VALUE || value > Integer.MAX_VALUE)) {
-            throw new org.eclipse.dirigible.sdk.db.ValidationException("report column [" + column + "] holds [" + value + "], too large");
+            throw org.eclipse.dirigible.sdk.db.GenerateRefusals.reportValueTooLarge(REFUSAL_CATALOG, column, value);
         }
         return value == null ? null : value.intValue();
     }
@@ -901,8 +902,7 @@ public class ${className}Generate {
         try {
             return new java.math.BigDecimal(String.valueOf(value)).longValueExact();
         } catch (NumberFormatException | ArithmeticException notWhole) {
-            throw new org.eclipse.dirigible.sdk.db.ValidationException(
-                    "report column [" + column + "] holds [" + value + "], which is not a whole number");
+            throw org.eclipse.dirigible.sdk.db.GenerateRefusals.reportValueNotWhole(REFUSAL_CATALOG, column, value);
         }
     }
 

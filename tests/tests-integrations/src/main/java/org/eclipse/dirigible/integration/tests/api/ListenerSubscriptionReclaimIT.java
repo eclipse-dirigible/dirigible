@@ -120,8 +120,8 @@ class ListenerSubscriptionReclaimIT extends IntegrationTest {
 
             await().until(() -> durable(orphan, orphan) == null);
             await().until(() -> subscribedInTheSharedMode(orphan) && subscribedInTheSharedMode(held));
-            await().until(
-                    () -> consumerLogs.containsMessage("[" + held + "] the previous listener connection mode registered", Level.WARN));
+            await().until(() -> consumerLogs.containsMessage("[" + held + "] a previous listener connection mode or client id registered",
+                    Level.WARN));
             assertThat(durable(held, held)).as("a subscription whose client id is still held is left alone")
                                            .isNotNull();
         } finally {
