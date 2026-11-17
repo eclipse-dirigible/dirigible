@@ -3,7 +3,10 @@ FROM amazoncorretto:21-alpine
 
 VOLUME /tmp
 
+# apk upgrade brings the base image's own packages (zlib, musl, openssl, ...) to the patch level of
+# the Alpine repository: the base image is rebuilt less often than its packages are fixed.
 RUN apk update && \
+    apk upgrade --no-cache && \
     apk add --no-cache \
     # Consolidating all apk adds to ensure one layer and the latest patches
     ttyd \
@@ -12,15 +15,17 @@ RUN apk update && \
     git \
     fontconfig ttf-dejavu ttf-liberation
 
-# This forces npm to update itself and its internal dependencies
-# to the latest versions available on the npm registry
-# RUN npm install -g npm@latest # -> Commented, so that the ARM64 build don't timeout the GitHub Action (currently it takes ~6 hours).
-
-# Install global npm packages: tsc, for the watcher that transpiles TypeScript projects. It starts
-# only when the registry holds TypeScript sources; DIRIGIBLE_TSC_WATCH_SERVICE_ENABLED=false turns it off.
-RUN npm i -g typescript \
+# Install global npm packages:
+# - npm itself, because the modules bundled in Alpine's npm package (tar, brace-expansion, pacote, ...)
+#   trail their security fixes. Alpine's copy is removed afterwards, or the image carries both.
+# - tsc, for the watcher that transpiles TypeScript projects. It starts only when the registry holds
+#   TypeScript sources; DIRIGIBLE_TSC_WATCH_SERVICE_ENABLED=false turns it off. Pinned to the version
+#   every workflow builds and tests with: an unpinned install floats to TypeScript 7, a Go binary
+#   whose standard library the image would then have to track as well.
+RUN npm i -g npm@latest typescript@5.9.3 \
     # Clean up npm cache to reduce image size
     && npm cache clean --force \
+    && apk del --no-cache npm \
     # cleanup of apk cache
     && rm -rf /var/cache/apk/*
 

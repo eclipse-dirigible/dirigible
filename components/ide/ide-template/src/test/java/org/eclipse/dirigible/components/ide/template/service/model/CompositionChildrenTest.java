@@ -41,6 +41,8 @@ class CompositionChildrenTest {
                                        .containsEntry("fkProperty", "Request")
                                        .containsEntry("javaChildPerspective", "vacations")
                                        .containsEntry("childLabel", "Vacation Day")
+                                       .containsEntry("childLabelJava", "\"Vacation Day\"")
+                                       .containsEntry("childLabelKeyJava", "null")
                                        .containsEntry("refuse", "false");
         assertThat(asMap(owned.get(1))).as("whenMasterDeleted: refuse rides the child's composition property")
                                        .containsEntry("childEntity", "VacationAttachment")
@@ -130,6 +132,25 @@ class CompositionChildrenTest {
         List<Object> owned = ModelValues.asList(master.get("compositionChildren"));
         assertThat(asMap(owned.get(0))).containsEntry("deleteRefusals", "true");
         assertThat(asMap(owned.get(1))).containsEntry("deleteRefusals", "false");
+    }
+
+    /**
+     * The refusal of the master's delete names the child through its catalog key, so it reads in the
+     * request's language, and its label is a Java literal however it is written (dirigible #8635).
+     */
+    @Test
+    void theRefusalNamesTheChildThroughItsCatalogKey() {
+        Map<String, Object> master = entity("Trip", "PRIMARY", "trips");
+        Map<String, Object> copy = child("TripCopy", "trips", "Trip", "Trip", true);
+        copy.put("entityLabel", "Trip \"Copy\"");
+        copy.put("labelCatalogKeyJava", "\"cascade:cascade-model.t.CASCADE_TRIP_COPY\"");
+        List<Map<String, Object>> entities = new ArrayList<>(List.of(master, copy));
+
+        CompositionChildren.annotate(entities);
+
+        assertThat(asMap(ModelValues.asList(master.get("compositionChildren"))
+                                    .get(0))).containsEntry("childLabelJava", "\"Trip \\\"Copy\\\"\"")
+                                             .containsEntry("childLabelKeyJava", "\"cascade:cascade-model.t.CASCADE_TRIP_COPY\"");
     }
 
     /** An entity with no composition parent is not anybody's child. */

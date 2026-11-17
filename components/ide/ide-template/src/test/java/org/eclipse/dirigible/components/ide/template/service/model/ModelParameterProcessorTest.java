@@ -164,6 +164,24 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * #8646: the en-US catalog carries a create-from's refusals - the default sentences every model
+     * gets, and the authored refuse: sentences the intent hands its model - under the keys the
+     * generated run resolves.
+     */
+    @Test
+    void createFromRefusalsAreCatalogEntries() {
+        Map<String, Object> model = model(entity("Stay", "Stays", property("Id", "INTEGER")));
+        model.put("generateRefusals", Map.of("billFromStayItemsRefused", "A night carries no amount"));
+
+        Map<String, Object> catalog = ModelTranslations.checkMessages(model);
+
+        assertEquals("no {item} row of the {entity} qualifies for {action}, so the {target} would have no lines",
+                catalog.get("generateNoItemQualifies"));
+        assertEquals("{message} (from {item} [{id}])", catalog.get("generateFromItem"));
+        assertEquals("A night carries no amount", catalog.get("billFromStayItemsRefused"));
+    }
+
+    /**
      * #8101: a refusing single flag's conflict message is translated like a check's, and a demoting
      * flag, which refuses nothing, has no message to translate.
      */

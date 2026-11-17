@@ -3743,6 +3743,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String accountForm = contentOf("gen/emission/views/Account/Account-form.html");
         assertTrue(accountForm.contains("relatedPanel(r, id)") && accountForm.contains("openRow(row)"),
                 "the referenced entity's form must render one related panel per register, whose only row action opens the source record");
+        // ... and so does its list's details sheet (#8651), below the selected record's properties,
+        // keyed by the selected id so another row re-reads the register.
+        String accountListPage = contentOf("gen/emission/js/components/pages/Account/AccountManageListPage.js");
+        assertTrue(accountListPage.contains("App.relatedFor('Account')"),
+                "the referenced entity's list page must read its registers from the runtime registry");
+        String accountListView = contentOf("gen/emission/views/Account/Account-manage-list.html");
+        int accountSheet = accountListView.indexOf("x-h-sheet-overlay=\"detailsOpen\"");
+        int accountSheetPanel = accountListView.indexOf("x-data=\"relatedPanel(r, selectedId)\"");
+        assertTrue(accountSheet >= 0 && accountSheetPanel > accountSheet,
+                "the referenced entity's list must render one related panel per register inside its details sheet: " + accountListView);
+        assertTrue(accountListView.contains(":key=\"r.entity + ':' + selectedId\"") && accountListView.contains("openRow(row)"),
+                "the sheet's register must be keyed by the selected record and open the source record");
+        String entryManageListView = contentOf("gen/emission/views/Entry/Entry-manage-list.html");
+        assertFalse(entryListPage.contains("relatedFor") || entryManageListView.contains("relatedPanel"),
+                "a list whose entity declares no related: must render exactly as before");
 
         // #6336 pattern: the server-side regex check and the client-side HTML pattern attribute.
         String personController = contentOf("gen/emission/api/person/PersonController.java");
@@ -3915,7 +3930,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // entities, in the repository, so it holds for a reaction and a cascade too, not only for REST.
         assertTrue(
                 entryRepository.contains("if (!new gen.emission.data.entry.EntryCopyRepository()")
-                        && entryRepository.contains("still has Entry Copy records - delete those first"),
+                        && entryRepository.contains("DeleteRefusals.hasChildren(messageCatalog(), \"Entry\", labelCatalogKey(),")
+                        && entryRepository.contains("\"Entry Copy\", \""),
                 "whenMasterDeleted: refuse must reject the master's delete while children exist, got: " + entryRepository);
         assertFalse(entryRepository.contains("EntryCopyOwner.delete("),
                 "a refusing child must not be cascaded into, got: " + entryRepository);
@@ -3924,7 +3940,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // every line and only THEN refused. The unit of work brings the rows back, but History writes on
         // its own raw-JDBC connection by design, so the trail permanently recorded deletes of lines that
         // still exist (#7143).
-        assertTrue(entryRepository.indexOf("still has Entry Copy records") < entryRepository.indexOf("EntryLineOwner.delete(EntryLineRow)"),
+        assertTrue(entryRepository.indexOf("DeleteRefusals.hasChildren(") < entryRepository.indexOf("EntryLineOwner.delete(EntryLineRow)"),
                 "a whenMasterDeleted refusal must be checked before the first cascade runs, got: " + entryRepository);
         // Secondary, same cascade: a document line's delete calls the master's recalculate(fk), so
         // sweeping N lines away with their master issued N reads, N targeted updates and N SYSTEM
@@ -4033,9 +4049,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // place it can be created. Asserted here as well as at runtime so a regression says WHICH
         // layer dropped it.
         assertTrue(schema.contains("\"PartyCode_Party_Code\""), "the composite business key must be emitted into the schema: " + schema);
+        // The authored conflict message is the repository's (#8661), so every writer answers with it.
+        assertTrue(
+                contentOf("gen/emission/data/partycode/PartyCodeRepository.java").contains(
+                        "This \\\"code\\\" is already registered for the party"),
+                "the generated repository must carry the authored conflict message");
         String partyCodeController = contentOf("gen/emission/api/partycode/PartyCodeController.java");
-        assertTrue(partyCodeController.contains("This \\\"code\\\" is already registered for the party"),
-                "the generated controller must carry the authored conflict message");
         // entity-level orderBy (#7727): the declared row order has to reach BOTH query shapes of the
         // list endpoint - the paged read and the filtered search - because an unordered page is free
         // to be a different slice on every call, so ordering it after the fact orders the wrong rows.
@@ -5409,6 +5428,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                     "the checkbox must sit in a plain box - x-h-field stretches a direct child to full width (#7103)");
         }
 
+        // An optional to-one picker can be emptied again (#8658): Harmonia's x-h-select clears on a
+        // re-click of the selected option only when its root carries data-clearable="true". Claim.Unit
+        // is optional on the power and the personal form; Claim.Person is required and keeps its value.
+        assertTrue(
+                Pattern.compile("<div x-h-select(?: class=\"flex-1\")? data-clearable=\"true\">\\s*<input x-h-select-input id=\"f_Unit\"")
+                       .matcher(claimPowerForm)
+                       .find(),
+                "an optional picker must be clearable on the power form (#8658)");
+        assertTrue(Pattern.compile("<div x-h-select(?: class=\"[^\"]*\")?>\\s*<input x-h-select-input id=\"f_Person\"")
+                          .matcher(claimPowerForm)
+                          .find(),
+                "a required picker must not be clearable on the power form (#8658)");
+        assertTrue(Pattern.compile("<div x-h-select data-clearable=\"true\">\\s*<input x-h-select-input x-model=\"form.Unit\"")
+                          .matcher(claimPersonalForm)
+                          .find(),
+                "an optional picker must be clearable on the personal form (#8658)");
+
         // documentItemsLayout: chat - the .model marker is resolved (body property from the child's
         // messageBody field), and the Harmonia document view + page render the items pane as an
         // x-h-bubble thread with an append-message composer instead of the editable table.
@@ -5564,7 +5600,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(rosterDoc.contains("x-h-calendar=\"itemsCalCfg\""), "the document's items pane must render as a calendar");
         assertTrue(rosterDoc.contains("onItemsEventClick") && rosterDoc.contains("onItemsDateClick"),
                 "the items calendar must be wired to the line dialog (edit on event, add on empty day)");
-        assertTrue(!rosterDoc.contains("x-for=\"col in tableColumns\""), "the items TABLE must be replaced, not rendered alongside");
+        assertTrue(!rosterDoc.contains("x-for=\"(col, ci) in tableColumns\""), "the items TABLE must be replaced, not rendered alongside");
         assertTrue(rosterDoc.contains("askDeleteDraft()"), "the line dialog must offer Delete - the calendar pane has no per-row menu");
         String rosterPage = contentOf("gen/emission/js/components/pages/Roster/RosterDocumentPage.js");
         assertTrue(rosterPage.contains("window.HarmoniaCalendar.events"), "the items events must come from the shared calendar mapping");
@@ -6148,21 +6184,24 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the source-row rule must narrow the item query itself, with the moment evaluated per run");
         assertTrue(billFromStay.contains("StayNightEntity srcItem : qualifying"),
                 "the clone loop must read the narrowed result, not the whole child set");
-        assertTrue(billFromStay.contains("would have no lines"),
+        assertTrue(billFromStay.contains("GenerateRefusals.noItemQualifies("),
                 "a rule that qualifies no row must refuse rather than commit a header with no lines");
         assertFalse(billFromStay.contains("java.util.List<Object> unqualified"),
                 "without refuse: an unqualified row is simply left out, so no second query collects them");
         // The other reading: the refusal names the rows, so the caller knows which of a hundred lines
         // to go and fix - the whole question they have.
         String checkedBillFromStay = contentOf("gen/events/emission/CheckedBillFromStayGenerate.java");
-        assertTrue(checkedBillFromStay.contains("\"Stay night carries no \\\"amount\\\" (StayNight \" + unqualified + \")\""),
+        assertTrue(
+                checkedBillFromStay.contains("GenerateRefusals.itemsRefused(")
+                        && checkedBillFromStay.contains("\"Stay night carries no \\\"amount\\\"\"")
+                        && checkedBillFromStay.contains("unqualified);"),
                 "refuse: must throw the authored message carrying the keys of the offending rows");
         // ...and both refusals are decided BEFORE the header is saved (#7224). The target's save
         // records the History create entry outside the unit of work (the document number too, before
         // #8113), so a refusal fired after it took the header back and left a spent number and a trail
         // row for a document that never existed - once per click.
         int billHeaderSave = billFromStay.indexOf("BillRepository().save(target)");
-        assertTrue(billHeaderSave > 0 && billFromStay.indexOf("would have no lines") < billHeaderSave,
+        assertTrue(billHeaderSave > 0 && billFromStay.indexOf("GenerateRefusals.noItemQualifies(") < billHeaderSave,
                 "the source-row rule must refuse before the header is saved, got: " + billFromStay);
         int checkedBillHeaderSave = checkedBillFromStay.indexOf("BillRepository().save(target)");
         assertTrue(checkedBillHeaderSave > 0 && checkedBillFromStay.indexOf("Stay night carries no \\\"amount\\\"") < checkedBillHeaderSave,
@@ -6218,8 +6257,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String promptedGenerate = contentOf("gen/events/emission/AddVoucherLineGenerate.java");
         assertTrue(promptedGenerate.contains("public java.util.Map<String, Object> values;"),
                 "a prompted create-from must accept the declared inputs in the posted body");
-        assertTrue(promptedGenerate.contains("missing required input [Amount]") && promptedGenerate.contains("Response.setStatus(400)"),
-                "a missing required prompt input must answer 400 before anything is written");
+        assertTrue(promptedGenerate.contains("FieldRefusals.required(REFUSAL_CATALOG, \"Amount\""),
+                "a missing required prompt input must answer 400, naming the input, before anything is written");
         assertTrue(promptedGenerate.contains("new java.math.BigDecimal(String.valueOf(raw))"),
                 "a decimal prompt input must convert to the generated entity's BigDecimal field");
         String promptedDescriptor = contentOf("add-voucher-line-generate-action.json");
@@ -9763,7 +9802,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             context.eval("js",
                     "var pages = {}; var window = this; var localStorage = { getItem: () => null };"
                             + " var document = { addEventListener: (event, callback) => callback() };"
-                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; } };"
+                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; }, store: () => undefined };"
                             + " window.HarmoniaFormat = { value: (v) => String(v), documentNumber: (v) => v };");
             context.eval("js", classpathResource("/META-INF/dirigible/application-core/shell/js/components/pages/basePage.js"));
             context.eval("js", pageScript);

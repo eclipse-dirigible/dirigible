@@ -23,16 +23,6 @@
 				</exclusion>
 			</exclusions>
 		</dependency>
-		<dependency>
-			<groupId>org.apache.activemq</groupId>
-			<artifactId>activemq-client-jakarta</artifactId>
-			<exclusions>
-				<exclusion>
-					<groupId>org.apache.activemq</groupId>
-					<artifactId>activemq-client</artifactId>
-				</exclusion>
-			</exclusions>
-		</dependency>
 		<!-- Components -->
 		<dependency>
 			<groupId>org.eclipse.dirigible</groupId>
@@ -101,11 +91,6 @@
 			<dependency>
 				<groupId>org.apache.activemq</groupId>
 				<artifactId>activemq-client</artifactId>
-				<version>${activemq.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.apache.activemq</groupId>
-				<artifactId>activemq-client-jakarta</artifactId>
 				<version>${activemq.version}</version>
 			</dependency>
 			<dependency>

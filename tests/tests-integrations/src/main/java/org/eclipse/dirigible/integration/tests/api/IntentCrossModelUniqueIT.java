@@ -128,8 +128,8 @@ class IntentCrossModelUniqueIT extends IntegrationTest {
 
     /**
      * Layer 1: the key is emitted over the two LOCAL FK columns - the cross-model one has the same
-     * {@code <ENTITY>_<RELATION>} form as the same-model one - and the controller carries the authored
-     * message it answers the 409 with.
+     * {@code <ENTITY>_<RELATION>} form as the same-model one - and the repository carries the authored
+     * message the 409 is answered with.
      */
     private void assertKeyReachesTheSchemaAndTheController() {
         String schema = contentOf(CONSUMER, "gen/" + CONSUMER_MODEL + "/schema/" + CONSUMER + ".schema");
@@ -138,9 +138,11 @@ class IntentCrossModelUniqueIT extends IntegrationTest {
         assertTrue(schema.contains("EMPLOYEE_TIMESHEET_EMPLOYEE"),
                 "the cross-model FK column is a column of THIS entity, so the key can constrain it: " + schema);
 
-        String controller = contentOf(CONSUMER, "gen/" + CONSUMER_MODEL + "/api/employeetimesheet/EmployeeTimesheetController.java");
-        assertTrue(controller.contains("This employee already has a timesheet for this project-month"),
-                "the generated controller must carry the authored conflict message");
+        // The message is the repository's (#8661): every writer of the entity answers the collision with
+        // it.
+        String repositoryCode = contentOf(CONSUMER, "gen/" + CONSUMER_MODEL + "/data/employeetimesheet/EmployeeTimesheetRepository.java");
+        assertTrue(repositoryCode.contains("This employee already has a timesheet for this project-month"),
+                "the generated repository must carry the authored conflict message");
     }
 
     /**

@@ -26,6 +26,10 @@ import java.util.Map;
  * entities are named by their labels in their own models' catalogs ({@code <catalog>.t.<name>}). A
  * language catalog that does not carry an entry falls back to the default-language text below, and
  * an entity without a catalog key to the English label it is given.
+ *
+ * <p>
+ * A master whose composition children refuse its delete (intent {@code whenMasterDeleted: refuse})
+ * is refused the same way, under {@code <catalog>.checks.deleteHasChildren} (dirigible #8635).
  */
 public final class DeleteRefusals {
 
@@ -55,6 +59,18 @@ public final class DeleteRefusals {
 
     /** The default-language sentence refusing a record referenced by records no rule counts. */
     public static final String REFERENCED_BY_OTHERS_TEXT = "This {entity} is referenced by other records and cannot be deleted";
+
+    /**
+     * The key, under a catalog's {@code checks}, of the sentence refusing a master that still has
+     * composition children which refuse its delete.
+     */
+    public static final String HAS_CHILDREN_KEY = "deleteHasChildren";
+
+    /**
+     * The default-language sentence refusing a master that still has children: {@code {entity}} is its
+     * label, {@code {children}} the children's.
+     */
+    public static final String HAS_CHILDREN_TEXT = "This {entity} still has {children} records - delete those first";
 
     /** How the kinds of reference are joined inside the sentence. */
     private static final String SEPARATOR = ", ";
@@ -100,6 +116,24 @@ public final class DeleteRefusals {
         return referencedByOthers(CheckMessages.language(), CheckMessages::readCatalog, catalog, entityLabel, entityLabelKey);
     }
 
+    /**
+     * The refusal of a master that still has composition children which refuse its delete (intent
+     * {@code whenMasterDeleted: refuse}), resolved for the request's language.
+     *
+     * @param catalog the master's model catalog ({@code <project>:<catalog prefix>}), or {@code null}
+     *        for the default-language text
+     * @param entityLabel the master's default-language label
+     * @param entityLabelKey the fully qualified catalog key of that label, or {@code null}
+     * @param childLabel the child's default-language label
+     * @param childLabelKey the fully qualified catalog key of that label, or {@code null}
+     * @return the exception to throw - mapped to HTTP 400 carrying the key and the parameters
+     */
+    public static ValidationException hasChildren(String catalog, String entityLabel, String entityLabelKey, String childLabel,
+            String childLabelKey) {
+        return hasChildren(CheckMessages.language(), CheckMessages::readCatalog, catalog, entityLabel, entityLabelKey, childLabel,
+                childLabelKey);
+    }
+
     static DeleteRestrictionException referenced(String language, CheckMessages.CatalogReader catalogs, String catalog, String entityLabel,
             String entityLabelKey, List<Reference> references) {
         String referenceKey = checkKey(catalog, REFERENCE_KEY);
@@ -118,6 +152,15 @@ public final class DeleteRefusals {
             String entityLabel, String entityLabelKey) {
         Map<String, Object> params = CheckMessages.params("entity", label(language, catalogs, entityLabelKey, entityLabel));
         return refusal(language, catalogs, checkKey(catalog, REFERENCED_BY_OTHERS_KEY), REFERENCED_BY_OTHERS_TEXT, params);
+    }
+
+    static ValidationException hasChildren(String language, CheckMessages.CatalogReader catalogs, String catalog, String entityLabel,
+            String entityLabelKey, String childLabel, String childLabelKey) {
+        Map<String, Object> params = CheckMessages.params("entity", label(language, catalogs, entityLabelKey, entityLabel), "children",
+                label(language, catalogs, childLabelKey, childLabel));
+        String messageKey = checkKey(catalog, HAS_CHILDREN_KEY);
+        return new ValidationException(CheckMessages.resolve(language, catalogs, messageKey, HAS_CHILDREN_TEXT, params), messageKey,
+                params);
     }
 
     private static DeleteRestrictionException refusal(String language, CheckMessages.CatalogReader catalogs, String messageKey, String text,

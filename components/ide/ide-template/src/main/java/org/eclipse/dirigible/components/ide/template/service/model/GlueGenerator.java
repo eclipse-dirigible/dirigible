@@ -1147,6 +1147,12 @@ class GlueGenerator {
         // A prompt field's source default (issue #7748); one written before the key existed has none.
         List<Map<String, Object>> promptFields = assignments(item.get("promptFields"));
         promptFields.forEach(field -> field.putIfAbsent("defaultProp", ""));
+        // A missing required input is refused as a field refusal (#8646), naming the input by its label.
+        // A .glue written before the label existed names it by its humanized name, with no catalog key.
+        promptFields.forEach(field -> {
+            field.put("labelJava", javaString(strOr(field, "label", NamingHelper.humanizeName(str(field, "prop")))));
+            field.put("labelKeyJava", javaStringOrNull(strOr(field, "labelKey", "")));
+        });
         context.put("promptFields", promptFields);
         // The topic the listener binds is the glue's to state and the template's to emit verbatim - but
         // a .glue written before the step axis (issue #6800) carries no suffix at all, and a bare
@@ -1228,6 +1234,38 @@ class GlueGenerator {
         List<Map<String, Object>> where = reportCells(item.get("reportWhere"));
         where.forEach(term -> term.put("valueJavaLiteral", JavaLiterals.escape(strOr(term, "value", ""))));
         context.put("reportWhere", where);
+        bindRefusalNames(item, context);
+    }
+
+    /**
+     * What a create-from's refusals are translated through (dirigible #8646), as Java expressions: the
+     * intent's model catalog, the source, target, source item and action as
+     * {@code GenerateRefusals.Label}s, and the catalog key of an authored {@code items: refuse:}
+     * sentence. A .glue written before the keys existed has no catalog - the refusals keep their
+     * default-language text - and names each entity by its humanized name.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     */
+    private static void bindRefusalNames(Map<String, Object> item, Map<String, Object> context) {
+        context.put("refusalCatalogJava", javaStringOrNull(strOr(item, "refusalCatalog", "")));
+        for (String role : List.of("fromEntity", "toEntity", "fromItemEntity")) {
+            context.put(role + "LabelJava", labelJava(strOr(item, role + "Label", NamingHelper.humanizeName(strOr(item, role, ""))),
+                    strOr(item, role + "LabelKey", "")));
+        }
+        context.put("actionLabelJava", labelJava(strOr(item, "actionLabel", NamingHelper.humanizeName(strOr(item, "name", ""))),
+                strOr(item, "actionLabelKey", "")));
+        context.put("itemRefuseKeyJava", javaStringOrNull(strOr(item, "itemRefuseKey", "")));
+    }
+
+    /** A {@code GenerateRefusals.Label} as a Java expression; a blank key is {@code null}. */
+    private static String labelJava(String text, String key) {
+        return "new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label(" + javaString(text) + ", " + javaStringOrNull(key) + ")";
+    }
+
+    /** A Java string literal of the value, or {@code null} for a blank one. */
+    private static String javaStringOrNull(String value) {
+        return value == null || value.isBlank() ? "null" : javaString(value);
     }
 
     /**

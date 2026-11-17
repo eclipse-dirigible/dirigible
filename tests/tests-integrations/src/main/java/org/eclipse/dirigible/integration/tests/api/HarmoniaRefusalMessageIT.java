@@ -114,6 +114,82 @@ class HarmoniaRefusalMessageIT {
         }
     }
 
+    /**
+     * #8637: a new attempt shows only its own outcome - the previous refusal's sentence does not stay
+     * in the banner beside the next attempt's "Fields that need attention".
+     */
+    @Test
+    void aNewAttemptForgetsThePreviousRefusal() {
+        try (Context context = load()) {
+            apply(context, 500, "InternalServerError", "could not execute statement");
+            context.eval("js", "page.resetSaveOutcome();");
+            assertEquals("", saveFailureMessage(context));
+            assertEquals(0, context.eval("js", "page.unmatchedCauses.length")
+                                   .asInt());
+        }
+    }
+
+    /**
+     * #8637: the server's message under a field is about the value it refused, so it goes once that
+     * value is changed - with no client rule on the field (a duplicate key) nothing else clears it.
+     */
+    @Test
+    void aServerFieldErrorGoesWhenItsValueChanges() {
+        try (Context context = load()) {
+            context.eval("js", "page.form.TrackingNumber = 'TRK-1';");
+            applyWithField(context, 409, "Conflict", "A delivery with this tracking number already exists", "TrackingNumber");
+            context.eval("js", "page.dropStaleServerErrors();");
+            assertEquals("A delivery with this tracking number already exists", fieldError(context, "TrackingNumber"),
+                    "the refused value is still there - so is the refusal");
+            context.eval("js", "page.form.TrackingNumber = 'TRK-2'; page.dropStaleServerErrors();");
+            assertEquals("", fieldError(context, "TrackingNumber"));
+            assertEquals("", fieldError(context, "__summary"), "the summary repeating it goes with it");
+        }
+    }
+
+    /** #8637: the 422 causes the server mapped onto fields go the same way, one field at a time. */
+    @Test
+    void aMappedCauseGoesWhenItsValueChanges() {
+        try (Context context = load()) {
+            context.eval("js",
+                    "page.form.Date = '2026-01-01'; page.form.TrackingNumber = 'TRK-1';"
+                            + "page.applyApiError({ isApiError: true, httpStatus: 422, errorType: 'ValidationError', errorCauses: ["
+                            + "{ field: 'Date', message: 'Date is in the past' }, { field: 'TrackingNumber', message: 'Too short' }] });"
+                            + "page.form.Date = '2026-12-01'; page.dropStaleServerErrors();");
+            assertEquals("", fieldError(context, "Date"));
+            assertFalse(fieldError(context, "TrackingNumber").isEmpty(), "an unchanged field keeps its cause");
+        }
+    }
+
+    /** #8637: an error the form's own rules set is not the server's - it keeps its on-blur timing. */
+    @Test
+    void aClientErrorIsLeftToItsRule() {
+        try (Context context = load()) {
+            context.eval("js", "page.errors = { Date: 'Date is required' }; page.form.Date = '2026-12-01'; page.dropStaleServerErrors();");
+            assertEquals("Date is required", fieldError(context, "Date"));
+        }
+    }
+
+    /**
+     * #8637: the generated forms use both - each save forgets the last outcome before it validates, and
+     * the form drops a server field error as that field is edited.
+     */
+    @Test
+    void everyGeneratedFormForgetsAStaleRefusal() throws Exception {
+        for (String page : List.of("perspective/manage/form-page.js.template", "perspective/document/document-page.js.template")) {
+            String content = read(UI + page);
+            int save = content.indexOf("async save() {");
+            assertTrue(save >= 0, page + ": no save()");
+            int reset = content.indexOf("this.resetSaveOutcome();", save);
+            assertTrue(reset >= 0 && reset < content.indexOf("if (!this.validate())", save),
+                    page + ": save() must forget the previous refusal before it validates");
+        }
+        for (String view : List.of("perspective/manage/form-view.html.template", "perspective/document/document-view.html.template")) {
+            assertTrue(read(UI + view).contains("x-effect=\"dropStaleServerErrors()\""),
+                    view + ": a server field error must go as its field is edited");
+        }
+    }
+
     @Test
     void everyGeneratedWritePathQuotesTheRefusal() throws Exception {
         String documentPage = read(UI + "perspective/document/document-page.js.template");
@@ -146,6 +222,11 @@ class HarmoniaRefusalMessageIT {
                 "page.applyApiError({ isApiError: true, httpStatus: " + status + ", errorType: '" + errorType + "', errorMessage: '"
                         + message.replace("'", "\\'") + "', field: '" + field
                         + "', messageKey: 'shipping:shipping-model.checks.Delivery_0' }, { fallbackMessage: 'Could not save.' });");
+    }
+
+    private static String fieldError(Context context, String field) {
+        return context.eval("js", "page.errors." + field + " || ''")
+                      .asString();
     }
 
     private static String saveFailureMessage(Context context) {

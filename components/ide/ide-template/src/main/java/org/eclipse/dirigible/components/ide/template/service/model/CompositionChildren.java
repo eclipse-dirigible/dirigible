@@ -62,6 +62,9 @@ final class CompositionChildren {
             owned.put("javaChildPerspective", NamingHelper.sanitizeJavaIdentifier(str(child, "perspectiveName")));
             owned.put("fkProperty", fkProperty);
             owned.put("childLabel", strOr(child, "entityLabel", str(child, "name")));
+            // The refusal names the child through its catalog key, in the reader's language (#8635).
+            owned.put("childLabelJava", "\"" + JavaLiterals.escape(str(owned, "childLabel")) + "\"");
+            owned.put("childLabelKeyJava", strOr(child, "labelCatalogKeyJava", "null"));
             owned.put("refuse", refusesMasterDelete(child) ? "true" : "false");
             // Whether a row of the child refuses its own delete, so the cascade must ask it first (#8114).
             owned.put("deleteRefusals", isTrue(child, "hasDeleteRefusals") ? "true" : "false");

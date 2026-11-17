@@ -20,6 +20,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -32,6 +35,8 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.callable.CallableResultAndException;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
@@ -182,6 +187,9 @@ class ListenerClassConsumerSharedConnectionTest {
     /** While set, a reclaim session finds nothing registered under the name it unsubscribes. */
     private final AtomicBoolean nothingToReclaim = new AtomicBoolean();
 
+    /** Another application on the broker holds the live shared client ids (#8655). */
+    private final AtomicBoolean liveClientIdsTaken = new AtomicBoolean();
+
     private ComponentContainer componentContainer;
     private ActiveMQConnectionArtifactsFactory connectionFactory;
     private TenantContext tenantContext;
@@ -219,6 +227,10 @@ class ListenerClassConsumerSharedConnectionTest {
             }
             if (brokerRefusingConnections.get()) {
                 throw new IllegalStateException("Failed to create connection to ActiveMQ");
+            }
+            if (liveClientIdsTaken.get()) {
+                throw new IllegalStateException("Failed to create connection to ActiveMQ",
+                        new InvalidClientIDException("Broker: localhost - Client: " + clientId + " already connected"));
             }
             Connection connection = mock(Connection.class);
             opened.add(new Opened(connection, invocation.getArgument(0), clientId));
@@ -285,6 +297,8 @@ class ListenerClassConsumerSharedConnectionTest {
     @AfterEach
     void tearDown() {
         consumerLogger.detachAppender(appender);
+        Configuration.remove(DirigibleConfig.MESSAGING_CLIENT_ID_PREFIX.getKey());
+        Configuration.remove(DirigibleConfig.APP_ID.getKey());
     }
 
     @Test
@@ -554,16 +568,139 @@ class ListenerClassConsumerSharedConnectionTest {
         }
     }
 
+    /**
+     * Two applications on one broker each have a default tenant and global destinations: the prefix
+     * keeps their shared client ids apart (#8655).
+     */
+    @Test
+    void aClientIdPrefixNamesEverySharedConnection() {
+        DirigibleConfig.MESSAGING_CLIENT_ID_PREFIX.setStringValue("orders-app");
+        load(EventsHandler.class);
+        load(GlobalEventsHandler.class);
+
+        assertEquals(Set.of("dirigible-java-orders-app-tenant-default-tenant", "dirigible-java-orders-app-tenant-acme",
+                "dirigible-java-orders-app-global"), Set.copyOf(clientIds()));
+    }
+
+    @Test
+    void theApplicationIdIsTheDefaultPrefix() {
+        DirigibleConfig.APP_ID.setStringValue("library");
+        load(EventsHandler.class);
+
+        assertEquals(List.of("dirigible-java-library-tenant-default-tenant", "dirigible-java-library-tenant-acme"), clientIds());
+    }
+
+    @Test
+    void theExplicitPrefixWinsOverTheApplicationId() {
+        DirigibleConfig.APP_ID.setStringValue("library");
+        DirigibleConfig.MESSAGING_CLIENT_ID_PREFIX.setStringValue("library-eu");
+        load(EventsHandler.class);
+
+        assertEquals(List.of("dirigible-java-library-eu-tenant-default-tenant", "dirigible-java-library-eu-tenant-acme"), clientIds());
+    }
+
+    @Test
+    void aPrefixTooLongForTheBrokerIsShortenedWithoutCollapsingTwoIds() {
+        String prefix = "p".repeat(250);
+        String defaultTenant = ListenerClassConsumer.sharedClientId(prefix, DEFAULT_TENANT_ID);
+        String acme = ListenerClassConsumer.sharedClientId(prefix, "acme");
+
+        assertTrue(defaultTenant.length() <= 200 && acme.length() <= 200, defaultTenant + " / " + acme);
+        assertTrue(!defaultTenant.equals(acme), "two scopes keep two ids");
+    }
+
+    /**
+     * After the prefix is set the broker still holds the durable subscriptions the unprefixed client
+     * ids registered: they are reclaimed once, like a mode switch's - and the per-listener identities
+     * as before.
+     */
+    @Test
+    void aPrefixReclaimsTheSubscriptionsTheUnprefixedClientIdsRegistered() throws Exception {
+        DirigibleConfig.MESSAGING_CLIENT_ID_PREFIX.setStringValue("orders-app");
+        load(EventsHandler.class);
+
+        consumer.reconcile();
+
+        assertEquals(Set.of("dirigible-java-tenant-default-tenant", "dirigible-java-tenant-acme"), Set.copyOf(reclaimClientIds().stream()
+                                                                                                                                .filter(id -> id.startsWith(
+                                                                                                                                        "dirigible-java-tenant-"))
+                                                                                                                                .toList()),
+                "the unprefixed shared client id of each tenant: " + reclaimClientIds());
+        assertEquals(4, reclaimConnections.size(), "two unprefixed shared identities and two per-listener ones");
+
+        consumer.reconcile();
+        assertEquals(4, reclaimConnections.size(), "a reclaimed identity is not looked for again");
+    }
+
+    @Test
+    void withoutAPrefixNothingUnprefixedIsReclaimed() {
+        load(EventsHandler.class);
+
+        consumer.reconcile();
+
+        assertTrue(reclaimClientIds().stream()
+                                     .noneMatch(id -> id.startsWith("dirigible-java-tenant-")),
+                "the live ids are the unprefixed ones: " + reclaimClientIds());
+    }
+
+    /**
+     * Another application holding the client id is not transient: the refusal stays at WARN, every
+     * interval, and names the setting that ends it (#8655).
+     */
+    @Test
+    void aClientIdAnotherConnectionHoldsIsReportedAtWarnEveryIntervalNamingTheFix() {
+        Instant start = Instant.parse("2026-11-16T12:00:00Z");
+        consumer.setClock(Clock.fixed(start, ZoneOffset.UTC));
+        liveClientIdsTaken.set(true);
+        load(EventsHandler.class);
+
+        List<ILoggingEvent> first = warnings("is held by another connection");
+        assertEquals(2, first.size(), "one report per scope");
+        assertTrue(first.get(0)
+                        .getFormattedMessage()
+                        .contains("DIRIGIBLE_MESSAGING_CLIENT_ID_PREFIX"),
+                first.get(0)
+                     .getFormattedMessage());
+        assertEquals(0, warnings("Failed to open the shared broker connection").size(), "reported as a held client id, not generically");
+
+        consumer.reconcile();
+        assertEquals(2, warnings("is held by another connection").size(), "not on every pass");
+        assertEquals(1, warnings("still not open").size(), "the scopes stay counted as not open");
+
+        consumer.setClock(Clock.fixed(start.plus(ListenerClassConsumer.CLIENT_ID_REFUSAL_REPORT_INTERVAL), ZoneOffset.UTC));
+        consumer.reconcile();
+        assertEquals(4, warnings("is held by another connection").size(), "again after the interval, while it lasts");
+
+        liveClientIdsTaken.set(false);
+        consumer.reconcile();
+        assertEquals(2, opened.size(), "both scopes connect once the client ids are free");
+    }
+
     private ListenerClassConsumer newConsumer(ListenerConnectionMode connectionMode) {
         mode = connectionMode;
         return new ListenerClassConsumer(componentContainer, connectionFactory, tenantContext, mock(TenantPropertyManager.class),
                 mock(Tenant.class), tenantConfigurationService, destinationNameManager, connectionMode);
     }
 
-    /** A reclaim connection carries the client id the OTHER mode gives a subscription. */
+    /**
+     * A reclaim connection carries a client id the live subscriptions do not: in the shared mode any id
+     * but the scopes' under the current prefix (the per-listener ids, and the unprefixed scope ids a
+     * prefix replaced); in the per-listener mode any scope id, prefixed or not.
+     */
     private boolean isReclaimClientId(String clientId) {
-        boolean scopeId = clientId != null && (clientId.startsWith("dirigible-java-tenant-") || clientId.equals("dirigible-java-global"));
-        return clientId != null && (mode == ListenerConnectionMode.SHARED) != scopeId;
+        if (clientId == null) {
+            return false;
+        }
+        String prefix = ListenerClassConsumer.clientIdPrefix();
+        if (mode == ListenerConnectionMode.SHARED) {
+            return !isScopeClientId(clientId, prefix);
+        }
+        return isScopeClientId(clientId, prefix) || isScopeClientId(clientId, null);
+    }
+
+    private static boolean isScopeClientId(String clientId, String prefix) {
+        String start = prefix == null ? "dirigible-java-" : "dirigible-java-" + prefix + "-";
+        return clientId.startsWith(start + "tenant-") || clientId.equals(start + "global");
     }
 
     private List<String> reclaimClientIds() {

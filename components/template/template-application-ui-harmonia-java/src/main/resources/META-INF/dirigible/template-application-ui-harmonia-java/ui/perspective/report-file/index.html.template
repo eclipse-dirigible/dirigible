@@ -81,6 +81,11 @@
          the shell that embeds it. */
       html, body { height: 100%; background-color: var(--background); color: var(--foreground); }
       [x-cloak] { display: none !important; }
+      /* On a phone the first column scrolls with the others (#8676), as in the shell's app.css: its
+         nowrap text, pinned, could take the whole table. */
+      @media (width < 48rem) {
+        th[data-sticky="start"], td[data-sticky="start"] { position: static; }
+      }
     </style>
   </head>
   <body class="vbox size-full" x-data="reportPage" x-cloak>
@@ -342,7 +347,7 @@
           <table x-h-table :data-borders="preview ? null : 'both'">
             <thead x-h-table-header>
               <tr x-h-table-row>
-                <template x-for="(col, i) in columns" :key="i"><th x-h-table-head scope="col" :class="alignClass(col)" x-text="col"></th></template>
+                <template x-for="(col, i) in columns" :key="i"><th x-h-table-head scope="col" :data-sticky="i === 0 ? 'start' : null" :class="alignClass(col)" x-text="col"></th></template>
               </tr>
             </thead>
             <tbody x-h-table-body>
@@ -351,13 +356,13 @@
 #if($drill)
                   <!-- Drill-down (#8374): the first cell opens the list of the records this row counts. -->
                   <template x-for="(col, ci) in columns" :key="ci">
-                    <td x-h-table-cell :class="alignClass(col)">
+                    <td x-h-table-cell :data-sticky="ci === 0 ? 'start' : null" :class="alignClass(col)">
                       <template x-if="ci === 0 && drillHref(row)"><a :href="drillHref(row)" target="_parent" class="font-medium underline" x-text="cellText(col, row)"></a></template>
                       <template x-if="!(ci === 0 && drillHref(row))"><span x-text="cellText(col, row)"></span></template>
                     </td>
                   </template>
 #else
-                  <template x-for="(col, ci) in columns" :key="ci"><td x-h-table-cell :class="alignClass(col)" x-text="cellText(col, row)"></td></template>
+                  <template x-for="(col, ci) in columns" :key="ci"><td x-h-table-cell :data-sticky="ci === 0 ? 'start' : null" :class="alignClass(col)" x-text="cellText(col, row)"></td></template>
 #end
                 </tr>
               </template>
@@ -368,7 +373,7 @@
             <tfoot x-h-table-footer x-show="showTotals">
               <tr x-h-table-row>
                 <template x-for="(col, ci) in columns" :key="ci">
-                  <td x-h-table-cell class="font-semibold" :class="alignClass(col)" x-text="ci === 0 ? T('application-core:shell.report.total', 'Total') : totalText(col)"></td>
+                  <td x-h-table-cell :data-sticky="ci === 0 ? 'start' : null" class="font-semibold" :class="alignClass(col)" x-text="ci === 0 ? T('application-core:shell.report.total', 'Total') : totalText(col)"></td>
                 </template>
               </tr>
             </tfoot>
@@ -414,6 +419,8 @@
          (no SPA shell / app.js), so the catalog namespace is bootstrapped inline: i18n.js reads
          App.config.projectName at load to fetch the project's catalogs next to 'application-core'. -->
     <script>window.App = window.App || { config: {} }; App.config = App.config || {}; App.config.projectName = '$projectName';</script>
+    <!-- The language the instance offers (#8632): the labels follow it, never a saved one it does not. -->
+    <script src="/services/web/application-core/shell/js/stores/locale.js"></script>
     <script src="/services/web/application-core/shell/js/services/i18n.js"></script>
     <script src="./report.js"></script>
     <script defer src="/webjars/alpinejs/dist/cdn.min.js"></script>

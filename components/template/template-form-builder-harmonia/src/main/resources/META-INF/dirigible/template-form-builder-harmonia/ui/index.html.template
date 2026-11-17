@@ -328,6 +328,8 @@
          (no SPA shell / app.js), so the catalog namespace is bootstrapped inline: i18n.js reads
          App.config.projectName at load to fetch the project's catalogs next to 'application-core'. -->
     <script>window.App = window.App || { config: {} }; App.config = App.config || {}; App.config.projectName = '$projectName';</script>
+    <!-- The language the instance offers (#8632): the labels follow it, never a saved one it does not. -->
+    <script src="/services/web/application-core/shell/js/stores/locale.js"></script>
     <script src="/services/web/application-core/shell/js/services/i18n.js"></script>
     <script src="./form.js"></script>
     <script defer src="/webjars/alpinejs/dist/cdn.min.js"></script>
