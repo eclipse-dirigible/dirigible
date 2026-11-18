@@ -13,6 +13,7 @@ import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -275,6 +276,50 @@ public abstract class JavaRepository<T> {
         } catch (RuntimeException e) {
             throw duplicateKeyOr(e);
         }
+    }
+
+    /**
+     * Targeted write of a change somebody AUTHORED - a transition, a workflow setter, a task form's
+     * reviewed edits, a create-from's flip of its source status - that also moves the entity's
+     * {@code @UpdatedAt} / {@code @UpdatedBy} properties, in the same statement (issue #8690). A plain
+     * targeted write leaves them alone, because it is also how the platform writes what it derives
+     * (roll-up totals, a stored display name, a process id stamped back), and a recompute must never
+     * read as somebody's edit; that left a record approved by a workflow looking untouched since its
+     * last form save, so nobody could ask what changed since a given moment.
+     *
+     * <p>
+     * The user is the one acting on this thread: the request's user, or the user whose action raised
+     * the event or completed the task this thread is handling. An entity without update-audit
+     * properties is written exactly as {@link #updateProperties(Object, Map)} writes it. Dispatched to
+     * {@link #updateProperties(Object, Map, String)}, so a generated repository's semantics apply.
+     *
+     * @param id the primary-key value
+     * @param values the properties to set (plain identifiers) with their new values
+     * @return the number of updated rows ({@code 0} when the id does not exist or {@code values} is
+     *         empty)
+     */
+    public int updateAuthored(Object id, Map<String, Object> values) {
+        return updateAuthored(id, values, null);
+    }
+
+    /**
+     * {@link #updateAuthored(Object, Map)} publishing the resulting row - audit values included - on
+     * the given topic, atomically with the write.
+     *
+     * @param id the primary-key value
+     * @param values the properties to set (plain identifiers) with their new values
+     * @param eventTopic the topic to publish the resulting row on; {@code null} publishes nothing
+     * @return the number of updated rows ({@code 0} when the id does not exist or {@code values} is
+     *         empty)
+     */
+    public int updateAuthored(Object id, Map<String, Object> values, String eventTopic) {
+        if (values == null || values.isEmpty()) {
+            return 0;
+        }
+        Map<String, Object> stamped = new LinkedHashMap<>(values);
+        store().updateAuditValues(entityClass)
+               .forEach(stamped::putIfAbsent);
+        return updateProperties(id, stamped, eventTopic);
     }
 
     /**

@@ -187,7 +187,7 @@ final class ManyToManyExpander {
         if (!isBlank(relation.getFunction())) {
             unsupported.add("function");
         }
-        if (!isBlank(relation.getInit())) {
+        if (!isBlank(relation.getInit()) || relation.getInitFlag() != null) {
             unsupported.add("init");
         }
         if (relation.getDependsOn() != null) {

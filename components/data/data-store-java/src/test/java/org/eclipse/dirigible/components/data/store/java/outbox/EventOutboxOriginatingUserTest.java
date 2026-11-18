@@ -43,6 +43,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
+import org.springframework.beans.factory.support.StaticListableBeanFactory;
 
 /**
  * An event remembers the user whose write raised it, and both deliveries - the in-process one after
@@ -77,7 +78,7 @@ class EventOutboxOriginatingUserTest {
         TenantContext tenantContext = mock(TenantContext.class);
         when(tenantContext.isNotInitialized()).thenReturn(true);
         store = new EventOutboxStore(dataSourcesManager, tenantContext);
-        outbox = new EventOutbox(store);
+        outbox = new EventOutbox(store, new StaticListableBeanFactory().getBeanProvider(OutboxRecordingParticipant.class));
 
         session = mock(Session.class);
         doAnswer(invocation -> {

@@ -521,7 +521,7 @@ public final class CaptureSupport {
         entry.put("nameLiteral", NotificationSupport.quote(name));
         entry.put("local", "match" + localPrefix + IntentNaming.pascalCase(name));
         entry.put("property", IntentNaming.pascalCase(name));
-        entry.put("required", relation.isRequired() && relation.getInit() == null);
+        entry.put("required", relation.isRequired() && relation.getInit() == null && relation.getInitFlag() == null);
         entry.put("targetEntity", relation.getTo());
         entry.put("crossModel", crossModel);
         entry.put("targetModel", crossModel ? relation.getModel() : "");

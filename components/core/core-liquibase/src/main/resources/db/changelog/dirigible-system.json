@@ -13337,6 +13337,173 @@
           }
         ]
       }
+    },
+    {
+      "changeSet": {
+        "id": "create-DIRIGIBLE_TENANT_WEBHOOKS",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_TENANT_WEBHOOKS"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "createTable": {
+              "columns": [
+                {
+                  "column": {
+                    "autoIncrement": true,
+                    "name": "TENWEBHOOK_ID",
+                    "type": "BIGINT",
+                    "constraints": {
+                      "nullable": false,
+                      "primaryKey": true,
+                      "primaryKeyName": "PK_DIRIGIBLE_TENANT_WEBHOOKS"
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENWEBHOOK_TENANT_ID",
+                    "type": "VARCHAR(255)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENWEBHOOK_SUBSCRIPTION_ID",
+                    "type": "VARCHAR(255)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENWEBHOOK_NAME",
+                    "type": "VARCHAR(255)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENWEBHOOK_URL",
+                    "type": "VARCHAR(2000)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENWEBHOOK_EVENT_TYPES",
+                    "type": "VARCHAR(4000)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENWEBHOOK_STATUS",
+                    "type": "VARCHAR(16)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENWEBHOOK_SECRET",
+                    "type": "VARCHAR(1000)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENWEBHOOK_PREVIOUS_SECRET",
+                    "type": "VARCHAR(1000)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENWEBHOOK_REVISION",
+                    "type": "BIGINT",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENWEBHOOK_CREATED_BY",
+                    "type": "VARCHAR(320)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENWEBHOOK_CREATED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENWEBHOOK_FAILING_AT",
+                    "type": "TIMESTAMP"
+                  }
+                }
+              ],
+              "tableName": "DIRIGIBLE_TENANT_WEBHOOKS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "UK_DIRIGIBLE_TENANT_WEBHOOKS_SUBSCRIPTION",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "constraintName": "UK_DIRIGIBLE_TENANT_WEBHOOKS_SUBSCRIPTION",
+                  "tableName": "DIRIGIBLE_TENANT_WEBHOOKS"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addUniqueConstraint": {
+              "columnNames": "TENWEBHOOK_TENANT_ID, TENWEBHOOK_SUBSCRIPTION_ID",
+              "constraintName": "UK_DIRIGIBLE_TENANT_WEBHOOKS_SUBSCRIPTION",
+              "tableName": "DIRIGIBLE_TENANT_WEBHOOKS"
+            }
+          }
+        ]
+      }
     }
   ]
 }

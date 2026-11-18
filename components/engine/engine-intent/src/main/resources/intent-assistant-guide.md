@@ -135,7 +135,8 @@ The three categories, and the extension point that carries each:
    acknowledgements, retries, batch or file transports (an SFTP drop, a signed archive, polling).
    `integrations:`, `inbound:` and `outbound:` are deliberately one-line call-outs. Anything richer is
    a **Camel route** in the same project, feeding the entity's ordinary write path.
-2. **Algorithms** - checksums (national identifiers, account numbers), fuzzy matching, scoring,
+2. **Algorithms** - checksums (national identifiers, account numbers - except an IBAN's, which is
+   `format: iban`), fuzzy matching, scoring,
    policy-driven tie-breaking. The DSL says this of `pattern` itself: a format check, not a semantic
    one. The modeled hooks are **`calculatedActionOnCreate` / `calculatedActionOnUpdate`** on a field
    or a to-one relation, and a serviceTask **`delegate:`** - both implemented under `custom/`.
@@ -269,6 +270,17 @@ not as an apology.
   atomic, with no ordering to reason about - while a start-step setter is extra moving parts for the
   same effect. Use `setRelationField` only for *transitions* (after a user task, or on a decision
   branch).
+- **`init: { flag: <field> }` on a to-one relation = default to the target row holding a `single:`
+  flag.** A document's default company, base currency or default payment method is not a fixed row: it
+  is the row the user has flagged as the base one. Never write `init: 1` for "the base company" - that
+  is whatever row has Id 1, and it dangles once that row is deleted. Name the target's fleet-wide
+  `single:` boolean instead: `- { name: Company, kind: manyToOne, to: Company, init: { flag: base } }`.
+  The create form preselects the row holding the flag when it opens, and a create that leaves the
+  relation out takes that row; moving the flag moves the default, and with no holder the relation stays
+  empty (a `required:` one is then refused by name). The target field must be a `boolean` with
+  `single: true` (a cross-model target is checked against its owner model at Generate); a
+  `single: { per: ... }` flag cannot be a default yet and is refused, and so is a `function:
+  EntityStatus` relation.
 - **Lifecycle events** (`notifications`, `integrations`): exactly **one** of `onCreate` / `onUpdate` /
   `onDelete` per item, and it must reference a declared entity.
 - **Recipients** (`to` in any notify block): a literal email address, a direct field
@@ -513,10 +525,14 @@ a `required` text field is refused when it is blank after that trim - spaces alo
     `filterBy` is rejected. Composable with the conditional `valueFrom` above. Harmonia UI only.
   A `documentStatus` relation can neither declare `dependsOn` nor trigger one (it is a read-only pill).
 - `format` (on a `string` field) - **a named input format**: `- { name: email, type: string, length: 320, format: email }`
-  Today the only value is `email`. It renders a `type="email"` control AND validates the address server-side (400 on a
-  bad value) - prefer it over hand-writing an email regex. Do NOT declare `format` and `pattern` on the same field.
-- `pattern` (on a `string`/`text` field) - **an input-format regex**: durable format validation for an IBAN, VAT
-  number, postcode, e-mail, phone. `- { name: iban, type: string, length: 34, pattern: '^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$' }`
+  `email` renders a `type="email"` control AND validates the address server-side (400 on a bad value) - prefer it over
+  hand-writing an email regex. `iban` validates the IBAN's shape AND its ISO 7064 mod-97 check digits (400 naming the
+  field), which no regex can: `- { name: iban, type: string, length: 34, format: iban, normalize: [strip: " ", upper] }`.
+  Always use it for an IBAN, never a `pattern`. The value is checked as stored (no spaces, upper case), hence the
+  `normalize`. Do NOT declare `format` and `pattern` on the same field.
+- `pattern` (on a `string`/`text` field) - **an input-format regex**: durable format validation for a VAT number,
+  postcode, phone (an IBAN is `format: iban`, an e-mail `format: email`).
+  `- { name: vatNumber, type: string, length: 14, pattern: '^[A-Z]{2}[0-9A-Z]{2,12}$' }`
   The generated REST controller rejects a non-matching value with 400 and the form input carries it as an HTML
   `pattern`. **String/text only** - on a numeric field the same underlying attribute is the DISPLAY format, so a
   regex there is rejected. The regex must compile.
@@ -1505,8 +1521,9 @@ field, in the reader's language). Add
 company): the holder can then neither be un-ticked nor deleted while no other row of its scope holds
 the flag (400, naming the field) - the flag moves only by being set on another row. The first row of a
 scope may still be created without it, and the last row of a scope may be deleted. Pair it with
-`required: true` on the field itself when the value may never be empty. The form keeps the ordinary
-checkbox:
+`required: true` on the field itself when the value may never be empty. A document that defaults to
+the flagged row names it with `init: { flag: base }` on its relation (fleet-wide flags only). The form
+keeps the ordinary checkbox:
 
 ```yaml
 entities:
@@ -1765,6 +1782,22 @@ from the consumer's side there.
 **Do not declare a phase** for a value the platform already computes before the row is visible - a
 `calculatedOnCreate` expression, a `calculatedActionOnCreate` action, a `number:` stamp, a document's
 own totals. Those are in the row the create event carries; a phase is for what a listener adds after.
+
+### webhooks - the events a tenant's external system may subscribe to
+
+**Use when:** another system (a scheduling tool, an accounting package) must learn that a record
+changed without polling - the tenant's provisioning system registers a webhook subscription for it.
+Only the declared events can be subscribed to; nothing is exposed by default.
+
+```yaml
+  - name: VacationRequest
+    webhooks: [created, transitioned]   # any of created, updated, deleted, transitioned
+```
+
+`transitioned` needs a `function: EntityStatus` relation (the status a transition or a workflow setter
+moves). Each value once. A delivery carries the record's id, its `Uuid` and its status only - the
+receiver reads the rest back through its integration client - so this key says nothing about which
+fields are shared.
 
 ### function - the entity's presentation role (explicit template selection)
 

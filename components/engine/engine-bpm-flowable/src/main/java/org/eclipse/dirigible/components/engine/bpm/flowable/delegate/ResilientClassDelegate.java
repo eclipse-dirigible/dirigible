@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.engine.bpm.flowable.delegate;
 import java.util.List;
 import java.util.Optional;
 
+import org.eclipse.dirigible.components.base.context.OriginatingUser;
 import org.eclipse.dirigible.components.base.spring.BeanProvider;
 import org.eclipse.dirigible.components.base.tenant.TenantConfigurationScope;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
@@ -86,7 +87,7 @@ class ResilientClassDelegate extends ClassDelegate {
 
     @Override
     public void execute(DelegateExecution execution) {
-        try {
+        try (OriginatingUser.Binding actingUser = ProcessActingUser.bind(execution)) {
             inTenantScope(execution.getTenantId(), describe(execution), () -> super.execute(execution));
         } catch (RuntimeException | Error failure) {
             // A BpmnError never reaches here (the superclass propagates it to its boundary itself);

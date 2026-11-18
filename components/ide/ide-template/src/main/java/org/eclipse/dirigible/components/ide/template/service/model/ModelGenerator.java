@@ -718,6 +718,9 @@ class ModelGenerator {
         collections.put("models", select(entities, e -> !"REPORT".equals(str(e, "type")) && !"FILTER".equals(str(e, "type"))));
         collections.put("apiModels", select(entities, e -> !"PROJECTION".equals(str(e, "type"))));
         collections.put("daoModels", select(entities, e -> !"PROJECTION".equals(str(e, "type"))));
+        // The entities a tenant's external system may subscribe to as webhooks (#8689): each renders the
+        // descriptor the webhook registry reads, so a model exposing nothing renders nothing more.
+        collections.put("webhookModels", select(entities, e -> !"PROJECTION".equals(str(e, "type")) && truthy(e, "webhooks")));
         collections.put("generateReportModels", select(entities, e -> "true".equals(e.get("generateReport"))));
         List<Map<String, Object>> reportModels = select(entities, e -> "REPORT".equals(str(e, "type")));
         collections.put("reportModels", reportModels);

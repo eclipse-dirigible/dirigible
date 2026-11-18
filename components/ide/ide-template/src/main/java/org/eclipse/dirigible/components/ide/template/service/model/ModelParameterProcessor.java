@@ -63,8 +63,11 @@ final class ModelParameterProcessor {
     /** The fallback name of the default datasource. */
     private static final String DEFAULT_DATASOURCE_NAME = "DefaultDB";
 
-    /** The display pattern applied to a float property that declares none. */
+    /** The display pattern applied to a float property that declares neither a pattern nor a scale. */
     private static final String DEFAULT_FLOAT_PATTERN = "### ### ### ##0.00";
+
+    /** The grouped integer part of a float display pattern; the scale's decimals follow it. */
+    private static final String FLOAT_PATTERN_INTEGER_PART = "### ### ### ##0";
 
     /**
      * Not instantiable.
@@ -1253,10 +1256,7 @@ final class ModelParameterProcessor {
                 String sqlType = strOr(property, "dataType", "").toUpperCase(Locale.ROOT);
                 if ("DECIMAL".equals(sqlType) || "DOUBLE".equals(sqlType) || "FLOAT".equals(sqlType) || "REAL".equals(sqlType)) {
                     property.put("isFloatType", Boolean.TRUE);
-                    String widgetPattern = str(property, "widgetPattern");
-                    property.put("formatPattern", widgetPattern != null && !widgetPattern.trim()
-                                                                                         .isEmpty() ? widgetPattern
-                                                                                                 : DEFAULT_FLOAT_PATTERN);
+                    property.put("formatPattern", floatPattern(property));
                     entity.put("hasFloats", Boolean.TRUE);
                 }
             }
@@ -2480,7 +2480,7 @@ final class ModelParameterProcessor {
             String sqlType = strOr(property, "dataType", "").toUpperCase(Locale.ROOT);
             if ("DECIMAL".equals(sqlType) || "DOUBLE".equals(sqlType) || "FLOAT".equals(sqlType) || "REAL".equals(sqlType)) {
                 column.put("float", Boolean.TRUE);
-                column.put("pattern", strOr(property, "widgetPattern", DEFAULT_FLOAT_PATTERN));
+                column.put("pattern", floatPattern(property));
             }
         } else if ("boolean".equals(dataType.typescript())) {
             // Read as this application's Yes / No (#8564): the source's own words live in its catalog,
@@ -2919,6 +2919,28 @@ final class ModelParameterProcessor {
             }
         }
         return null;
+    }
+
+    /**
+     * The display pattern of a float property: its own {@code widgetPattern}, else one with as many
+     * decimals as its {@code dataScale} (#8701 - a scale-6 rate read 1.955834 as 1.96), else the
+     * two-decimal default.
+     *
+     * @param property the property
+     * @return the pattern
+     */
+    private static String floatPattern(Map<String, Object> property) {
+        String widgetPattern = str(property, "widgetPattern");
+        if (widgetPattern != null && !widgetPattern.isBlank()) {
+            return widgetPattern;
+        }
+        Object rawScale = property.get("dataScale");
+        double scale = rawScale == null || rawScale.toString()
+                                                   .isBlank() ? Double.NaN : parseIntLenient(rawScale);
+        if (Double.isNaN(scale) || scale < 0) {
+            return DEFAULT_FLOAT_PATTERN;
+        }
+        return scale == 0 ? FLOAT_PATTERN_INTEGER_PART : FLOAT_PATTERN_INTEGER_PART + "." + "0".repeat((int) scale);
     }
 
     /**

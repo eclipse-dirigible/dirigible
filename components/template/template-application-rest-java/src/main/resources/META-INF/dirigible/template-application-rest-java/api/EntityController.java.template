@@ -1724,8 +1724,9 @@ public class ${name}Controller {
 #if($property.refusalFieldArgsJava)#set($refusalField = $property.refusalFieldArgsJava)#end
 ## A required value the PLATFORM supplies is not the caller's to send: the generated repository fills a
 ## document number and a uuid on insert, so demanding them here would refuse every create of a numbered
-## document with a message about a field no form has (#7099).
-#set($requiredChecked = $property.isRequiredProperty && !$property.dataDefaultValue && !$property.numberStampOnCreate && !$property.generatedUuid)
+## document with a message about a field no form has (#7099). A relation defaulting from a flag
+## (`init: { flag: }`, #8683) is filled there too; with no holder the repository refuses it by name.
+#set($requiredChecked = $property.isRequiredProperty && !$property.dataDefaultValue && !$property.relationshipInitFlag && !$property.numberStampOnCreate && !$property.generatedUuid)
 #if($requiredChecked)
 ## A whitespace-only text value is no value (#7719) - the repository trims it to empty on the write.
         if (entity.${property.name} == null#if($property.dataTypeJavaClass == "String") || org.eclipse.dirigible.sdk.db.Normalize.isBlank(entity.${property.name})#end) {
@@ -1738,7 +1739,13 @@ public class ${name}Controller {
             throw org.eclipse.dirigible.sdk.db.FieldRefusals.tooLong(${refusalCatalog}, ${refusalField}, ${property.dataLength});
         }
 #end
-#if($property.widgetPattern && $property.widgetPattern != "")
+#if($property.inputFormat == "IBAN")
+## format: iban (#8302): the shape AND the ISO 7064 check digits, which a regex cannot check - so a
+## value whose check digits fail is refused like one off the shape, and blank is "no value" as above.
+        if (entity.${property.name} != null#if($property.isRequiredProperty != "true") && !entity.${property.name}.isBlank()#end && !org.eclipse.dirigible.sdk.db.FieldFormats.isIban(entity.${property.name})) {
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.iban(${refusalCatalog}, ${refusalField});
+        }
+#elseif($property.widgetPattern && $property.widgetPattern != "")
 ## A format constraint describes what a value must look like WHEN THERE IS ONE. On an OPTIONAL property
 ## a blank string is "no value", so the pattern must not fire on it - otherwise the field is required by
 ## the back door (a blank optional Email was rejected, and the only way to save was to invent an

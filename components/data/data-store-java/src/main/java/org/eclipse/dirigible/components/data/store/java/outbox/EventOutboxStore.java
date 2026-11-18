@@ -131,16 +131,36 @@ class EventOutboxStore {
     /**
      * Records one event on a connection of its own — the standalone variant for an announcement that is
      * deliberately decoupled from the write it is about (a deferred publish after a synchronous chain's
-     * commit), where there is no enclosing transaction to join.
+     * commit), where there is no enclosing transaction to join. The entry and whatever
+     * {@code alongside} records commit together in one short transaction, or neither does.
      *
      * @param event the event to record
      * @param nextAttemptAt when the relay may first take the entry over
-     * @throws SQLException if the insert fails
+     * @param alongside more rows to record on the same connection, after the entry
+     * @throws SQLException if the insert or {@code alongside} fails; nothing is then recorded
      */
-    void insert(PendingEvent event, Instant nextAttemptAt) throws SQLException {
+    void insert(PendingEvent event, Instant nextAttemptAt, ConnectionWork alongside) throws SQLException {
         try (Connection connection = connection()) {
-            insert(connection, event, nextAttemptAt);
+            boolean autoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                insert(connection, event, nextAttemptAt);
+                alongside.execute(connection);
+                connection.commit();
+            } catch (SQLException | RuntimeException ex) {
+                connection.rollback();
+                throw ex;
+            } finally {
+                connection.setAutoCommit(autoCommit);
+            }
         }
+    }
+
+    /** Work done on the standalone insert's connection, inside its transaction. */
+    @FunctionalInterface
+    interface ConnectionWork {
+
+        void execute(Connection connection) throws SQLException;
     }
 
     /**

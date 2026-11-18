@@ -96,11 +96,12 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
             #set($ignore = $reportedOnUpdate.add($property))
         #end
     #end
-## A user-editable field the model gives a default - a field's defaultValue:, a relation's init: - is
-## kept from the stored row when an update leaves it null (#8105): a caller PUTs the fields its form
-## edits, so an omitted one is not a clear. Defaults apply on create only, so without this the update
-## wrote NULL - and a 500 quoting the statement when the column is also NOT NULL.
-    #if(!$property.dataPrimaryKey && $property.dataDefaultValue && !$preservedOnUpdate.contains($property))
+## A user-editable field the model gives a default - a field's defaultValue:, a relation's init: (a fixed
+## id, or the holder of a flag) - is kept from the stored row when an update leaves it null (#8105): a
+## caller PUTs the fields its form edits, so an omitted one is not a clear. Defaults apply on create
+## only, so without this the update wrote NULL - and a 500 quoting the statement when the column is also
+## NOT NULL.
+    #if(!$property.dataPrimaryKey && ($property.dataDefaultValue || $property.relationshipInitFlag) && !$preservedOnUpdate.contains($property))
         #set($ignore = $keptWhenOmitted.add($property))
     #end
 #end
@@ -294,11 +295,23 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
         keepDefaultedWhenOmitted(entity);
 #end
 #end
+## A relation's `init: { flag: X }` (#8683) has no literal: its default is the target row holding the
+## single: flag X when the record is created, read through the target's repository inside this write's
+## unit of work, and none when no row holds it - never a fixed id that may name a deleted row.
 #macro(applyDefaults)
 #foreach($property in $properties)
 #if($property.dataDefaultValueJavaLiteral)
         if (entity.${property.name} == null) {
             entity.${property.name} = ${property.dataDefaultValueJavaLiteral};
+        }
+#elseif($property.relationshipInitFlag && $property.targetRepositoryClass)
+        if (entity.${property.name} == null) {
+            entity.${property.name} = new ${property.targetRepositoryClass}()
+                    .findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${property.relationshipInitFlag}", true))
+                    .stream()
+                    .map(holder -> holder.${property.widgetDropDownKey})
+                    .findFirst()
+                    .orElse(null);
         }
 #end
 #end

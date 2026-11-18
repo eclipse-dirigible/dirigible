@@ -21,7 +21,8 @@ import gen.${javaGenFolderName}.api.${javaPerspective}.${entity}Controller;
  * service task (flowable:delegateExpression="\${JavaTask}") inserted immediately after the user task,
  * so a field the reviewer edited on the (otherwise read-only) task form is persisted on completion. It
  * collects each present variable, coerced to the entity's Java type, and persists them all in ONE
- * TARGETED multi-column write (updateProperties): only the edited columns are in the UPDATE statement,
+ * TARGETED multi-column write (updateAuthored): only the edited columns, and the record's UpdatedAt /
+ * UpdatedBy when it has them, are in the UPDATE statement,
  * so a concurrent write to any other column of the row (a recalculated total, a workflow status, the
  * trigger's ProcessId) cannot be reverted - unlike the load-then-full-row-merge shape this replaces.
  *
@@ -95,7 +96,7 @@ public class ${className} implements JavaDelegate {
         } catch (ResponseStatusException refusal) {
             throw new ValidationException(refusal.getReason(), refusal);
         }
-        if (repository.updateProperties(id, values) == 0) {
+        if (repository.updateAuthored(id, values) == 0) {
             return;
         }
         // Re-load AFTER the targeted write so the published payload is the committed row - the edited

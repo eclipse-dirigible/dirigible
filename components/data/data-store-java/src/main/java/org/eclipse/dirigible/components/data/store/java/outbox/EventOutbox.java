@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.data.store.java.outbox;
 
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
@@ -25,6 +26,7 @@ import org.eclipse.dirigible.components.data.store.java.repository.DomainEvent;
 import org.hibernate.Session;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 /**
@@ -62,8 +64,25 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
 
     private final EventOutboxStore store;
 
-    EventOutbox(EventOutboxStore store) {
+    /** What records more rows with the events, in the same transaction - e.g. webhook deliveries. */
+    private final ObjectProvider<OutboxRecordingParticipant> participantProvider;
+
+    /** The participants, resolved on first use: none of them is needed to construct the outbox. */
+    private volatile List<OutboxRecordingParticipant> participants;
+
+    EventOutbox(EventOutboxStore store, ObjectProvider<OutboxRecordingParticipant> participantProvider) {
         this.store = store;
+        this.participantProvider = participantProvider;
+    }
+
+    private List<OutboxRecordingParticipant> participants() {
+        List<OutboxRecordingParticipant> resolved = participants;
+        if (resolved == null) {
+            resolved = participantProvider.orderedStream()
+                                          .toList();
+            participants = resolved;
+        }
+        return resolved;
     }
 
     /**
@@ -93,8 +112,26 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
             for (PendingEvent event : pending) {
                 store.insert(connection, event, relayTakesOverAt);
             }
+            recordWithParticipants(connection, pending);
         });
         return new Batch(this, pending);
+    }
+
+    /**
+     * Lets every {@link OutboxRecordingParticipant} record what it derives from the given entries, on
+     * the connection - and so in the transaction - that just recorded them.
+     */
+    private void recordWithParticipants(Connection connection, List<PendingEvent> pending) throws SQLException {
+        List<OutboxRecordingParticipant> recording = participants();
+        if (recording.isEmpty()) {
+            return;
+        }
+        List<OutboxEntry> entries = pending.stream()
+                                           .map(event -> new OutboxEntry(event.id(), event.topic(), event.payload()))
+                                           .toList();
+        for (OutboxRecordingParticipant participant : recording) {
+            participant.recorded(connection, entries);
+        }
     }
 
     /**
@@ -102,9 +139,12 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
      * synchronous chain's commit, or ordered after several transactions — where {@link #record} has no
      * transaction to join. The entry is recorded in its own short transaction and handed to the broker
      * immediately; whatever the broker refuses stays for the relay, exactly as a write-attached event
-     * would. If even the recording fails (the outbox table unreachable), the message is handed to the
-     * broker directly — the caller's work has already committed and an at-most-once attempt beats
-     * failing a caller whose announcement machinery is down.
+     * would. The {@link OutboxRecordingParticipant}s record in that same transaction, as they do for
+     * {@link #record}: a workflow step's {@code -transitioned} announcement takes this path, and its
+     * webhook deliveries must not be missing (#8689). If even the recording fails (the outbox table
+     * unreachable), the message is handed to the broker directly — the caller's work has already
+     * committed and an at-most-once attempt beats failing a caller whose announcement machinery is
+     * down.
      *
      * @param topic the topic to publish on
      * @param payload the message body
@@ -116,7 +156,7 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
                 topic, payload, 0, originatingUser());
         try {
             prepare();
-            store.insert(event, nextAttemptAt());
+            store.insert(event, nextAttemptAt(), connection -> recordWithParticipants(connection, List.of(event)));
         } catch (RuntimeException | SQLException ex) {
             LOGGER.error("Failed to record a durable publish on topic [{}]; attempting the direct publish instead.", topic, ex);
             MessagingFacade.sendToTopic(topic, payload);
@@ -126,8 +166,9 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
     }
 
     /**
-     * Makes sure the current tenant's outbox table exists. Called before the write transaction opens so
-     * that the table's DDL never runs inside it.
+     * Makes sure the current tenant's outbox table exists, and lets every
+     * {@link OutboxRecordingParticipant} prepare. Called before the write transaction opens so that no
+     * table's DDL ever runs inside it.
      *
      * @throws IllegalStateException if the table is missing and cannot be created
      */
@@ -137,6 +178,7 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
         } catch (SQLException ex) {
             throw new IllegalStateException("Failed to prepare the event outbox table [" + EventOutboxStore.TABLE_NAME + "]", ex);
         }
+        participants().forEach(OutboxRecordingParticipant::prepare);
     }
 
     /**

@@ -113,7 +113,10 @@ final class UnknownKeyValidator {
             Map.entry("ResolveIntent#notFound", Set.of("setStatus")), Map.entry("ResolveIntent#ambiguous", Set.of("setStatus")),
             // A boolean field's words for its two values (#8564): YAML reads the keys as booleans, and
             // they are compared by their text.
-            Map.entry("FieldIntent#labels", Set.of("true", "false")));
+            Map.entry("FieldIntent#labels", Set.of("true", "false")),
+            // The object form of a to-one relation's init (#8683): the target's single: flag it defaults
+            // from. The scalar form (a seed id or name) falls straight through this check.
+            Map.entry("RelationIntent#init", Set.of("flag")));
 
     private UnknownKeyValidator() {}
 

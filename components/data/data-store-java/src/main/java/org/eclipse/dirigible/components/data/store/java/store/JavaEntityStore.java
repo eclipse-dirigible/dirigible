@@ -16,6 +16,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -646,6 +647,43 @@ public class JavaEntityStore implements WriteTransaction {
                     : eventsOf(eventTopic, eventTopic == null ? null : readInTransaction(session, type, meta, id), additionalEvents)));
             return updated;
         });
+    }
+
+    /**
+     * The update-audit values of an AUTHORED targeted write (issue #8690): the entity's
+     * {@code @UpdatedAt} property with the current moment and its {@code @UpdatedBy} property with the
+     * acting user, typed as the entity declares them - what {@link #update(Object)} stamps on a
+     * full-row write. A targeted write stamps nothing on its own (it is also how the platform writes
+     * its derived and bookkeeping columns), so a caller writing a change somebody made - a transition,
+     * a workflow setter - adds these to the values it writes, and they land in the same statement.
+     *
+     * @param type the entity class
+     * @return the audit properties with their values, in no particular order; empty for an entity
+     *         without update-audit properties
+     */
+    public Map<String, Object> updateAuditValues(Class<?> type) {
+        RegisteredEntity meta = resolve(type);
+        Map<String, Object> values = new LinkedHashMap<>();
+        if (!meta.audit()
+                 .any()) {
+            return values;
+        }
+        Instant now = Instant.now();
+        String user = currentUserSafely();
+        for (RegisteredEntity.PropertyInfo p : meta.properties()) {
+            if (p.updatedAt()) {
+                Object moment = temporalValue(p.field()
+                                               .getType(),
+                        now);
+                if (moment != null) {
+                    values.put(p.propertyName(), moment);
+                }
+            }
+            if (p.updatedBy() && user != null) {
+                values.put(p.propertyName(), user);
+            }
+        }
+        return values;
     }
 
     /** Property names must be plain identifiers so nothing can be injected into the mutation HQL. */
@@ -1347,18 +1385,28 @@ public class JavaEntityStore implements WriteTransaction {
     }
 
     private static void writeTemporal(Object entity, Field field, Instant instant) throws IllegalAccessException {
-        field.setAccessible(true);
-        Class<?> t = field.getType();
-        if (t == Instant.class) {
-            field.set(entity, instant);
-        } else if (t == Timestamp.class) {
-            field.set(entity, Timestamp.from(instant));
-        } else if (t == java.util.Date.class) {
-            field.set(entity, java.util.Date.from(instant));
-        } else if (t == java.time.LocalDateTime.class) {
-            field.set(entity, java.time.LocalDateTime.ofInstant(instant, java.time.ZoneId.systemDefault()));
+        Object value = temporalValue(field.getType(), instant);
+        if (value != null) {
+            field.setAccessible(true);
+            field.set(entity, value);
         }
-        // Other temporal types are ignored — the entity author chose an unsupported type.
+    }
+
+    /**
+     * The given moment as the given temporal type, or {@code null} for a type the audit fields do not
+     * support - the entity author chose an unsupported type, and the field is left alone.
+     */
+    private static Object temporalValue(Class<?> type, Instant instant) {
+        if (type == Instant.class) {
+            return instant;
+        } else if (type == Timestamp.class) {
+            return Timestamp.from(instant);
+        } else if (type == java.util.Date.class) {
+            return java.util.Date.from(instant);
+        } else if (type == java.time.LocalDateTime.class) {
+            return java.time.LocalDateTime.ofInstant(instant, java.time.ZoneId.systemDefault());
+        }
+        return null;
     }
 
     private static void writeId(Object entity, RegisteredEntity meta, Object idValue) {

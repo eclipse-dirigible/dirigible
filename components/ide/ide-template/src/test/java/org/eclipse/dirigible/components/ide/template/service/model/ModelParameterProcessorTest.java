@@ -182,6 +182,22 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * #8302: the IBAN refusal is a catalog entry only in a model with a {@code format: iban} field, so
+     * every other model's catalog stays as it was.
+     */
+    @Test
+    void ibanRefusalIsACatalogEntryOnlyWhereAFieldIsAnIban() {
+        Map<String, Object> iban = property("Iban", "VARCHAR");
+        iban.put("inputFormat", "IBAN");
+        Map<String, Object> catalog =
+                ModelTranslations.checkMessages(model(entity("Employee", "Employees", property("Id", "INTEGER"), iban)));
+
+        assertEquals("The value of '{label}' is not a valid IBAN", catalog.get("fieldIban"));
+        assertFalse(ModelTranslations.checkMessages(model(entity("Stay", "Stays", property("Id", "INTEGER"))))
+                                     .containsKey("fieldIban"));
+    }
+
+    /**
      * #8101 / #8700: a refusing single flag's conflict is the shared {@code fieldSingleTaken} sentence
      * - {@code fieldSingleTakenInScope} for a scoped flag, naming the scope by its relation's label -
      * so the flag and the scope are named by their labels' catalog keys like the other field refusals.
@@ -848,6 +864,32 @@ class ModelParameterProcessorTest {
         assertEquals(Boolean.TRUE, amount.get("isFloatType"));
         assertEquals(Boolean.TRUE, entity.get("hasFloats"));
         assertEquals("### ### ### ##0.00", amount.get("formatPattern"));
+    }
+
+    /** A float without an authored pattern shows as many decimals as it stores (#8701). */
+    @Test
+    void derivesTheFloatDisplayPatternFromTheScale() {
+        Map<String, Object> rate = property("Rate", "DECIMAL");
+        rate.put("dataScale", "6");
+        Map<String, Object> quantity = property("Quantity", "DECIMAL");
+        quantity.put("dataScale", 3.0);
+        Map<String, Object> amount = property("Amount", "DECIMAL");
+        amount.put("dataScale", "2");
+        Map<String, Object> whole = property("Whole", "DECIMAL");
+        whole.put("dataScale", "0");
+        Map<String, Object> authored = property("Price", "DECIMAL");
+        authored.put("dataScale", "4");
+        authored.put("widgetPattern", "#,##0.0");
+        Map<String, Object> unscaled = property("Ratio", "DOUBLE");
+        ModelParameterProcessor.process(model(entity("Currency", "Currencies", rate, quantity, amount, whole, authored, unscaled)),
+                parameters());
+
+        assertEquals("### ### ### ##0.000000", rate.get("formatPattern"));
+        assertEquals("### ### ### ##0.000", quantity.get("formatPattern"));
+        assertEquals("### ### ### ##0.00", amount.get("formatPattern"));
+        assertEquals("### ### ### ##0", whole.get("formatPattern"));
+        assertEquals("#,##0.0", authored.get("formatPattern"));
+        assertEquals("### ### ### ##0.00", unscaled.get("formatPattern"));
     }
 
     @Test
@@ -1876,6 +1918,21 @@ class ModelParameterProcessorTest {
         assertEquals("/services/java/bookstore/gen/sales_order/api/settings/ChannelController", lookup(resolved).get("url"));
         assertEquals("Id", lookup(resolved).get("key"));
         assertEquals("Name", lookup(resolved).get("text"));
+    }
+
+    /** A register's decimal column shows its source property's scale, as the entity's own list does. */
+    @Test
+    void aRegisterDecimalColumnFollowsItsScale() {
+        Map<String, Object> column = property("Rate", "DECIMAL");
+        column.put("dataScale", "6");
+        Map<String, Object> currency = entity("Currency", "Currencies", property("Id", "INTEGER"));
+        currency.put("relatedEntities", List.of(register("CurrencyRate", "Rates", column)));
+
+        ModelParameterProcessor.process(model(currency), javaParameters());
+
+        Map<String, Object> resolved = registerColumn(currency);
+        assertEquals(Boolean.TRUE, resolved.get("float"));
+        assertEquals("### ### ### ##0.000000", resolved.get("pattern"));
     }
 
     /**

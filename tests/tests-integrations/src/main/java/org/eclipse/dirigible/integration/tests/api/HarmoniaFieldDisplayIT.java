@@ -129,6 +129,20 @@ class HarmoniaFieldDisplayIT {
         }
     }
 
+    /**
+     * A decimal shows the decimals of its scale (#8701): the generator derives the pattern from it, so
+     * a scale-6 rate keeps all six and a scale-2 amount stays at two.
+     */
+    @Test
+    void aDecimalShowsTheDecimalsOfItsScale() {
+        try (Context context = load()) {
+            assertEquals("1.955834", display(context, "1.955834, 'NUMBER', '### ### ### ##0.000000', null"));
+            assertEquals("1.955830", display(context, "1.95583, 'NUMBER', '### ### ### ##0.000000', null"));
+            assertEquals("1.96", display(context, "1.955834, 'NUMBER', '### ### ### ##0.00', null"));
+            assertEquals("2", display(context, "1.5, 'NUMBER', '### ### ### ##0', null"));
+        }
+    }
+
     @Test
     void aCheckboxShowsTheLabelOfItsState() {
         try (Context context = load()) {

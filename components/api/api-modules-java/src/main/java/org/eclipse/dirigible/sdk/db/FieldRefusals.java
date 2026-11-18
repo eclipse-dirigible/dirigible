@@ -13,10 +13,11 @@ import java.util.Map;
 
 /**
  * Builds the refusals a generated controller answers a value of one property with - a required
- * value left out, a text longer than its column, a value off its pattern, a value another record
- * already holds under a {@code unique: true}, a required single flag left without a holder, a
- * refusing single flag another record holds - their messages resolved for the language of the
- * request exactly as a generated check's are, see {@link CheckMessages} (dirigible #8596).
+ * value left out, a text longer than its column, a value off its pattern, a value that is not of
+ * its named format, a value another record already holds under a {@code unique: true}, a required
+ * single flag left without a holder, a refusing single flag another record holds - their messages
+ * resolved for the language of the request exactly as a generated check's are, see
+ * {@link CheckMessages} (dirigible #8596).
  *
  * <p>
  * Each sentence is an entry of the entity's model catalog, under {@code <catalog>.checks.<key>},
@@ -49,6 +50,12 @@ public final class FieldRefusals {
      * The default-language sentence refusing a value off its pattern: {@code {pattern}} is the regex.
      */
     public static final String PATTERN_TEXT = "The value of '{label}' does not match the required pattern '{pattern}'";
+
+    /** The key, under a catalog's {@code checks}, of the sentence refusing a value that is no IBAN. */
+    public static final String IBAN_KEY = "fieldIban";
+
+    /** The default-language sentence refusing a value that is no IBAN (dirigible #8302). */
+    public static final String IBAN_TEXT = "The value of '{label}' is not a valid IBAN";
 
     /** The key, under a catalog's {@code checks}, of the sentence refusing a repeated unique value. */
     public static final String DUPLICATE_KEY = "fieldDuplicate";
@@ -140,6 +147,21 @@ public final class FieldRefusals {
     public static ValidationException pattern(String catalog, String field, String label, String labelKey, String pattern) {
         return refusal(CheckMessages.language(), CheckMessages::readCatalog, catalog, PATTERN_KEY, PATTERN_TEXT, field, label, labelKey,
                 "pattern", pattern);
+    }
+
+    /**
+     * The refusal of a value of a {@code format: iban} field that is not an IBAN - off its shape, or
+     * with check digits that do not hold (see {@link FieldFormats#isIban(String)}).
+     *
+     * @param catalog the entity's model catalog ({@code <project>:<catalog prefix>}), or {@code null}
+     * @param field the property
+     * @param label the property's default-language label
+     * @param labelKey the fully qualified catalog key of that label, or {@code null}
+     * @return the exception to throw - mapped to HTTP 400 carrying the key, the parameters and the
+     *         field
+     */
+    public static ValidationException iban(String catalog, String field, String label, String labelKey) {
+        return refusal(CheckMessages.language(), CheckMessages::readCatalog, catalog, IBAN_KEY, IBAN_TEXT, field, label, labelKey);
     }
 
     /**

@@ -598,9 +598,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: contactEmail, type: string, length: 320, pattern: '^[^@]+@[^@]+\\.[a-z]{2,}$' }
                   # #7726 normalize: a pasted phone loses its separators BEFORE the strict pattern reads it,
                   # and an IBAN is trimmed, de-spaced and upper-cased (the order of the list is not the
-                  # order of the transforms: trim, strip, case).
+                  # order of the transforms: trim, strip, case). #8302 format: iban then checks the
+                  # normalized value's check digits, not only its shape.
                   - { name: phone, type: string, length: 20, normalize: [strip: " -()"], pattern: '^\\+[1-9][0-9]{6,14}$' }
-                  - { name: iban, type: string, length: 34, normalize: [upper, strip: " ", trim] }
+                  - { name: iban, type: string, length: 34, normalize: [upper, strip: " ", trim], format: iban }
 
               # period is a month field: YYYY-MM string storage, month-picker widget on EVERY
               # writable surface (power + my), a |format label token rendering "2026 July", and
@@ -652,6 +653,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: approved, type: boolean, readOnly: true }
                   # #7718: a `true` default opens checked on the power AND the personal create form.
                   - { name: billable, type: boolean, defaultValue: true }
+                  # #8302: the personal controller checks an IBAN's check digits as the power one does.
+                  - { name: payoutIban, type: string, length: 34, format: iban }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true, personal: true }
                   # a plain dropdown relation: the personal LIST must resolve it to a label (the
@@ -923,6 +926,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: secret,  type: decimal, sensitive: true }
                   # #7718: the partner create form shows the default too.
                   - { name: priority, type: integer, defaultValue: 3 }
+                  # #8302: the partner controller checks an IBAN's check digits too.
+                  - { name: refundIban, type: string, length: 34, format: iban }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true, partner: true }
                   # #7496: the partner form builds its options apart from the others, so it carries a rule too.
@@ -2435,7 +2440,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     // Still the entities list. single: (#8101): a Tender's base flag is fleet-wide and changes hands
     // on a create or an update; a Purse's base flag changes hands within its tender only, and its
     // preferred flag refuses a second holder in the tender with 409. A Denomination's and a Till's base
-    // flags are required (#8700): fleet-wide and per denomination, the holder never gives them up.
+    // flags are required (#8700): fleet-wide and per denomination, the holder never gives them up. A
+    // Coin defaults to the Mint holding the base flag (init: { flag: }, #8683).
     private static final String INTENT_YAML_SINGLE_FLAGS = """
               - name: Tender
                 fields:
@@ -2462,6 +2468,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: base,  type: boolean, single: { per: Denomination, required: true } }
                 relations:
                   - { name: Denomination, kind: manyToOne, to: Denomination }
+              - name: Mint
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, length: 30 }
+                  - { name: base, type: boolean, single: true }
+              - name: Coin
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: face, type: string, length: 10 }
+                relations:
+                  - { name: Mint, kind: manyToOne, to: Mint, init: { flag: base } }
             """;
 
     // Still the entities list. unique: { ignoreCase: true } (#8095): a login and an e-mail address are
@@ -2774,6 +2791,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         }
 
         assertEmission();
+        assertInitFlagEmission();
         assertFieldPlacementEmission();
         assertFieldEmptyTextEmission();
         assertRecordHeaderEmission();
@@ -2792,6 +2810,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertStatusStampsRuntime();
         assertSingleFlagsRuntime();
         assertRequiredSingleFlagsRuntime();
+        assertInitFlagRuntime();
         assertUniqueIgnoringCaseRuntime();
         assertEmptyToNullRuntime();
         assertTimedWaitRuntime();
@@ -3180,6 +3199,50 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                .body("message", containsString("must stay 'Base'"))
                                                .body("messageKey", endsWith(".checks.fieldSingleRequired"))
                                                .body("field", equalTo("Base")));
+    }
+
+    /**
+     * {@code init: { flag: base }} (#8683), generated: the create form asks the target for the row
+     * holding the flag instead of seeding a fixed id, and the FK column carries no DEFAULT.
+     */
+    private void assertInitFlagEmission() {
+        String page = contentOf("gen/emission/js/components/pages/Coin/CoinFormPage.js");
+        assertTrue(page.contains("{ equals: { Base: true } }") && page.contains("this.form.Mint = String(holdersMint[0].Id)"),
+                "the create form must preselect the Mint holding the base flag, got: " + page);
+        String repository = contentOf("gen/emission/data/coin/CoinRepository.java");
+        assertTrue(repository.contains("new gen.emission.data.mint.MintRepository()") && repository.contains(".eq(\"Base\", true)"),
+                "the repository must default Mint to the holder of the base flag, got: " + repository);
+    }
+
+    /**
+     * {@code init: { flag: base }} (#8683), published and running: a create that leaves the relation
+     * out takes the target row holding the flag at that moment - none while no row holds it, the new
+     * holder once the flag moves - an explicit pick wins, and an update that leaves it out keeps it.
+     */
+    private void assertInitFlagRuntime() {
+        String mints = "/mint/MintController";
+        String coins = "/coin/CoinController";
+        int unminted = createRecord(coins, "{\"Face\":\"1\"}");
+        assertNull(readRecord(coins, unminted).get("Mint"), "with no holder the relation must stay empty, not a fixed id");
+
+        int royal = createRecord(mints, "{\"Name\":\"Royal\",\"Base\":true}");
+        int local = createRecord(mints, "{\"Name\":\"Local\",\"Base\":false}");
+        int first = createRecord(coins, "{\"Face\":\"2\"}");
+        assertEquals(royal, readRecord(coins, first).get("Mint"), "a create must default to the holder of the flag");
+
+        updateRecord(mints, local, "{\"Id\":" + local + ",\"Name\":\"Local\",\"Base\":true}", 200);
+        int second = createRecord(coins, "{\"Face\":\"5\"}");
+        assertEquals(local, readRecord(coins, second).get("Mint"), "moving the flag must move the default");
+        assertEquals(royal, readRecord(coins, first).get("Mint"), "moving the flag must not touch an existing record");
+
+        int picked = createRecord(coins, "{\"Face\":\"10\",\"Mint\":" + royal + "}");
+        assertEquals(royal, readRecord(coins, picked).get("Mint"), "an explicit pick must win over the default");
+        updateRecord(coins, picked, "{\"Id\":" + picked + ",\"Face\":\"20\"}", 200);
+        assertEquals(royal, readRecord(coins, picked).get("Mint"), "an update that leaves the relation out must keep it");
+
+        updateRecord(mints, local, "{\"Id\":" + local + ",\"Name\":\"Local\",\"Base\":false}", 200);
+        int orphan = createRecord(coins, "{\"Face\":\"50\"}");
+        assertNull(readRecord(coins, orphan).get("Mint"), "once no row holds the flag the relation must stay empty");
     }
 
     /**
@@ -5829,8 +5892,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(transition.contains("currentStatus == 1"), "transitions must emit the allowed-statuses guard");
         assertTrue(transition.contains("Calc.eval(\"Paid\", source, 6)"), "the when guard must emit a Calc comparison");
         assertTrue(transition.contains("Response.setStatus(409)"), "a failed guard must surface as 409");
-        assertTrue(transition.contains("repository.updateProperties(req.id, java.util.Map.of("),
-                "the status flip must be the targeted write, touching only the status column");
+        assertTrue(transition.contains("repository.updateAuthored(req.id, java.util.Map.of("),
+                "the status flip must be the targeted authored write, touching only the status and audit columns");
         assertTrue(transition.contains("-transitioned\");"),
                 "the -transitioned notice must ride the targeted write into the outbox, so flip and announcement commit together");
         assertFalse(transition.contains("Producer.sendToTopic"),
@@ -7159,6 +7222,26 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(API + "/person/PersonController")
                                                  .then()
                                                  .statusCode(400));
+        // #8302 format: iban - the pasted form of the same account with check digits that cannot hold
+        // is normalized, matches the shape, and is still refused, naming the field, on a create and on
+        // an update; the stored valid IBAN is kept.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Name\":\"Checksum\",\"Email\":\"p5@example.com\",\"Iban\":\" bg00 bnbg 9661 1020 3456 78 \"}")
+                                                 .when()
+                                                 .post(API + "/person/PersonController")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("field", equalTo("Iban"))
+                                                 .body("messageKey", endsWith(".checks.fieldIban"))
+                                                 .body("message", equalTo("The value of 'Iban' is not a valid IBAN")));
+        updateRecord("/person/PersonController", normalizedPerson,
+                "{\"Id\":" + normalizedPerson + ",\"Name\":\"Pasted\",\"Email\":\"p3@example.com\",\"Iban\":\"BG81BNBG96611020345678\"}",
+                400);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/person/PersonController/" + normalizedPerson)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Iban", equalTo("BG80BNBG96611020345678")));
 
         // leafOnly: Account 1 has a child, so referencing it must be rejected server-side.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
@@ -8304,6 +8387,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .put(API + "/claim/ClaimMyController/1")
                                                  .then()
                                                  .statusCode(200));
+        // #8302: the personal controller refuses an IBAN whose check digits fail, as the power one does.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Note\":\"edited\",\"PayoutIban\":\"BG00BNBG96611020345678\"}")
+                                                 .when()
+                                                 .put(API + "/claim/ClaimMyController/1")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("field", equalTo("PayoutIban")));
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(API + "/claim/ClaimController/1")
                                                  .then()

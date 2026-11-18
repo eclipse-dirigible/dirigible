@@ -52,7 +52,10 @@ document.addEventListener('alpine:init', () => {
     settingsItems: [],
     settingsMode: false,
     settingsSelected: '',
+    // The iframe address of the selected setting entity (empty for a built-in section, which renders locally),
+    // and the inner route of that app (without its leading slash) as last mirrored from it or sent to it.
     settingsUrl: '',
+    settingsInner: '',
     // Region & Language: the platform-wide language flag (the shared locale store), offered here
     // because the shell's Settings is where users look for it. The offered codes are the PLATFORM's
     // supported set (DIRIGIBLE_APPLICATION_LANGUAGES via the locale store) - modules never define
@@ -601,38 +604,48 @@ document.addEventListener('alpine:init', () => {
           if (reports) reports.loadWidgets(true);
         }
         if (p === '/settings' || p.indexOf('/settings/') === 0) {
-          // Settings master-detail: /settings (list only) or /settings/<perspective-id> (one selected).
+          // Settings master-detail: /settings (list only) or /settings/<perspective-id>[/<inner-route>] (one
+          // selected; the inner route is the embedded app's own, like /app/<id>/<inner-route>).
           this.settingsMode = true;
           this.scanLanguageCoverage();
           this.hostedId = '';
           this.hostedUrl = '';
-          const rest = p.indexOf('/settings/') === 0 ? p.slice('/settings/'.length) : '';
-          if (rest) {
-            const item = this.findSettingItem(decodeURIComponent(rest));
-            if (item) {
-              this.settingsSelected = item.id;
-              this.settingsUrl = item.path || '';
-              if (item.id === 'tenant-configuration') this.loadTenantConfig();
-              if (item.id === 'print-templates') this.loadPrintTemplates();
-              if (item.id === 'document-numbering') this.loadNumbering();
-              if (item.id === 'tenant-users') this.loadTenantUsers();
-              if (item.id === 'tenant-export') this.loadTenantExport();
-            }
+          const settings = p.match(/^\/settings(?:\/([^/]+)(?:\/(.*))?)?$/);
+          const id = settings && settings[1] ? decodeURIComponent(settings[1]) : '';
+          const inner = (settings && settings[2]) || '';
+          const item = id ? this.findSettingItem(id) : null;
+          if (!item) {
+            // The list alone (a bare /settings, or Back to it): nothing is selected, whatever was before.
+            this.clearSettingSelection();
+          } else if (this.settingsSelected !== id) {
+            // Another setting (a typed address, or Back): its iframe is pointed in place, never reloaded by src.
+            this.showSetting(item, inner);
+          } else if (item.path && inner !== this.settingsInner) {
+            // The same setting at another page of its app: routed in place through the app's own router.
+            this.routeEmbedded(true, inner);
           }
         } else {
           this.settingsMode = false;
+          this.clearSettingSelection();
           const match = p.match(/^\/app\/([^/]+)(?:\/(.*))?$/);
           if (match) {
             const id = decodeURIComponent(match[1]);
             const inner = match[2] || '';
             // Only (re)point the iframe when the app changes - while the same app is hosted, resetting
-            // its src would reload it and lose its state. An address naming another page of that app
-            // (typed, pasted, or the browser's Back) routes it in place instead (#8638).
+            // its document would reload it and lose its state. An address naming another page of that app
+            // (typed, pasted, or the browser's Back) routes it in place instead (#8638). A frame that is
+            // already loaded is pointed with location.replace, never by src: a src change adds an entry to
+            // the tab's one joint session history, so a single click would take two Back presses to undo.
             if (this.hostedId !== id) {
               const item = this.findItem(id);
-              if (item) { this.hostedId = id; this.hostedInner = inner; this.hostedUrl = this.appUrl(item, inner); }
+              if (item) {
+                this.hostedId = id;
+                this.hostedInner = inner;
+                this.hostedUrl = this.appUrl(item, inner);
+                this.pointFrame(this.$refs.hostedFrame, this.hostedUrl);
+              }
             } else if (inner !== this.hostedInner) {
-              this.routeHostedApp(inner);
+              this.routeEmbedded(false, inner);
             }
           } else {
             this.hostedId = '';
@@ -688,18 +701,25 @@ document.addEventListener('alpine:init', () => {
       store.selected = name ? (store.items || []).find(r => r.name === name) || null : null;
     },
 
-    /** Host a domain app (a perspective) in the iframe. Swap the iframe synchronously on click (do not
-     *  wait for the router's pinecone:end - for a template-less route it can fire before the context is
-     *  ready, leaving the pane stale), then update the URL. applyRoute then no-ops (hostedId already set). */
+    /** Host a domain app (a perspective) in the iframe, once the router has taken the URL. Pinecone's
+     *  navigate is asynchronous and fires pinecone:end while the old address is still current; a frame
+     *  pointed before that would be pointed back by applyRoute at the app the old address names. Whichever
+     *  of applyRoute and this method sees the new address first points the frame; the other finds it done.
+     *  The click is one history entry - the shell's - so the frame is pointed with replace (pointFrame). */
     openApp(item) {
       // Re-clicking the already-hosted app is a no-op: leave its inner route (and the URL) untouched.
       if (this.hostedId !== item.id || this.settingsMode) {
-        this.settingsMode = false;
-        this.hostedId = item.id;
-        this.hostedInner = '';
-        this.hostedUrl = this.appUrl(item, '');
-        this.currentPath = '/app/' + encodeURIComponent(item.id);
-        window.PineconeRouter.navigate('/app/' + encodeURIComponent(item.id));
+        const route = '/app/' + encodeURIComponent(item.id);
+        Promise.resolve(window.PineconeRouter.navigate(route)).then(() => {
+          this.settingsMode = false;
+          this.currentPath = route;
+          if (this.hostedId !== item.id) {
+            this.hostedId = item.id;
+            this.hostedInner = '';
+            this.hostedUrl = this.appUrl(item, '');
+            this.pointFrame(this.$refs.hostedFrame, this.hostedUrl);
+          }
+        });
       } else {
         // The app is already on screen: its page re-reads instead (#8130).
         this.reenterHostedApp();
@@ -724,11 +744,29 @@ document.addEventListener('alpine:init', () => {
       return hash ? base + '#/' + hash : base;
     },
 
-    /** Wire the hosted iframe so its inner navigation is mirrored into the shell's address bar. */
-    onIframeLoad(e) {
+    /** Point an iframe at `url` without adding a history entry. Setting `src` on a loaded frame pushes an
+     *  entry onto the tab's one joint session history, which `location.replace` does not. A frame that is
+     *  not on screen yet needs nothing: its `x-init` takes the current address as its first `src`. */
+    pointFrame(frame, url) {
+      if (!frame || !url) return;
+      try {
+        frame.contentWindow.location.replace(url);
+      } catch (e) { frame.src = url; } // no usable window (cross-origin or detached)
+    },
+
+    /** The selected setting's iframe, while the Settings page is rendered. Looked up in the document, not
+     *  through $refs: the frame lives in the routed _settings.html fragment, and a $refs read from the
+     *  fragment's own handlers (the list's click) does not reach it. */
+    settingsFrame() {
+      return document.querySelector('iframe[data-settings-frame]');
+    },
+
+    /** Wire an embedded iframe - the hosted app's, or with `settings` the selected setting's - so its inner
+     *  navigation is mirrored into the shell's address bar. */
+    onIframeLoad(e, settings) {
       const win = e.target && e.target.contentWindow;
       if (!win) return;
-      const mirror = () => this.mirrorInner(win);
+      const mirror = () => this.mirrorInner(win, !!settings);
       // The embedded app routes with Pinecone (history.pushState, no hashchange) and signals every
       // navigation with a `pinecone:end` event on its own document; popstate covers in-app back/forward.
       try {
@@ -739,14 +777,20 @@ document.addEventListener('alpine:init', () => {
       mirror();
     },
 
-    /** Reflect the embedded app's current hash route into the top URL as /app/<id>/<inner-route>. */
-    mirrorInner(win) {
-      if (!this.hostedId) return;
+    /** Reflect the embedded app's current hash route into the top URL as /app/<id>/<inner-route> (or
+     *  /settings/<id>/<inner-route>). The app's own navigation made its own history entry, so the shell
+     *  only replaces its address - one user action, one entry. */
+    mirrorInner(win, settings) {
+      const id = settings ? this.settingsSelected : this.hostedId;
+      if (!id || (settings && (!this.settingsMode || !this.settingsUrl))) return; // a built-in section shows no app: its hidden frame says nothing
       let hash;
-      try { hash = win.location.hash || ''; } catch (e) { return; } // cross-origin guard
+      try {
+        if (win.location.href === 'about:blank') return; // the frame's initial document, before its address loads
+        hash = win.location.hash || '';
+      } catch (e) { return; } // cross-origin guard
       const inner = hash.replace(/^#\/?/, '');
-      this.hostedInner = inner;
-      const top = '/app/' + encodeURIComponent(this.hostedId) + (inner ? '/' + inner : '');
+      if (settings) this.settingsInner = inner; else this.hostedInner = inner;
+      const top = (settings ? '/settings/' : '/app/') + encodeURIComponent(id) + (inner ? '/' + inner : '');
       const newHash = '#' + top;
       if (window.location.hash !== newHash) {
         // replaceState updates the address bar without re-triggering the shell router (no reload loop).
@@ -783,24 +827,50 @@ document.addEventListener('alpine:init', () => {
       this.closeSideNav();
     },
 
-    /** Select a setting entity: host its app at that entity's route in the settings detail iframe.
-     *  Update the URL with replaceState (no Pinecone re-render) so the master-detail split keeps the
-     *  layout it computed when first shown; the detail iframe just swaps its src. */
+    /** Select a setting entity: host its app at that entity's route in the settings detail iframe. The pick
+     *  is one real shell entry (#/settings/<id>) and the iframe is pointed with replace (pointFrame). The
+     *  route /settings/:id?/:inner* is one pattern for the list and every selection, so Pinecone does not
+     *  swap the template on this navigation - the split keeps the layout it computed when first shown
+     *  (that was why this used replaceState, which left no entry for Back to return to).
+     *  The selection follows the router's navigation, never precedes it: Pinecone's navigate is asynchronous
+     *  and fires pinecone:end while the old address is still current, and applyRoute, finding a selection
+     *  that address does not name, would point the frame back at the setting it does name. */
     selectSetting(item) {
       if (this.settingsSelected !== item.id) {
-        this.settingsSelected = item.id;
-        this.settingsUrl = item.path || '';
-        this.currentPath = '/settings/' + encodeURIComponent(item.id);
-        const url = '#/settings/' + encodeURIComponent(item.id);
-        if (window.location.hash !== url && window.history && window.history.replaceState) {
-          window.history.replaceState(window.history.state, '', url);
-        }
-        if (item.id === 'tenant-configuration') this.loadTenantConfig();
-        if (item.id === 'print-templates') this.loadPrintTemplates();
-        if (item.id === 'document-numbering') this.loadNumbering();
-        if (item.id === 'tenant-users') this.loadTenantUsers();
-        if (item.id === 'tenant-export') this.loadTenantExport();
+        const route = '/settings/' + encodeURIComponent(item.id);
+        Promise.resolve(window.PineconeRouter.navigate(route)).then(() => {
+          this.currentPath = route;
+          if (this.settingsSelected !== item.id) this.showSetting(item, '');
+        });
       }
+    },
+
+    /** Make `item` the selected setting at the app's `inner` route and read the section it shows. */
+    showSetting(item, inner) {
+      this.settingsSelected = item.id;
+      this.settingsInner = inner;
+      this.settingsUrl = item.path ? this.appUrl(item, inner) : '';
+      this.pointFrame(this.settingsFrame(), this.settingsUrl);
+      if (item.id === 'tenant-configuration') this.loadTenantConfig();
+      if (item.id === 'print-templates') this.loadPrintTemplates();
+      if (item.id === 'document-numbering') this.loadNumbering();
+      if (item.id === 'tenant-users') this.loadTenantUsers();
+      if (item.id === 'tenant-export') this.loadTenantExport();
+    },
+
+    /** Nothing selected: the list alone (the frame, if any, keeps its last document out of sight until
+     *  the next pick points it again). */
+    clearSettingSelection() {
+      this.settingsSelected = '';
+      this.settingsUrl = '';
+      this.settingsInner = '';
+    },
+
+    /** Compact screens: back from the detail to the list. */
+    settingsBack() {
+      this.clearSettingSelection();
+      this.currentPath = '/settings';
+      window.PineconeRouter.navigate('/settings');
     },
 
     isSettingActive(item) { return this.settingsMode && this.settingsSelected === item.id; },
@@ -966,8 +1036,8 @@ document.addEventListener('alpine:init', () => {
     get breadcrumbTrail() {
       if (this.isDashboard) return [{ label: this.tr('application-core:shell.nav.dashboard', 'Dashboard') }];
       if (this.currentPath.indexOf('/app/') === 0) return this.hostedAppTrail();
-      const [top, rest] = this.currentPath.split('/').filter(Boolean);
-      if (top === 'settings') return this.settingsTrail(rest ? decodeURIComponent(rest) : '');
+      const [top, rest, ...inner] = this.currentPath.split('/').filter(Boolean);
+      if (top === 'settings') return this.settingsTrail(rest ? decodeURIComponent(rest) : '', inner.join('/'));
       const BUILTIN = { inbox: 'Inbox', issues: 'Issues', documents: 'Documents', reports: 'Reports' };
       if (!BUILTIN[top]) return [];
       const label = this.tr('application-core:shell.nav.' + top, BUILTIN[top]);
@@ -977,19 +1047,39 @@ document.addEventListener('alpine:init', () => {
       return [{ label, open: () => this.navigate('/reports') }, { label: reports.displayLabel(report) }];
     },
 
-    /** Settings and the selected setting. Settings itself does not link: its list stays beside the detail. */
-    settingsTrail(id) {
-      const crumbs = [{ label: this.tr('application-core:shell.nav.settings', 'Settings') }];
+    /** The label of a built-in settings section (one rendered by the shell itself), or '' for any other id. */
+    builtinSettingLabel(id) {
       const BUILTIN = {
         'region-language': ['regionLanguage', 'Region & Language'],
         'tenant-configuration': ['tenantConfig', 'Tenant Configuration'],
         'document-numbering': ['numbering', 'Document Numbering'],
         'tenant-users': ['tenantUsers', 'Users'],
         'print-templates': ['printTemplates', 'Print Templates'],
+        'tenant-export': ['tenantExport', 'Data export'],
       };
-      const item = !BUILTIN[id] && this.settingsItems.find(i => i.id === id);
-      if (BUILTIN[id]) crumbs.push({ label: this.tr('application-core:shell.settings.' + BUILTIN[id][0], BUILTIN[id][1]) });
-      else if (item) crumbs.push({ label: this.itemLabel(item) });
+      return BUILTIN[id] ? this.tr('application-core:shell.settings.' + BUILTIN[id][0], BUILTIN[id][1]) : '';
+    },
+
+    /** The name of the selected setting, built-in or an app's entity ('' with none selected). */
+    get settingsSelectedLabel() {
+      const id = this.settingsSelected;
+      const item = id && !this.builtinSettingLabel(id) && this.settingsItems.find(i => i.id === id);
+      return this.builtinSettingLabel(id) || (item ? this.itemLabel(item) : '');
+    },
+
+    /** Settings > the selected setting [> the page its app shows]. Settings itself does not link: its list
+     *  stays beside the detail. The entity links back to its list in place, like a hosted app's landing. */
+    settingsTrail(id, inner) {
+      const crumbs = [{ label: this.tr('application-core:shell.nav.settings', 'Settings') }];
+      const builtin = this.builtinSettingLabel(id);
+      const item = !builtin && this.settingsItems.find(i => i.id === id);
+      if (builtin) {
+        crumbs.push({ label: builtin });
+      } else if (item) {
+        const page = this.hostedPageLabel(item, inner || '');
+        if (!page) crumbs.push({ label: this.itemLabel(item) });
+        else crumbs.push({ label: this.itemLabel(item), open: () => this.showHostedLanding(item, this.settingsFrame()) }, { label: page });
+      }
       return crumbs;
     },
 
@@ -1032,27 +1122,30 @@ document.addEventListener('alpine:init', () => {
       return hashAt === -1 ? '/' : '/' + path.slice(hashAt + 1).replace(/^\/+/, '');
     },
 
-    /** Route the hosted app to the inner route its address names (#8638), in place, through its own router:
-     *  a dirty form's unsaved-changes guard then applies as for any navigation inside the app, and a
-     *  refused one leaves the form, whose router end mirrors its own address back. An app without that
-     *  router (or on another origin) has its src pointed at the route instead. */
-    routeHostedApp(inner) {
-      const item = this.findItem(this.hostedId);
+    /** Route an embedded app - the hosted one, or with `settings` the selected setting's - to the inner route
+     *  its address names (#8638), in place, through its own router: a dirty form's unsaved-changes guard then
+     *  applies as for any navigation inside the app, and a refused one leaves the form, whose router end
+     *  mirrors its own address back. An app without that router (or on another origin) has its frame pointed
+     *  at the route instead. */
+    routeEmbedded(settings, inner) {
+      const item = settings ? this.findSettingItem(this.settingsSelected) : this.findItem(this.hostedId);
       if (!item) return;
-      this.hostedInner = inner;
-      const win = this.$refs.hostedFrame && this.$refs.hostedFrame.contentWindow;
+      const frame = settings ? this.settingsFrame() : this.$refs.hostedFrame;
+      if (settings) this.settingsInner = inner; else this.hostedInner = inner;
       let router = null;
-      try { router = win && win.PineconeRouter; } catch (e) { router = null; } // cross-origin guard
+      try { router = frame && frame.contentWindow && frame.contentWindow.PineconeRouter; } catch (e) { router = null; } // cross-origin guard
       const url = this.appUrl(item, inner);
       const hashAt = url.indexOf('#');
       if (router) router.navigate(hashAt === -1 ? '/' : url.slice(hashAt + 1));
-      else this.hostedUrl = url;
+      else this.pointFrame(frame, url);
     },
 
-    /** Route the hosted app back to its landing page in place - reloading the iframe would lose its state.
-     *  The app's own router hears it, and mirrorInner then updates the address bar and the trail. */
-    showHostedLanding(item) {
-      const win = this.$refs.hostedFrame && this.$refs.hostedFrame.contentWindow;
+    /** Route an embedded app (the hosted one's frame unless `frame` is given) back to its landing page in
+     *  place - reloading the iframe would lose its state. The app's own router hears it, and mirrorInner then
+     *  updates the address bar and the trail. */
+    showHostedLanding(item, frame) {
+      const target = frame || this.$refs.hostedFrame;
+      const win = target && target.contentWindow;
       if (!win) return;
       const route = this.landingRoute(item);
       if (win.PineconeRouter) win.PineconeRouter.navigate(route);

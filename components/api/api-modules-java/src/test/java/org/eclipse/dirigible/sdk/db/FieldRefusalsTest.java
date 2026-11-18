@@ -33,6 +33,7 @@ class FieldRefusalsTest {
             Map.entry(CATALOG + ".checks.fieldRequired", "Полето '{label}' е задължително"), //
             Map.entry(CATALOG + ".checks.fieldTooLong", "Полето '{label}' е по-дълго от {length} знака"), //
             Map.entry(CATALOG + ".checks.fieldDuplicate", "Вече съществува {entity} с това '{label}'"), //
+            Map.entry(CATALOG + ".checks.fieldIban", "Стойността на '{label}' не е валиден IBAN"), //
             Map.entry(CATALOG + ".checks.UoM_pattern_Sap", "{label}: три главни латински букви"), //
             Map.entry(CATALOG + ".checks.fieldSingleRequired",
                     "Поне една {entity} трябва да е '{label}' - първо отбележете друга като '{label}'"), //
@@ -119,6 +120,21 @@ class FieldRefusalsTest {
         assertEquals("Another UoM is already 'Base' for this Company",
                 FieldRefusals.singleTakenInScope(null, CATALOGS, CATALOG, "UoM", UOM_LABEL_KEY, "Base", "Base", BASE_LABEL_KEY, "Company",
                         COMPANY_LABEL_KEY)
+                             .getMessage());
+    }
+
+    /** dirigible #8302: a value of a {@code format: iban} field that is no IBAN names the field. */
+    @Test
+    void aValueThatIsNoIbanNamesTheFieldByItsTranslatedLabel() {
+        ValidationException refusal = FieldRefusals.refusal("bg", CATALOGS, CATALOG, FieldRefusals.IBAN_KEY, FieldRefusals.IBAN_TEXT, "Sap",
+                "SAP Code", SAP_LABEL_KEY);
+
+        assertEquals("Стойността на 'САП код' не е валиден IBAN", refusal.getMessage());
+        assertEquals(CATALOG + ".checks.fieldIban", refusal.getMessageKey());
+        assertEquals("Sap", refusal.getField());
+        assertEquals("The value of 'SAP Code' is not a valid IBAN",
+                FieldRefusals.refusal(null, CATALOGS, CATALOG, FieldRefusals.IBAN_KEY, FieldRefusals.IBAN_TEXT, "Sap", "SAP Code",
+                        SAP_LABEL_KEY)
                              .getMessage());
     }
 

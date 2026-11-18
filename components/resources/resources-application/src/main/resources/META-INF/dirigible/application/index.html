@@ -336,7 +336,7 @@
             <!-- Pinecone Router renders the matched built-in view fragment here. -->
           </div>
           <div x-show="hostedUrl" class="flex-1 size-full" style="position: relative">
-            <iframe x-ref="hostedFrame" :src="hostedUrl" title="Application" @load="onIframeLoad($event)" style="position: absolute; inset: 0; width: 100%; height: 100%; border: 0"></iframe>
+            <iframe x-ref="hostedFrame" x-init="if (hostedUrl) $el.src = hostedUrl" title="Application" @load="onIframeLoad($event, false)" style="position: absolute; inset: 0; width: 100%; height: 100%; border: 0"></iframe>
           </div>
         </main>
       </div>
@@ -554,10 +554,14 @@
     <template x-route="/reports" x-template.target.app="/services/web/application-core/shell/views/_reports.html"></template>
     <!-- /reports/<name> deep-links a specific report (restored on refresh); applyRoute resolves the store selection. -->
     <template x-route="/reports/:name" x-template.target.app="/services/web/application-core/shell/views/_reports.html"></template>
-    <!-- Settings: list (/settings) or a selected entity (/settings/<perspective-id>). The master-detail
-         fragment renders into #app (visible) so its split lays out correctly. -->
-    <template x-route="/settings" x-template.target.app="./views/_settings.html"></template>
-    <template x-route="/settings/:id" x-template.target.app="./views/_settings.html"></template>
+    <!-- Settings: the list (/settings), a selected entity (/settings/<perspective-id>) and the page its app
+         shows (/settings/<perspective-id>/<inner-route>, mirrored from the iframe like /app/...). ONE pattern
+         for all three: Pinecone swaps a route's template only when the matched route changes, and
+         data-keep-rendered exempts it from the guard's re-render on new params (app.js renderAnew, #8638), so
+         picking a setting never re-renders the split or destroys the setting's iframe - Back could not step
+         through the history entries of a destroyed frame. applyRoute follows the params instead. The fragment
+         renders into #app (visible) so its split lays out correctly. -->
+    <template x-route="/settings/:id?/:inner*" x-template.target.app="./views/_settings.html" data-keep-rendered></template>
     <!-- Hosted domain apps: /app/<perspective-id>[/<inner-route>]. No template - the iframe renders them;
          the optional inner segment mirrors the embedded app's own hash route (deep-linkable). -->
     <template x-route="/app/:id/:inner*"></template>
