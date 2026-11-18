@@ -27,16 +27,21 @@ class FieldRefusalsTest {
     private static final String UOM_LABEL_KEY = CATALOG + ".t.UOM";
     private static final String SAP_LABEL_KEY = CATALOG + ".t.UOM_SAP";
     private static final String BASE_LABEL_KEY = CATALOG + ".t.UOM_BASE";
+    private static final String COMPANY_LABEL_KEY = CATALOG + ".t.UOM_COMPANY";
 
-    private static final Map<String, String> BG = Map.of( //
-            CATALOG + ".checks.fieldRequired", "Полето '{label}' е задължително", //
-            CATALOG + ".checks.fieldTooLong", "Полето '{label}' е по-дълго от {length} знака", //
-            CATALOG + ".checks.fieldDuplicate", "Вече съществува {entity} с това '{label}'", //
-            CATALOG + ".checks.UoM_pattern_Sap", "{label}: три главни латински букви", //
-            CATALOG + ".checks.fieldSingleRequired", "Поне една {entity} трябва да е '{label}' - първо отбележете друга като '{label}'", //
-            BASE_LABEL_KEY, "Основна", //
-            UOM_LABEL_KEY, "мерна единица", //
-            SAP_LABEL_KEY, "САП код");
+    private static final Map<String, String> BG = Map.ofEntries( //
+            Map.entry(CATALOG + ".checks.fieldRequired", "Полето '{label}' е задължително"), //
+            Map.entry(CATALOG + ".checks.fieldTooLong", "Полето '{label}' е по-дълго от {length} знака"), //
+            Map.entry(CATALOG + ".checks.fieldDuplicate", "Вече съществува {entity} с това '{label}'"), //
+            Map.entry(CATALOG + ".checks.UoM_pattern_Sap", "{label}: три главни латински букви"), //
+            Map.entry(CATALOG + ".checks.fieldSingleRequired",
+                    "Поне една {entity} трябва да е '{label}' - първо отбележете друга като '{label}'"), //
+            Map.entry(CATALOG + ".checks.fieldSingleTaken", "Друга {entity} вече е '{label}'"), //
+            Map.entry(CATALOG + ".checks.fieldSingleTakenInScope", "Друга {entity} вече е '{label}' за тази {scope}"), //
+            Map.entry(BASE_LABEL_KEY, "Основна"), //
+            Map.entry(UOM_LABEL_KEY, "мерна единица"), //
+            Map.entry(SAP_LABEL_KEY, "САП код"), //
+            Map.entry(COMPANY_LABEL_KEY, "фирма"));
 
     private static final CheckMessages.CatalogReader CATALOGS = (language, key) -> "bg".equals(language) ? BG.get(key) : null;
 
@@ -86,6 +91,34 @@ class FieldRefusalsTest {
         assertEquals("Base", refusal.getField());
         assertEquals("One UoM must stay 'Base' - mark another one 'Base' first",
                 FieldRefusals.singleRequired(null, CATALOGS, CATALOG, "UoM", UOM_LABEL_KEY, "Base", "Base", BASE_LABEL_KEY)
+                             .getMessage());
+    }
+
+    /**
+     * dirigible #8101: a refusing single flag another record holds, named by the translated labels -
+     * fleet-wide, and within the scope of the relation the flag is scoped by.
+     */
+    @Test
+    void aTakenSingleFlagNamesTheEntityTheFlagAndItsScopeByTheirTranslatedLabels() {
+        ValidationException refusal =
+                FieldRefusals.singleTaken("bg", CATALOGS, CATALOG, "UoM", UOM_LABEL_KEY, "Base", "Base", BASE_LABEL_KEY);
+
+        assertEquals("Друга мерна единица вече е 'Основна'", refusal.getMessage());
+        assertEquals(CATALOG + ".checks.fieldSingleTaken", refusal.getMessageKey());
+        assertEquals("Base", refusal.getField());
+        assertEquals("Another UoM is already 'Base'",
+                FieldRefusals.singleTaken(null, CATALOGS, CATALOG, "UoM", UOM_LABEL_KEY, "Base", "Base", BASE_LABEL_KEY)
+                             .getMessage());
+
+        ValidationException scoped = FieldRefusals.singleTakenInScope("bg", CATALOGS, CATALOG, "UoM", UOM_LABEL_KEY, "Base", "Base",
+                BASE_LABEL_KEY, "Company", COMPANY_LABEL_KEY);
+
+        assertEquals("Друга мерна единица вече е 'Основна' за тази фирма", scoped.getMessage());
+        assertEquals(CATALOG + ".checks.fieldSingleTakenInScope", scoped.getMessageKey());
+        assertEquals("Base", scoped.getField());
+        assertEquals("Another UoM is already 'Base' for this Company",
+                FieldRefusals.singleTakenInScope(null, CATALOGS, CATALOG, "UoM", UOM_LABEL_KEY, "Base", "Base", BASE_LABEL_KEY, "Company",
+                        COMPANY_LABEL_KEY)
                              .getMessage());
     }
 

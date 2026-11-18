@@ -1499,7 +1499,8 @@ default bank account of a company", declare `single:` on the `boolean` field ins
 holder in the whole table; `single: { per: <relation> }` keeps one per value of one of the entity's own
 `manyToOne`/`oneToOne` relations. A write that sets the flag hands it over: the row that held it in
 the same scope is set to `false` in the same transaction. Add `onConflict: refuse` when taking the flag
-must be a deliberate act - the write is then answered 409 while another row holds it. Add
+must be a deliberate act - the write is then answered 409 while another row holds it (naming the
+field, in the reader's language). Add
 `required: true` when the flag provides a default that must always exist (the base currency, the base
 company): the holder can then neither be un-ticked nor deleted while no other row of its scope holds
 the flag (400, naming the field) - the flag moves only by being set on another row. The first row of a

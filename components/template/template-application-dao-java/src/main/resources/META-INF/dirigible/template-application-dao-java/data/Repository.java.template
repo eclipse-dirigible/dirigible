@@ -1568,6 +1568,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      */
 ## ponytail: two concurrent writers that each find no other holder can both commit one; a database
 ## partial unique index (not portable to H2) or a lock on the scope would close it.
+#set($refusalCatalog = "null")
+#if($messageCatalogJava)#set($refusalCatalog = $messageCatalogJava)#end
+#set($refusalEntityLabel = '"' + $name + '"')
+#if($entityLabelJava)#set($refusalEntityLabel = $entityLabelJava)#end
+#set($refusalEntityLabelKey = "null")
+#if($labelCatalogKeyJava)#set($refusalEntityLabelKey = $labelCatalogKeyJava)#end
     private void enforceSingleFlags(${name}Entity entity) {
 #if($hasRequiredSingleFlags)
         ${name}Entity singleStored = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
@@ -1592,8 +1598,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
                     continue;
                 }
 #if($flag.refuse == "true")
-                throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
-                        org.eclipse.dirigible.sdk.db.CheckMessages.message(${flag.messageArgsJava}));
+                // Refused in the reader's language, naming the flag (#8700), answered 409 like a business key.
+                throw new org.eclipse.dirigible.sdk.db.DuplicateKeyException(org.eclipse.dirigible.sdk.db.FieldRefusals.#if($flag.per)singleTakenInScope#{else}singleTaken#end(
+                        ${refusalCatalog}, ${refusalEntityLabel}, ${refusalEntityLabelKey}, ${flag.takenRefusalArgsJava}));
 #else
                 updateProperties(holder.${pkPropertyName}, java.util.Map.<String, Object>of("${flag.property}", false),
                         "${projectName}-${perspectiveName}-${name}-updated");
@@ -1621,12 +1628,6 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
 #end
     }
-#set($refusalCatalog = "null")
-#if($messageCatalogJava)#set($refusalCatalog = $messageCatalogJava)#end
-#set($refusalEntityLabel = '"' + $name + '"')
-#if($entityLabelJava)#set($refusalEntityLabel = $entityLabelJava)#end
-#set($refusalEntityLabelKey = "null")
-#if($labelCatalogKeyJava)#set($refusalEntityLabelKey = $labelCatalogKeyJava)#end
 #foreach($flag in $singleFlags)
 #if($flag.required == "true")
 

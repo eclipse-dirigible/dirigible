@@ -3112,7 +3112,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .put(API + purses + "/" + second)
                                                  .then()
                                                  .statusCode(409)
-                                                 .body("message", containsString("Another Purse is already Preferred for this Tender")));
+                                                 .body("message", containsString("Another Purse is already 'Preferred' for this Tender"))
+                                                 .body("messageKey", endsWith(".checks.fieldSingleTakenInScope"))
+                                                 .body("field", equalTo("Preferred")));
         assertEquals(Boolean.TRUE, readRecord(purses, first).get("Preferred"), "a refused write leaves the holder alone");
         assertNotEquals(Boolean.TRUE, readRecord(purses, second).get("Preferred"), "a refused write is not written");
     }

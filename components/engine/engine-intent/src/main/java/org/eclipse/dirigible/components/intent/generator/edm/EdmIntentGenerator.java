@@ -4067,12 +4067,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
 
     /**
      * The single flags ({@code single:}, #8101) the generated repository keeps at one holder per scope:
-     * {@code singleFlags} lists one {@code { property, per, refuse, message, required }} per flagged
-     * boolean, {@code per} (the scoping relation's FK property) only when scoped, {@code refuse} with
-     * its conflict {@code message} only for {@code onConflict: refuse} and {@code required} only for
-     * {@code required: true} (#8700) - whose refusal is the shared {@code fieldSingleRequired}
-     * sentence, naming the entity and the flag by their catalog labels. Absent when no field declares
-     * one, so a model without the key generates byte-identically.
+     * {@code singleFlags} lists one {@code { property, per, refuse, required }} per flagged boolean,
+     * {@code per} (the scoping relation's FK property) only when scoped, {@code refuse} only for
+     * {@code onConflict: refuse} and {@code required} only for {@code required: true} (#8700). Their
+     * refusals are the shared {@code fieldSingleTaken} / {@code fieldSingleTakenInScope} and
+     * {@code fieldSingleRequired} sentences, naming the entity, the flag and the scope by their catalog
+     * labels. Absent when no field declares one, so a model without the key generates byte-identically.
      */
     private static void putSingleFlags(Map<String, Object> entityMap, EntityIntent entity) {
         List<Map<String, Object>> flags = new ArrayList<>();
@@ -4089,9 +4089,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             if (single.isRefuse()) {
                 flag.put("refuse", "true");
-                flag.put("message",
-                        "Another " + IntentNaming.humanize(entity.getName()) + " is already " + IntentNaming.humanize(field.getName())
-                                + (per == null ? "" : " for this " + IntentNaming.humanize(per.getName())));
             }
             if (single.isRequired()) {
                 flag.put("required", "true");

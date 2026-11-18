@@ -123,6 +123,7 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: code, type: string, length: 3 }
                   - { name: base, type: boolean, label: Base, single: { required: true } }
+                  - { name: preferred, type: boolean, label: Preferred, single: { onConflict: refuse } }
 
               - name: InvoiceItem
                 fields:
@@ -271,6 +272,56 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
                                                              .body("message",
                                                                      equalTo("One " + currencyLabel
                                                                              + " must stay 'Base' - mark another one 'Base' first")),
+                TIMEOUT_SECONDS);
+    }
+
+    /**
+     * dirigible #8101 / #8700: a refusing {@code single:} flag another record holds is refused 409 with
+     * the shared {@code fieldSingleTaken} sentence, translated like the other field refusals and naming
+     * the entity and the flag by their translated labels, with the flag as {@code field}.
+     */
+    @Test
+    void a_taken_single_flags_refusal_is_answered_in_the_request_language() {
+        generateProject();
+        JsonObject generated = generatedCatalog();
+        assertEquals("Another {entity} is already '{label}'", generated.getAsJsonObject("checks")
+                                                                       .get("fieldSingleTaken")
+                                                                       .getAsString());
+        String preferredKey = textKey(generated, "Preferred");
+        String currencyKey = entityKey(generated, "CURRENCY");
+        String currencyLabel = generated.getAsJsonObject("t")
+                                        .get(currencyKey)
+                                        .getAsString();
+        writeResource(PROJECT_PATH + "/i18n/bg-BG/checkmsg.model.json", """
+                {
+                  "checkmsg-model": {
+                    "checks": {
+                      "fieldSingleTaken": "Друга {entity} вече е '{label}'"
+                    },
+                    "t": { "%s": "Предпочитана", "%s": "валута" }
+                  }
+                }
+                """.formatted(preferredKey, currencyKey));
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        create(CURRENCIES, "{\"Code\":\"EUR\",\"Base\":true,\"Preferred\":true}", null, "en");
+        restAssuredExecutor.execute(() -> request(null, "bg").body("{\"Code\":\"USD\",\"Base\":false,\"Preferred\":true}")
+                                                             .when()
+                                                             .post(CURRENCIES)
+                                                             .then()
+                                                             .statusCode(409)
+                                                             .body("message", equalTo("Друга валута вече е 'Предпочитана'"))
+                                                             .body("messageKey", equalTo(CATALOG + "fieldSingleTaken"))
+                                                             .body("field", equalTo("Preferred")),
+                TIMEOUT_SECONDS);
+        restAssuredExecutor.execute(() -> request(null, "en").body("{\"Code\":\"USD\",\"Base\":false,\"Preferred\":true}")
+                                                             .when()
+                                                             .post(CURRENCIES)
+                                                             .then()
+                                                             .statusCode(409)
+                                                             .body("message",
+                                                                     equalTo("Another " + currencyLabel + " is already 'Preferred'")),
                 TIMEOUT_SECONDS);
     }
 

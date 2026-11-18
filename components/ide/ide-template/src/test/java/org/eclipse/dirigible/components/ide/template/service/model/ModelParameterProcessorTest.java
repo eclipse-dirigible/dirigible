@@ -182,18 +182,25 @@ class ModelParameterProcessorTest {
     }
 
     /**
-     * #8101: a refusing single flag's conflict message is translated like a check's, and a demoting
-     * flag, which refuses nothing, has no message to translate.
+     * #8101 / #8700: a refusing single flag's conflict is the shared {@code fieldSingleTaken} sentence
+     * - {@code fieldSingleTakenInScope} for a scoped flag, naming the scope by its relation's label -
+     * so the flag and the scope are named by their labels' catalog keys like the other field refusals.
+     * A demoting flag refuses nothing, and the sentences reach the en-US catalog only for a model
+     * declaring a refusing flag.
      */
     @Test
-    void refusingSingleFlagMessageBecomesACatalogKey() {
+    void refusingSingleFlagRefusalNamesTheFlagAndItsScopeByTheirLabels() {
         Map<String, Object> refusing = new LinkedHashMap<>();
         refusing.put("property", "Preferred");
+        refusing.put("per", "Owner");
         refusing.put("refuse", "true");
-        refusing.put("message", "Another Wallet is already Preferred");
         Map<String, Object> demoting = new LinkedHashMap<>();
         demoting.put("property", "Base");
-        Map<String, Object> wallet = entity("Wallet", "Wallets", property("Id", "INTEGER"));
+        Map<String, Object> preferred = property("Preferred", "BOOLEAN");
+        preferred.put("dataName", "WALLET_PREFERRED");
+        Map<String, Object> owner = property("Owner", "INTEGER");
+        owner.put("dataName", "WALLET_OWNER");
+        Map<String, Object> wallet = entity("Wallet", "Wallets", property("Id", "INTEGER"), preferred, owner);
         wallet.put("singleFlags", List.of(refusing, demoting));
         Map<String, Object> model = model(wallet);
         Map<String, Object> parameters = parameters();
@@ -201,12 +208,17 @@ class ModelParameterProcessorTest {
 
         ModelParameterProcessor.process(model, parameters);
 
-        assertEquals("\"bookstore:billing-model.checks.Wallet_single_Preferred\", \"Another Wallet is already Preferred\"",
-                refusing.get("messageArgsJava"));
-        assertFalse(demoting.containsKey("messageArgsJava"));
+        assertEquals("\"Preferred\", \"Preferred\", \"bookstore:billing-model.t.WALLET_PREFERRED\", \"Owner\", "
+                + "\"bookstore:billing-model.t.WALLET_OWNER\"", refusing.get("takenRefusalArgsJava"));
+        assertFalse(demoting.containsKey("takenRefusalArgsJava"));
         Map<String, Object> catalog = ModelTranslations.checkMessages(model);
-        assertEquals("Another Wallet is already Preferred", catalog.get("Wallet_single_Preferred"));
-        assertFalse(catalog.containsKey("Wallet_single_Base"));
+        assertEquals("Another {entity} is already '{label}'", catalog.get("fieldSingleTaken"));
+        assertEquals("Another {entity} is already '{label}' for this {scope}", catalog.get("fieldSingleTakenInScope"));
+        assertFalse(catalog.containsKey("Wallet_single_Preferred"));
+        demoting.remove("refuse");
+        refusing.remove("refuse");
+        assertFalse(ModelTranslations.checkMessages(model)
+                                     .containsKey("fieldSingleTaken"));
     }
 
     /**

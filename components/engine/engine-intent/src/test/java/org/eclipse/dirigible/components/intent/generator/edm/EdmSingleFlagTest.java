@@ -51,9 +51,7 @@ class EdmSingleFlagTest {
     void flagDescriptorsCarryPropertyScopeAndRefusal() {
         assertEquals(List.of(Map.of("property", "Base")), entity(YAML, "Company").get("singleFlags"));
         assertEquals(
-                List.of(Map.of("property", "Base", "per", "Company"),
-                        Map.of("property", "Preferred", "per", "Company", "refuse", "true", "message",
-                                "Another Bank Account is already Preferred for this Company")),
+                List.of(Map.of("property", "Base", "per", "Company"), Map.of("property", "Preferred", "per", "Company", "refuse", "true")),
                 entity(YAML, "BankAccount").get("singleFlags"));
     }
 
