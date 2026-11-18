@@ -17,6 +17,7 @@ import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.lessThan;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -81,12 +82,14 @@ import io.restassured.path.json.JsonPath;
  *
  * <p>
  * Walked in one scenario, because each step builds on what the previous one registered: a create
- * and a transition each deliver one signed, thin event; a receiver answering 500 gets the same
- * event id again until it answers 2xx, and the log shows every attempt; a resend delivers the same
- * id once more; a receiver that never answers 2xx turns its subscription {@code FAILING} after the
- * retry window; a rotation signs with both secrets; a second tenant's events reach only its own
- * subscription; a removed subscription is gone; and an internal address or an undeclared event type
- * is refused at registration. The retry schedule and window are shrunk to seconds for the run.
+ * and a transition each deliver one signed, thin event, and so does a workflow step's status setter
+ * (whose announcement takes the outbox's durable publish, not a write-attached event); a receiver
+ * answering 500 gets the same event id again until it answers 2xx, and the log shows every attempt;
+ * a resend delivers the same id once more; a receiver that never answers 2xx turns its subscription
+ * {@code FAILING} after the retry window; a rotation signs with both secrets; a second tenant's
+ * events reach only its own subscription; a removed subscription is gone; and an internal address
+ * or an undeclared event type is refused at registration. The retry schedule and window are shrunk
+ * to seconds for the run.
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class TenantWebhooksIT extends IntegrationTest {
@@ -111,6 +114,8 @@ class TenantWebhooksIT extends IntegrationTest {
 
     private static final int DRAFT = 1;
     private static final int APPROVED = 2;
+    private static final int CLOSED = 3;
+    private static final String TASKS = "/services/inbox/tasks";
 
     private static final String INTENT = """
             name: webhookit
@@ -133,6 +138,15 @@ class TenantWebhooksIT extends IntegrationTest {
 
             transitions:
               - { name: ApproveLeave, forEntity: Leave, from: [1], setStatus: 2, label: Approve }
+            processes:
+              - name: LeaveReview
+                trigger: { onCreate: Leave }
+                steps:
+                  - { name: review, kind: userTask, args: { assignee: approver, form: ReviewLeave } }
+                  - { name: close,  kind: serviceTask, args: { setRelationField: Status, value: 3 } }
+                  - { name: end,    kind: end }
+            forms:
+              - { name: ReviewLeave, forEntity: Leave, fields: [note], editable: [note], actions: [close] }
 
             seeds:
               - name: leave-statuses
@@ -140,6 +154,7 @@ class TenantWebhooksIT extends IntegrationTest {
                 rows:
                   - { id: 1, name: DRAFT }
                   - { id: 2, name: APPROVED }
+                  - { id: 3, name: CLOSED }
             """;
 
     /** What the receiver got, in order. */
@@ -299,6 +314,19 @@ class TenantWebhooksIT extends IntegrationTest {
         assertEquals(APPROVED, transitioned.json()
                                            .getInt("data.status"));
 
+        // 1b. A workflow step's status setter announces its transition after the commit, through the
+        // outbox's durable publish rather than a write-attached event - it delivers too.
+        int reviewed = createLeave("reviewed", null);
+        awaitOne("/main", CREATED, reviewed);
+        completeTask(taskFor(reviewed));
+        Received closed = awaitOne("/main", TRANSITIONED, reviewed);
+        assertSignedWith(closed, SECRET);
+        assertEquals(CLOSED, closed.json()
+                                   .getInt("data.status"));
+        assertEquals(List.of("id", "status"), new ArrayList<>(closed.json()
+                                                                    .getMap("data")
+                                                                    .keySet()));
+
         // 2. A receiver answering 500 gets the same event id again until it answers 2xx.
         SCRIPTED.put("/main", new ArrayDeque<>(List.of(500, 500)));
         int second = createLeave("second", null);
@@ -396,6 +424,29 @@ class TenantWebhooksIT extends IntegrationTest {
             restAssuredExecutor.execute(tenant, create::run, TIMEOUT_SECONDS);
         }
         return id.get();
+    }
+
+    private String taskFor(int leave) {
+        AtomicReference<String> task = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> task.set(given().when()
+                                                          .get(TASKS + "?type=groups")
+                                                          .then()
+                                                          .statusCode(200)
+                                                          .body("find { it.processInstanceBusinessKey == '" + leave + "' }", notNullValue())
+                                                          .extract()
+                                                          .path("find { it.processInstanceBusinessKey == '" + leave + "' }.id")),
+                TIMEOUT_SECONDS);
+        return task.get();
+    }
+
+    private void completeTask(String task) {
+        restAssuredExecutor.execute(() -> given().contentType(ContentType.JSON)
+                                                 .body("{\"action\":\"COMPLETE\",\"data\":{\"action\":\"close\"}}")
+                                                 .when()
+                                                 .post(TASKS + "/" + task)
+                                                 .then()
+                                                 .statusCode(200),
+                TIMEOUT_SECONDS);
     }
 
     private Received awaitOne(String path, String type, int recordId) {

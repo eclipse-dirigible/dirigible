@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.data.store.java.outbox;
 
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
@@ -111,17 +112,26 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
             for (PendingEvent event : pending) {
                 store.insert(connection, event, relayTakesOverAt);
             }
-            List<OutboxRecordingParticipant> recording = participants();
-            if (!recording.isEmpty()) {
-                List<OutboxEntry> entries = pending.stream()
-                                                   .map(event -> new OutboxEntry(event.id(), event.topic(), event.payload()))
-                                                   .toList();
-                for (OutboxRecordingParticipant participant : recording) {
-                    participant.recorded(connection, entries);
-                }
-            }
+            recordWithParticipants(connection, pending);
         });
         return new Batch(this, pending);
+    }
+
+    /**
+     * Lets every {@link OutboxRecordingParticipant} record what it derives from the given entries, on
+     * the connection - and so in the transaction - that just recorded them.
+     */
+    private void recordWithParticipants(Connection connection, List<PendingEvent> pending) throws SQLException {
+        List<OutboxRecordingParticipant> recording = participants();
+        if (recording.isEmpty()) {
+            return;
+        }
+        List<OutboxEntry> entries = pending.stream()
+                                           .map(event -> new OutboxEntry(event.id(), event.topic(), event.payload()))
+                                           .toList();
+        for (OutboxRecordingParticipant participant : recording) {
+            participant.recorded(connection, entries);
+        }
     }
 
     /**
@@ -129,9 +139,12 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
      * synchronous chain's commit, or ordered after several transactions — where {@link #record} has no
      * transaction to join. The entry is recorded in its own short transaction and handed to the broker
      * immediately; whatever the broker refuses stays for the relay, exactly as a write-attached event
-     * would. If even the recording fails (the outbox table unreachable), the message is handed to the
-     * broker directly — the caller's work has already committed and an at-most-once attempt beats
-     * failing a caller whose announcement machinery is down.
+     * would. The {@link OutboxRecordingParticipant}s record in that same transaction, as they do for
+     * {@link #record}: a workflow step's {@code -transitioned} announcement takes this path, and its
+     * webhook deliveries must not be missing (#8689). If even the recording fails (the outbox table
+     * unreachable), the message is handed to the broker directly — the caller's work has already
+     * committed and an at-most-once attempt beats failing a caller whose announcement machinery is
+     * down.
      *
      * @param topic the topic to publish on
      * @param payload the message body
@@ -143,7 +156,7 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
                 topic, payload, 0, originatingUser());
         try {
             prepare();
-            store.insert(event, nextAttemptAt());
+            store.insert(event, nextAttemptAt(), connection -> recordWithParticipants(connection, List.of(event)));
         } catch (RuntimeException | SQLException ex) {
             LOGGER.error("Failed to record a durable publish on topic [{}]; attempting the direct publish instead.", topic, ex);
             MessagingFacade.sendToTopic(topic, payload);
