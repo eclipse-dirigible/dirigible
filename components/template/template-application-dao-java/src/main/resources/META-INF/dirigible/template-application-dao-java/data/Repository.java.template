@@ -1621,6 +1621,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
 #end
     }
+#set($refusalCatalog = "null")
+#if($messageCatalogJava)#set($refusalCatalog = $messageCatalogJava)#end
+#set($refusalEntityLabel = '"' + $name + '"')
+#if($entityLabelJava)#set($refusalEntityLabel = $entityLabelJava)#end
+#set($refusalEntityLabelKey = "null")
+#if($labelCatalogKeyJava)#set($refusalEntityLabelKey = $labelCatalogKeyJava)#end
 #foreach($flag in $singleFlags)
 #if($flag.required == "true")
 
@@ -1641,7 +1647,8 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             return;
         }
         if (count(others.eq("${flag.property}", true)) == 0) {
-            throw org.eclipse.dirigible.sdk.db.CheckMessages.fieldRefusal(${flag.requiredRefusalArgsJava});
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.singleRequired(${refusalCatalog}, ${refusalEntityLabel}, ${refusalEntityLabelKey},
+                    ${flag.requiredRefusalArgsJava});
         }
     }
 #end

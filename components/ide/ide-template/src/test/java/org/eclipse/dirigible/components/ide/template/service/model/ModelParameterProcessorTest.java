@@ -210,17 +210,19 @@ class ModelParameterProcessorTest {
     }
 
     /**
-     * #8700: a required single flag's refusal names the flag and is translated like a check's; the
-     * entity is marked, so the repository and the REST deletes render the guard, and an entity without
-     * one is not.
+     * #8700: a required single flag's refusal is the shared {@code fieldSingleRequired} sentence,
+     * naming the flag by its label's catalog key like the other field refusals; the entity is marked,
+     * so the repository and the REST deletes render the guard. The sentence reaches the en-US catalog
+     * only for a model declaring such a flag.
      */
     @Test
-    void requiredSingleFlagRefusalBecomesACatalogKey() {
+    void requiredSingleFlagRefusalNamesTheFlagByItsLabel() {
         Map<String, Object> required = new LinkedHashMap<>();
         required.put("property", "Base");
         required.put("required", "true");
-        required.put("requiredMessage", "One Currency must stay Base - mark another one Base first");
-        Map<String, Object> currency = entity("Currency", "Currencies", property("Id", "INTEGER"));
+        Map<String, Object> base = property("Base", "BOOLEAN");
+        base.put("dataName", "CURRENCY_BASE");
+        Map<String, Object> currency = entity("Currency", "Currencies", property("Id", "INTEGER"), base);
         currency.put("singleFlags", List.of(required));
         Map<String, Object> plain = entity("Country", "Countries", property("Id", "INTEGER"));
         plain.put("singleFlags", List.of(new LinkedHashMap<>(Map.of("property", "Base"))));
@@ -230,12 +232,13 @@ class ModelParameterProcessorTest {
 
         ModelParameterProcessor.process(model, parameters);
 
-        assertEquals("\"Base\", \"bookstore:billing-model.checks.Currency_singleRequired_Base\", "
-                + "\"One Currency must stay Base - mark another one Base first\"", required.get("requiredRefusalArgsJava"));
+        assertEquals("\"Base\", \"Base\", \"bookstore:billing-model.t.CURRENCY_BASE\"", required.get("requiredRefusalArgsJava"));
         assertEquals(Boolean.TRUE, currency.get("hasRequiredSingleFlags"));
         assertFalse(plain.containsKey("hasRequiredSingleFlags"));
-        assertEquals("One Currency must stay Base - mark another one Base first", ModelTranslations.checkMessages(model)
-                                                                                                   .get("Currency_singleRequired_Base"));
+        assertEquals("One {entity} must stay '{label}' - mark another one '{label}' first", ModelTranslations.checkMessages(model)
+                                                                                                             .get("fieldSingleRequired"));
+        assertFalse(ModelTranslations.checkMessages(model(plain))
+                                     .containsKey("fieldSingleRequired"));
     }
 
     /**

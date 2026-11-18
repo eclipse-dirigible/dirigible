@@ -14,8 +14,9 @@ import java.util.Map;
 /**
  * Builds the refusals a generated controller answers a value of one property with - a required
  * value left out, a text longer than its column, a value off its pattern, a value another record
- * already holds under a {@code unique: true} - their messages resolved for the language of the
- * request exactly as a generated check's are, see {@link CheckMessages} (dirigible #8596).
+ * already holds under a {@code unique: true}, a required single flag left without a holder - their
+ * messages resolved for the language of the request exactly as a generated check's are, see
+ * {@link CheckMessages} (dirigible #8596).
  *
  * <p>
  * Each sentence is an entry of the entity's model catalog, under {@code <catalog>.checks.<key>},
@@ -56,6 +57,18 @@ public final class FieldRefusals {
      * The default-language sentence refusing a repeated unique value: {@code {entity}} is the entity's.
      */
     public static final String DUPLICATE_TEXT = "A {entity} with this '{label}' already exists";
+
+    /**
+     * The key, under a catalog's {@code checks}, of the sentence refusing to leave a {@code single: {
+     * required: true }} flag without a holder.
+     */
+    public static final String SINGLE_REQUIRED_KEY = "fieldSingleRequired";
+
+    /**
+     * The default-language sentence refusing to leave a required single flag without a holder:
+     * {@code {entity}} is the entity's label, {@code {label}} the flag's (dirigible #8700).
+     */
+    public static final String SINGLE_REQUIRED_TEXT = "One {entity} must stay '{label}' - mark another one '{label}' first";
 
     private FieldRefusals() {}
 
@@ -153,6 +166,32 @@ public final class FieldRefusals {
     static ValidationException duplicate(String language, CheckMessages.CatalogReader catalogs, String catalog, String entityLabel,
             String entityLabelKey, String field, String label, String labelKey) {
         return refusal(language, catalogs, catalog, DUPLICATE_KEY, DUPLICATE_TEXT, field, label, labelKey, "entity",
+                CheckMessages.resolve(language, catalogs, entityLabelKey, entityLabel, Map.of()));
+    }
+
+    /**
+     * The refusal of a write that would leave a {@code single: { required: true }} flag held by no row
+     * of its scope - its holder un-flagged, moved out of the scope or deleted while other rows remain
+     * (dirigible #8700).
+     *
+     * @param catalog the entity's model catalog ({@code <project>:<catalog prefix>}), or {@code null}
+     * @param entityLabel the entity's default-language label
+     * @param entityLabelKey the fully qualified catalog key of that label, or {@code null}
+     * @param field the flag's property
+     * @param label the flag's default-language label
+     * @param labelKey the fully qualified catalog key of that label, or {@code null}
+     * @return the exception to throw - mapped to HTTP 400 carrying the key, the parameters and the
+     *         field
+     */
+    public static ValidationException singleRequired(String catalog, String entityLabel, String entityLabelKey, String field, String label,
+            String labelKey) {
+        return singleRequired(CheckMessages.language(), CheckMessages::readCatalog, catalog, entityLabel, entityLabelKey, field, label,
+                labelKey);
+    }
+
+    static ValidationException singleRequired(String language, CheckMessages.CatalogReader catalogs, String catalog, String entityLabel,
+            String entityLabelKey, String field, String label, String labelKey) {
+        return refusal(language, catalogs, catalog, SINGLE_REQUIRED_KEY, SINGLE_REQUIRED_TEXT, field, label, labelKey, "entity",
                 CheckMessages.resolve(language, catalogs, entityLabelKey, entityLabel, Map.of()));
     }
 

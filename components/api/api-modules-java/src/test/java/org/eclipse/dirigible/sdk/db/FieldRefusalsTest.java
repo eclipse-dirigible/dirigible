@@ -26,12 +26,15 @@ class FieldRefusalsTest {
     private static final String CATALOG = "uoms:uoms-model";
     private static final String UOM_LABEL_KEY = CATALOG + ".t.UOM";
     private static final String SAP_LABEL_KEY = CATALOG + ".t.UOM_SAP";
+    private static final String BASE_LABEL_KEY = CATALOG + ".t.UOM_BASE";
 
     private static final Map<String, String> BG = Map.of( //
             CATALOG + ".checks.fieldRequired", "Полето '{label}' е задължително", //
             CATALOG + ".checks.fieldTooLong", "Полето '{label}' е по-дълго от {length} знака", //
             CATALOG + ".checks.fieldDuplicate", "Вече съществува {entity} с това '{label}'", //
             CATALOG + ".checks.UoM_pattern_Sap", "{label}: три главни латински букви", //
+            CATALOG + ".checks.fieldSingleRequired", "Поне една {entity} трябва да е '{label}' - първо отбележете друга като '{label}'", //
+            BASE_LABEL_KEY, "Основна", //
             UOM_LABEL_KEY, "мерна единица", //
             SAP_LABEL_KEY, "САП код");
 
@@ -67,6 +70,22 @@ class FieldRefusalsTest {
         assertEquals("Sap", refusal.getField());
         assertEquals("A UoM with this 'SAP Code' already exists",
                 FieldRefusals.duplicate(null, CATALOGS, CATALOG, "UoM", UOM_LABEL_KEY, "Sap", "SAP Code", SAP_LABEL_KEY)
+                             .getMessage());
+    }
+
+    /**
+     * dirigible #8700: a required single flag left without a holder, named by the translated labels.
+     */
+    @Test
+    void aRequiredSingleFlagLeftWithoutAHolderNamesTheEntityAndTheFlagByTheirTranslatedLabels() {
+        ValidationException refusal =
+                FieldRefusals.singleRequired("bg", CATALOGS, CATALOG, "UoM", UOM_LABEL_KEY, "Base", "Base", BASE_LABEL_KEY);
+
+        assertEquals("Поне една мерна единица трябва да е 'Основна' - първо отбележете друга като 'Основна'", refusal.getMessage());
+        assertEquals(CATALOG + ".checks.fieldSingleRequired", refusal.getMessageKey());
+        assertEquals("Base", refusal.getField());
+        assertEquals("One UoM must stay 'Base' - mark another one 'Base' first",
+                FieldRefusals.singleRequired(null, CATALOGS, CATALOG, "UoM", UOM_LABEL_KEY, "Base", "Base", BASE_LABEL_KEY)
                              .getMessage());
     }
 

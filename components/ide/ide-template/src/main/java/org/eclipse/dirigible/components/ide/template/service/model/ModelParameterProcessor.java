@@ -149,7 +149,7 @@ final class ModelParameterProcessor {
         for (Map<String, Object> flag : asMaps(entity.get("singleFlags"))) {
             // A refusing single flag's conflict message (#8101), resolved for the reader's language.
             resolveMessageCatalog(flag, ModelTranslations.singleFlagMessageKey(entity, flag), parameters);
-            resolveSingleFlagRequiredMessage(entity, flag, parameters);
+            resolveSingleFlagRequired(entity, flag);
         }
         resolveSlotRules(entity, parameters);
         resolveLifecycleStatusNames(entity);
@@ -508,26 +508,28 @@ final class ModelParameterProcessor {
 
     /**
      * Hands a required single flag (#8700) the arguments of its refusal:
-     * {@code requiredRefusalArgsJava} is the flag's property (the field the refusal names), the catalog
-     * key the en-US catalog writes {@code requiredMessage} under and the default-language text. The
-     * entity is marked {@code hasRequiredSingleFlags}, which the repository and the REST deletes are
-     * rendered on.
+     * {@code requiredRefusalArgsJava} is the flag property's {@code refusalFieldArgsJava} - its name,
+     * its label and the label's catalog key - so the shared {@code fieldSingleRequired} sentence names
+     * the flag, like the entity, by its label in the reader's language. The entity is marked
+     * {@code hasRequiredSingleFlags}, which the repository and the REST deletes are rendered on.
      *
-     * @param entity the entity
+     * @param entity the entity, its properties' refusal arguments already resolved
      * @param flag the single flag
-     * @param parameters the generation parameters (project name and model file path)
      */
-    private static void resolveSingleFlagRequiredMessage(Map<String, Object> entity, Map<String, Object> flag,
-            Map<String, Object> parameters) {
-        String message = str(flag, "requiredMessage");
-        if (message == null) {
+    private static void resolveSingleFlagRequired(Map<String, Object> entity, Map<String, Object> flag) {
+        if (!"true".equals(str(flag, "required"))) {
             return;
         }
         entity.put("hasRequiredSingleFlags", Boolean.TRUE);
-        String catalogKey = ModelTranslations.catalogKey(parameters,
-                ModelTranslations.CHECKS_CATALOG + "." + ModelTranslations.singleFlagRequiredMessageKey(entity, flag));
-        flag.put("requiredRefusalArgsJava", "\"" + JavaLiterals.escape(str(flag, "property")) + "\", \"" + JavaLiterals.escape(catalogKey)
-                + "\", \"" + JavaLiterals.escape(message) + "\"");
+        String property = str(flag, "property");
+        String args = asMaps(entity.get("properties")).stream()
+                                                      .filter(candidate -> property.equals(str(candidate, "name")))
+                                                      .map(candidate -> str(candidate, "refusalFieldArgsJava"))
+                                                      .filter(Objects::nonNull)
+                                                      .findFirst()
+                                                      .orElse("\"" + JavaLiterals.escape(property) + "\", \""
+                                                              + JavaLiterals.escape(property) + "\", null");
+        flag.put("requiredRefusalArgsJava", args);
     }
 
     /**

@@ -12,6 +12,7 @@ package org.eclipse.dirigible.integration.tests.api;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
@@ -3124,18 +3125,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
      */
     private void assertRequiredSingleFlagsRuntime() {
         String denominations = "/denomination/DenominationController";
-        String refusal = "One Denomination must stay Base - mark another one Base first";
         int unflagged = createRecord(denominations, "{\"Code\":\"USD\",\"Base\":false}");
         int euro = createRecord(denominations, "{\"Code\":\"EUR\",\"Base\":true}");
         assertBaseFlagRefused(() -> given().contentType("application/json")
                                            .body("{\"Id\":" + euro + ",\"Code\":\"EUR\",\"Base\":false}")
                                            .when()
-                                           .put(API + denominations + "/" + euro),
-                refusal);
+                                           .put(API + denominations + "/" + euro));
         assertEquals(Boolean.TRUE, readRecord(denominations, euro).get("Base"), "a refused un-flag is not written");
         assertBaseFlagRefused(() -> given().when()
-                                           .delete(API + denominations + "/" + euro),
-                refusal);
+                                           .delete(API + denominations + "/" + euro));
         updateRecord(denominations, unflagged, "{\"Id\":" + unflagged + ",\"Code\":\"USD\",\"Base\":true}", 200);
         assertEquals(Boolean.FALSE, readRecord(denominations, euro).get("Base"), "taking the flag still demotes its holder");
         restAssuredExecutor.execute(() -> given().when()
@@ -3144,18 +3142,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(200));
 
         String tills = "/till/TillController";
-        String tillRefusal = "One Till must stay Base for each Denomination - mark another one Base first";
         int front = createRecord(tills, "{\"Label\":\"front\",\"Denomination\":" + unflagged + ",\"Base\":true}");
         int back = createRecord(tills, "{\"Label\":\"back\",\"Denomination\":" + unflagged + ",\"Base\":false}");
         assertBaseFlagRefused(() -> given().contentType("application/json")
                                            .body("{\"Id\":" + front + ",\"Label\":\"front\",\"Denomination\":" + unflagged
                                                    + ",\"Base\":false}")
                                            .when()
-                                           .put(API + tills + "/" + front),
-                tillRefusal);
+                                           .put(API + tills + "/" + front));
         assertBaseFlagRefused(() -> given().when()
-                                           .delete(API + tills + "/" + front),
-                tillRefusal);
+                                           .delete(API + tills + "/" + front));
         int other = createRecord(denominations, "{\"Code\":\"BGN\",\"Base\":false}");
         int lone = createRecord(tills, "{\"Label\":\"lone\",\"Denomination\":" + other + ",\"Base\":true}");
         restAssuredExecutor.execute(() -> given().when()
@@ -3172,12 +3167,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(200));
     }
 
-    /** Asserts a write is refused 400 naming the {@code Base} field, with the given message. */
-    private void assertBaseFlagRefused(Supplier<Response> write, String message) {
+    /**
+     * Asserts a write is refused 400 with the shared, translatable {@code fieldSingleRequired}
+     * sentence, naming the {@code Base} field.
+     */
+    private void assertBaseFlagRefused(Supplier<Response> write) {
         restAssuredExecutor.execute(() -> write.get()
                                                .then()
                                                .statusCode(400)
-                                               .body("message", containsString(message))
+                                               .body("message", containsString("must stay 'Base'"))
+                                               .body("messageKey", endsWith(".checks.fieldSingleRequired"))
                                                .body("field", equalTo("Base")));
     }
 

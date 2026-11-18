@@ -4067,12 +4067,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
 
     /**
      * The single flags ({@code single:}, #8101) the generated repository keeps at one holder per scope:
-     * {@code singleFlags} lists one {@code { property, per, refuse, message, required, requiredMessage
-     * }} per flagged boolean, {@code per} (the scoping relation's FK property) only when scoped,
-     * {@code refuse} with its conflict {@code message} only for {@code onConflict: refuse} and
-     * {@code required} with the refusal of giving the flag up ({@code requiredMessage}) only for
-     * {@code required: true} (#8700). Absent when no field declares one, so a model without the key
-     * generates byte-identically.
+     * {@code singleFlags} lists one {@code { property, per, refuse, message, required }} per flagged
+     * boolean, {@code per} (the scoping relation's FK property) only when scoped, {@code refuse} with
+     * its conflict {@code message} only for {@code onConflict: refuse} and {@code required} only for
+     * {@code required: true} (#8700) - whose refusal is the shared {@code fieldSingleRequired}
+     * sentence, naming the entity and the flag by their catalog labels. Absent when no field declares
+     * one, so a model without the key generates byte-identically.
      */
     private static void putSingleFlags(Map<String, Object> entityMap, EntityIntent entity) {
         List<Map<String, Object>> flags = new ArrayList<>();
@@ -4095,10 +4095,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             if (single.isRequired()) {
                 flag.put("required", "true");
-                flag.put("requiredMessage",
-                        "One " + IntentNaming.humanize(entity.getName()) + " must stay " + IntentNaming.humanize(field.getName())
-                                + (per == null ? "" : " for each " + IntentNaming.humanize(per.getName())) + " - mark another one "
-                                + IntentNaming.humanize(field.getName()) + " first");
             }
             flags.add(flag);
         }

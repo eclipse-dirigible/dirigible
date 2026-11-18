@@ -133,6 +133,15 @@ final class ModelTranslations {
             Map.entry("fieldDuplicate", "A {entity} with this '{label}' already exists"));
 
     /**
+     * The default-language text of the refusal to leave a {@code single: { required: true }} flag
+     * without a holder (dirigible #8700), by its key under the catalog's {@code checks}: the one
+     * {@code org.eclipse.dirigible.sdk.db.FieldRefusals} falls back to, written into the en-US catalog
+     * of a model that declares such a flag, for a translator to copy into another language's.
+     */
+    static final Map.Entry<String, String> SINGLE_REQUIRED_MESSAGE =
+            Map.entry("fieldSingleRequired", "One {entity} must stay '{label}' - mark another one '{label}' first");
+
+    /**
      * The default-language texts of a create-from's refusals (dirigible #8646) - a source the report it
      * reads cannot be run for, no row qualifying, a refused target line's source row, a report value
      * the target cannot hold - by their key under the catalog's {@code checks}. They are the ones
@@ -196,17 +205,6 @@ final class ModelTranslations {
      */
     static String singleFlagMessageKey(Map<String, Object> entity, Map<String, Object> flag) {
         return str(entity, "name") + "_single_" + str(flag, "property");
-    }
-
-    /**
-     * The catalog key of a required single flag's refusal to give the flag up (issue #8700).
-     *
-     * @param entity the entity
-     * @param flag the single flag
-     * @return the key, relative to the catalog's {@code checks} sub-object
-     */
-    static String singleFlagRequiredMessageKey(Map<String, Object> entity, Map<String, Object> flag) {
-        return str(entity, "name") + "_singleRequired_" + str(flag, "property");
     }
 
     /**
@@ -501,6 +499,9 @@ final class ModelTranslations {
         if (!entities.isEmpty()) {
             DELETE_REFUSAL_MESSAGES.forEach(message -> messages.put(message.getKey(), message.getValue()));
             FIELD_REFUSAL_MESSAGES.forEach(message -> messages.put(message.getKey(), message.getValue()));
+            if (hasRequiredSingleFlag(entities)) {
+                messages.put(SINGLE_REQUIRED_MESSAGE.getKey(), SINGLE_REQUIRED_MESSAGE.getValue());
+            }
             GENERATE_REFUSAL_MESSAGES.forEach(message -> messages.put(message.getKey(), message.getValue()));
         }
         // A create-from's authored refusal sentences (#8646), keyed by the intent.
@@ -527,10 +528,6 @@ final class ModelTranslations {
                 String message = str(flag, "message");
                 if (message != null && !message.isBlank()) {
                     messages.put(singleFlagMessageKey(entity, flag), message);
-                }
-                String requiredMessage = str(flag, "requiredMessage");
-                if (requiredMessage != null && !requiredMessage.isBlank()) {
-                    messages.put(singleFlagRequiredMessageKey(entity, flag), requiredMessage);
                 }
             }
             slotMessages(entity).forEach((rule, message) -> messages.put(slotMessageKey(entity, rule), message));
@@ -775,4 +772,11 @@ final class ModelTranslations {
         }
     }
 
+
+    /** Whether an entity of the model declares a {@code single: { required: true }} flag (#8700). */
+    private static boolean hasRequiredSingleFlag(List<Map<String, Object>> entities) {
+        return entities.stream()
+                       .flatMap(entity -> asMaps(entity.get("singleFlags")).stream())
+                       .anyMatch(flag -> "true".equals(str(flag, "required")));
+    }
 }
