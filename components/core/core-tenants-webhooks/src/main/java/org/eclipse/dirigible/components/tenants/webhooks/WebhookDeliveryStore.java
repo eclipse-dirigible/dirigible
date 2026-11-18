@@ -466,12 +466,13 @@ class WebhookDeliveryStore {
     }
 
     /**
-     * Drops every delivery and attempt of the current tenant - deprovisioning.
+     * Drops every delivery and attempt of the current tenant - deprovisioning. A tenant whose data
+     * source was never registered has no schema and so nothing to drop.
      *
      * @throws SQLException if the delete fails
      */
     void deleteAll() throws SQLException {
-        if (!tablesExist()) {
+        if (!dataSourcesManager.isDefaultDataSourceDefined() || !tablesExist()) {
             return;
         }
         try (Connection connection = connection()) {

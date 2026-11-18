@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -78,7 +79,7 @@ record WebhookRetrySchedule(List<Duration> delays, Duration window) {
                     }
                 } catch (NumberFormatException notANumber) {
                     // skipped, as documented: a typo in one delay must not stop every delivery
-                    LOGGER.warn("Ignoring the webhook retry delay [{}] of [{}]: not a number of seconds", part,
+                    LOGGER.warn("Ignoring the webhook retry delay [{}] of [{}]: not a number of seconds", LogSanitizer.sanitize(part),
                             DirigibleConfig.TENANT_WEBHOOKS_RETRY_SCHEDULE_SECONDS.getKey(), notANumber);
                 }
             }

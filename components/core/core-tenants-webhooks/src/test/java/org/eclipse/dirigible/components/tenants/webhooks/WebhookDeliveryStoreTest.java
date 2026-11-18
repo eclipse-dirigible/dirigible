@@ -13,7 +13,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.lang.reflect.InvocationTargetException;
@@ -47,13 +50,16 @@ class WebhookDeliveryStoreTest {
 
     private WebhookDeliveryStore store;
 
+    private DataSourcesManager dataSourcesManager;
+
     @BeforeEach
     void setUp() throws SQLException {
         url = "jdbc:h2:mem:webhooks-" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1";
         DirigibleDataSource dataSource = mock(DirigibleDataSource.class);
         when(dataSource.getConnection()).thenAnswer(invocation -> h2Connection());
-        DataSourcesManager dataSourcesManager = mock(DataSourcesManager.class);
+        dataSourcesManager = mock(DataSourcesManager.class);
         when(dataSourcesManager.getDefaultDataSource()).thenReturn(dataSource);
+        when(dataSourcesManager.isDefaultDataSourceDefined()).thenReturn(true);
         TenantContext tenantContext = mock(TenantContext.class);
         when(tenantContext.isNotInitialized()).thenReturn(true);
         store = new WebhookDeliveryStore(dataSourcesManager, tenantContext);
@@ -145,6 +151,16 @@ class WebhookDeliveryStoreTest {
 
         store.deleteAll();
         assertEquals(List.of(), store.log("s1", 10));
+    }
+
+    @Test
+    void aTenantWithoutADataSourceHasNothingToDropAndIsNotRefused() throws SQLException {
+        clearInvocations(dataSourcesManager);
+        when(dataSourcesManager.isDefaultDataSourceDefined()).thenReturn(false);
+
+        store.deleteAll();
+
+        verify(dataSourcesManager, never()).getDefaultDataSource();
     }
 
     private void insert(String eventId, String subscriptionId) throws SQLException {
