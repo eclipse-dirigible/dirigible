@@ -12,6 +12,7 @@ package org.eclipse.dirigible.integration.tests.api;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
@@ -595,9 +596,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: contactEmail, type: string, length: 320, pattern: '^[^@]+@[^@]+\\.[a-z]{2,}$' }
                   # #7726 normalize: a pasted phone loses its separators BEFORE the strict pattern reads it,
                   # and an IBAN is trimmed, de-spaced and upper-cased (the order of the list is not the
-                  # order of the transforms: trim, strip, case).
+                  # order of the transforms: trim, strip, case). #8302 format: iban then checks the
+                  # normalized value's check digits, not only its shape.
                   - { name: phone, type: string, length: 20, normalize: [strip: " -()"], pattern: '^\\+[1-9][0-9]{6,14}$' }
-                  - { name: iban, type: string, length: 34, normalize: [upper, strip: " ", trim] }
+                  - { name: iban, type: string, length: 34, normalize: [upper, strip: " ", trim], format: iban }
 
               # period is a month field: YYYY-MM string storage, month-picker widget on EVERY
               # writable surface (power + my), a |format label token rendering "2026 July", and
@@ -649,6 +651,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: approved, type: boolean, readOnly: true }
                   # #7718: a `true` default opens checked on the power AND the personal create form.
                   - { name: billable, type: boolean, defaultValue: true }
+                  # #8302: the personal controller checks an IBAN's check digits as the power one does.
+                  - { name: payoutIban, type: string, length: 34, format: iban }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true, personal: true }
                   # a plain dropdown relation: the personal LIST must resolve it to a label (the
@@ -920,6 +924,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: secret,  type: decimal, sensitive: true }
                   # #7718: the partner create form shows the default too.
                   - { name: priority, type: integer, defaultValue: 3 }
+                  # #8302: the partner controller checks an IBAN's check digits too.
+                  - { name: refundIban, type: string, length: 34, format: iban }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true, partner: true }
                   # #7496: the partner form builds its options apart from the others, so it carries a rule too.
@@ -7077,6 +7083,26 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(API + "/person/PersonController")
                                                  .then()
                                                  .statusCode(400));
+        // #8302 format: iban - the pasted form of the same account with check digits that cannot hold
+        // is normalized, matches the shape, and is still refused, naming the field, on a create and on
+        // an update; the stored valid IBAN is kept.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Name\":\"Checksum\",\"Email\":\"p5@example.com\",\"Iban\":\" bg00 bnbg 9661 1020 3456 78 \"}")
+                                                 .when()
+                                                 .post(API + "/person/PersonController")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("field", equalTo("Iban"))
+                                                 .body("messageKey", endsWith(".checks.fieldIban"))
+                                                 .body("message", equalTo("The value of 'Iban' is not a valid IBAN")));
+        updateRecord("/person/PersonController", normalizedPerson,
+                "{\"Id\":" + normalizedPerson + ",\"Name\":\"Pasted\",\"Email\":\"p3@example.com\",\"Iban\":\"BG81BNBG96611020345678\"}",
+                400);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/person/PersonController/" + normalizedPerson)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Iban", equalTo("BG80BNBG96611020345678")));
 
         // leafOnly: Account 1 has a child, so referencing it must be rejected server-side.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
@@ -8222,6 +8248,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .put(API + "/claim/ClaimMyController/1")
                                                  .then()
                                                  .statusCode(200));
+        // #8302: the personal controller refuses an IBAN whose check digits fail, as the power one does.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Note\":\"edited\",\"PayoutIban\":\"BG00BNBG96611020345678\"}")
+                                                 .when()
+                                                 .put(API + "/claim/ClaimMyController/1")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("field", equalTo("PayoutIban")));
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(API + "/claim/ClaimController/1")
                                                  .then()

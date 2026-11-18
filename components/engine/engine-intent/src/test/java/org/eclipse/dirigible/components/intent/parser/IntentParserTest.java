@@ -3309,12 +3309,29 @@ class IntentParserTest {
 
     @Test
     void unknownFieldFormatIsRejected() {
-        String yaml = FIELD_FORMAT.replace("format: email", "format: iban");
+        String yaml = FIELD_FORMAT.replace("format: email", "format: ssn");
         IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
         assertTrue(ex.getIssues()
                      .stream()
-                     .anyMatch(i -> i.contains("unknown `format` [iban]")),
+                     .anyMatch(i -> i.contains("unknown `format` [ssn]")),
                 "expected an unknown-format issue, got: " + ex.getIssues());
+    }
+
+    /** `format: iban` (#8302) is a named format of a string field, under the same rules as email. */
+    @Test
+    void fieldFormatIbanParses() {
+        IntentModel model = IntentParser.parse(FIELD_FORMAT.replace("format: email", "format: iban"));
+        assertEquals("iban", model.getEntities()
+                                  .get(0)
+                                  .getFields()
+                                  .get(1)
+                                  .getFormat());
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(
+                FIELD_FORMAT.replace("- { name: age, type: integer }", "- { name: age, type: integer, format: iban }")));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("`format` applies to a string field")),
+                "expected a type restriction issue, got: " + ex.getIssues());
     }
 
     @Test

@@ -182,6 +182,22 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * #8302: the IBAN refusal is a catalog entry only in a model with a {@code format: iban} field, so
+     * every other model's catalog stays as it was.
+     */
+    @Test
+    void ibanRefusalIsACatalogEntryOnlyWhereAFieldIsAnIban() {
+        Map<String, Object> iban = property("Iban", "VARCHAR");
+        iban.put("inputFormat", "IBAN");
+        Map<String, Object> catalog =
+                ModelTranslations.checkMessages(model(entity("Employee", "Employees", property("Id", "INTEGER"), iban)));
+
+        assertEquals("The value of '{label}' is not a valid IBAN", catalog.get("fieldIban"));
+        assertFalse(ModelTranslations.checkMessages(model(entity("Stay", "Stays", property("Id", "INTEGER"))))
+                                     .containsKey("fieldIban"));
+    }
+
+    /**
      * #8101: a refusing single flag's conflict message is translated like a check's, and a demoting
      * flag, which refuses nothing, has no message to translate.
      */

@@ -8604,8 +8604,11 @@ public final class IntentParser {
         }
     }
 
-    /** The named field formats (#6463). A preset over `pattern`, so each maps to a canonical regex. */
-    private static final Set<String> FIELD_FORMATS = Set.of("email");
+    /**
+     * The named field formats (#6463). A preset over `pattern`, so each maps to a canonical regex -
+     * {@code iban} (#8302) also to the check of its check digits, which no regex can express.
+     */
+    private static final Set<String> FIELD_FORMATS = Set.of("email", "iban");
 
     /** The ISO 3166-1 alpha-2 codes a field's {@code countryLabels} may be keyed by. */
     private static final Set<String> ISO_COUNTRIES = Set.of(Locale.getISOCountries());

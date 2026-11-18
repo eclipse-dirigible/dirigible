@@ -420,6 +420,11 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
             if ("string".equals(out.get("type")) && property != null && !string(property.get("widgetPattern")).isBlank()) {
                 out.put("pattern", string(property.get("widgetPattern")));
             }
+            // format: iban (#8302): a value of that shape is still refused unless its check digits hold,
+            // so the runner has to build a real IBAN rather than a sample of the pattern.
+            if ("iban".equalsIgnoreCase(field.getFormat())) {
+                out.put("format", "iban");
+            }
             out.put("major", field.isMajor());
             fields.add(out);
         }

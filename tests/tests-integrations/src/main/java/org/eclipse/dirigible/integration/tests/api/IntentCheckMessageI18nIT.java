@@ -89,6 +89,7 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
                   - { name: name,     type: string, length: 100 }
                   - { name: discount, type: decimal, precision: 18, scale: 2 }
                   - { name: credit,   type: decimal, precision: 18, scale: 2 }
+                  - { name: iban,     type: string, length: 34, format: iban }
 
               - name: Invoice
                 checks:
@@ -155,7 +156,7 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
      * The refusals of one property's value - a required value left out, a too long one, a repeated
      * unique one - are translated like a check's, naming the field and the entity by their translated
      * labels, and every refusal about one field (a {@code compare} too) names it in the body -
-     * dirigible #8596, #8597.
+     * dirigible #8596, #8597. An IBAN whose check digits fail is one of them (#8302).
      */
     @Test
     void field_refusals_are_answered_in_the_request_language_and_name_their_field() {
@@ -166,6 +167,8 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
                                                                  .getAsString());
         assertEquals("A {entity} with this '{label}' already exists", checks.get("fieldDuplicate")
                                                                             .getAsString());
+        assertEquals("The value of '{label}' is not a valid IBAN", checks.get("fieldIban")
+                                                                         .getAsString());
         String sapKey = textKey(generated, "SAP Code");
         String uomKey = entityKey(generated, "UOM");
         String uomLabel = generated.getAsJsonObject("t")
@@ -178,7 +181,8 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
                   "checkmsg-model": {
                     "checks": {
                       "fieldRequired": "Полето '{label}' е задължително",
-                      "fieldDuplicate": "Вече съществува {entity} с това '{label}'"
+                      "fieldDuplicate": "Вече съществува {entity} с това '{label}'",
+                      "fieldIban": "Стойността на '{label}' не е валиден IBAN"
                     },
                     "t": { "%s": "САП код", "%s": "мерна единица" }
                   }
@@ -196,6 +200,14 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
         // A compare about one field names it, so the form marks it (#8597).
         refused(UOMS, "{\"Sap\":\"M\",\"Numerator\":0}", "bg", 400).body("message", equalTo("The numerator is greater than zero"))
                                                                    .body("field", equalTo("Numerator"));
+
+        // An IBAN of the right shape whose check digits fail (#8302).
+        refused(CUSTOMERS, "{\"Name\":\"Iban\",\"Iban\":\"BG00BNBG96611020345678\"}", "bg", 400).body("message",
+                equalTo("Стойността на 'Iban' не е валиден IBAN"))
+                                                                                                .body("messageKey",
+                                                                                                        equalTo(CATALOG + "fieldIban"))
+                                                                                                .body("field", equalTo("Iban"));
+        create(CUSTOMERS, "{\"Name\":\"Iban\",\"Iban\":\"BG80BNBG96611020345678\"}", null, "en");
 
         create(UOMS, "{\"Sap\":\"KG\",\"Numerator\":1}", null, "en");
         refused(UOMS, "{\"Sap\":\"KG\",\"Numerator\":1}", "bg", 409)

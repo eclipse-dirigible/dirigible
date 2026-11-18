@@ -1128,7 +1128,13 @@ public class ${name}PartnerController {
             throw org.eclipse.dirigible.sdk.db.FieldRefusals.tooLong(${refusalCatalog}, ${refusalField}, ${property.dataLength});
         }
 #end
-#if($property.widgetPattern && $property.widgetPattern != "")
+#if($property.inputFormat == "IBAN")
+## format: iban (#8302): the shape AND the ISO 7064 check digits, which a regex cannot check - so a
+## value whose check digits fail is refused like one off the shape, and blank is "no value" as above.
+        if (entity.${property.name} != null#if($property.isRequiredProperty != "true") && !entity.${property.name}.isBlank()#end && !org.eclipse.dirigible.sdk.db.FieldFormats.isIban(entity.${property.name})) {
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.iban(${refusalCatalog}, ${refusalField});
+        }
+#elseif($property.widgetPattern && $property.widgetPattern != "")
 ## A format constraint describes what a value must look like WHEN THERE IS ONE - on an OPTIONAL
 ## property a blank string is "no value", exactly as on the power surface.
         if (entity.${property.name} != null#if($property.isRequiredProperty != "true") && !entity.${property.name}.toString().isBlank()#end && !entity.${property.name}.toString().matches("${property.widgetPatternJava}")) {
