@@ -39,9 +39,11 @@ import gen.${javaGenFolderName}.data.${javaTargetPerspective}.${targetEntity}Rep
  * it is re-generated with the application. Runs
  * as a BPMN service task (flowable:delegateExpression="\${JavaTask}"): it persists the change as a
 #if($assignments)
- * TARGETED write (updateProperties) - only the members set are in the UPDATE statement, so a
+ * TARGETED write (updateAuthored) - only the members set and the record's update-audit columns are in
+ * the UPDATE statement, so a
 #else
- * TARGETED single-column write (updateProperty) - only ${field} is in the UPDATE statement, so a
+ * TARGETED single-column write (updateAuthored) - only ${field} and the record's update-audit columns
+ * are in the UPDATE statement, so a
 #end
  * concurrent write to any other column of the row (a recalculated total, a minted document number,
  * the trigger's ProcessId) cannot be reverted, unlike the load-then-full-row-merge shape this
@@ -132,28 +134,28 @@ public class ${className} implements JavaDelegate {
         values.put("${assignment.field}", ${assignment.expression});
 #end
 #end
-        int updated = ${writeRepository}.updateProperties(${writeKey}, values);
+        int updated = ${writeRepository}.updateAuthored(${writeKey}, values);
 #elseif($relation == "true")
 #if($heldByRollup)
-        int updated = ${writeRepository}.updateProperty(${writeKey}, statusColumn, ${value});
+        int updated = ${writeRepository}.updateAuthored(${writeKey}, java.util.Collections.singletonMap(statusColumn, ${value}));
 #else
-        int updated = ${writeRepository}.updateProperty(${writeKey}, "${field}", ${value});
+        int updated = ${writeRepository}.updateAuthored(${writeKey}, java.util.Collections.singletonMap("${field}", ${value}));
 #end
 #elseif($clear == "true")
         // clearField: the erasure twin of setField - the column goes back to empty, so a re-driven
         // instance that now succeeds does not leave the previous failure's explanation standing.
-        int updated = ${writeRepository}.updateProperty(${writeKey}, "${field}", null);
+        int updated = ${writeRepository}.updateAuthored(${writeKey}, java.util.Collections.singletonMap("${field}", null));
 #elseif($now == "true")
         // The {now} value: the moment the flow reached this step, recorded when it happened.
-        int updated = ${writeRepository}.updateProperty(${writeKey}, "${field}", ${nowExpression});
+        int updated = ${writeRepository}.updateAuthored(${writeKey}, java.util.Collections.singletonMap("${field}", ${nowExpression}));
 #elseif($errorMessage == "true")
         // The {error} value: the failure message the resilience conversion published just before it
         // raised the caught BPMN error that routed the flow here (empty when nothing published it).
         Object errorMessage = execution.getVariable("__errorMessage");
-        int updated = ${writeRepository}.updateProperty(${writeKey}, "${field}",
-                errorMessage == null ? "" : errorMessage.toString());
+        int updated = ${writeRepository}.updateAuthored(${writeKey}, java.util.Collections.singletonMap("${field}",
+                errorMessage == null ? "" : errorMessage.toString()));
 #else
-        int updated = ${writeRepository}.updateProperty(${writeKey}, "${field}", "${valueJavaLiteral}");
+        int updated = ${writeRepository}.updateAuthored(${writeKey}, java.util.Collections.singletonMap("${field}", "${valueJavaLiteral}"));
 #end
         if (updated == 0) {
             return;

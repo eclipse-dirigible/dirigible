@@ -5747,8 +5747,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(transition.contains("currentStatus == 1"), "transitions must emit the allowed-statuses guard");
         assertTrue(transition.contains("Calc.eval(\"Paid\", source, 6)"), "the when guard must emit a Calc comparison");
         assertTrue(transition.contains("Response.setStatus(409)"), "a failed guard must surface as 409");
-        assertTrue(transition.contains("repository.updateProperties(req.id, java.util.Map.of("),
-                "the status flip must be the targeted write, touching only the status column");
+        assertTrue(transition.contains("repository.updateAuthored(req.id, java.util.Map.of("),
+                "the status flip must be the targeted authored write, touching only the status and audit columns");
         assertTrue(transition.contains("-transitioned\");"),
                 "the -transitioned notice must ride the targeted write into the outbox, so flip and announcement commit together");
         assertFalse(transition.contains("Producer.sendToTopic"),

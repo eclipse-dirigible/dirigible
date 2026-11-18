@@ -38,8 +38,8 @@ import org.eclipse.dirigible.sdk.utils.Json;
  * Transition ${name}: the guarded on-demand status flip on a ${entity} (loaded by the id in the
  * posted body). The record must currently be in one of the allowed statuses [${fromStatuses}]#if($guardExpr != "")
  * and satisfy the guard [${guardText}]#end; otherwise 409 and the record stays untouched. On success
- * ONLY the status column is written - through the targeted updateProperties primitive, a
- * workflow-style system write (no "-updated" re-fire; a full-row update would merge the stale
+ * ONLY the status column is written, with the record's UpdatedAt / UpdatedBy when it has them - through
+ * the targeted updateAuthored primitive (no "-updated" re-fire; a full-row update would merge the stale
  * pre-check snapshot and revert concurrent writes) - and the "-transitioned" notice rides that write
  * into the outbox, so the flip and its announcement commit together and posting glue / integrations
  * can never miss a transition whose row is durable.
@@ -166,10 +166,10 @@ public class ${controllerClass} {
 #end
             }
 #end
-            return repository.updateProperties(req.id, values, "${projectName}-${perspective}-${entity}-transitioned");
+            return repository.updateAuthored(req.id, values, "${projectName}-${perspective}-${entity}-transitioned");
         });
 #else
-        repository.updateProperties(req.id, java.util.Map.of("${statusProperty}", ${setStatus}),
+        repository.updateAuthored(req.id, java.util.Map.of("${statusProperty}", ${setStatus}),
                 "${projectName}-${perspective}-${entity}-transitioned");
 #end
         // Reload so the response (and the notify block) carries the committed row, not the pre-check snapshot.

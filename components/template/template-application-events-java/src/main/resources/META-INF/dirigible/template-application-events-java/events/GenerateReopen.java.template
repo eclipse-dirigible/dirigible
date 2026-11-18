@@ -100,7 +100,7 @@ public class ${className}GenerateReopen implements MessageHandler {
                 return;
             }
         }
-        sourceRepository.updateProperties(target.${backRefProperty},
+        sourceRepository.updateAuthored(target.${backRefProperty},
                 java.util.Map.of("${sourceStatusProperty}", ${reopenStatusValue}),
                 "${fromProjectName}-${fromPerspective}-${fromEntity}-transitioned");
         LOG.info("Generate ${name}: ${toEntity} [{}] was retired - ${fromEntity} [{}] returned to status ${reopenStatusValue}",

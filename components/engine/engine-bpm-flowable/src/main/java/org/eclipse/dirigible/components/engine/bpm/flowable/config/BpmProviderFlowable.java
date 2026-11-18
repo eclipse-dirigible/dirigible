@@ -106,6 +106,12 @@ public class BpmProviderFlowable implements BpmProvider {
     public static final String COMPLETED_BY_PREFIX = "__completedBy_";
 
     /**
+     * The process variable a completion through {@code BpmService} records its user in, whichever task
+     * it completed: the user the steps that follow act for, on the job executor too (issue #8690).
+     */
+    public static final String LAST_COMPLETED_BY = "__lastCompletedBy";
+
+    /**
      * The reserved {@code taskSeparateFrom} name for the record's owner, kept out of a task even when
      * no task before it was theirs (issue #8560).
      */

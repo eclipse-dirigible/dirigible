@@ -649,14 +649,14 @@ public class ${className}Generate {
                 LOG.info("Generate ${name}: ${fromEntity} [{}] moved on to status [{}] before the create-from ran - left there,"
                         + " not flipped to ${sourceStatusValue}", sourceId, source.${sourceStatusProperty});
             } else {
-                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().updateProperties(sourceId,
+                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().updateAuthored(sourceId,
                         java.util.Map.of("${sourceStatusProperty}", ${sourceStatusValue}),
                         "${fromProjectName}-${fromPerspective}-${fromEntity}-transitioned");
             }
     #else
             gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository sourceRepository =
                     new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository();
-            sourceRepository.updateProperties(sourceId, java.util.Map.of("${sourceStatusProperty}", ${sourceStatusValue}),
+            sourceRepository.updateAuthored(sourceId, java.util.Map.of("${sourceStatusProperty}", ${sourceStatusValue}),
                     "${fromProjectName}-${fromPerspective}-${fromEntity}-transitioned");
     #end
     #end
