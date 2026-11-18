@@ -149,6 +149,7 @@ final class ModelParameterProcessor {
         for (Map<String, Object> flag : asMaps(entity.get("singleFlags"))) {
             // A refusing single flag's conflict message (#8101), resolved for the reader's language.
             resolveMessageCatalog(flag, ModelTranslations.singleFlagMessageKey(entity, flag), parameters);
+            resolveSingleFlagRequiredMessage(entity, flag, parameters);
         }
         resolveSlotRules(entity, parameters);
         resolveLifecycleStatusNames(entity);
@@ -503,6 +504,30 @@ final class ModelParameterProcessor {
         check.put("messageCatalogKey", catalogKey);
         check.put("messageCatalogKeyJavaLiteral", JavaLiterals.escape(catalogKey));
         check.put("messageArgsJava", "\"" + JavaLiterals.escape(catalogKey) + "\", \"" + JavaLiterals.escape(message) + "\"");
+    }
+
+    /**
+     * Hands a required single flag (#8700) the arguments of its refusal:
+     * {@code requiredRefusalArgsJava} is the flag's property (the field the refusal names), the catalog
+     * key the en-US catalog writes {@code requiredMessage} under and the default-language text. The
+     * entity is marked {@code hasRequiredSingleFlags}, which the repository and the REST deletes are
+     * rendered on.
+     *
+     * @param entity the entity
+     * @param flag the single flag
+     * @param parameters the generation parameters (project name and model file path)
+     */
+    private static void resolveSingleFlagRequiredMessage(Map<String, Object> entity, Map<String, Object> flag,
+            Map<String, Object> parameters) {
+        String message = str(flag, "requiredMessage");
+        if (message == null) {
+            return;
+        }
+        entity.put("hasRequiredSingleFlags", Boolean.TRUE);
+        String catalogKey = ModelTranslations.catalogKey(parameters,
+                ModelTranslations.CHECKS_CATALOG + "." + ModelTranslations.singleFlagRequiredMessageKey(entity, flag));
+        flag.put("requiredRefusalArgsJava", "\"" + JavaLiterals.escape(str(flag, "property")) + "\", \"" + JavaLiterals.escape(catalogKey)
+                + "\", \"" + JavaLiterals.escape(message) + "\"");
     }
 
     /**

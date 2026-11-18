@@ -210,6 +210,35 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * #8700: a required single flag's refusal names the flag and is translated like a check's; the
+     * entity is marked, so the repository and the REST deletes render the guard, and an entity without
+     * one is not.
+     */
+    @Test
+    void requiredSingleFlagRefusalBecomesACatalogKey() {
+        Map<String, Object> required = new LinkedHashMap<>();
+        required.put("property", "Base");
+        required.put("required", "true");
+        required.put("requiredMessage", "One Currency must stay Base - mark another one Base first");
+        Map<String, Object> currency = entity("Currency", "Currencies", property("Id", "INTEGER"));
+        currency.put("singleFlags", List.of(required));
+        Map<String, Object> plain = entity("Country", "Countries", property("Id", "INTEGER"));
+        plain.put("singleFlags", List.of(new LinkedHashMap<>(Map.of("property", "Base"))));
+        Map<String, Object> model = model(currency, plain);
+        Map<String, Object> parameters = parameters();
+        parameters.put("filePath", "billing.model");
+
+        ModelParameterProcessor.process(model, parameters);
+
+        assertEquals("\"Base\", \"bookstore:billing-model.checks.Currency_singleRequired_Base\", "
+                + "\"One Currency must stay Base - mark another one Base first\"", required.get("requiredRefusalArgsJava"));
+        assertEquals(Boolean.TRUE, currency.get("hasRequiredSingleFlags"));
+        assertFalse(plain.containsKey("hasRequiredSingleFlags"));
+        assertEquals("One Currency must stay Base - mark another one Base first", ModelTranslations.checkMessages(model)
+                                                                                                   .get("Currency_singleRequired_Base"));
+    }
+
+    /**
      * A relation fixed after create (#7903): every controller refuses a changed value with the message
      * the en-US catalog carries under {@code checks.<Entity>_fixed_<Relation>}, so the arguments it
      * hands {@code CheckMessages} name that key and the default text. A flag spelled out as false fixes

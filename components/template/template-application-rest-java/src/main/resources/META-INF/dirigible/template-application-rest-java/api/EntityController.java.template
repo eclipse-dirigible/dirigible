@@ -704,6 +704,10 @@ public class ${name}Controller {
         // update - the delete is the third affordance the master-detail panel hides (#7372).
         repository.findOne(id).ifPresent(stored -> requireDeletable(stored));
 #end
+#if($hasRequiredSingleFlags)
+        // The holder of a `single: { required: true }` flag goes only once another row holds it (#8700).
+        repository.findOne(id).ifPresent(repository::requireSingleFlagsKept);
+#end
 #if($attachmentEntity)
         String storagePath = repository.findOne(id)
                                        .map(a -> a.StoragePath)

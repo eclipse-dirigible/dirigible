@@ -57,6 +57,19 @@ class EdmSingleFlagTest {
                 entity(YAML, "BankAccount").get("singleFlags"));
     }
 
+    /** #8700: a required flag carries the refusal of giving it up, scoped like the flag. */
+    @Test
+    void requiredFlagCarriesItsRefusal() {
+        String yaml = YAML.replace("single: true", "single: { required: true }")
+                          .replace("single: { per: Company }", "single: { per: Company, required: true }");
+        assertEquals(List.of(Map.of("property", "Base", "required", "true", "requiredMessage",
+                "One Company must stay Base - mark another one Base first")), entity(yaml, "Company").get("singleFlags"));
+        assertEquals(
+                Map.of("property", "Base", "per", "Company", "required", "true", "requiredMessage",
+                        "One Bank Account must stay Base for each Company - mark another one Base first"),
+                ((List<?>) entity(yaml, "BankAccount").get("singleFlags")).get(0));
+    }
+
     @Test
     void entityWithoutFlagsHasNoFlagVariable() {
         assertFalse(entity(YAML.replace(", single: true", ""), "Company").containsKey("singleFlags"));

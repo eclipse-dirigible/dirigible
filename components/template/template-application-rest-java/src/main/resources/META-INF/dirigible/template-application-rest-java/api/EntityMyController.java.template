@@ -429,6 +429,10 @@ public class ${name}MyController {
         // its update - the delete is the third affordance the master-detail panel hides (#7372).
         requireDeletable(existing);
 #end
+#if($hasRequiredSingleFlags)
+        // The holder of a `single: { required: true }` flag goes only once another row holds it (#8700).
+        repository.requireSingleFlagsKept(existing);
+#end
         try {
             repository.deleteById(id);
         } catch (RuntimeException e) {

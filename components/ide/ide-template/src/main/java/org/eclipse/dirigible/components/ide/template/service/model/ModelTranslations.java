@@ -199,6 +199,17 @@ final class ModelTranslations {
     }
 
     /**
+     * The catalog key of a required single flag's refusal to give the flag up (issue #8700).
+     *
+     * @param entity the entity
+     * @param flag the single flag
+     * @return the key, relative to the catalog's {@code checks} sub-object
+     */
+    static String singleFlagRequiredMessageKey(Map<String, Object> entity, Map<String, Object> flag) {
+        return str(entity, "name") + "_singleRequired_" + str(flag, "property");
+    }
+
+    /**
      * The flags that fix a property, each with its default-language refusal in {@code <flag>Message}.
      */
     static final List<String> FIXED_FLAGS = List.of("fixedAfterCreate", "fixedWhenReferenced");
@@ -516,6 +527,10 @@ final class ModelTranslations {
                 String message = str(flag, "message");
                 if (message != null && !message.isBlank()) {
                     messages.put(singleFlagMessageKey(entity, flag), message);
+                }
+                String requiredMessage = str(flag, "requiredMessage");
+                if (requiredMessage != null && !requiredMessage.isBlank()) {
+                    messages.put(singleFlagRequiredMessageKey(entity, flag), requiredMessage);
                 }
             }
             slotMessages(entity).forEach((rule, message) -> messages.put(slotMessageKey(entity, rule), message));
