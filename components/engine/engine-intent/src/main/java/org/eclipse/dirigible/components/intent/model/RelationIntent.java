@@ -71,6 +71,13 @@ public class RelationIntent {
      */
     private String init;
     /**
+     * The object form of {@link #init} ({@code init: { flag: Base }}, dirigible #8683): the name of the
+     * target's fleet-wide {@code single:} boolean, so a new row takes the target row holding that flag
+     * when it is created - none when no row holds it - instead of a fixed id. Transient: the parser
+     * lifts it off the raw {@code init} mapping, so it is never a key an author spells on its own.
+     */
+    private transient String initFlag;
+    /**
      * Optional form-control width as a 12-column grid span (3/4/6/12: 3 = quarter, 4 = third, 6 = half,
      * 12 = full). Emitted as the FK property's {@code widgetSize}; the Harmonia form maps it to
      * {@code grid-column: span N}. Absent (the default) leaves it unset (the form falls back to half
@@ -374,6 +381,14 @@ public class RelationIntent {
 
     public void setInit(String init) {
         this.init = init;
+    }
+
+    public String getInitFlag() {
+        return initFlag;
+    }
+
+    public void setInitFlag(String initFlag) {
+        this.initFlag = initFlag;
     }
 
     public Integer getSize() {
