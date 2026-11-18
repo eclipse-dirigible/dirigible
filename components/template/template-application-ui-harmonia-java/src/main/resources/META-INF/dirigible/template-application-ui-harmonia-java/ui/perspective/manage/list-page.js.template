@@ -108,6 +108,10 @@ document.addEventListener('alpine:init', () => {
       // The sheet's overlay owns detailsOpen two-way, so a dismissal that never goes through
       // closeDetails() - a click on the scrim - still has to drop the selection and the record id.
       this.$watch('detailsOpen', (open) => { if (!open && this.selected) this.closeDetails(); });
+      // Opening a record is a step of its own in the browser's history (syncSelectionUrl), and Back /
+      // Forward between the list and that record stay on this route, so Pinecone renders nothing for
+      // them: the page follows the address itself.
+      this.listenOnWindow('popstate', () => this.followRouteSelection());
       // The menu always opens on its "add a filter" step, whatever editor it was last left on.
       this.$watch('filterOpen', (open) => { if (open) { this.filterEditing = null; this.filterDraft = ''; } });
 #if($ownerProperty)
@@ -172,8 +176,9 @@ document.addEventListener('alpine:init', () => {
     // Deep link / reload support: /${name}/:id pre-selects that row once the list is loaded, and
     // opens the sheet it is selected IN - the URL names a record because the record is being looked
     // at, so a reload or a step through history that lands here has to show it, not just highlight
-    // the row behind a closed sheet. Every route step re-renders this fragment, so this covers the
-    // whole history axis: an id opens the sheet, the bare list route renders with none.
+    // the row behind a closed sheet. A route step that re-renders this fragment lands here: an id
+    // opens the sheet, the bare list route renders with none. Back / Forward between the list and a
+    // record this page opened re-render nothing, and followRouteSelection() follows them instead.
     selectFromRoute() {
       const params = (window.PineconeRouter.context && window.PineconeRouter.context.params) || {};
       const id = params.id;
@@ -200,19 +205,52 @@ document.addEventListener('alpine:init', () => {
               title, () => this.load());
     },
 
-    // Reflect the selected row in the URL (/${name}/:id) without re-rendering the list. Uses
-    // replaceState (no Pinecone re-route) and notifies the embedding shell so the top-level
-    // address bar stays in sync; deep-linking/reload is handled by selectFromRoute() above.
+    // Reflect the selected row in the URL (/${name}/:id) without re-rendering the list (no Pinecone
+    // re-route), and notify the embedding shell so the top-level address bar stays in sync;
+    // deep-linking/reload is handled by selectFromRoute() above.
+    // Opening a record from the bare list is one history entry, so Back closes the sheet rather than
+    // leaving the list; picking another row while the sheet is open replaces it, so a run through ten
+    // records is not ten steps back. Closing the sheet takes its own entry back (history.back), which
+    // leaves no step behind that Back would walk through without effect. A sheet this page did not
+    // open as an entry of its own (a deep link, a reload) closes in place, as it always did.
     syncSelectionUrl(row) {
       if (typeof window.history === 'undefined' || !window.history.replaceState) return;
       // Inline, the selected row is not a destination of its own: rewriting the hash routes the
       // shell away from the page that embeds us, straight out of Settings.
       if (this.inlineHosted()) return;
-      const path = '/${name}' + (row ? '/' + encodeURIComponent(row.${primaryKeysString}) : '');
-      const url = '#' + path;
+      const url = '#/${name}' + (row ? '/' + encodeURIComponent(row.${primaryKeysString}) : '');
       if (window.location.hash === url) return;
-      window.history.replaceState(window.history.state, '', url);
+      const state = window.history.state || {};
+      if (!row && state.recordSheet) {
+        window.history.back();
+        return;
+      }
+      if (row && window.location.hash.split('?')[0] === '#/${name}') {
+        window.history.pushState({ ...state, recordSheet: true }, '', url);
+      } else {
+        window.history.replaceState(state, '', url);
+      }
       try { window.dispatchEvent(new HashChangeEvent('hashchange')); } catch (e) { /* older browsers */ }
+    },
+
+    // Back / Forward between the list and one of its records: open or close the sheet the address
+    // names, without writing the address again. Any other address is a route of its own, rendered by
+    // Pinecone.
+    followRouteSelection() {
+      if (this.inlineHosted()) return;
+      const here = (window.location.hash || '').split('?')[0];
+      if (here === '#/${name}') {
+        if (!this.selected && !this.detailsOpen) return;
+        this.selected = null;
+        this.detailsOpen = false;
+        this.refreshIcons();
+        return;
+      }
+      const prefix = '#/${name}/';
+      if (here.indexOf(prefix) !== 0 || here.indexOf('/', prefix.length) !== -1) return;
+      const id = decodeURIComponent(here.slice(prefix.length));
+      const match = this.items.find(it => String(it.${primaryKeysString}) === id);
+      if (match) { this.selected = match; this.detailsOpen = true; this.refreshIcons(); }
     },
 
     // `quiet` keeps the current rows, page and filters on screen until the fresh rows arrive (a

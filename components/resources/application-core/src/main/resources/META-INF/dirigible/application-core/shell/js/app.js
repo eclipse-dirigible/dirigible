@@ -207,12 +207,16 @@ App.leaveGuard = {
   // template element).
   // It runs from the guard's handler, once the guard lets the navigation through: Pinecone keeps one
   // list of global handlers, and a refused navigation must keep the page it refused to leave.
+  // A route whose template carries `data-keep-rendered` follows its params itself and keeps its page: the
+  // application shell's Settings, whose embedded app's iframe - and that frame's history entries, which
+  // Back would otherwise step through without effect - must survive picking another setting.
   renderAnew(context) {
     const current = window.PineconeRouter.context;
     if (!current || !current.route || !context.route || current.route.path !== context.route.path) return;
     if (JSON.stringify(current.params || {}) === JSON.stringify(context.params || {})) return;
     const element = context.route._template_element;
-    if (element && typeof element._x_PineconeRouter_undoTemplate === 'function') element._x_PineconeRouter_undoTemplate();
+    if (!element || element.hasAttribute('data-keep-rendered')) return;
+    if (typeof element._x_PineconeRouter_undoTemplate === 'function') element._x_PineconeRouter_undoTemplate();
   },
 
   install() {

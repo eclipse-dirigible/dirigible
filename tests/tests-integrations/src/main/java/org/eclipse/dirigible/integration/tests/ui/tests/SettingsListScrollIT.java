@@ -44,10 +44,15 @@ class SettingsListScrollIT extends UserInterfaceIntegrationTest {
 
     private static final Duration RENDER = Duration.ofSeconds(30);
 
+    /**
+     * The pane showing a local setting is looked for among the siblings of the settings iframe: they
+     * share the detail content area, which is the panel itself in some shells and a wrapper inside it
+     * (below the compact back toolbar) in the application shell.
+     */
     private static final String LAYOUT = "const app = document.getElementById('app');"
             + "const panels = app.querySelectorAll('[x-h-split-panel]');" + "const list = panels[0].querySelector('ul[x-h-list]');"
             + "const detail = panels[1].getBoundingClientRect();" + "const frame = panels[1].querySelector(\"iframe[title='Settings']\");"
-            + "const page = Array.from(panels[1].children).find(c => c.offsetParent !== null && c.tagName !== 'IFRAME');"
+            + "const page = Array.from(frame.parentElement.children).find(c => c.offsetParent !== null && c.tagName !== 'IFRAME');"
             + "return { page: app.scrollTop, list: list.scrollTop, overflows: list.scrollHeight > list.clientHeight,"
             + "  appTop: Math.round(app.getBoundingClientRect().top), frameTop: Math.round(frame.getBoundingClientRect().top),"
             + "  detailBottom: Math.round(detail.bottom), windowBottom: window.innerHeight,"
