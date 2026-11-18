@@ -575,6 +575,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                        .isEmpty()) {
                 entityMap.put("phases", String.join(",", entity.getPhases()));
             }
+            // The events a tenant's external system may subscribe to as webhooks (#8689): the DAO template
+            // renders them, with the three properties a thin event carries, into the descriptor the
+            // webhook registry validates subscriptions against. Emitted only when declared, so a model
+            // that exposes nothing generates byte-identically.
+            if (!entity.getWebhooks()
+                       .isEmpty()) {
+                putWebhooks(entityMap, entity, exportLedger);
+            }
             // Custom Java imports for the generated entity Repository (e.g. a calculated-field action's
             // CalculatedField class). Base64-encoded to match the EDM editor's serialization, which the
             // generation pipeline decodes before emitting them into the import block.
@@ -4692,6 +4700,37 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /** The entity's {@code function: EntityStatus} relation, or null. */
+    /**
+     * The webhook declaration of an entity (#8689): the exposed actions, and the identifier,
+     * {@code Uuid} and status properties a thin event carries. The identifier of a file child or an
+     * export ledger without a declared key is the synthesized {@code Id}; {@code Uuid} is the injected
+     * attachment column or an authored {@code uuid} field.
+     */
+    private static void putWebhooks(Map<String, Object> entityMap, EntityIntent entity, boolean exportLedger) {
+        entityMap.put("webhooks", String.join(",", entity.getWebhooks()
+                                                         .stream()
+                                                         .map(String::trim)
+                                                         .toList()));
+        String idProperty = entity.getFields()
+                                  .stream()
+                                  .filter(FieldIntent::isPrimaryKey)
+                                  .map(field -> IntentNaming.pascalCase(field.getName()))
+                                  .findFirst()
+                                  .orElse("Id");
+        entityMap.put("webhookIdProperty", idProperty);
+        boolean uuid = entity.isFileChild() || exportLedger || entity.getFields()
+                                                                     .stream()
+                                                                     .anyMatch(field -> field.getName() != null
+                                                                             && "Uuid".equals(IntentNaming.pascalCase(field.getName())));
+        if (uuid) {
+            entityMap.put("webhookUuidProperty", "Uuid");
+        }
+        RelationIntent status = entityStatusRelation(entity);
+        if (status != null) {
+            entityMap.put("webhookStatusProperty", IntentNaming.pascalCase(status.getName()));
+        }
+    }
+
     private static RelationIntent entityStatusRelation(EntityIntent entity) {
         if (entity.getRelations() == null) {
             return null;

@@ -76,6 +76,19 @@ public class DataSourcesManager {
     }
 
     /**
+     * Whether the current tenant's default data source is defined - a tenant whose provisioning never
+     * registered one has none, and {@link #getDefaultDataSource()} would refuse it.
+     *
+     * @return true, if it is defined
+     */
+    public boolean isDefaultDataSourceDefined() {
+        String dataSourceName =
+                tenantDataSourceNameManager.getTenantDataSourceName(DirigibleConfig.DEFAULT_DATA_SOURCE_NAME.getStringValue());
+        return datasourceService.findOptionalByName(dataSourceName)
+                                .isPresent();
+    }
+
+    /**
      * Gets the data source.
      *
      * @param name the name

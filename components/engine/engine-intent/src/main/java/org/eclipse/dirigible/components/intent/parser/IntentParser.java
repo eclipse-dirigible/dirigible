@@ -5490,6 +5490,10 @@ public final class IntentParser {
                        .isEmpty()) {
                 validatePhases(entity, issues);
             }
+            if (!entity.getWebhooks()
+                       .isEmpty()) {
+                validateWebhooks(entity, issues);
+            }
             validateWidgetSizes(entity, issues);
         }
         return entityNames;
@@ -5550,6 +5554,35 @@ public final class IntentParser {
             if (!seen.add(name)) {
                 issues.add(subject + " declares phase [" + name + "] more than once");
             }
+        }
+    }
+
+    /** The entity events an entity may expose as webhooks (#8689). */
+    private static final List<String> WEBHOOK_ACTIONS = List.of("created", "updated", "deleted", "transitioned");
+
+    /**
+     * An entity's {@code webhooks:} (#8689) - the events a tenant's external system may subscribe to.
+     * Each is one of {@link #WEBHOOK_ACTIONS}, once; {@code transitioned} only on an entity with a
+     * {@code function: EntityStatus} relation, the only one a transition or a workflow setter moves.
+     */
+    private static void validateWebhooks(EntityIntent entity, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "]";
+        Set<String> seen = new LinkedHashSet<>();
+        for (String action : entity.getWebhooks()) {
+            String name = action == null ? "" : action.trim();
+            if (!WEBHOOK_ACTIONS.contains(name)) {
+                issues.add(subject + " webhooks names [" + name + "] - an exposed event is one of " + WEBHOOK_ACTIONS);
+                continue;
+            }
+            if (!seen.add(name)) {
+                issues.add(subject + " webhooks names [" + name + "] more than once");
+            }
+        }
+        if (seen.contains("transitioned") && entity.getRelations()
+                                                   .stream()
+                                                   .noneMatch(RelationIntent::isEntityStatus)) {
+            issues.add(subject + " webhooks names [transitioned], but the entity has no `function: EntityStatus` relation for a"
+                    + " transition to move");
         }
     }
 

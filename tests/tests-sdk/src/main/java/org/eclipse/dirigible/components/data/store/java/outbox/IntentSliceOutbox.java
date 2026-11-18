@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.data.store.java.outbox;
 
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.springframework.beans.factory.support.StaticListableBeanFactory;
 
 /**
  * Builds the event outbox for the in-process test slice (dirigible #7643), whose constructors are
@@ -28,6 +29,7 @@ public final class IntentSliceOutbox {
      * @return the outbox
      */
     public static EventOutbox create(DataSourcesManager dataSourcesManager, TenantContext tenantContext) {
-        return new EventOutbox(new EventOutboxStore(dataSourcesManager, tenantContext));
+        return new EventOutbox(new EventOutboxStore(dataSourcesManager, tenantContext),
+                new StaticListableBeanFactory().getBeanProvider(OutboxRecordingParticipant.class));
     }
 }

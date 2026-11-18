@@ -539,6 +539,46 @@ public enum DirigibleConfig {
     EVENT_OUTBOX_RELAY_GRACE_SECONDS("DIRIGIBLE_EVENT_OUTBOX_RELAY_GRACE_SECONDS", "60"),
 
     /**
+     * The key that encrypts the signing secrets of the tenants' webhook subscriptions at rest: 32
+     * bytes, Base64-encoded (AES-256-GCM). Without it the webhook registry accepts no subscription.
+     */
+    TENANT_WEBHOOKS_ENCRYPTION_KEY("DIRIGIBLE_TENANT_WEBHOOKS_ENCRYPTION_KEY", null, meta().secret()),
+
+    /**
+     * The delays, in seconds and comma-separated, between the attempts of an undelivered webhook event:
+     * the first after the first failure, and so on; the last one repeats.
+     */
+    TENANT_WEBHOOKS_RETRY_SCHEDULE_SECONDS("DIRIGIBLE_TENANT_WEBHOOKS_RETRY_SCHEDULE_SECONDS", "60,300,1800,7200,21600",
+            meta().type(ConfigType.LIST)),
+
+    /**
+     * How long, in seconds, an undelivered webhook event is retried before it is given up and its
+     * subscription is marked FAILING.
+     */
+    TENANT_WEBHOOKS_RETRY_WINDOW_SECONDS("DIRIGIBLE_TENANT_WEBHOOKS_RETRY_WINDOW_SECONDS", "86400"),
+
+    /**
+     * How long, in seconds, one webhook delivery attempt may take; a slower receiver counts as failed.
+     */
+    TENANT_WEBHOOKS_TIMEOUT_SECONDS("DIRIGIBLE_TENANT_WEBHOOKS_TIMEOUT_SECONDS", "10"),
+
+    /** How many days the webhook delivery log keeps a finished delivery and its attempts. */
+    TENANT_WEBHOOKS_LOG_RETENTION_DAYS("DIRIGIBLE_TENANT_WEBHOOKS_LOG_RETENTION_DAYS", "30"),
+
+    /** The most webhook subscriptions one tenant may hold. */
+    TENANT_WEBHOOKS_MAX_SUBSCRIPTIONS("DIRIGIBLE_TENANT_WEBHOOKS_MAX_SUBSCRIPTIONS", "20"),
+
+    /** Interval (seconds) between ticks of the relay that delivers the tenants' webhook events. */
+    TENANT_WEBHOOKS_RELAY_INTERVAL_SECONDS("DIRIGIBLE_TENANT_WEBHOOKS_RELAY_INTERVAL_SECONDS", "5"),
+
+    /**
+     * FOR TESTS ONLY: lets a webhook subscription name a plain-HTTP URL on a loopback address, so a
+     * test can run its receiver in-process. Link-local and private addresses stay refused. Never set it
+     * in a deployment: it lets a tenant make the application call itself.
+     */
+    TENANT_WEBHOOKS_ALLOW_LOOPBACK_FOR_TESTS("DIRIGIBLE_TENANT_WEBHOOKS_ALLOW_LOOPBACK_FOR_TESTS", Boolean.FALSE.toString()),
+
+    /**
      * Interval (seconds) between ticks of the watchdog that re-attempts client-Java runtime state a
      * previous pass could not establish - a JMS subscription the broker refused, a job registration
      * that threw.
