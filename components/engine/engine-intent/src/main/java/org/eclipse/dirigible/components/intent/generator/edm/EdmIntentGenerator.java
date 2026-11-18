@@ -2073,6 +2073,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // format: email (#6463) is a preset over the same attribute - so the server-side check and the
             // client-side feedback are the ones the pattern machinery already provides, not a second path.
             p.put("widgetPattern", EMAIL_PATTERN);
+        } else if ("iban".equalsIgnoreCase(field.getFormat())) {
+            // format: iban (#8302): the shape rides widgetPattern, so the form tells the user before
+            // submitting; inputFormat makes the controllers check the ISO 7064 check digits as well,
+            // which a regex cannot, and refuse with the IBAN sentence instead of one quoting the regex.
+            p.put("widgetPattern", IBAN_PATTERN);
+            p.put("inputFormat", "IBAN");
         }
         // Input normalization (#7726): applied by the generated repository and controllers before the
         // pattern and the checks, and by the form on blur. Scalars rather than the authored list,
@@ -5212,6 +5218,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * controller's {@code matches()}) AND as an HTML {@code pattern} - both anchor the whole value.
      */
     private static final String EMAIL_PATTERN = "^[^@\\s]+@[^@\\s]+\\.[A-Za-z]{2,}$";
+
+    /**
+     * The shape behind {@code format: iban} (#8302): the electronic form, as the SDK's
+     * {@code FieldFormats.IBAN_PATTERN} checks it server-side together with the check digits.
+     */
+    private static final String IBAN_PATTERN = "^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$";
 
     private static String widgetForField(FieldIntent field, String dataType) {
         // A named format selects the widget (an EMAIL field renders as a type="email" control).

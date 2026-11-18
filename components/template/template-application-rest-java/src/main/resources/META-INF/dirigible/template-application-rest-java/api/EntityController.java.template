@@ -1734,7 +1734,13 @@ public class ${name}Controller {
             throw org.eclipse.dirigible.sdk.db.FieldRefusals.tooLong(${refusalCatalog}, ${refusalField}, ${property.dataLength});
         }
 #end
-#if($property.widgetPattern && $property.widgetPattern != "")
+#if($property.inputFormat == "IBAN")
+## format: iban (#8302): the shape AND the ISO 7064 check digits, which a regex cannot check - so a
+## value whose check digits fail is refused like one off the shape, and blank is "no value" as above.
+        if (entity.${property.name} != null#if($property.isRequiredProperty != "true") && !entity.${property.name}.isBlank()#end && !org.eclipse.dirigible.sdk.db.FieldFormats.isIban(entity.${property.name})) {
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.iban(${refusalCatalog}, ${refusalField});
+        }
+#elseif($property.widgetPattern && $property.widgetPattern != "")
 ## A format constraint describes what a value must look like WHEN THERE IS ONE. On an OPTIONAL property
 ## a blank string is "no value", so the pattern must not fire on it - otherwise the field is required by
 ## the back door (a blank optional Email was rejected, and the only way to save was to invent an

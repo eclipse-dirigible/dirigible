@@ -4150,6 +4150,37 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * `format: iban` (#8302) supplies the IBAN shape through widgetPattern, for the form, and marks the
+     * property `inputFormat: IBAN`, so the controllers check the check digits as well; it keeps the
+     * plain textbox. A field without the format carries neither.
+     */
+    @org.junit.jupiter.api.Test
+    void fieldFormatIbanEmitsTheShapeAndTheInputFormat() {
+        String yaml = """
+                name: hr
+                entities:
+                  - name: Employee
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: iban, type: string, length: 34, format: iban }
+                      - { name: note, type: string }
+                    """;
+        java.util.Map<String, Object> employee = entityByName(entities(
+                EdmIntentGenerator.buildModelJsonForTest(org.eclipse.dirigible.components.intent.parser.IntentParser.parse(yaml), "hr")),
+                "Employee");
+        java.util.Map<String, Object> iban = propertyByName(employee, "Iban");
+        assertEquals("TEXTBOX", iban.get("widgetType"));
+        assertEquals("IBAN", iban.get("inputFormat"));
+        java.util.regex.Pattern shape = java.util.regex.Pattern.compile((String) iban.get("widgetPattern"));
+        assertTrue(shape.matcher("BG80BNBG96611020345678")
+                        .matches());
+        assertTrue(!shape.matcher("BG80 BNBG 9661 1020 3456 78")
+                         .matches(),
+                "the shape is the electronic form: " + shape);
+        assertNull(propertyByName(employee, "Note").get("inputFormat"));
+    }
+
+    /**
      * A child collection that does not freeze with its master carries the marker the detail
      * registration reads; every other entity keeps byte-identical output (the attribute is emitted only
      * when declared false).

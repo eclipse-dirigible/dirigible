@@ -135,7 +135,8 @@ The three categories, and the extension point that carries each:
    acknowledgements, retries, batch or file transports (an SFTP drop, a signed archive, polling).
    `integrations:`, `inbound:` and `outbound:` are deliberately one-line call-outs. Anything richer is
    a **Camel route** in the same project, feeding the entity's ordinary write path.
-2. **Algorithms** - checksums (national identifiers, account numbers), fuzzy matching, scoring,
+2. **Algorithms** - checksums (national identifiers, account numbers - except an IBAN's, which is
+   `format: iban`), fuzzy matching, scoring,
    policy-driven tie-breaking. The DSL says this of `pattern` itself: a format check, not a semantic
    one. The modeled hooks are **`calculatedActionOnCreate` / `calculatedActionOnUpdate`** on a field
    or a to-one relation, and a serviceTask **`delegate:`** - both implemented under `custom/`.
@@ -513,10 +514,14 @@ a `required` text field is refused when it is blank after that trim - spaces alo
     `filterBy` is rejected. Composable with the conditional `valueFrom` above. Harmonia UI only.
   A `documentStatus` relation can neither declare `dependsOn` nor trigger one (it is a read-only pill).
 - `format` (on a `string` field) - **a named input format**: `- { name: email, type: string, length: 320, format: email }`
-  Today the only value is `email`. It renders a `type="email"` control AND validates the address server-side (400 on a
-  bad value) - prefer it over hand-writing an email regex. Do NOT declare `format` and `pattern` on the same field.
-- `pattern` (on a `string`/`text` field) - **an input-format regex**: durable format validation for an IBAN, VAT
-  number, postcode, e-mail, phone. `- { name: iban, type: string, length: 34, pattern: '^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$' }`
+  `email` renders a `type="email"` control AND validates the address server-side (400 on a bad value) - prefer it over
+  hand-writing an email regex. `iban` validates the IBAN's shape AND its ISO 7064 mod-97 check digits (400 naming the
+  field), which no regex can: `- { name: iban, type: string, length: 34, format: iban, normalize: [strip: " ", upper] }`.
+  Always use it for an IBAN, never a `pattern`. The value is checked as stored (no spaces, upper case), hence the
+  `normalize`. Do NOT declare `format` and `pattern` on the same field.
+- `pattern` (on a `string`/`text` field) - **an input-format regex**: durable format validation for a VAT number,
+  postcode, phone (an IBAN is `format: iban`, an e-mail `format: email`).
+  `- { name: vatNumber, type: string, length: 14, pattern: '^[A-Z]{2}[0-9A-Z]{2,12}$' }`
   The generated REST controller rejects a non-matching value with 400 and the form input carries it as an HTML
   `pattern`. **String/text only** - on a numeric field the same underlying attribute is the DISPLAY format, so a
   regex there is rejected. The regex must compile.

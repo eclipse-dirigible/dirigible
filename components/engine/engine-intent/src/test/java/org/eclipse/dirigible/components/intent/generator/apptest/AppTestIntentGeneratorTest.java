@@ -37,6 +37,9 @@ class AppTestIntentGeneratorTest {
     /** The canonical address regex {@code format: email} resolves to - what the EDM emits. */
     private static final String EMAIL_PATTERN = "^[^@\\s]+@[^@\\s]+\\.[A-Za-z]{2,}$";
 
+    /** The IBAN shape {@code format: iban} resolves to - what the EDM emits. */
+    private static final String IBAN_PATTERN = "^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$";
+
     private static final String INTENT = """
             name: countries
             languages: [en, bg]
@@ -359,6 +362,7 @@ class AppTestIntentGeneratorTest {
                       - { name: id, type: integer, primaryKey: true, generated: true }
                       - { name: number, type: string, length: 100, number: { series: Sales Invoice, stampOn: issue } }
                       - { name: email, type: string, length: 320, format: email }
+                      - { name: iban, type: string, length: 34, format: iban }
                       - { name: total, type: decimal }
                       - { name: reference, type: string, length: 200 }
                 """;
@@ -368,6 +372,7 @@ class AppTestIntentGeneratorTest {
                 // what the EDM generator emits for a `number:` field: the platform stamps it and the
                 // form renders it read-only
                 property("Number", Map.of("isReadOnlyProperty", "true")), property("Email", Map.of("widgetPattern", EMAIL_PATTERN)),
+                property("Iban", Map.of("widgetPattern", IBAN_PATTERN, "inputFormat", "IBAN")),
                 // on a numeric property the same attribute is the DISPLAY format, never a guard
                 property("Total", Map.of("widgetPattern", "### ##0.00")), property("Reference", Map.of())));
         edm.put("processDeleteGuards", "SalesInvoicePosting:Sales Invoice Posting");
@@ -388,6 +393,14 @@ class AppTestIntentGeneratorTest {
         // the shape guard travels, so the sample value can be made to match instead of being refused
         assertEquals(EMAIL_PATTERN, fields.get("Email")
                                           .get("pattern"));
+        assertNull(fields.get("Email")
+                         .get("format"),
+                "only a format the shape cannot capture is named");
+        // format: iban (#8302): a value of the shape is still refused unless its check digits hold
+        assertEquals(IBAN_PATTERN, fields.get("Iban")
+                                         .get("pattern"));
+        assertEquals("iban", fields.get("Iban")
+                                   .get("format"));
         assertNull(fields.get("Total")
                          .get("pattern"),
                 "a numeric widgetPattern is a display format, not an input guard");
