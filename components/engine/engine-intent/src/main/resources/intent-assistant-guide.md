@@ -269,6 +269,17 @@ not as an apology.
   atomic, with no ordering to reason about - while a start-step setter is extra moving parts for the
   same effect. Use `setRelationField` only for *transitions* (after a user task, or on a decision
   branch).
+- **`init: { flag: <field> }` on a to-one relation = default to the target row holding a `single:`
+  flag.** A document's default company, base currency or default payment method is not a fixed row: it
+  is the row the user has flagged as the base one. Never write `init: 1` for "the base company" - that
+  is whatever row has Id 1, and it dangles once that row is deleted. Name the target's fleet-wide
+  `single:` boolean instead: `- { name: Company, kind: manyToOne, to: Company, init: { flag: base } }`.
+  The create form preselects the row holding the flag when it opens, and a create that leaves the
+  relation out takes that row; moving the flag moves the default, and with no holder the relation stays
+  empty (a `required:` one is then refused by name). The target field must be a `boolean` with
+  `single: true` (a cross-model target is checked against its owner model at Generate); a
+  `single: { per: ... }` flag cannot be a default yet and is refused, and so is a `function:
+  EntityStatus` relation.
 - **Lifecycle events** (`notifications`, `integrations`): exactly **one** of `onCreate` / `onUpdate` /
   `onDelete` per item, and it must reference a declared entity.
 - **Recipients** (`to` in any notify block): a literal email address, a direct field
@@ -1499,8 +1510,9 @@ default bank account of a company", declare `single:` on the `boolean` field ins
 holder in the whole table; `single: { per: <relation> }` keeps one per value of one of the entity's own
 `manyToOne`/`oneToOne` relations. A write that sets the flag hands it over: the row that held it in
 the same scope is set to `false` in the same transaction. Add `onConflict: refuse` when taking the flag
-must be a deliberate act - the write is then answered 409 while another row holds it. The form keeps
-the ordinary checkbox:
+must be a deliberate act - the write is then answered 409 while another row holds it. A document that
+defaults to the flagged row names it with `init: { flag: base }` on its relation (fleet-wide flags
+only). The form keeps the ordinary checkbox:
 
 ```yaml
 entities:

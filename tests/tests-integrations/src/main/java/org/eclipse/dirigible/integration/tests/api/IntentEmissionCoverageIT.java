@@ -2431,7 +2431,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
     // Still the entities list. single: (#8101): a Tender's base flag is fleet-wide and changes hands
     // on a create or an update; a Purse's base flag changes hands within its tender only, and its
-    // preferred flag refuses a second holder in the tender with 409.
+    // preferred flag refuses a second holder in the tender with 409. A Coin defaults to the Mint
+    // holding the base flag (init: { flag: }, #8683).
     private static final String INTENT_YAML_SINGLE_FLAGS = """
               - name: Tender
                 fields:
@@ -2446,6 +2447,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: preferred, type: boolean, single: { per: Tender, onConflict: refuse } }
                 relations:
                   - { name: Tender, kind: manyToOne, to: Tender }
+              - name: Mint
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, length: 30 }
+                  - { name: base, type: boolean, single: true }
+              - name: Coin
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: face, type: string, length: 10 }
+                relations:
+                  - { name: Mint, kind: manyToOne, to: Mint, init: { flag: base } }
             """;
 
     // Still the entities list. unique: { ignoreCase: true } (#8095): a login and an e-mail address are
@@ -2758,6 +2770,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         }
 
         assertEmission();
+        assertInitFlagEmission();
         assertFieldPlacementEmission();
         assertFieldEmptyTextEmission();
         assertRecordHeaderEmission();
@@ -2775,6 +2788,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertSystemWrittenRefusedOnEverySurface();
         assertStatusStampsRuntime();
         assertSingleFlagsRuntime();
+        assertInitFlagRuntime();
         assertUniqueIgnoringCaseRuntime();
         assertEmptyToNullRuntime();
         assertTimedWaitRuntime();
@@ -3098,6 +3112,50 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("message", containsString("Another Purse is already Preferred for this Tender")));
         assertEquals(Boolean.TRUE, readRecord(purses, first).get("Preferred"), "a refused write leaves the holder alone");
         assertNotEquals(Boolean.TRUE, readRecord(purses, second).get("Preferred"), "a refused write is not written");
+    }
+
+    /**
+     * {@code init: { flag: base }} (#8683), generated: the create form asks the target for the row
+     * holding the flag instead of seeding a fixed id, and the FK column carries no DEFAULT.
+     */
+    private void assertInitFlagEmission() {
+        String page = contentOf("gen/emission/js/components/pages/Coin/CoinFormPage.js");
+        assertTrue(page.contains("{ equals: { Base: true } }") && page.contains("this.form.Mint = String(holdersMint[0].Id)"),
+                "the create form must preselect the Mint holding the base flag, got: " + page);
+        String repository = contentOf("gen/emission/data/coin/CoinRepository.java");
+        assertTrue(repository.contains("new gen.emission.data.mint.MintRepository()") && repository.contains(".eq(\"Base\", true)"),
+                "the repository must default Mint to the holder of the base flag, got: " + repository);
+    }
+
+    /**
+     * {@code init: { flag: base }} (#8683), published and running: a create that leaves the relation
+     * out takes the target row holding the flag at that moment - none while no row holds it, the new
+     * holder once the flag moves - an explicit pick wins, and an update that leaves it out keeps it.
+     */
+    private void assertInitFlagRuntime() {
+        String mints = "/mint/MintController";
+        String coins = "/coin/CoinController";
+        int unminted = createRecord(coins, "{\"Face\":\"1\"}");
+        assertNull(readRecord(coins, unminted).get("Mint"), "with no holder the relation must stay empty, not a fixed id");
+
+        int royal = createRecord(mints, "{\"Name\":\"Royal\",\"Base\":true}");
+        int local = createRecord(mints, "{\"Name\":\"Local\",\"Base\":false}");
+        int first = createRecord(coins, "{\"Face\":\"2\"}");
+        assertEquals(royal, readRecord(coins, first).get("Mint"), "a create must default to the holder of the flag");
+
+        updateRecord(mints, local, "{\"Id\":" + local + ",\"Name\":\"Local\",\"Base\":true}", 200);
+        int second = createRecord(coins, "{\"Face\":\"5\"}");
+        assertEquals(local, readRecord(coins, second).get("Mint"), "moving the flag must move the default");
+        assertEquals(royal, readRecord(coins, first).get("Mint"), "moving the flag must not touch an existing record");
+
+        int picked = createRecord(coins, "{\"Face\":\"10\",\"Mint\":" + royal + "}");
+        assertEquals(royal, readRecord(coins, picked).get("Mint"), "an explicit pick must win over the default");
+        updateRecord(coins, picked, "{\"Id\":" + picked + ",\"Face\":\"20\"}", 200);
+        assertEquals(royal, readRecord(coins, picked).get("Mint"), "an update that leaves the relation out must keep it");
+
+        updateRecord(mints, local, "{\"Id\":" + local + ",\"Name\":\"Local\",\"Base\":false}", 200);
+        int orphan = createRecord(coins, "{\"Face\":\"50\"}");
+        assertNull(readRecord(coins, orphan).get("Mint"), "once no row holds the flag the relation must stay empty");
     }
 
     /**

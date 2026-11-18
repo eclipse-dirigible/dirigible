@@ -146,6 +146,19 @@ document.addEventListener('alpine:init', () => {
 #else
         if ('${property.name}' in this.form) this.form.${property.name} = ${property.dataDefaultValueJsLiteral};
 #end
+#elseif($property.relationshipInitFlag && $property.widgetDropdownControllerUrl)
+## A relation's `init: { flag: X }` (#8683) has no literal: its default is the target row holding the
+## single: flag X, asked of the target as the form opens - the record the server fills on a create that
+## omits it. With no holder the field stays empty, never a fixed id that may name a deleted row.
+        if ('${property.name}' in this.form) {
+          try {
+            const holders${property.name} = await App.services.api.post('${property.widgetDropdownControllerUrl}/search',
+              { equals: { ${property.relationshipInitFlag}: true } }, { baseUrl: '' }) || [];
+            if (holders${property.name}.length) this.form.${property.name} = String(holders${property.name}[0].${property.widgetDropDownKey});
+          } catch (e) {
+            console.error('[${name}MyFormPage] failed to read the default of ${property.name}', e);
+          }
+        }
 #end
 #end
         // Prefill from query params - a parent panel presets its FK (and a clicked date). A

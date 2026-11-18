@@ -391,6 +391,7 @@ public final class IntentParser {
         UnknownKeyValidator.collect(tree, issues);
         collectEmptyArrivalValues(tree, issues);
         collectBooleanLabelWords(tree, issues);
+        List<RelationInitFlag> initFlags = liftRelationInitFlags(tree, issues);
         // Statuses may be referenced by their seeded NAME; resolve them to ids on the raw tree so the
         // typed mapping, every validator and every generator keep seeing the integers they always saw.
         StatusSymbolResolver.resolve(tree);
@@ -411,8 +412,67 @@ public final class IntentParser {
             model = new IntentModel();
         }
         restoreSetMaps(tree, model);
+        restoreRelationInitFlags(initFlags, model);
         validate(model, issues);
         return model;
+    }
+
+    /** A to-one relation's {@code init: { flag: <field> }} (#8683), by its position in the raw tree. */
+    private record RelationInitFlag(int entity, int relation, String flag) {
+    }
+
+    /**
+     * A to-one relation's {@code init:} is a seed id or name, or - its object form (#8683) - the
+     * target's {@code single:} flag it defaults from: {@code init: { flag: Base }}. The typed
+     * {@code init} is a string, so the mapping is lifted off the raw tree before the typed mapping (and
+     * before {@code StatusSymbolResolver}, which reads a scalar there) and restored onto the typed
+     * relation afterwards by {@link #restoreRelationInitFlags}. The unknown-key walk has already held
+     * the mapping to its one key.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     * @param issues the collecting issue list
+     * @return the lifted flags, by entity and relation position
+     */
+    @SuppressWarnings("unchecked")
+    private static List<RelationInitFlag> liftRelationInitFlags(Object tree, List<String> issues) {
+        List<RelationInitFlag> flags = new ArrayList<>();
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("entities") instanceof List<?> entities)) {
+            return flags;
+        }
+        for (int e = 0; e < entities.size(); e++) {
+            if (!(entities.get(e) instanceof Map<?, ?> entity) || !(entity.get("relations") instanceof List<?> relations)) {
+                continue;
+            }
+            for (int r = 0; r < relations.size(); r++) {
+                if (!(relations.get(r) instanceof Map<?, ?> relation) || !(relation.get("init") instanceof Map<?, ?> init)) {
+                    continue;
+                }
+                ((Map<Object, Object>) relation).remove("init");
+                if (init.get("flag") instanceof String flag && !flag.isBlank()) {
+                    flags.add(new RelationInitFlag(e, r, flag.trim()));
+                } else {
+                    issues.add("entity [" + entity.get("name") + "] relation [" + relation.get("name")
+                            + "] init must name the target's single: boolean - write init: { flag: <field> }");
+                }
+            }
+        }
+        return flags;
+    }
+
+    /** Puts each lifted {@code init: { flag }} onto the typed relation it was written on. */
+    private static void restoreRelationInitFlags(List<RelationInitFlag> flags, IntentModel model) {
+        for (RelationInitFlag flag : flags) {
+            if (flag.entity() < model.getEntities()
+                                     .size()) {
+                List<RelationIntent> relations = model.getEntities()
+                                                      .get(flag.entity())
+                                                      .getRelations();
+                if (flag.relation() < relations.size()) {
+                    relations.get(flag.relation())
+                             .setInitFlag(flag.flag());
+                }
+            }
+        }
     }
 
     /**
@@ -464,6 +524,7 @@ public final class IntentParser {
         validateLifecycles(model, issues);
         validateStatusStamps(model, issues);
         validateSingleFlags(model, issues);
+        validateRelationInitFlags(model, issues);
         validatePostings(model, usesAliases, issues);
         validateReports(model, entityNames, issues);
         validateWidgets(model, issues);
@@ -785,7 +846,7 @@ public final class IntentParser {
      * server's own "field is required".
      */
     private static void validateDuplicableReset(String subject, String name, RelationIntent relation, List<String> issues) {
-        if (relation.isRequired() && !hasText(relation.getInit())) {
+        if (relation.isRequired() && !hasText(relation.getInit()) && relation.getInitFlag() == null) {
             issues.add(subject + " names required relation [" + name + "], which declares no init: - resetting it would make every"
                     + " duplicate fail; give it a defaults: value or an init:");
         }
@@ -5585,7 +5646,7 @@ public final class IntentParser {
         if (relation.isComposition()) {
             unsupported.add("composition");
         }
-        if (!isBlank(relation.getInit())) {
+        if (!isBlank(relation.getInit()) || relation.getInitFlag() != null) {
             unsupported.add("init");
         }
         if (!isBlank(relation.getFunction())) {
@@ -12858,6 +12919,63 @@ public final class IntentParser {
                 }
             }
         }
+    }
+
+    /**
+     * A to-one relation's {@code init: { flag: <field> }} (#8683): the target's fleet-wide
+     * {@code single:} boolean, whose holder a new row defaults to. A same-model target is checked here;
+     * a cross-model one is checked against its owner model at generation, as its other properties are.
+     * A {@code single: { per: }} flag has a holder per scope, and the scope value of the record being
+     * created is not resolved in this cut - refused rather than read fleet-wide. A status starts at a
+     * seed, never at a flag.
+     */
+    private static void validateRelationInitFlags(IntentModel model, List<String> issues) {
+        for (EntityIntent entity : model.getEntities()) {
+            for (RelationIntent relation : entity.getRelations()) {
+                String flag = relation.getInitFlag();
+                if (flag == null) {
+                    continue;
+                }
+                String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "] init flag [" + flag + "]";
+                if (!"manyToOne".equals(relation.getKind()) && !"oneToOne".equals(relation.getKind())) {
+                    issues.add(subject + " needs a manyToOne or oneToOne relation - the flag's holder is one record");
+                    continue;
+                }
+                if (relation.isEntityStatus()) {
+                    issues.add(subject + " cannot default a function: EntityStatus relation - a status starts at a seed (init: <status>)");
+                    continue;
+                }
+                if (relation.isCrossModel()) {
+                    continue;
+                }
+                EntityIntent target = relation.getTo() == null ? null : entityByName(model, relation.getTo());
+                if (target != null) {
+                    validateInitFlagField(target, flag, subject, issues);
+                }
+            }
+        }
+    }
+
+    /** The named field of the target is a boolean carrying a fleet-wide {@code single:}. */
+    private static void validateInitFlagField(EntityIntent target, String flag, String subject, List<String> issues) {
+        for (FieldIntent field : target.getFields()) {
+            if (!IntentNaming.pascalCase(flag)
+                             .equals(IntentNaming.pascalCase(field.getName()))) {
+                continue;
+            }
+            if (!"boolean".equals(field.getType()) || field.getSingle() == null) {
+                issues.add(subject + " names [" + target.getName() + "." + field.getName()
+                        + "], which is not a boolean with single: - the default is the one row holding that flag");
+            } else if (field.getSingle()
+                            .getPer() != null) {
+                issues.add(subject
+                        + " names [" + target.getName() + "." + field.getName() + "], whose single: is scoped per [" + field.getSingle()
+                                                                                                                            .getPer()
+                        + "] - a per-scope holder cannot be a default yet; use a fleet-wide single: flag");
+            }
+            return;
+        }
+        issues.add(subject + " is not a field of [" + target.getName() + "] - name its single: boolean");
     }
 
     /** A stamped field takes the moment of the move and nothing else writes it. */

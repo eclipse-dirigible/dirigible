@@ -113,13 +113,17 @@ public final class CrossModelSupport {
      *        seed ids in seed order, as {@code LifecycleStages.stagesOf} reads it in the owner. A
      *        cross-model posting needs it to know which later statuses still hold its post (issue
      *        #8243); empty when the owner classifies none or the model was not resolved
+     * @param singleFlags the target's {@code single:} booleans (the owner's {@code singleFlags}): each
+     *        flag property with its scoping relation's property, {@code ""} when fleet-wide. A relation
+     *        defaulting from one ({@code init: { flag: }}, issue #8683) is checked against it; empty
+     *        when the owner declares none, {@code null} when the model was not resolved
      */
     public record TargetInfo(boolean resolved, String perspectiveName, String tableDataName, String keyField, String keyColumn,
             String labelField, String fkType, java.util.Set<String> propertyNames, String hierarchyProperty, String identityProperty,
             java.util.Map<String, String> propertyWidgets, String statusProperty, java.util.Map<String, String> propertyRelations,
             java.util.Set<String> translatedProperties, java.util.Map<String, String> propertyTypes,
             java.util.Set<String> draftNumberProperties, String hierarchyColumn, String writeRoles,
-            java.util.Map<String, List<Integer>> statusStages) {
+            java.util.Map<String, List<Integer>> statusStages, java.util.Map<String, String> singleFlags) {
     }
 
     @SuppressWarnings("unchecked")
@@ -599,7 +603,7 @@ public final class CrossModelSupport {
                         hierarchyProperty, identityProperty, propertyWidgets, statusProperty, propertyRelations,
                         translatedProperties("true".equals(String.valueOf(entity.get("multilingual"))), properties), propertyTypes,
                         draftNumberProperties(properties), hierarchyProperty == null ? null : propertyColumns.get(hierarchyProperty),
-                        str(entity.get("roleWrite"), null), statusStages);
+                        str(entity.get("roleWrite"), null), statusStages, singleFlags(entity.get("singleFlags")));
             }
         } catch (RuntimeException e) {
             LOGGER.warn("Failed to read owner model [{}] for cross-model target [{}]", LoggedValue.of(modelPath),
@@ -690,7 +694,23 @@ public final class CrossModelSupport {
         String table = IntentNaming.upperSnake(alias) + "_" + IntentNaming.upperSnake(targetEntity);
         String keyColumn = IntentNaming.upperSnake(targetEntity) + "_ID";
         return new TargetInfo(false, targetEntity, table, "Id", keyColumn, "Name", "INTEGER", null, null, null, null, null, null,
-                java.util.Set.of(), null, java.util.Set.of(), null, null, java.util.Map.of());
+                java.util.Set.of(), null, java.util.Set.of(), null, null, java.util.Map.of(), null);
+    }
+
+    /**
+     * The owner's {@code singleFlags} read back as flag property to scoping property ({@code ""} when
+     * fleet-wide); an owner without the attribute declares none.
+     */
+    private static java.util.Map<String, String> singleFlags(Object attribute) {
+        java.util.Map<String, String> flags = new java.util.LinkedHashMap<>();
+        if (attribute instanceof List<?> declared) {
+            for (Object entry : declared) {
+                if (entry instanceof Map<?, ?> flag && flag.get("property") != null) {
+                    flags.put(String.valueOf(flag.get("property")), flag.get("per") == null ? "" : String.valueOf(flag.get("per")));
+                }
+            }
+        }
+        return flags;
     }
 
     /**

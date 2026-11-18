@@ -2306,6 +2306,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                                    .isBlank()) {
             p.put("dataDefaultValue", relation.getInit());
         }
+        putInitFlag(p, relation, null);
         p.put("auditType", "NONE");
         // Relationship metadata the generation reads (Dirigible .model convention): composition vs
         // association + cardinality (composition 1_n; association n_1 for manyToOne, 1_1 for oneToOne);
@@ -2426,6 +2427,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                                    .isBlank()) {
             p.put("dataDefaultValue", relation.getInit());
         }
+        putInitFlag(p, relation, info);
         p.put("auditType", "NONE");
         p.put("relationshipType", "ASSOCIATION");
         p.put("relationshipCardinality", oneToOne ? "1_1" : "n_1");
@@ -2886,6 +2888,35 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // personal pages can show "New/Edit <Doc> for <owner>". Falls back to the identity match field.
         p.put("relationshipIdentityLabel",
                 (targetIdentityLabel == null || targetIdentityLabel.isBlank()) ? targetIdentityProperty : targetIdentityLabel);
+    }
+
+    /**
+     * {@code init: { flag: <field> }} (issue #8683): {@code relationshipInitFlag} names the target's
+     * {@code single:} boolean, so a create defaults the FK to the row holding it - read when the record
+     * is created, never a column DEFAULT, which can only be a fixed id. The parser checked a same-model
+     * target; a resolved cross-model one ({@code target} non-null) is checked here against its owner
+     * model's {@code singleFlags}, and an unresolved one (the unit-test convention fallback) is taken
+     * as written.
+     */
+    private static void putInitFlag(Map<String, Object> p, RelationIntent relation, CrossModelSupport.TargetInfo target) {
+        if (relation.getInitFlag() == null) {
+            return;
+        }
+        String flag = IntentNaming.pascalCase(relation.getInitFlag());
+        if (target != null && target.resolved() && target.singleFlags() != null) {
+            String per = target.singleFlags()
+                               .get(flag);
+            if (per == null) {
+                throw new IntentValidationException(java.util.List.of("relation [" + relation.getName() + "] init flag ["
+                        + relation.getInitFlag() + "] is not a single: boolean of [" + relation.getTo() + "] in its owner model"));
+            }
+            if (!per.isEmpty()) {
+                throw new IntentValidationException(java.util.List.of("relation [" + relation.getName() + "] init flag ["
+                        + relation.getInitFlag() + "] of [" + relation.getTo() + "] is scoped per [" + per
+                        + "] - a per-scope holder cannot be a default yet; use a fleet-wide single: flag"));
+            }
+        }
+        p.put("relationshipInitFlag", flag);
     }
 
     /**
