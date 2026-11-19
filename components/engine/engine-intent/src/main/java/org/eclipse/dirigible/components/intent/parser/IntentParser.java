@@ -514,6 +514,7 @@ public final class IntentParser {
         validateSubtitles(model, issues);
         validateOrderBy(model, issues);
         validateProcesses(model, entityNames, issues);
+        validateSystemProperties(model, issues);
         validateForms(model, entityNames, issues);
         validateActions(model, entityNames, issues);
         // A reversal IS a create-from of its entity onto itself (issue #7886): expanded before the
@@ -6447,6 +6448,39 @@ public final class IntentParser {
             }
         }
         return roles;
+    }
+
+    /**
+     * {@code systemProperties: { processId: { visibleTo: [Role, ...] } }} (dirigible #8692) - who the
+     * generated pages show the generator's own {@code ProcessId} / {@code ProcessIds} to. The roles
+     * must be declared in {@code permissions}, as a field's {@code visibleTo:} must, and the list must
+     * name at least one: a setting that names nobody hides the value from every reader, which is not
+     * what an allow-list says.
+     */
+    private static void validateSystemProperties(IntentModel model, List<String> issues) {
+        if (model.getSystemProperties() == null || model.getSystemProperties()
+                                                        .getProcessId() == null) {
+            return;
+        }
+        String subject = "systemProperties.processId visibleTo";
+        List<String> roles = model.getSystemProperties()
+                                  .getProcessId()
+                                  .getVisibleTo();
+        if (roles.isEmpty()) {
+            issues.add(subject + " lists no role - list the roles the pages show ProcessId to, or remove systemProperties.processId");
+            return;
+        }
+        Set<String> declaredRoles = declaredRoles(model);
+        for (String role : roles) {
+            if (role == null || role.isBlank()) {
+                issues.add(subject + " lists a blank role");
+            } else if (!declaredRoles.contains(role)) {
+                List<String> known = new ArrayList<>(declaredRoles);
+                known.sort(null);
+                issues.add(subject + " names role [" + role + "], which the intent does not declare - add it to `permissions`"
+                        + (known.isEmpty() ? " (the intent declares no roles at all)" : " (declared: " + String.join(", ", known) + ")"));
+            }
+        }
     }
 
     /**

@@ -43,7 +43,9 @@
 #macro(emptyTextArgs $p)'$projectName:${tprefix}.t.${p.dataName}_empty', '${p.widgetEmptyTextJs}'#end
 #macro(emptyPlaceholder $p)#if($p.widgetEmptyText) :placeholder="T(#emptyTextArgs($p))"#end#end
 #macro(valueDisplay $property)#if($property.widgetEmptyText)orEmptyText(record.${property.name}, fieldDisplay(record.${property.name}, #displayArgs($property)), #emptyTextArgs($property))#{else}fieldDisplay(record.${property.name}, #displayArgs($property))#end#end
-#macro(valueGate $property)#if($property.widgetEmptyText)#if($property.roleRead || $property.visibleWhenJs)x-show="#if($property.roleRead)canSee('${property.name}')#if($property.visibleWhenJs) && #end#end$!{property.visibleWhenJs}"#end#{else}x-show="#if($property.roleRead)canSee('${property.name}') && #end#if($property.visibleWhenJs)${property.visibleWhenJs} && #{end}fieldDisplay(form.${property.name}, #displayArgs($property)) !== ''"#end#end
+## roleDisplay (#8692, systemProperties.processId) gates the row like roleRead does, by the same
+## /restricted answer - but only the row: the response still carries the value.
+#macro(valueGate $property)#set($valueGated = $property.roleRead || $property.roleDisplay)#if($property.widgetEmptyText)#if($valueGated || $property.visibleWhenJs)x-show="#if($valueGated)canSee('${property.name}')#if($property.visibleWhenJs) && #end#end$!{property.visibleWhenJs}"#end#{else}x-show="#if($valueGated)canSee('${property.name}') && #end#if($property.visibleWhenJs)${property.visibleWhenJs} && #{end}fieldDisplay(form.${property.name}, #displayArgs($property)) !== ''"#end#end
 <div x-data="${name}DocumentPage" class="vbox w-full">
 ## Document roles: the DOCUMENT_NUMBER field shows in the title (e.g. "SALES INVOICE 00001231"); the
 ## DOCUMENT_STATUS FK shows as a read-only coloured pill (statusText/statusVariant resolve + colour it).

@@ -772,6 +772,11 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   `uuid`), and together with `major: true`, `visibleWhen:`, the entity's `list:` or a `related:`
   register's `show:`. Unlike `visibleTo:`, which also strips the value from REST, `hidden` only keeps
   it off the pages.
+- `systemProperties: { processId: { visibleTo: [Support] } }` (top level, **once per intent**) - who
+  the record pages show the generated `ProcessId` / `ProcessIds` to (the "Process Id" in the Details
+  rail of every entity a process starts on). Display only: the REST responses keep the value, because
+  the page matches the record's process tasks on it. Every role must be declared in `permissions`, and
+  the list must name at least one. Absent, every reader sees them, as before.
 - `emptyText: <text>` (on a **field**) - **what an empty value reads as** when "empty" means
   something: `{ name: maxLoans, type: integer, readOnly: true, label: Loan limit, emptyText: No limit }`,
   `{ name: expiresOn, type: date, emptyText: Never }`, `{ name: nickname, type: string, emptyText: Not set }`.

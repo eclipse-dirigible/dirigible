@@ -646,8 +646,18 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // An entity a process starts on create carries a ProcessId back-reference (the runtime
             // listener/handler writes the started process-instance id here). See TriggerSupport.
             if (triggerTargets.contains(name)) {
-                properties.add(processIdProperty(name));
-                properties.add(processIdsProperty(name));
+                Map<String, Object> processId = processIdProperty(name);
+                Map<String, Object> processIds = processIdsProperty(name);
+                // `systemProperties.processId.visibleTo` (#8692): the pages show the pair only to those
+                // roles. Display only - unlike a field's roleRead, the REST responses keep serving the
+                // value, because the page correlates the record's process tasks on ProcessId.
+                String processIdRoles = processIdDisplayRoles(model);
+                if (processIdRoles != null) {
+                    processId.put("roleDisplay", processIdRoles);
+                    processIds.put("roleDisplay", processIdRoles);
+                }
+                properties.add(processId);
+                properties.add(processIds);
             }
             // The parent of a capacity roll-up with a status remembers the status that roll-up displaced,
             // so a sum back at zero can restore it (#7016). See displacedStatusProperty.
@@ -2253,6 +2263,25 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("widgetLength", "");
         p.put("widgetIsMajor", "false");
         return p;
+    }
+
+    /**
+     * The roles {@code systemProperties.processId.visibleTo} shows the generated {@code ProcessId} /
+     * {@code ProcessIds} to, comma-separated as a property's role attributes are - or null, the
+     * default, when the intent does not restrict them (dirigible #8692).
+     */
+    private static String processIdDisplayRoles(IntentModel model) {
+        if (model.getSystemProperties() == null || model.getSystemProperties()
+                                                        .getProcessId() == null
+                || model.getSystemProperties()
+                        .getProcessId()
+                        .getVisibleTo()
+                        .isEmpty()) {
+            return null;
+        }
+        return String.join(",", model.getSystemProperties()
+                                     .getProcessId()
+                                     .getVisibleTo());
     }
 
     /**

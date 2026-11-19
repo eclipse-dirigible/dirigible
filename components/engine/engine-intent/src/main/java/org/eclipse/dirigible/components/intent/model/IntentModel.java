@@ -92,9 +92,22 @@ public class IntentModel {
      * Effective-dated register lookups - fill a to-one from the register row valid on a record's date.
      */
     private List<ResolveIntent> resolves = new ArrayList<>();
+    /**
+     * Settings of the properties the generator adds on its own (dirigible #8692) - e.g. who the pages
+     * show {@code ProcessId} to. Absent (the default), nothing changes.
+     */
+    private SystemPropertiesIntent systemProperties;
 
     public List<ActionIntent> getActions() {
         return actions;
+    }
+
+    public SystemPropertiesIntent getSystemProperties() {
+        return systemProperties;
+    }
+
+    public void setSystemProperties(SystemPropertiesIntent systemProperties) {
+        this.systemProperties = systemProperties;
     }
 
     public List<ResolveIntent> getResolves() {
