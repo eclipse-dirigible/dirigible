@@ -1095,7 +1095,7 @@ class ReportIntentGeneratorTest {
         // optional Unit relation itself is left-joined too - dirigible #7105 - so count the _LANG one.)
         assertEquals(1, query.split("LEFT JOIN \"SHOP_UNIT_LANG\"", -1).length - 1, query);
         assertTrue(query.contains(
-                "LEFT JOIN \"SHOP_UNIT_LANG\" as Unit_LANG ON Unit_LANG.\"Id\" = Unit.\"UNIT_ID\" AND Unit_LANG.\"Language\" = :language"),
+                "LEFT JOIN \"SHOP_UNIT_LANG\" as Unit_LANG ON Unit_LANG.\"Id\" = Unit.\"UNIT_ID\" AND LOWER(TRIM(Unit_LANG.\"Language\")) = :language"),
                 query);
         // The related nomenclature's label - the column the issue was raised about.
         assertTrue(query.contains("COALESCE(Unit_LANG.\"Name\", Unit.\"UNIT_NAME\") as \"Unit\""), query);
@@ -1143,7 +1143,7 @@ class ReportIntentGeneratorTest {
                                                      .get("query");
 
         assertTrue(query.contains(
-                "LEFT JOIN \"SHOP_UNIT_LANG\" as Unit_LANG ON Unit_LANG.\"Id\" = Unit.\"UNIT_ID\" AND Unit_LANG.\"Language\" = :language"),
+                "LEFT JOIN \"SHOP_UNIT_LANG\" as Unit_LANG ON Unit_LANG.\"Id\" = Unit.\"UNIT_ID\" AND LOWER(TRIM(Unit_LANG.\"Language\")) = :language"),
                 query);
         assertTrue(query.contains("COALESCE(Unit_LANG.\"Name\", Unit.\"UNIT_NAME\") as \"Name\""), query);
         assertTrue(query.contains("Unit.\"UNIT_FACTOR\" as \"Factor\""), query);

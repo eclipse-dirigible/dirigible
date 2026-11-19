@@ -4230,7 +4230,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // (never interpolated) that the report repository fills from the request.
         String claimsByUnitReport = contentOf("ClaimsByUnit.report");
         assertTrue(claimsByUnitReport.contains(
-                "LEFT JOIN \\\"EMISSION_UNIT_LANG\\\" as Unit_LANG ON Unit_LANG.\\\"Id\\\" = Unit.\\\"UNIT_ID\\\" AND Unit_LANG.\\\"Language\\\" = :language"),
+                "LEFT JOIN \\\"EMISSION_UNIT_LANG\\\" as Unit_LANG ON Unit_LANG.\\\"Id\\\" = Unit.\\\"UNIT_ID\\\" AND LOWER(TRIM(Unit_LANG.\\\"Language\\\")) = :language"),
                 "a translated report dimension must join the language table for the request language: " + claimsByUnitReport);
         assertTrue(claimsByUnitReport.contains("COALESCE(Unit_LANG.\\\"Name\\\", Unit.\\\"UNIT_NAME\\\")"),
                 "a translated report dimension must fall back to its base value: " + claimsByUnitReport);

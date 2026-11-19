@@ -1723,10 +1723,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 });
                 String languageAlias = ref.tableAlias + LANGUAGE_TABLE_SUFFIX;
                 repoJoins.putIfAbsent(languageAlias,
-                        new Join(ref.languageTable, languageAlias,
-                                languageAlias + "." + quote(LANGUAGE_ID_COLUMN) + " = " + baseAlias + "." + quote(keyColumn) + " AND "
-                                        + languageAlias + "." + quote(LANGUAGE_CODE_COLUMN) + " = " + LANGUAGE_PARAMETER,
-                                LANGUAGE_JOIN_TYPE, true));
+                        new Join(ref.languageTable, languageAlias, languageAlias + "." + quote(LANGUAGE_ID_COLUMN) + " = " + baseAlias + "."
+                                + quote(keyColumn) + " AND " + languageMatch(languageAlias), LANGUAGE_JOIN_TYPE, true));
                 repoExpression =
                         "COALESCE(" + languageAlias + "." + quote(ref.languageColumn) + ", " + baseAlias + "." + quote(viewColumn) + ")";
             } else {
@@ -3361,8 +3359,22 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         ref.languageColumn = property;
         ref.languageTable = table + LANGUAGE_TABLE_SUFFIX;
         ref.languageKey = ref.tableAlias + "." + quote(keyColumn);
-        ref.languageJoin = new Join(ref.languageTable, alias, alias + "." + quote(LANGUAGE_ID_COLUMN) + " = " + ref.languageKey + " AND "
-                + alias + "." + quote(LANGUAGE_CODE_COLUMN) + " = " + LANGUAGE_PARAMETER, LANGUAGE_JOIN_TYPE, true);
+        ref.languageJoin = new Join(ref.languageTable, alias,
+                alias + "." + quote(LANGUAGE_ID_COLUMN) + " = " + ref.languageKey + " AND " + languageMatch(alias), LANGUAGE_JOIN_TYPE,
+                true);
+    }
+
+    /**
+     * The condition that picks a translation row of the caller's language. It compares the stored code
+     * the way {@code Translator} does for the entity's forms and lists - trimmed and case-insensitive -
+     * so a row a hand-written CSV or SQL stored as {@code BG} translates the report too (#8737).
+     * {@code :language} is bound lower-cased by the generated repository.
+     *
+     * @param alias the alias of the translation table
+     * @return the join condition on the language code
+     */
+    private static String languageMatch(String alias) {
+        return "LOWER(TRIM(" + alias + "." + quote(LANGUAGE_CODE_COLUMN) + ")) = " + LANGUAGE_PARAMETER;
     }
 
     /**

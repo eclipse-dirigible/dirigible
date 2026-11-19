@@ -188,7 +188,7 @@ class ReportEditorRoundTripTest {
         assertEquals("Currency_LANG", language.get("alias"));
         assertEquals("SALES_CURRENCY_LANG", language.get("name"));
         assertEquals("LEFT", language.get("type"));
-        assertEquals("Currency_LANG.\"Id\" = Currency.\"CURRENCY_ID\" AND Currency_LANG.\"Language\" = :language",
+        assertEquals("Currency_LANG.\"Id\" = Currency.\"CURRENCY_ID\" AND LOWER(TRIM(Currency_LANG.\"Language\")) = :language",
                 language.get("condition"));
         assertEquals("COALESCE(Currency_LANG.\"Name\", Currency.\"CURRENCY_NAME\")", columns(document).get(0)
                                                                                                       .get("expression"));
