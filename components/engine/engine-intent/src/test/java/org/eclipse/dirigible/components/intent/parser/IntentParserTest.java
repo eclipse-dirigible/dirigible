@@ -700,6 +700,45 @@ class IntentParserTest {
                 "expected a date-type issue, got: " + ex.getIssues());
     }
 
+    /**
+     * A register of ANOTHER model (#8687): named with {@code model:}, it is resolved at runtime, so the
+     * parser accepts a name it cannot see - the owner uses this model and cannot be used back - while
+     * the date is still this entity's own.
+     */
+    @Test
+    void immutableInPeriodNamesTheRegisterOfAnotherModel() {
+        String yaml = """
+                name: cashdesk
+                entities:
+                  - name: CashOrder
+                    immutableInPeriod: { period: FiscalPeriod, model: journal, date: date }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: date, type: date }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        PeriodLockIntent lock = model.getEntities()
+                                     .get(0)
+                                     .getImmutableInPeriod();
+        assertEquals("FiscalPeriod", lock.getPeriod());
+        assertEquals("journal", lock.getModel());
+        assertEquals("date", lock.getDate());
+
+        String blankModel = yaml.replace("model: journal", "model: \"\"");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(blankModel));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("immutableInPeriod model is blank")),
+                "expected a blank-model issue, got: " + ex.getIssues());
+
+        String wrongDate = yaml.replace("{ name: date, type: date }", "{ name: date, type: timestamp }");
+        ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(wrongDate));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("date [date] must be a date field")),
+                "the own date is still checked, got: " + ex.getIssues());
+    }
+
     @Test
     void immutableWhenParsesAndValidates() {
         String yaml = """

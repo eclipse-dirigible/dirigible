@@ -4071,6 +4071,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (lock != null) {
             entityMap.put("periodLockEntity", lock.getPeriod());
             entityMap.put("periodLockDateProperty", IntentNaming.pascalCase(lock.getDate()));
+            if (lock.getModel() != null) {
+                // A register of another model (#8687), asked at runtime by model + name.
+                entityMap.put("periodLockModel", lock.getModel());
+            }
         }
     }
 

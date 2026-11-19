@@ -509,7 +509,7 @@ ${importsCode}
 
 @Repository
 @Component("${javaGenFolderName}_${name}Repository")
-public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTargetDeleteRules || $hasTargetAgreementRules || $share) implements #if($hasTargetDeleteRules)org.eclipse.dirigible.sdk.db.TargetDeleteRule#if($hasTargetAgreementRules || $share), #end#end#if($hasTargetAgreementRules)org.eclipse.dirigible.sdk.db.TargetAgreementRule#if($share), #end#end#if($share)org.eclipse.dirigible.components.engine.share.ShareSubject#end#end {
+public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTargetDeleteRules || $hasTargetAgreementRules || $share || $periodStatusProperty) implements #if($hasTargetDeleteRules)org.eclipse.dirigible.sdk.db.TargetDeleteRule#if($hasTargetAgreementRules || $share || $periodStatusProperty), #end#end#if($hasTargetAgreementRules)org.eclipse.dirigible.sdk.db.TargetAgreementRule#if($share || $periodStatusProperty), #end#end#if($share)org.eclipse.dirigible.components.engine.share.ShareSubject#if($periodStatusProperty), #end#end#if($periodStatusProperty)org.eclipse.dirigible.sdk.db.PeriodRegister#end#end {
 
 #if($reportedOnUpdate.size() > 0 || ($guardChecks && $guardChecks.size() > 0))
     /**
@@ -3048,6 +3048,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     }
 
     private boolean isPeriodClosed(${periodLock.dateJavaClass} date) {
+#if($periodLock.foreignModel)
+        // The register belongs to the ${periodLock.foreignModel} model (#8687): asked at runtime, and
+        // open while that model is not deployed.
+        return org.eclipse.dirigible.sdk.db.PeriodRegisters.isClosed("${periodLock.foreignModel}", "${periodLock.entity}", date);
+#else
         if (date == null) {
             return false;
         }
@@ -3060,6 +3065,42 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             }
             for (String closed : "${periodLock.closedValues}".split(",")) {
                 if (closed.equals(String.valueOf(period.${periodLock.statusProperty}))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+#end
+    }
+#end
+#if($periodStatusProperty)
+
+    // A period register answers for the records of OTHER models too (intent `immutableInPeriod:` with
+    // `model:`, #8687): a source document whose module this model uses cannot reference this register
+    // at compile time, so it asks every PeriodRegister by model and name at runtime.
+    @Override
+    public String periodModel() {
+        return "${javaGenFolderName}";
+    }
+
+    @Override
+    public String periodRegister() {
+        return "${name}";
+    }
+
+    @Override
+    public boolean isClosedOn(java.time.LocalDate date) {
+        if (date == null) {
+            return false;
+        }
+        for (${name}Entity period : findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                                                                                                         .le("${periodStartProperty}", date)
+                                                                                                         .ge("${periodEndProperty}", date))) {
+            if (period.${periodStatusProperty} == null) {
+                continue;
+            }
+            for (String closed : "${periodClosedValues}".split(",")) {
+                if (closed.equals(String.valueOf(period.${periodStatusProperty}))) {
                     return true;
                 }
             }
