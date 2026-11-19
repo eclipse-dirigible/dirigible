@@ -323,8 +323,9 @@ the register is read at generation time: the register's generated repository ans
 `PeriodRegister` (`org.eclipse.dirigible.sdk.db`), and the lock asks it at runtime by model and
 name, with the same semantics - 409 on user writes, the repository's refusal on system writes. While
 the owner model is not deployed, the record is not locked. A POSTING into a record locked this way is
-still refused by its repository, but does not pre-check the period or re-run itself when the period
-reopens (that needs the register's facts, which only a local register provides).
+pre-checked the same way before it writes (#8755: it waits with a warning instead of failing into
+its target's refusal), but is not re-run when the period reopens - the sweep listens on the
+register's own topic, which only a local register lets the posting name.
 
 ## lifecycle - the legal status graph
 

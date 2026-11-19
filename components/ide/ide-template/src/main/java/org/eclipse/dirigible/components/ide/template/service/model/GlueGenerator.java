@@ -1428,7 +1428,7 @@ class GlueGenerator {
         // the key existed.
         for (String key : new String[] {"periodRegisterEntity", "periodRegisterPerspective", "periodRegisterKeyField",
                 "periodStartProperty", "periodEndProperty", "periodStatusProperty", "periodClosedValues", "periodDateProperty",
-                "periodSourceDateProperty", "reopenClassName", "reopenTopicSuffix"}) {
+                "periodSourceDateProperty", "reopenClassName", "reopenTopicSuffix", "periodRegisterModel"}) {
             context.put(key, strOr(item, key, ""));
         }
         context.put("periodRegisterJavaPerspective", sanitize(item, "periodRegisterPerspective"));

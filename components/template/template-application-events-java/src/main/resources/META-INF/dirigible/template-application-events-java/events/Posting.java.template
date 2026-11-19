@@ -443,7 +443,7 @@ public class ${className}Posting implements MessageHandler {
             }
         });
     }
-#if($periodRegisterEntity != "" && !$followsSource)
+#if($periodRegisterEntity != "" && $periodRegisterModel == "" && !$followsSource)
 
     /**
      * Whether this posting already stands for the ${sourceEntity} (#8243) - asked by the period-reopen
@@ -591,6 +591,24 @@ public class ${className}Posting implements MessageHandler {
         if (date == null) {
             return true;
         }
+#if($periodRegisterModel != "")
+        // The register belongs to the ${periodRegisterModel} model (#8755): asked at runtime by model and
+        // name, as the target's own repository asks it (#8687) - open while that model is not deployed.
+        java.time.LocalDate day;
+        if (date instanceof java.time.LocalDate local) {
+            day = local;
+        } else if (date instanceof java.sql.Date sql) {
+            day = sql.toLocalDate();
+        } else {
+            String text = String.valueOf(date);
+            try {
+                day = java.time.LocalDate.parse(text.length() > 10 ? text.substring(0, 10) : text);
+            } catch (RuntimeException e) {
+                return true; // not a date this check can read - the target's repository decides
+            }
+        }
+        return !org.eclipse.dirigible.sdk.db.PeriodRegisters.isClosed("${periodRegisterModel}", "${periodRegisterEntity}", day);
+#else
         for (gen.${javaGenFolderName}.data.${periodRegisterJavaPerspective}.${periodRegisterEntity}Entity period :
                 new gen.${javaGenFolderName}.data.${periodRegisterJavaPerspective}.${periodRegisterEntity}Repository().findAll(
                         Criteria.create()
@@ -606,6 +624,7 @@ public class ${className}Posting implements MessageHandler {
             }
         }
         return true;
+#end
     }
 #end
 
