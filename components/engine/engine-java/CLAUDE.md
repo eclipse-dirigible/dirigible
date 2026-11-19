@@ -262,7 +262,13 @@ same budget the JavaScript listener path uses) retries it before the broker dead
 work is retried, but there is still **no job-log row and nothing to trigger by hand** — the log and
 the dead-letter queue are the whole operational record. (Before that log line existed, a throwing
 listener produced no output at all — the handler's own `onError` defaults to a no-op — and before the
-rethrow, the message was acknowledged and the event lost for good.)
+rethrow, the message was acknowledged and the event lost for good.) **A lock-conflict victim is run
+again in process first** (#8745, `DeadlockVictimRetry`): a failure whose cause chain carries SQLSTATE
+`40001`/`40P01` (deadlock, serialization) or `HYT00`/`55P03` (lock-wait timeout, H2/PostgreSQL) is
+retried up to 5 runs with a randomised doubling pause (under 1.5 s in all) before it reaches the
+broker, so contention does not spend the redelivery budget. Safe because the dispatch is no
+transaction - every repository write and `UnitOfWork` commits or rolls back on its own before the
+failure reaches the dispatch - so a repeat asks of the handler only what a redelivery already does.
 
 Two consequences worth internalizing before writing either kind of handler:
 
