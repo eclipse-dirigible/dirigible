@@ -49,9 +49,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 import io.restassured.path.json.JsonPath;
+import io.restassured.response.Response;
 
 
 import org.eclipse.dirigible.components.api.messaging.MessagingFacade;
@@ -2437,8 +2439,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
     // Still the entities list. single: (#8101): a Tender's base flag is fleet-wide and changes hands
     // on a create or an update; a Purse's base flag changes hands within its tender only, and its
-    // preferred flag refuses a second holder in the tender with 409. A Coin defaults to the Mint
-    // holding the base flag (init: { flag: }, #8683).
+    // preferred flag refuses a second holder in the tender with 409. A Denomination's and a Till's base
+    // flags are required (#8700): fleet-wide and per denomination, the holder never gives them up. A
+    // Coin defaults to the Mint holding the base flag (init: { flag: }, #8683).
     private static final String INTENT_YAML_SINGLE_FLAGS = """
               - name: Tender
                 fields:
@@ -2453,6 +2456,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: preferred, type: boolean, single: { per: Tender, onConflict: refuse } }
                 relations:
                   - { name: Tender, kind: manyToOne, to: Tender }
+              - name: Denomination
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: code, type: string, length: 10 }
+                  - { name: base, type: boolean, single: { required: true } }
+              - name: Till
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: label, type: string, length: 30 }
+                  - { name: base,  type: boolean, single: { per: Denomination, required: true } }
+                relations:
+                  - { name: Denomination, kind: manyToOne, to: Denomination }
               - name: Mint
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
@@ -2794,6 +2809,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertSystemWrittenRefusedOnEverySurface();
         assertStatusStampsRuntime();
         assertSingleFlagsRuntime();
+        assertRequiredSingleFlagsRuntime();
         assertInitFlagRuntime();
         assertUniqueIgnoringCaseRuntime();
         assertEmptyToNullRuntime();
@@ -3115,9 +3131,74 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .put(API + purses + "/" + second)
                                                  .then()
                                                  .statusCode(409)
-                                                 .body("message", containsString("Another Purse is already Preferred for this Tender")));
+                                                 .body("message", containsString("Another Purse is already 'Preferred' for this Tender"))
+                                                 .body("messageKey", endsWith(".checks.fieldSingleTakenInScope"))
+                                                 .body("field", equalTo("Preferred")));
         assertEquals(Boolean.TRUE, readRecord(purses, first).get("Preferred"), "a refused write leaves the holder alone");
         assertNotEquals(Boolean.TRUE, readRecord(purses, second).get("Preferred"), "a refused write is not written");
+    }
+
+    /**
+     * {@code single: { required: true }} (#8700), generated, published and running: the holder of the
+     * flag can neither un-flag itself nor be deleted while no other row of its scope holds it (400,
+     * naming the flag); setting the flag on another row moves it, after which the old holder goes. The
+     * first row of a scope is created without the flag, and the last row of a scope may be deleted.
+     */
+    private void assertRequiredSingleFlagsRuntime() {
+        String denominations = "/denomination/DenominationController";
+        int unflagged = createRecord(denominations, "{\"Code\":\"USD\",\"Base\":false}");
+        int euro = createRecord(denominations, "{\"Code\":\"EUR\",\"Base\":true}");
+        assertBaseFlagRefused(() -> given().contentType("application/json")
+                                           .body("{\"Id\":" + euro + ",\"Code\":\"EUR\",\"Base\":false}")
+                                           .when()
+                                           .put(API + denominations + "/" + euro));
+        assertEquals(Boolean.TRUE, readRecord(denominations, euro).get("Base"), "a refused un-flag is not written");
+        assertBaseFlagRefused(() -> given().when()
+                                           .delete(API + denominations + "/" + euro));
+        updateRecord(denominations, unflagged, "{\"Id\":" + unflagged + ",\"Code\":\"USD\",\"Base\":true}", 200);
+        assertEquals(Boolean.FALSE, readRecord(denominations, euro).get("Base"), "taking the flag still demotes its holder");
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .delete(API + denominations + "/" + euro)
+                                                 .then()
+                                                 .statusCode(200));
+
+        String tills = "/till/TillController";
+        int front = createRecord(tills, "{\"Label\":\"front\",\"Denomination\":" + unflagged + ",\"Base\":true}");
+        int back = createRecord(tills, "{\"Label\":\"back\",\"Denomination\":" + unflagged + ",\"Base\":false}");
+        assertBaseFlagRefused(() -> given().contentType("application/json")
+                                           .body("{\"Id\":" + front + ",\"Label\":\"front\",\"Denomination\":" + unflagged
+                                                   + ",\"Base\":false}")
+                                           .when()
+                                           .put(API + tills + "/" + front));
+        assertBaseFlagRefused(() -> given().when()
+                                           .delete(API + tills + "/" + front));
+        int other = createRecord(denominations, "{\"Code\":\"BGN\",\"Base\":false}");
+        int lone = createRecord(tills, "{\"Label\":\"lone\",\"Denomination\":" + other + ",\"Base\":true}");
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .delete(API + tills + "/" + back)
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .delete(API + tills + "/" + lone)
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .delete(API + tills + "/" + front)
+                                                 .then()
+                                                 .statusCode(200));
+    }
+
+    /**
+     * Asserts a write is refused 400 with the shared, translatable {@code fieldSingleRequired}
+     * sentence, naming the {@code Base} field.
+     */
+    private void assertBaseFlagRefused(Supplier<Response> write) {
+        restAssuredExecutor.execute(() -> write.get()
+                                               .then()
+                                               .statusCode(400)
+                                               .body("message", containsString("must stay 'Base'"))
+                                               .body("messageKey", endsWith(".checks.fieldSingleRequired"))
+                                               .body("field", equalTo("Base")));
     }
 
     /**

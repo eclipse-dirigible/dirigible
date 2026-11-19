@@ -153,6 +153,35 @@ class RoleScopedFieldControllerTemplateIT {
         assertFalse(rendered.contains("mayWrite()"), "an ungated controller has no gate to evaluate");
     }
 
+    /**
+     * A display-only role ({@code roleDisplay}, intent {@code systemProperties.processId}, #8692): the
+     * caller outside the roles is told the property is withheld from the page, but the responses keep
+     * the value - the page correlates the record's process tasks on {@code ProcessId}.
+     */
+    @Test
+    void aDisplayOnlyRoleIsListedAsWithheldButNeverStripped() throws Exception {
+        Map<String, Object> context = context();
+        Map<String, Object> processId = new LinkedHashMap<>();
+        processId.put("name", "ProcessId");
+        processId.put("dataName", "PAYSLIP_PROCESS_ID");
+        processId.put("dataType", "VARCHAR");
+        processId.put("dataTypeJavaClass", "String");
+        processId.put("dataPrimaryKey", Boolean.FALSE);
+        processId.put("isReadOnlyProperty", "true");
+        processId.put("roleDisplay", "Support");
+        context.put("properties", List.of(primaryKey(), amount(), processId));
+        String rendered = render("EntityController.java.template", context);
+
+        assertTrue(rendered.contains("@Get(\"/restricted\")"), "the page must be able to ask: " + rendered);
+        assertTrue(rendered.contains("if (!isInAnyRole(\"Support\")) {\n            restricted.add(\"ProcessId\");"),
+                "the property must be listed for a caller outside the roles: " + rendered);
+        // No read redaction at all (the create path's system-owned drop is a different, older guard).
+        assertFalse(rendered.contains("redactRead"), "a display-only role must not strip the value from any response: " + rendered);
+        assertFalse(rendered.contains("if (!isInAnyRole(\"Support\")) {\n            entity.ProcessId = null;"),
+                "the value must stay in every response: " + rendered);
+        assertNoUnresolvedReferences(rendered);
+    }
+
     private static List<String> templates() {
         List<String> templates = new ArrayList<>();
         templates.add("EntityController.java.template");

@@ -146,6 +146,10 @@ public class BpmFlowableConfig {
         // arming has committed (EarlyMessages, #8106).
         config.setCustomJobHandlers(List.of(new EarlyMessageJobHandler()));
 
+        // A completion takes the task's row lock before the process moves on from the task, so a
+        // concurrent completion of the same task fails before its service steps write anything (#8547).
+        TaskCompletionLock.register(config);
+
         return config;
     }
 

@@ -11,6 +11,8 @@ package org.eclipse.dirigible.components.security.domain;
 
 import org.eclipse.dirigible.components.base.artefact.Artefact;
 
+import com.google.gson.annotations.Expose;
+
 import jakarta.persistence.*;
 
 /**
@@ -33,6 +35,23 @@ public class Role extends Artefact {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "ROLE_ID", nullable = false)
     private Long id;
+
+    /**
+     * Whether a tenant's Owner may give this role to a person of the tenant (#8728) - the
+     * {@code "assignable"} attribute of a {@code .roles} entry. A role without it stays reachable only
+     * to integration clients and to groups made at the identity provider.
+     */
+    @Column(name = "ROLE_ASSIGNABLE")
+    @Expose
+    private Boolean assignable;
+
+    /**
+     * How the role reads to a tenant's Owner choosing it for a person - the {@code "label"} attribute
+     * of a {@code .roles} entry; the name stands in when there is none.
+     */
+    @Column(name = "ROLE_LABEL", columnDefinition = "VARCHAR", length = 255)
+    @Expose
+    private String label;
 
     /**
      * Instantiates a new role.
@@ -71,6 +90,42 @@ public class Role extends Artefact {
     }
 
     /**
+     * Whether a tenant's Owner may give this role to a person of the tenant.
+     *
+     * @return true only when the {@code .roles} entry says so
+     */
+    public boolean isAssignable() {
+        return Boolean.TRUE.equals(assignable);
+    }
+
+    /**
+     * Sets whether a tenant's Owner may give this role to a person of the tenant.
+     *
+     * @param assignable the flag; null reads as false
+     */
+    public void setAssignable(Boolean assignable) {
+        this.assignable = assignable;
+    }
+
+    /**
+     * Gets the label a tenant's Owner reads.
+     *
+     * @return the label, null when the entry declares none
+     */
+    public String getLabel() {
+        return label;
+    }
+
+    /**
+     * Sets the label a tenant's Owner reads.
+     *
+     * @param label the label
+     */
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
+    /**
      * To string.
      *
      * @return the string
@@ -78,7 +133,8 @@ public class Role extends Artefact {
     @Override
     public String toString() {
         return "SecurityRole {" + "id=" + id + ", location='" + location + '\'' + ", name='" + name + '\'' + ", type='" + type + '\''
-                + ", description='" + description + '\'' + ", key='" + key + '\'' + ", dependencies='" + dependencies + '\''
-                + ", createdBy=" + createdBy + ", createdAt=" + createdAt + ", updatedBy=" + updatedBy + ", updatedAt=" + updatedAt + '}';
+                + ", description='" + description + '\'' + ", assignable=" + assignable + ", label='" + label + '\'' + ", key='" + key
+                + '\'' + ", dependencies='" + dependencies + '\'' + ", createdBy=" + createdBy + ", createdAt=" + createdAt + ", updatedBy="
+                + updatedBy + ", updatedAt=" + updatedAt + '}';
     }
 }

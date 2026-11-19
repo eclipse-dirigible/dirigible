@@ -62,6 +62,13 @@ class CheckMessagesTest {
         assertEquals("$1 \\ literal", CheckMessages.interpolate("{value} literal", Map.of("value", "$1 \\")));
     }
 
+    /** A message may name a value of the record one hop away (#8665). */
+    @Test
+    void a_one_hop_placeholder_is_interpolated() {
+        assertEquals("max 20% for 2.1 (and {Other.code})", CheckMessages.interpolate(
+                "max {taxRateCap}% for {Category.code} (and {Other.code})", Map.of("taxRateCap", 20, "Category.code", "2.1")));
+    }
+
     @Test
     void the_alternating_arguments_become_ordered_parameters() {
         assertEquals(Map.of("count", 2, "match", "Acme"), CheckMessages.params("count", 2, "match", "Acme"));

@@ -7,7 +7,7 @@ package gen.${javaGenFolderName}.api.${javaPerspectiveName};
 ## A read-scoped property (the modeler's roleRead, or the intent's `visibleTo:` allow-list) is stripped
 ## from every response for a caller outside its roles - and the generated pages ask which ones those are
 ## so they can leave the column/input out instead of rendering a permanently empty one.
-#if($property.roleRead)
+#if($property.roleRead || $property.roleDisplay)
 #set($hasRestrictedReads = "true")
 #end
 ## A single-column `unique: true` is a column-level UNIQUE the SCHEMA leaves for the database to name,
@@ -283,6 +283,11 @@ public class ${name}Controller {
 #foreach ($property in $properties)
 #if($property.roleRead)
         if (!isInAnyRole("${property.roleRead}")) {
+            restricted.add("${property.name}");
+        }
+#elseif($property.roleDisplay)
+        // Withheld from the page only (#8692): the responses keep the value, which the page needs.
+        if (!isInAnyRole("${property.roleDisplay}")) {
             restricted.add("${property.name}");
         }
 #end
@@ -703,6 +708,10 @@ public class ${name}Controller {
         // A `checks: forbidWhen` refuses the REMOVAL of a row it guards too, not only its create and its
         // update - the delete is the third affordance the master-detail panel hides (#7372).
         repository.findOne(id).ifPresent(stored -> requireDeletable(stored));
+#end
+#if($hasRequiredSingleFlags)
+        // The holder of a `single: { required: true }` flag goes only once another row holds it (#8700).
+        repository.findOne(id).ifPresent(repository::requireSingleFlagsKept);
 #end
 #if($attachmentEntity)
         String storagePath = repository.findOne(id)
@@ -1332,6 +1341,11 @@ public class ${name}Controller {
     // A date covered by no period at all is open: periods are declared as they are needed, and an
     // unopened future month must not freeze the present. A record carrying no date falls in none.
     private boolean isPeriodOpen(${periodLock.dateJavaClass} date) {
+#if($periodLock.foreignModel)
+        // The register belongs to the ${periodLock.foreignModel} model (#8687): asked at runtime, and
+        // open while that model is not deployed.
+        return !org.eclipse.dirigible.sdk.db.PeriodRegisters.isClosed("${periodLock.foreignModel}", "${periodLock.entity}", date);
+#else
         if (date == null) {
             return true;
         }
@@ -1344,8 +1358,10 @@ public class ${name}Controller {
             }
         }
         return true;
+#end
     }
 
+#if(!$periodLock.foreignModel)
     private static boolean isPeriodClosed(${periodLock.entityClass} period) {
         if (period.${periodLock.statusProperty} == null) {
             return false;
@@ -1357,6 +1373,7 @@ public class ${name}Controller {
         }
         return false;
     }
+#end
 
 #end
 #if($masterLock)
@@ -1452,6 +1469,9 @@ public class ${name}Controller {
     // recomputes the document's totals, so a document dated in a closed period freezes its lines with
     // it - exactly as a locked status does.
     private boolean isMasterPeriodOpen(${masterLock.period.dateJavaClass} date) {
+#if($masterLock.period.foreignModel)
+        return !org.eclipse.dirigible.sdk.db.PeriodRegisters.isClosed("${masterLock.period.foreignModel}", "${masterLock.period.entity}", date);
+#else
         if (date == null) {
             return true;
         }
@@ -1468,6 +1488,7 @@ public class ${name}Controller {
             }
         }
         return true;
+#end
     }
 #end
 #foreach($ancestor in $masterLock.ancestors)
@@ -1493,6 +1514,9 @@ public class ${name}Controller {
 #if($ancestor.period)
 
     private boolean isAncestor${ancestorIndex}PeriodOpen(${ancestor.period.dateJavaClass} date) {
+#if($ancestor.period.foreignModel)
+        return !org.eclipse.dirigible.sdk.db.PeriodRegisters.isClosed("${ancestor.period.foreignModel}", "${ancestor.period.entity}", date);
+#else
         if (date == null) {
             return true;
         }
@@ -1509,6 +1533,7 @@ public class ${name}Controller {
             }
         }
         return true;
+#end
     }
 #end
 #end
@@ -1845,7 +1870,7 @@ public class ${name}Controller {
 #end
     }
 #end
-#if($needsRoles || $isEntityPropertySecurityEnabled || $share)
+#if($needsRoles || $isEntityPropertySecurityEnabled || $share || $hasRestrictedReads)
 
     /**
      * Whether the caller holds ANY of a comma-separated role list. One role name is what the entity

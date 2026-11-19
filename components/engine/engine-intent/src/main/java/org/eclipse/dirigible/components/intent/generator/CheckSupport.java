@@ -618,6 +618,10 @@ public final class CheckSupport {
                                 + "] compares with " + (date ? "dates - use CURRENT_DATE" : "timestamps - use CURRENT_TIMESTAMP"));
             }
             Map<String, Object> reading = reading("moment", "shape", shape);
+            if (moment.start() != null) {
+                // A period start (#8664): the first day of the month / quarter / year it is judged in.
+                reading.put("start", moment.start());
+            }
             String offset = moment.duration();
             if (offset == null) {
                 return CompareLiteral.of(reading);

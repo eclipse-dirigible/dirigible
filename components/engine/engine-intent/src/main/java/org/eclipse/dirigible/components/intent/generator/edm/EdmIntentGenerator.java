@@ -38,6 +38,7 @@ import org.eclipse.dirigible.components.intent.generator.ImportSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.ReportItemsSupport;
+import org.eclipse.dirigible.components.intent.generator.CheckMessageParams;
 import org.eclipse.dirigible.components.intent.generator.CheckSupport;
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
@@ -646,8 +647,18 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // An entity a process starts on create carries a ProcessId back-reference (the runtime
             // listener/handler writes the started process-instance id here). See TriggerSupport.
             if (triggerTargets.contains(name)) {
-                properties.add(processIdProperty(name));
-                properties.add(processIdsProperty(name));
+                Map<String, Object> processId = processIdProperty(name);
+                Map<String, Object> processIds = processIdsProperty(name);
+                // `systemProperties.processId.visibleTo` (#8692): the pages show the pair only to those
+                // roles. Display only - unlike a field's roleRead, the REST responses keep serving the
+                // value, because the page correlates the record's process tasks on ProcessId.
+                String processIdRoles = processIdDisplayRoles(model);
+                if (processIdRoles != null) {
+                    processId.put("roleDisplay", processIdRoles);
+                    processIds.put("roleDisplay", processIdRoles);
+                }
+                properties.add(processId);
+                properties.add(processIds);
             }
             // The parent of a capacity roll-up with a status remembers the status that roll-up displaced,
             // so a sum back at zero can restore it (#7016). See displacedStatusProperty.
@@ -2256,6 +2267,25 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * The roles {@code systemProperties.processId.visibleTo} shows the generated {@code ProcessId} /
+     * {@code ProcessIds} to, comma-separated as a property's role attributes are - or null, the
+     * default, when the intent does not restrict them (dirigible #8692).
+     */
+    private static String processIdDisplayRoles(IntentModel model) {
+        if (model.getSystemProperties() == null || model.getSystemProperties()
+                                                        .getProcessId() == null
+                || model.getSystemProperties()
+                        .getProcessId()
+                        .getVisibleTo()
+                        .isEmpty()) {
+            return null;
+        }
+        return String.join(",", model.getSystemProperties()
+                                     .getProcessId()
+                                     .getVisibleTo());
+    }
+
+    /**
      * The {@code ProcessId} back-reference property added to an entity that a process starts on create.
      * A plain VARCHAR holding the started process-instance id; the runtime trigger handler writes it.
      * Not a major widget - it is system-managed, not user input. The per-process bookkeeping lives in
@@ -2478,11 +2508,17 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * (#8306): a PUT naming another master would move the line and its amounts there, so its refusal
      * says how a line does move. A {@code fixedWhenReferenced: true} relation (#8194) is emitted the
      * same way as {@code fixedWhenReferenced} + {@code fixedWhenReferencedMessage}, under
-     * {@code checks.<Entity>_fixedWhenReferenced_<Relation>}, as the field key is. Nothing is emitted
-     * for an ordinary relation.
+     * {@code checks.<Entity>_fixedWhenReferenced_<Relation>}, as the field key is. A
+     * {@code readOnly: true} relation (#8662) - one only the system sets - carries the
+     * {@code isReadOnlyProperty} flag a {@code readOnly} field does, so the same templates keep it off
+     * the New/Edit inputs, show a set value in the read-only details, drop it from a user create and
+     * keep the stored value on a user update. Nothing is emitted for an ordinary relation.
      */
     private static void putFixedRelation(Map<String, Object> p, String ownerEntity, RelationIntent relation) {
         String name = IntentNaming.pascalCase(relation.getName());
+        if (relation.isReadOnly()) {
+            p.put("isReadOnlyProperty", "true");
+        }
         if (relation.isFixedOnceCreated()) {
             p.put("fixedAfterCreate", "true");
             p.put("fixedAfterCreateMessage",
@@ -3170,6 +3206,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                                                                                 .isBlank() ? check.getId()
                                                                                                                   .trim()
                                                                                                         : check.getKind() + "_" + index));
+            // The record's values the message names (#8665), filled in after translation like {count}.
+            List<Map<String, Object>> messageParams =
+                    CheckMessageParams.params(entity, byName, compositionParents, crossModel, check.getMessage());
+            if (!messageParams.isEmpty()) {
+                checkMap.put("messageParams", messageParams);
+            }
             if (check.isWarning()) {
                 // The soft tier (#7466): the check is asked of the person writing instead of refusing
                 // the write. The code is what a caller echoes back to confirm it - stable across saves
@@ -4058,6 +4100,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (lock != null) {
             entityMap.put("periodLockEntity", lock.getPeriod());
             entityMap.put("periodLockDateProperty", IntentNaming.pascalCase(lock.getDate()));
+            if (lock.getModel() != null) {
+                // A register of another model (#8687), asked at runtime by model + name.
+                entityMap.put("periodLockModel", lock.getModel());
+            }
         }
     }
 
@@ -4112,10 +4158,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
 
     /**
      * The single flags ({@code single:}, #8101) the generated repository keeps at one holder per scope:
-     * {@code singleFlags} lists one {@code { property, per, refuse, message }} per flagged boolean,
-     * {@code per} (the scoping relation's FK property) only when scoped and {@code refuse} with its
-     * conflict {@code message} only for {@code onConflict: refuse}. Absent when no field declares one,
-     * so a model without the key generates byte-identically.
+     * {@code singleFlags} lists one {@code { property, per, refuse, required }} per flagged boolean,
+     * {@code per} (the scoping relation's FK property) only when scoped, {@code refuse} only for
+     * {@code onConflict: refuse} and {@code required} only for {@code required: true} (#8700). Their
+     * refusals are the shared {@code fieldSingleTaken} / {@code fieldSingleTakenInScope} and
+     * {@code fieldSingleRequired} sentences, naming the entity, the flag and the scope by their catalog
+     * labels. Absent when no field declares one, so a model without the key generates byte-identically.
      */
     private static void putSingleFlags(Map<String, Object> entityMap, EntityIntent entity) {
         List<Map<String, Object>> flags = new ArrayList<>();
@@ -4132,9 +4180,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             if (single.isRefuse()) {
                 flag.put("refuse", "true");
-                flag.put("message",
-                        "Another " + IntentNaming.humanize(entity.getName()) + " is already " + IntentNaming.humanize(field.getName())
-                                + (per == null ? "" : " for this " + IntentNaming.humanize(per.getName())));
+            }
+            if (single.isRequired()) {
+                flag.put("required", "true");
             }
             flags.add(flag);
         }

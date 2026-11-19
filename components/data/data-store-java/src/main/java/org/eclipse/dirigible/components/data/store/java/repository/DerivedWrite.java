@@ -72,6 +72,22 @@ public final class DerivedWrite {
     }
 
     /**
+     * Whether the derived write running on this thread persists the given property and has not yet
+     * recorded its event. A generated repository asks this BEFORE it writes, to tell a recomputed total
+     * from an authored value: its {@code checks:} gate what a person or a workflow writes, and a
+     * derived column is the platform's to keep equal to its children (#8443). Once the derived write's
+     * own event is recorded the answer is {@code false}, so a write the derived one causes in turn is
+     * treated as authored - the conservative side.
+     *
+     * @param property the property name
+     * @return {@code true} when the current derived write persists it
+     */
+    public static boolean persists(String property) {
+        Set<String> columns = COLUMNS.get();
+        return columns != null && columns.contains(property);
+    }
+
+    /**
      * Adds the marker to an event payload when the current thread is inside {@link #run}, and only to
      * the FIRST event recorded there: that is the derived write's own row. A write the derived one
      * causes in turn - a document line resumming its master - is about another row whose columns this

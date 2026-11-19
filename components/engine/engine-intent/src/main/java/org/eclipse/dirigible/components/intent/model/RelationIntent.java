@@ -279,6 +279,17 @@ public class RelationIntent {
      * where {@link #fixedAfterCreate} is.
      */
     private boolean fixedWhenReferenced;
+    /**
+     * A to-one only the system sets ({@code readOnly: true}, dirigible #8662) - a storno's link to the
+     * order it reverses, written by a posting delegate. Emitted as the FK property's
+     * {@code isReadOnlyProperty}, the same flag a {@code readOnly} field carries: the New and Edit
+     * forms render no picker (a set value is shown in the record's read-only details), the generated
+     * controllers drop a value a create carries and keep the stored one on update, and repository
+     * writes (create-from, postings, delegates, workflow steps) still set it. Valid on a plain
+     * {@code manyToOne}/{@code oneToOne} - not an EntityStatus, a composition parent, the
+     * personal/partner/owner relation, nor beside a calculated action or the fixed keys.
+     */
+    private boolean readOnly;
 
     public String getName() {
         return name;
@@ -581,6 +592,14 @@ public class RelationIntent {
 
     public void setFixedWhenReferenced(boolean fixedWhenReferenced) {
         this.fixedWhenReferenced = fixedWhenReferenced;
+    }
+
+    public boolean isReadOnly() {
+        return readOnly;
+    }
+
+    public void setReadOnly(boolean readOnly) {
+        this.readOnly = readOnly;
     }
 
     /**

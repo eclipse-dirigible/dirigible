@@ -47,17 +47,23 @@ class TenantUserCommands {
     /** The access rules. */
     private final TenantUsersAccess access;
 
+    /** The roles an Owner may give. */
+    private final TenantUserRoles roles;
+
     /**
      * Instantiates the commands.
      *
      * @param replica the replica
      * @param publisher the publisher
      * @param access the access rules
+     * @param roles the roles an Owner may give
      */
-    TenantUserCommands(TenantUserReplicaService replica, TenantUserChangePublisher publisher, TenantUsersAccess access) {
+    TenantUserCommands(TenantUserReplicaService replica, TenantUserChangePublisher publisher, TenantUsersAccess access,
+            TenantUserRoles roles) {
         this.replica = replica;
         this.publisher = publisher;
         this.access = access;
+        this.roles = roles;
     }
 
     /**
@@ -154,21 +160,25 @@ class TenantUserCommands {
         return email;
     }
 
-    /** The desired roles, trimmed, sorted and without duplicates - each one an application role. */
-    private static List<String> requireRoles(List<String> raw) {
-        Set<String> roles = new TreeSet<>();
+    /**
+     * The desired roles, trimmed, sorted and without duplicates - each one a role the application
+     * offers (#8728).
+     */
+    private List<String> requireRoles(List<String> raw) {
+        List<String> offered = roles.names();
+        Set<String> desired = new TreeSet<>();
         for (String role : raw == null ? List.<String>of() : raw) {
             String trimmed = role == null ? "" : role.trim();
-            if (!ApplicationRoles.ALL.contains(trimmed)) {
+            if (!offered.contains(trimmed)) {
                 throw new TenantUsersException(HttpStatus.BAD_REQUEST, "INVALID_ROLE",
-                        "[" + trimmed + "] is not a role of this application - one of " + ApplicationRoles.ALL);
+                        "[" + trimmed + "] is not a role of this application - one of " + offered);
             }
-            roles.add(trimmed);
+            desired.add(trimmed);
         }
-        if (roles.isEmpty()) {
-            throw new TenantUsersException(HttpStatus.BAD_REQUEST, "NO_ROLES", "Name at least one role - one of " + ApplicationRoles.ALL);
+        if (desired.isEmpty()) {
+            throw new TenantUsersException(HttpStatus.BAD_REQUEST, "NO_ROLES", "Name at least one role - one of " + offered);
         }
-        return List.copyOf(roles);
+        return List.copyOf(desired);
     }
 
     private static long requireRevision(Long expectedRevision) {

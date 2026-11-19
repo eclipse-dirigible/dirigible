@@ -181,13 +181,33 @@ public final class JavaLiterals {
         if (!"moment".equals(kind)) {
             return null;
         }
-        String now = date ? "java.time.LocalDate.now()" : "java.time.Instant.now()";
+        String now = date ? today(reading) : "java.time.Instant.now()";
         String offset = text(reading, "offset");
         if (offset == null) {
             return now;
         }
         String amount = (date ? "java.time.Period.parse(\"" : "java.time.Duration.parse(\"") + escape(offset) + "\")";
         return now + ("false".equals(text(reading, "forward")) ? ".minus(" : ".plus(") + amount + ")";
+    }
+
+    /**
+     * The day a date moment counts from: today, or - for a period start (dirigible #8664) - the first
+     * day of today's month, quarter or year, on the clock of the run that evaluates it.
+     *
+     * @param reading the moment reading
+     * @return the {@code LocalDate} expression
+     */
+    private static String today(Map<?, ?> reading) {
+        String start = text(reading, "start");
+        if (start == null) {
+            return "java.time.LocalDate.now()";
+        }
+        return switch (start) {
+            case "month" -> "java.time.LocalDate.now().withDayOfMonth(1)";
+            case "quarter" -> "java.time.LocalDate.now().with(java.time.temporal.IsoFields.DAY_OF_QUARTER, 1L)";
+            case "year" -> "java.time.LocalDate.now().withDayOfYear(1)";
+            default -> "java.time.LocalDate.now()";
+        };
     }
 
     /**
@@ -341,11 +361,11 @@ public final class JavaLiterals {
         boolean date = "date".equals(text(reading, "shape"));
         String offset = text(reading, "offset");
         if (offset == null) {
-            return date ? "java.time.LocalDate.now()" : "java.time.Instant.now()";
+            return date ? today(reading) : "java.time.Instant.now()";
         }
         String movement = "false".equals(text(reading, "forward")) ? ".minus(" : ".plus(";
         if (date) {
-            return "java.time.LocalDate.now()" + movement + "java.time.Period.parse(\"" + escape(offset) + "\"))";
+            return today(reading) + movement + "java.time.Period.parse(\"" + escape(offset) + "\"))";
         }
         if (offset.indexOf('T') >= 0 || offset.indexOf('t') >= 0) {
             return "java.time.Instant.now()" + movement + "java.time.Duration.parse(\"" + escape(offset) + "\"))";

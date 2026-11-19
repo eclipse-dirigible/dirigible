@@ -59,17 +59,22 @@ class TenantUsersEndpoint extends BaseEndpoint {
     /** The commands. */
     private final TenantUserCommands commands;
 
+    /** The roles an Owner may give. */
+    private final TenantUserRoles roles;
+
     /**
      * Instantiates the endpoint.
      *
      * @param access the access rules
      * @param replica the replica
      * @param commands the commands
+     * @param roles the roles an Owner may give
      */
-    TenantUsersEndpoint(TenantUsersAccess access, TenantUserReplicaService replica, TenantUserCommands commands) {
+    TenantUsersEndpoint(TenantUsersAccess access, TenantUserReplicaService replica, TenantUserCommands commands, TenantUserRoles roles) {
         this.access = access;
         this.replica = replica;
         this.commands = commands;
+        this.roles = roles;
     }
 
     /**
@@ -83,7 +88,11 @@ class TenantUsersEndpoint extends BaseEndpoint {
         boolean canRead = access.canRead();
         String tenantId = canRead ? access.requireTenant() : null;
         Integer seatLimit = tenantId == null ? null : replica.seatLimit(tenantId);
-        return ResponseEntity.ok(new TenantUsersContext(true, tenantId, canManage, canRead, ApplicationRoles.OWNER, ApplicationRoles.ALL,
+        List<TenantUserRoles.Offer> catalog = roles.catalog();
+        List<String> names = catalog.stream()
+                                    .map(TenantUserRoles.Offer::name)
+                                    .toList();
+        return ResponseEntity.ok(new TenantUsersContext(true, tenantId, canManage, canRead, ApplicationRoles.OWNER, names, catalog,
                 access.requestedBy(), seatLimit));
     }
 

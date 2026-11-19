@@ -153,14 +153,84 @@ public class JobEmailProcessor {
     private TemplateEnginesManager generationEnginesManager;
 
     /**
-     * Prepare email.
+     * Sends the e-mail announcing a change of the job - its status, or its enablement. The body is
+     * rendered only when an e-mail is due: a sender is configured and there is someone to send it to,
+     * the job's own e-mails or the configured recipients. Without them nothing is rendered, so an
+     * instance with no scheduler e-mail configured stays silent on every change (#8704).
+     *
+     * @param job the job
+     * @param emailSubject the email subject, formatted with the job's name
+     * @param templateLocation the configured template location
+     * @param defaultLocation the default template location
+     */
+    public void sendEmail(Job job, String emailSubject, String templateLocation, String defaultLocation) {
+        String[] recipients = emailSender == null ? new String[0] : resolveRecipients(job);
+        if (recipients.length == 0) {
+            if (emailRecipientsLine != null && logger.isErrorEnabled()) {
+                logger.error("DIRIGIBLE_SCHEDULER_EMAIL_* environment variables are not set correctly");
+            }
+            return;
+        }
+        String emailContent = prepareEmail(job, templateLocation, defaultLocation);
+        if (emailContent == null) {
+            return;
+        }
+        try {
+            List<Map> parts = new ArrayList<Map>();
+            Map<String, String> map = new HashMap<>();
+            map.put("contentType", ContentTypeHelper.TEXT_PLAIN);
+            map.put("type", "text");
+            map.put("text", emailContent);
+            parts.add(map);
+            MailFacade.getInstance()
+                      .send(emailSender, recipients, null, null, subjectOf(emailSubject, job), parts);
+        } catch (MessagingException e) {
+            if (logger.isErrorEnabled()) {
+                logger.error("Sending an e-mail failed with: " + e.getMessage(), e);
+            }
+        }
+    }
+
+    /**
+     * Puts the job's name in place of the {@code %s} of the configured subject. The subject is
+     * configuration, so it is never used as a format string: any other {@code %} in it stays as it is
+     * instead of failing the job's status change.
+     *
+     * @param emailSubject the configured subject
+     * @param job the job
+     * @return the subject of the job's e-mail
+     */
+    private static String subjectOf(String emailSubject, Job job) {
+        return emailSubject.replace("%s", job.getName());
+    }
+
+    /**
+     * Resolves who receives the job's e-mails: its own e-mails, or the configured recipients when it
+     * has none.
+     *
+     * @param job the job
+     * @return the recipients, empty when there is no one to send to
+     */
+    private String[] resolveRecipients(Job job) {
+        String[] emails = jobEmailService.findAllByJobName(job.getName())
+                                         .stream()
+                                         .map(JobEmail::getEmail)
+                                         .toArray(String[]::new);
+        if (emails.length > 0) {
+            return emails;
+        }
+        return emailRecipients != null ? emailRecipients : new String[0];
+    }
+
+    /**
+     * Renders the e-mail body.
      *
      * @param job the job
      * @param templateLocation the template location
      * @param defaultLocation the default location
-     * @return the string
+     * @return the body, or null when it could not be rendered
      */
-    public String prepareEmail(Job job, String templateLocation, String defaultLocation) {
+    private String prepareEmail(Job job, String templateLocation, String defaultLocation) {
 
         byte[] template = registryAccessor.getRegistryContent(templateLocation, defaultLocation);
 
@@ -186,46 +256,6 @@ public class JobEmailProcessor {
             logger.error("Error on generating the e-mail body, because no template engine has been registered in this instance.");
         }
         return null;
-    }
-
-    /**
-     * Send email.
-     *
-     * @param job the job
-     * @param emailSubject the email subject
-     * @param emailContent the email content
-     */
-    public void sendEmail(Job job, String emailSubject, String emailContent) {
-        try {
-            List<JobEmail> emailArtefacts = jobEmailService.findAllByJobName(job.getName());
-            String[] emails = emailArtefacts.stream()
-                                            .map(JobEmail::getEmail)
-                                            .toArray(String[]::new);
-
-            if (emailSender != null && ((emailRecipients != null && emailRecipients.length > 0) || emails.length > 0)) {
-
-                List<Map> parts = new ArrayList<Map>();
-                Map<String, String> map = new HashMap<>();
-                map.put("contentType", ContentTypeHelper.TEXT_PLAIN);
-                map.put("type", "text");
-                map.put("text", emailContent);
-                parts.add(map);
-                MailFacade.getInstance()
-                          .send(emailSender, emails.length > 0 ? emails : emailRecipients, null, null,
-                                  String.format(emailSubject, job.getName()), parts);
-                // String from, String[] to, String[] cc, String[] bcc, String subject, List<Map> parts
-            } else {
-                if (emailRecipientsLine != null) {
-                    if (logger.isErrorEnabled()) {
-                        logger.error("DIRIGIBLE_SCHEDULER_EMAIL_* environment variables are not set correctly");
-                    }
-                }
-            }
-        } catch (MessagingException e) {
-            if (logger.isErrorEnabled()) {
-                logger.error("Sending an e-mail failed with: " + e.getMessage(), e);
-            }
-        }
     }
 
 }

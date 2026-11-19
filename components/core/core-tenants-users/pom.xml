@@ -30,6 +30,11 @@
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-core-tenants-provisioning</artifactId>
 		</dependency>
+		<!-- The roles an Owner may give are the application's registered roles marked assignable -->
+		<dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-engine-security</artifactId>
+		</dependency>
 		<!-- An invitation is published to a queue -->
 		<dependency>
 			<groupId>org.eclipse.dirigible</groupId>

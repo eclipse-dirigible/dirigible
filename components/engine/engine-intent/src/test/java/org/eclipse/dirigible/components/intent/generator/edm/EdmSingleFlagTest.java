@@ -51,10 +51,21 @@ class EdmSingleFlagTest {
     void flagDescriptorsCarryPropertyScopeAndRefusal() {
         assertEquals(List.of(Map.of("property", "Base")), entity(YAML, "Company").get("singleFlags"));
         assertEquals(
-                List.of(Map.of("property", "Base", "per", "Company"),
-                        Map.of("property", "Preferred", "per", "Company", "refuse", "true", "message",
-                                "Another Bank Account is already Preferred for this Company")),
+                List.of(Map.of("property", "Base", "per", "Company"), Map.of("property", "Preferred", "per", "Company", "refuse", "true")),
                 entity(YAML, "BankAccount").get("singleFlags"));
+    }
+
+    /**
+     * #8700: a required flag is marked, scoped like the flag - and carries no sentence of its own: its
+     * refusal is the shared, translated {@code fieldSingleRequired}.
+     */
+    @Test
+    void requiredFlagIsMarked() {
+        String yaml = YAML.replace("single: true", "single: { required: true }")
+                          .replace("single: { per: Company }", "single: { per: Company, required: true }");
+        assertEquals(List.of(Map.of("property", "Base", "required", "true")), entity(yaml, "Company").get("singleFlags"));
+        assertEquals(Map.of("property", "Base", "per", "Company", "required", "true"),
+                ((List<?>) entity(yaml, "BankAccount").get("singleFlags")).get(0));
     }
 
     @Test

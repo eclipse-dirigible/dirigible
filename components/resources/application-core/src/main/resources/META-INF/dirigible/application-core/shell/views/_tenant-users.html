@@ -148,7 +148,7 @@
             <td x-h-table-cell>
               <div class="hbox items-center gap-1 flex-wrap">
                 <template x-for="role in invited.roles" :key="role">
-                  <span x-h-badge data-variant="positive" :data-role="role" data-state="ADDING" x-text="'+ ' + role"></span>
+                  <span x-h-badge data-variant="positive" :data-role="role" data-state="ADDING" x-text="'+ ' + $store.tenantUsers.roleName(role)"></span>
                 </template>
               </div>
             </td>
@@ -191,7 +191,7 @@
                   <input type="checkbox" :id="'tenant-users-invite-role-' + role" :value="role" x-model="$store.tenantUsers.invite.roles" />
                 </span>
                 <div x-h-tile-content>
-                  <div x-h-tile-title x-text="role"></div>
+                  <div x-h-tile-title x-text="$store.tenantUsers.roleName(role)"></div>
                   <p x-h-tile-description x-show="$store.tenantUsers.roleDescription(role)" x-text="$store.tenantUsers.roleDescription(role)"></p>
                 </div>
               </label>
@@ -229,7 +229,7 @@
                 <input type="checkbox" :id="'tenant-users-edit-role-' + role" :value="role" x-model="$store.tenantUsers.editRoles" />
               </span>
               <div x-h-tile-content>
-                <div x-h-tile-title x-text="role"></div>
+                <div x-h-tile-title x-text="$store.tenantUsers.roleName(role)"></div>
                 <p x-h-tile-description x-show="$store.tenantUsers.roleDescription(role)" x-text="$store.tenantUsers.roleDescription(role)"></p>
               </div>
             </label>
@@ -237,10 +237,10 @@
         </div>
         <div class="hbox items-center gap-1 flex-wrap" data-diff>
           <template x-for="role in $store.tenantUsers.rolesAdded" :key="'added:' + role">
-            <span x-h-badge data-variant="positive" x-text="'+ ' + role"></span>
+            <span x-h-badge data-variant="positive" x-text="'+ ' + $store.tenantUsers.roleName(role)"></span>
           </template>
           <template x-for="role in $store.tenantUsers.rolesRemoved" :key="'removed:' + role">
-            <span x-h-badge data-variant="negative" class="line-through" x-text="'− ' + role"></span>
+            <span x-h-badge data-variant="negative" class="line-through" x-text="'− ' + $store.tenantUsers.roleName(role)"></span>
           </template>
           <span x-show="$store.tenantUsers.rolesAdded.length === 0 && $store.tenantUsers.rolesRemoved.length === 0" x-h-text.muted class="text-sm"
                 x-text="$store.tenantUsers.t('shell.tenantUsers.noChange', 'No change yet')"></span>

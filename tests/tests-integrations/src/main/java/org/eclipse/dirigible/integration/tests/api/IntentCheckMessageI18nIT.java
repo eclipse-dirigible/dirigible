@@ -63,6 +63,7 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
     private static final String INVOICES = API + "/invoice/InvoiceController";
     private static final String ITEMS = API + "/invoice/InvoiceItemController";
     private static final String UOMS = API + "/uom/UomController";
+    private static final String CURRENCIES = API + "/currency/CurrencyController";
     private static final String CONFIRM = "X-Confirm-Warnings";
     private static final String CATALOG = PROJECT + ":" + PROJECT + "-model.checks.";
     private static final long TIMEOUT_SECONDS = 90;
@@ -117,6 +118,13 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
                     pattern: '^[A-Z]{3}$'
                     patternMessage: "The {label} is three capital letters"
                   - { name: region,    type: string, length: 2, pattern: '^[A-Z]{2}$' }
+
+              - name: Currency
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: code, type: string, length: 3 }
+                  - { name: base, type: boolean, label: Base, single: { required: true } }
+                  - { name: preferred, type: boolean, label: Preferred, single: { onConflict: refuse } }
 
               - name: InvoiceItem
                 fields:
@@ -217,6 +225,116 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
                                                                     .body("field", equalTo("Sap"));
         refused(UOMS, "{\"Sap\":\"KG\",\"Numerator\":1}", "en", 409).body("message",
                 equalTo("A " + uomLabel + " with this 'SAP Code' already exists"));
+    }
+
+    /**
+     * dirigible #8700: the refusal to leave a {@code single: { required: true }} flag without a holder
+     * - an update un-flagging it, a delete of it - is the shared {@code fieldSingleRequired} sentence,
+     * translated like the other field refusals and naming the entity and the flag by their translated
+     * labels, with the flag as {@code field}.
+     */
+    @Test
+    void a_required_single_flags_refusal_is_answered_in_the_request_language() {
+        generateProject();
+        JsonObject generated = generatedCatalog();
+        assertEquals("One {entity} must stay '{label}' - mark another one '{label}' first", generated.getAsJsonObject("checks")
+                                                                                                     .get("fieldSingleRequired")
+                                                                                                     .getAsString());
+        String baseKey = textKey(generated, "Base");
+        String currencyKey = entityKey(generated, "CURRENCY");
+        String currencyLabel = generated.getAsJsonObject("t")
+                                        .get(currencyKey)
+                                        .getAsString();
+        writeResource(PROJECT_PATH + "/i18n/bg-BG/checkmsg.model.json", """
+                {
+                  "checkmsg-model": {
+                    "checks": {
+                      "fieldSingleRequired": "Поне една {entity} трябва да е '{label}' - първо отбележете друга като '{label}'"
+                    },
+                    "t": { "%s": "Основна", "%s": "валута" }
+                  }
+                }
+                """.formatted(baseKey, currencyKey));
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        create(CURRENCIES, "{\"Code\":\"USD\",\"Base\":false}", null, "en");
+        int euro = create(CURRENCIES, "{\"Code\":\"EUR\",\"Base\":true}", null, "en");
+        String bg = "Поне една валута трябва да е 'Основна' - първо отбележете друга като 'Основна'";
+        restAssuredExecutor.execute(() -> request(null, "bg").body("{\"Id\":" + euro + ",\"Code\":\"EUR\",\"Base\":false}")
+                                                             .when()
+                                                             .put(CURRENCIES + "/" + euro)
+                                                             .then()
+                                                             .statusCode(400)
+                                                             .body("message", equalTo(bg))
+                                                             .body("messageKey", equalTo(CATALOG + "fieldSingleRequired"))
+                                                             .body("field", equalTo("Base")),
+                TIMEOUT_SECONDS);
+        restAssuredExecutor.execute(() -> request(null, "bg").when()
+                                                             .delete(CURRENCIES + "/" + euro)
+                                                             .then()
+                                                             .statusCode(400)
+                                                             .body("message", equalTo(bg))
+                                                             .body("field", equalTo("Base")),
+                TIMEOUT_SECONDS);
+        restAssuredExecutor.execute(() -> request(null, "en").when()
+                                                             .delete(CURRENCIES + "/" + euro)
+                                                             .then()
+                                                             .statusCode(400)
+                                                             .body("message",
+                                                                     equalTo("One " + currencyLabel
+                                                                             + " must stay 'Base' - mark another one 'Base' first")),
+                TIMEOUT_SECONDS);
+    }
+
+    /**
+     * dirigible #8101 / #8700: a refusing {@code single:} flag another record holds is refused 409 with
+     * the shared {@code fieldSingleTaken} sentence, translated like the other field refusals and naming
+     * the entity and the flag by their translated labels, with the flag as {@code field}.
+     */
+    @Test
+    void a_taken_single_flags_refusal_is_answered_in_the_request_language() {
+        generateProject();
+        JsonObject generated = generatedCatalog();
+        assertEquals("Another {entity} is already '{label}'", generated.getAsJsonObject("checks")
+                                                                       .get("fieldSingleTaken")
+                                                                       .getAsString());
+        String preferredKey = textKey(generated, "Preferred");
+        String currencyKey = entityKey(generated, "CURRENCY");
+        String currencyLabel = generated.getAsJsonObject("t")
+                                        .get(currencyKey)
+                                        .getAsString();
+        writeResource(PROJECT_PATH + "/i18n/bg-BG/checkmsg.model.json", """
+                {
+                  "checkmsg-model": {
+                    "checks": {
+                      "fieldSingleTaken": "Друга {entity} вече е '{label}'"
+                    },
+                    "t": { "%s": "Предпочитана", "%s": "валута" }
+                  }
+                }
+                """.formatted(preferredKey, currencyKey));
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        create(CURRENCIES, "{\"Code\":\"EUR\",\"Base\":true,\"Preferred\":true}", null, "en");
+        restAssuredExecutor.execute(() -> request(null, "bg").body("{\"Code\":\"USD\",\"Base\":false,\"Preferred\":true}")
+                                                             .when()
+                                                             .post(CURRENCIES)
+                                                             .then()
+                                                             .statusCode(409)
+                                                             .body("message", equalTo("Друга валута вече е 'Предпочитана'"))
+                                                             .body("messageKey", equalTo(CATALOG + "fieldSingleTaken"))
+                                                             .body("field", equalTo("Preferred")),
+                TIMEOUT_SECONDS);
+        restAssuredExecutor.execute(() -> request(null, "en").body("{\"Code\":\"USD\",\"Base\":false,\"Preferred\":true}")
+                                                             .when()
+                                                             .post(CURRENCIES)
+                                                             .then()
+                                                             .statusCode(409)
+                                                             .body("message",
+                                                                     equalTo("Another " + currencyLabel + " is already 'Preferred'")),
+                TIMEOUT_SECONDS);
     }
 
     /**

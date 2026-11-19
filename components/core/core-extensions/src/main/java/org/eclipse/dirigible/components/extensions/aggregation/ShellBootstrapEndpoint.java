@@ -187,11 +187,13 @@ class ShellBootstrapEndpoint {
     /**
      * The standalone reports of every published application the caller may read, as one manifest - the
      * application shell's Reports section and dashboard read it instead of walking the registry and
-     * fetching each {@code .report} (#8345).
+     * fetching each {@code .report} (#8345). With {@code project}, only that project's: a generated
+     * application learns which of its reports the reader may read from it, without running them
+     * (#8699).
      */
     @GetMapping(CANONICAL + "reports")
-    ResponseEntity<Object> reports() {
-        return json(reports.aggregate());
+    ResponseEntity<Object> reports(HttpServletRequest request) {
+        return json(reports.aggregate(request.getParameter("project")));
     }
 
     @GetMapping({CANONICAL + "user-name", SCRIPT_SERVICES + "user-name.js", PUBLIC_SCRIPT_SERVICES + "user-name.js"})

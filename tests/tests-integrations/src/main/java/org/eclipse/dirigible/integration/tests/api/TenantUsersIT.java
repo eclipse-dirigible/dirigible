@@ -12,7 +12,9 @@ package org.eclipse.dirigible.integration.tests.api;
 import static org.eclipse.dirigible.integration.tests.support.TenantUsersTestSupport.drainQueue;
 import static org.eclipse.dirigible.integration.tests.support.TenantUsersTestSupport.pushSnapshot;
 import static org.eclipse.dirigible.integration.tests.support.TenantUsersTestSupport.receive;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -27,6 +29,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -34,7 +37,10 @@ import java.util.Map;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.api.messaging.MessagingFacade;
 import org.eclipse.dirigible.components.api.messaging.TimeoutException;
+import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.integration.tests.support.TenantUsersTestSupport;
+import org.eclipse.dirigible.repository.api.IRepository;
+import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 import org.junit.jupiter.api.BeforeAll;
@@ -86,6 +92,12 @@ class TenantUsersIT extends IntegrationTest {
 
     @Autowired
     private MockMvc mvc;
+
+    @Autowired
+    private IRepository repository;
+
+    @Autowired
+    private SynchronizationProcessor synchronizationProcessor;
 
     private final ObjectMapper json = new ObjectMapper();
 
@@ -372,6 +384,68 @@ class TenantUsersIT extends IntegrationTest {
                          .getResponse()
                          .getContentAsString();
         assertFalse(body.contains("stranger@example.com"), "a sign-in never creates a row: " + body);
+    }
+
+    /**
+     * The roles an Owner may give are the ones the application marks assignable (#8728): a published
+     * {@code .roles} puts its marked role in the context's catalog with its label, an Owner invites a
+     * person with that role alone, a convention role and a role of the instance (registered, never
+     * marked) are refused, the provisioning system lists the same catalog, and a person holding only
+     * that role is a member the list shows.
+     */
+    @Test
+    @Order(11)
+    void anOwnerGivesARoleTheApplicationOffersWithoutUser() throws Exception {
+        repository.createResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/tenant-users-it/catalog.roles", """
+                [
+                  {"name": "Accountant", "label": "Accountant", "description": "Enters invoices.", "assignable": true},
+                  {"name": "tenant-users-it.Invoices.InvoiceReadOnly", "description": "A convention role"}
+                ]
+                """.getBytes(StandardCharsets.UTF_8), false, "application/json", true);
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        MockHttpSession owner = enter(OWNER, "Owner");
+        mvc.perform(get(USERS + "/context").session(owner)
+                                           .with(authentication(person(OWNER, "Owner"))))
+           .andExpect(status().isOk())
+           .andExpect(jsonPath("$.roles", contains("Owner", "User", "Accountant")))
+           .andExpect(jsonPath("$.catalog[2].name").value("Accountant"))
+           .andExpect(jsonPath("$.catalog[2].label").value("Accountant"))
+           .andExpect(jsonPath("$.catalog[2].description").value("Enters invoices."));
+
+        drainQueue(QUEUE);
+        mvc.perform(post(USERS).session(owner)
+                               .with(authentication(person(OWNER, "Owner")))
+                               .contentType(MediaType.APPLICATION_JSON)
+                               .content("{\"email\":\"clerk@example.com\",\"roles\":[\"Accountant\"]}"))
+           .andExpect(status().isAccepted());
+        JsonNode message = receive(QUEUE, 10_000);
+        assertEquals(List.of("Accountant"), json.convertValue(message.get("roles"), List.class));
+
+        for (String role : List.of("tenant-users-it.Invoices.InvoiceReadOnly", "ADMINISTRATOR")) {
+            mvc.perform(post(USERS).session(owner)
+                                   .with(authentication(person(OWNER, "Owner")))
+                                   .contentType(MediaType.APPLICATION_JSON)
+                                   .content("{\"email\":\"clerk2@example.com\",\"roles\":[\"" + role + "\"]}"))
+               .andExpect(status().isBadRequest())
+               .andExpect(jsonPath("$.reason").value("INVALID_ROLE"))
+               .andExpect(jsonPath("$.message").value(containsString("[Owner, User, Accountant]")));
+        }
+
+        mvc.perform(get("/services/tenant-provisioning/user-roles").with(authentication(TenantUsersTestSupport.provisioner())))
+           .andExpect(status().isOk())
+           .andExpect(jsonPath("$.roles[*].name", contains("Owner", "User", "Accountant")))
+           .andExpect(jsonPath("$.roles[2].description").value("Enters invoices."));
+
+        pushSnapshot(mvc, tenant.getId(), 7, TenantUsersTestSupport.user(OWNER)
+                                                                   .revision(7)
+                                                                   .role("Owner", "GRANTED"),
+                TenantUsersTestSupport.user("clerk@example.com")
+                                      .revision(7)
+                                      .status("ASSIGNED")
+                                      .role("Accountant", "GRANTED"));
+        assertEquals("GRANTED", roleOf(userNamed(owner, "clerk@example.com"), "Accountant").get("state")
+                                                                                           .asText());
     }
 
     private MockHttpSession enter(String user, String role) throws Exception {

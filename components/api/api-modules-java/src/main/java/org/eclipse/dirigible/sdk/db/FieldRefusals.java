@@ -14,8 +14,9 @@ import java.util.Map;
 /**
  * Builds the refusals a generated controller answers a value of one property with - a required
  * value left out, a text longer than its column, a value off its pattern, a value that is not of
- * its named format, a value another record already holds under a {@code unique: true} - their
- * messages resolved for the language of the request exactly as a generated check's are, see
+ * its named format, a value another record already holds under a {@code unique: true}, a required
+ * single flag left without a holder, a refusing single flag another record holds - their messages
+ * resolved for the language of the request exactly as a generated check's are, see
  * {@link CheckMessages} (dirigible #8596).
  *
  * <p>
@@ -63,6 +64,42 @@ public final class FieldRefusals {
      * The default-language sentence refusing a repeated unique value: {@code {entity}} is the entity's.
      */
     public static final String DUPLICATE_TEXT = "A {entity} with this '{label}' already exists";
+
+    /**
+     * The key, under a catalog's {@code checks}, of the sentence refusing to leave a {@code single: {
+     * required: true }} flag without a holder.
+     */
+    public static final String SINGLE_REQUIRED_KEY = "fieldSingleRequired";
+
+    /**
+     * The default-language sentence refusing to leave a required single flag without a holder:
+     * {@code {entity}} is the entity's label, {@code {label}} the flag's (dirigible #8700).
+     */
+    public static final String SINGLE_REQUIRED_TEXT = "One {entity} must stay '{label}' - mark another one '{label}' first";
+
+    /**
+     * The key, under a catalog's {@code checks}, of the sentence refusing a {@code single: {
+     * onConflict: refuse }} flag another record holds.
+     */
+    public static final String SINGLE_TAKEN_KEY = "fieldSingleTaken";
+
+    /**
+     * The default-language sentence refusing a fleet-wide refusing single flag another record holds:
+     * {@code {entity}} is the entity's label, {@code {label}} the flag's (dirigible #8101).
+     */
+    public static final String SINGLE_TAKEN_TEXT = "Another {entity} is already '{label}'";
+
+    /**
+     * The key, under a catalog's {@code checks}, of the sentence refusing a refusing single flag
+     * another record of the same scope ({@code per:}) holds.
+     */
+    public static final String SINGLE_TAKEN_IN_SCOPE_KEY = "fieldSingleTakenInScope";
+
+    /**
+     * The default-language sentence refusing a scoped refusing single flag another record of the scope
+     * holds: {@code {scope}} is the label of the relation the flag is scoped by (dirigible #8101).
+     */
+    public static final String SINGLE_TAKEN_IN_SCOPE_TEXT = "Another {entity} is already '{label}' for this {scope}";
 
     private FieldRefusals() {}
 
@@ -176,6 +213,85 @@ public final class FieldRefusals {
             String entityLabelKey, String field, String label, String labelKey) {
         return refusal(language, catalogs, catalog, DUPLICATE_KEY, DUPLICATE_TEXT, field, label, labelKey, "entity",
                 CheckMessages.resolve(language, catalogs, entityLabelKey, entityLabel, Map.of()));
+    }
+
+    /**
+     * The refusal of a write that would leave a {@code single: { required: true }} flag held by no row
+     * of its scope - its holder un-flagged, moved out of the scope or deleted while other rows remain
+     * (dirigible #8700).
+     *
+     * @param catalog the entity's model catalog ({@code <project>:<catalog prefix>}), or {@code null}
+     * @param entityLabel the entity's default-language label
+     * @param entityLabelKey the fully qualified catalog key of that label, or {@code null}
+     * @param field the flag's property
+     * @param label the flag's default-language label
+     * @param labelKey the fully qualified catalog key of that label, or {@code null}
+     * @return the exception to throw - mapped to HTTP 400 carrying the key, the parameters and the
+     *         field
+     */
+    public static ValidationException singleRequired(String catalog, String entityLabel, String entityLabelKey, String field, String label,
+            String labelKey) {
+        return singleRequired(CheckMessages.language(), CheckMessages::readCatalog, catalog, entityLabel, entityLabelKey, field, label,
+                labelKey);
+    }
+
+    static ValidationException singleRequired(String language, CheckMessages.CatalogReader catalogs, String catalog, String entityLabel,
+            String entityLabelKey, String field, String label, String labelKey) {
+        return refusal(language, catalogs, catalog, SINGLE_REQUIRED_KEY, SINGLE_REQUIRED_TEXT, field, label, labelKey, "entity",
+                CheckMessages.resolve(language, catalogs, entityLabelKey, entityLabel, Map.of()));
+    }
+
+    /**
+     * The refusal of a write that sets a fleet-wide {@code single: { onConflict: refuse }} flag while
+     * another record holds it (dirigible #8101).
+     *
+     * @param catalog the entity's model catalog ({@code <project>:<catalog prefix>}), or {@code null}
+     * @param entityLabel the entity's default-language label
+     * @param entityLabelKey the fully qualified catalog key of that label, or {@code null}
+     * @param field the flag's property
+     * @param label the flag's default-language label
+     * @param labelKey the fully qualified catalog key of that label, or {@code null}
+     * @return the refusal - carrying the key, the parameters and the field; wrapped in a
+     *         {@link DuplicateKeyException} it is answered HTTP 409
+     */
+    public static ValidationException singleTaken(String catalog, String entityLabel, String entityLabelKey, String field, String label,
+            String labelKey) {
+        return singleTaken(CheckMessages.language(), CheckMessages::readCatalog, catalog, entityLabel, entityLabelKey, field, label,
+                labelKey);
+    }
+
+    static ValidationException singleTaken(String language, CheckMessages.CatalogReader catalogs, String catalog, String entityLabel,
+            String entityLabelKey, String field, String label, String labelKey) {
+        return refusal(language, catalogs, catalog, SINGLE_TAKEN_KEY, SINGLE_TAKEN_TEXT, field, label, labelKey, "entity",
+                CheckMessages.resolve(language, catalogs, entityLabelKey, entityLabel, Map.of()));
+    }
+
+    /**
+     * The refusal of a write that sets a {@code single: { per: <relation>, onConflict: refuse }} flag
+     * while another record of the same scope holds it (dirigible #8101).
+     *
+     * @param catalog the entity's model catalog ({@code <project>:<catalog prefix>}), or {@code null}
+     * @param entityLabel the entity's default-language label
+     * @param entityLabelKey the fully qualified catalog key of that label, or {@code null}
+     * @param field the flag's property
+     * @param label the flag's default-language label
+     * @param labelKey the fully qualified catalog key of that label, or {@code null}
+     * @param scopeLabel the default-language label of the relation the flag is scoped by
+     * @param scopeLabelKey the fully qualified catalog key of that label, or {@code null}
+     * @return the refusal - carrying the key, the parameters and the field; wrapped in a
+     *         {@link DuplicateKeyException} it is answered HTTP 409
+     */
+    public static ValidationException singleTakenInScope(String catalog, String entityLabel, String entityLabelKey, String field,
+            String label, String labelKey, String scopeLabel, String scopeLabelKey) {
+        return singleTakenInScope(CheckMessages.language(), CheckMessages::readCatalog, catalog, entityLabel, entityLabelKey, field, label,
+                labelKey, scopeLabel, scopeLabelKey);
+    }
+
+    static ValidationException singleTakenInScope(String language, CheckMessages.CatalogReader catalogs, String catalog, String entityLabel,
+            String entityLabelKey, String field, String label, String labelKey, String scopeLabel, String scopeLabelKey) {
+        return refusal(language, catalogs, catalog, SINGLE_TAKEN_IN_SCOPE_KEY, SINGLE_TAKEN_IN_SCOPE_TEXT, field, label, labelKey, "entity",
+                CheckMessages.resolve(language, catalogs, entityLabelKey, entityLabel, Map.of()), "scope",
+                CheckMessages.resolve(language, catalogs, scopeLabelKey, scopeLabel, Map.of()));
     }
 
     static ValidationException refusal(String language, CheckMessages.CatalogReader catalogs, String catalog, String key, String text,

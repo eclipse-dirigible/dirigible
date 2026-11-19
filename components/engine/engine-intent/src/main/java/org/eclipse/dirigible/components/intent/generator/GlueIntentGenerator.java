@@ -3912,7 +3912,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     private static void putPostingPeriodLock(Map<String, Object> e, EntityIntent creates, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, IntentModel model, List<Map<String, Object>> headerAssignments) {
         PeriodLockIntent lock = creates == null ? null : creates.getImmutableInPeriod();
-        EntityIntent register = lock == null ? null : byName.get(lock.getPeriod());
+        // A register of another model (#8687) is not readable from here; the target's repository still
+        // refuses a write into its closed period, but the posting neither pre-checks nor sweeps it.
+        EntityIntent register = lock == null || lock.getModel() != null ? null : byName.get(lock.getPeriod());
         PeriodIntent period = register == null ? null : register.getPeriod();
         RelationIntent status = register == null ? null : LifecycleStages.statusRelation(register);
         if (period == null || status == null) {
