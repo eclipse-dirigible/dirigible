@@ -52,11 +52,13 @@ public final class ScheduleSupport {
             Map.of("DATE", Moment.Shape.DATE, "TIMESTAMP", Moment.Shape.TIMESTAMP);
 
     /**
-     * A moment value: one of the now-tokens, optionally followed by a single signed ISO-8601 duration.
-     * Anchored, so a trailing anything (a second offset, a stray word) simply is not a moment and the
-     * caller reports it as one.
+     * A moment value: one of the now-tokens, or a period start (dirigible #8664 - the
+     * {@code START_OF_MONTH} / {@code START_OF_QUARTER} / {@code START_OF_YEAR} report filters accept
+     * since #8435), optionally followed by a single signed ISO-8601 duration. Anchored, so a trailing
+     * anything (a second offset, a stray word) simply is not a moment and the caller reports it as one.
      */
-    private static final Pattern MOMENT = Pattern.compile("(CURRENT_DATE|CURRENT_TIMESTAMP|NOW)(?:([+-])(\\S+))?");
+    private static final Pattern MOMENT =
+            Pattern.compile("(CURRENT_DATE|CURRENT_TIMESTAMP|NOW|START_OF_MONTH|START_OF_QUARTER|START_OF_YEAR)(?:([+-])(\\S+))?");
 
     private ScheduleSupport() {}
 
@@ -86,11 +88,21 @@ public final class ScheduleSupport {
         private final Shape shape;
         private final boolean forward;
         private final String duration;
+        private final String start;
 
-        private Moment(Shape shape, boolean forward, String duration) {
+        private Moment(Shape shape, boolean forward, String duration, String start) {
             this.shape = shape;
             this.forward = forward;
             this.duration = duration;
+            this.start = start;
+        }
+
+        /**
+         * @return the period the moment starts - {@code month}, {@code quarter} or {@code year} for a
+         *         {@code START_OF_*} token (always a date), {@code null} for a now-token
+         */
+        public String start() {
+            return start;
         }
 
         /**
@@ -157,8 +169,14 @@ public final class ScheduleSupport {
         if (!matcher.matches()) {
             return null;
         }
-        Moment.Shape shape = "CURRENT_DATE".equals(matcher.group(1)) ? Moment.Shape.DATE : Moment.Shape.TIMESTAMP;
-        return new Moment(shape, "+".equals(matcher.group(2)), matcher.group(3));
+        String token = matcher.group(1);
+        // A period start is the first DAY of the current month, quarter or year - a date, like
+        // CURRENT_DATE.
+        String start = token.startsWith("START_OF_") ? token.substring("START_OF_".length())
+                                                            .toLowerCase(java.util.Locale.ROOT)
+                : null;
+        Moment.Shape shape = "CURRENT_DATE".equals(token) || start != null ? Moment.Shape.DATE : Moment.Shape.TIMESTAMP;
+        return new Moment(shape, "+".equals(matcher.group(2)), matcher.group(3), start);
     }
 
     /**
@@ -267,6 +285,10 @@ public final class ScheduleSupport {
         if (moment != null && moment.offsetValid()) {
             reading.put("kind", "moment");
             reading.put("shape", moment.shape() == Moment.Shape.DATE ? "date" : "timestamp");
+            if (moment.start() != null) {
+                // The first day of the run's month / quarter / year (#8664), before any offset.
+                reading.put("start", moment.start());
+            }
             if (moment.duration() != null) {
                 reading.put("offset", moment.duration());
                 reading.put("forward", moment.forward());

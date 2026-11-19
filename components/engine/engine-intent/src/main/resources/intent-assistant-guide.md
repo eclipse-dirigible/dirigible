@@ -4462,6 +4462,24 @@ the field, a time offset on a date field, a second offset, an offset that is not
 (`-30M`), and a moment compared with a non-temporal field. Do NOT model the clock into the data (a
 stored "deadline" column every writer must maintain) to work around this - the moment is the value.
 
+**Period starts (#8664).** A `date` field also takes `START_OF_MONTH`, `START_OF_QUARTER` and
+`START_OF_YEAR` - the first day of the run's month, quarter or year, the same tokens report filters
+take - with at most one signed date period (`START_OF_MONTH-P1M` is the first day of last month).
+That is what a month-end run needs to select "dated before this month": `CURRENT_DATE-P27D` lands on
+day 1 to 4 depending on the month's length.
+
+```yaml
+schedules:
+  - name: monthly-depreciation
+    cron: "0 0 22 L * ?"
+    entity: Asset
+    where:
+      - { field: commissioningDate, op: lt, value: START_OF_MONTH }   # not the ones put in use this month
+```
+
+A period start is a date, so a `timestamp` field refuses it. The same values work in a create-from's
+`items: where:`, a `children[].where` and a `compare` check's `value:`.
+
 **generate** (scheduled record generation) - e.g. "on the 1st of every month, create an
 EmployeeTimesheet for each active employee". Per matching row, a new target record is created and
 saved through the target's generated repository, so its create-time logic (document numbering, status

@@ -163,6 +163,18 @@ class JavaLiteralsTest {
                 Map.of("kind", "moment", "shape", "timestamp", "offset", "PT1H", "forward", "false")));
     }
 
+    /**
+     * A period start (#8664) counts from the first day of the month, quarter or year it is judged in.
+     */
+    @Test
+    void rendersAPeriodStartFromTheFirstDayOfThePeriod() {
+        assertEquals("java.time.LocalDate.now().withDayOfMonth(1)",
+                JavaLiterals.compareLiteralExpression(Map.of("kind", "moment", "shape", "date", "start", "month")));
+        assertEquals("java.time.LocalDate.now().withDayOfYear(1).minus(java.time.Period.parse(\"P1D\"))",
+                JavaLiterals.compareLiteralExpression(
+                        Map.of("kind", "moment", "shape", "date", "start", "year", "offset", "P1D", "forward", "false")));
+    }
+
     @Test
     void rendersATemporalLiteralInTheShapeItsColumnCarries() {
         assertEquals("java.time.LocalDate.parse(\"2026-01-01\")",
