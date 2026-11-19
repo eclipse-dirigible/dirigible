@@ -209,9 +209,8 @@ public class JobLogService extends BaseArtefactService<JobLog, Long> {
         job.setExecutedAt(jobLog.getFinishedAt());
         jobRepository.saveAndFlush(job);
         if (statusChanged) {
-            String content =
-                    jobEmailProcessor.prepareEmail(job, JobEmailProcessor.emailTemplateNormal, JobEmailProcessor.EMAIL_TEMPLATE_NORMAL);
-            jobEmailProcessor.sendEmail(job, JobEmailProcessor.emailSubjectNormal, content);
+            jobEmailProcessor.sendEmail(job, JobEmailProcessor.emailSubjectNormal, JobEmailProcessor.emailTemplateNormal,
+                    JobEmailProcessor.EMAIL_TEMPLATE_NORMAL);
         }
         return jobLog;
     }
@@ -249,9 +248,8 @@ public class JobLogService extends BaseArtefactService<JobLog, Long> {
         job.setExecutedAt(jobLog.getFinishedAt());
         jobRepository.saveAndFlush(job);
         if (statusChanged) {
-            String content =
-                    jobEmailProcessor.prepareEmail(job, JobEmailProcessor.emailTemplateError, JobEmailProcessor.EMAIL_TEMPLATE_ERROR);
-            jobEmailProcessor.sendEmail(job, JobEmailProcessor.emailSubjectError, content);
+            jobEmailProcessor.sendEmail(job, JobEmailProcessor.emailSubjectError, JobEmailProcessor.emailTemplateError,
+                    JobEmailProcessor.EMAIL_TEMPLATE_ERROR);
         }
         return jobLog;
     }

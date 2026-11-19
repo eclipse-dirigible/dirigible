@@ -89,13 +89,11 @@ public class JobService extends BaseArtefactService<Job, Long> {
         }
         if (existing != null) {
             if (existing.isEnabled() && !job.isEnabled()) {
-                String content = jobEmailProcessor.prepareEmail(job, JobEmailProcessor.emailTemplateDisable,
+                jobEmailProcessor.sendEmail(job, JobEmailProcessor.emailSubjectDisable, JobEmailProcessor.emailTemplateDisable,
                         JobEmailProcessor.EMAIL_TEMPLATE_DISABLE);
-                jobEmailProcessor.sendEmail(job, JobEmailProcessor.emailSubjectDisable, content);
             } else if (!existing.isEnabled() && job.isEnabled()) {
-                String content =
-                        jobEmailProcessor.prepareEmail(job, JobEmailProcessor.emailTemplateEnable, JobEmailProcessor.EMAIL_TEMPLATE_ENABLE);
-                jobEmailProcessor.sendEmail(job, JobEmailProcessor.emailSubjectEnable, content);
+                jobEmailProcessor.sendEmail(job, JobEmailProcessor.emailSubjectEnable, JobEmailProcessor.emailTemplateEnable,
+                        JobEmailProcessor.EMAIL_TEMPLATE_ENABLE);
             }
         }
         return getRepo().saveAndFlush(job);
