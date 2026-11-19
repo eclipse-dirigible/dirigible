@@ -99,6 +99,26 @@ class ReportsAggregatorTest {
                                                                             .toList());
     }
 
+    /**
+     * The generated controller also refuses a caller outside the report's top-level
+     * {@code perspectiveRole}, so the shell must not list it for them (#8753).
+     */
+    @Test
+    void leaves_out_a_report_whose_perspective_role_the_caller_does_not_hold() {
+        page("shop", "granted", "Granted");
+        report("shop", "Granted", "{\"perspectiveRole\": \"Clerk, Viewer\", \"security\": {\"roleRead\": \"Viewer\"}}");
+        page("shop", "refused", "Refused");
+        report("shop", "Refused", "{\"perspectiveRole\": \"Clerk\"}");
+        page("shop", "both", "Both");
+        report("shop", "Both", "{\"perspectiveRole\": \"Clerk\", \"security\": {\"roleRead\": \"Viewer\"}}");
+        page("shop", "blank", "Blank");
+        report("shop", "Blank", "{\"perspectiveRole\": \"\"}");
+
+        assertEquals(List.of("Blank", "Granted"), values(aggregate(), "name").stream()
+                                                                             .sorted()
+                                                                             .toList());
+    }
+
     @Test
     void lists_a_page_without_its_report_file_under_its_name_alone() {
         page("legacy", "legacy", "Totals");
