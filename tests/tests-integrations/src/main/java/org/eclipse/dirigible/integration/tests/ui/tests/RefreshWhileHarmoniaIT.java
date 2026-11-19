@@ -93,8 +93,8 @@ class RefreshWhileHarmoniaIT extends UserInterfaceIntegrationTest {
             """;
 
     /** How many times the page read the shipments - the list, or one record - since resetReads(). */
-    private static final String SHIPMENT_READS = "return performance.getEntriesByType('resource').map(e => e.name)"
-            + ".filter(n => /\\/ShipmentController(\\/\\d+)?(\\?|$)/.test(n)).length;";
+    private static final String SHIPMENT_READS =
+            "return " + RecordedRequests.RECORDED + ".filter(n => /\\/ShipmentController(\\/\\d+)?(\\?|$)/.test(n)).length;";
 
     @Autowired
     private IRepository repository;
@@ -138,6 +138,7 @@ class RefreshWhileHarmoniaIT extends UserInterfaceIntegrationTest {
     void a_moving_row_updates_without_refresh() {
         int id = createShipment("S-1", 2);
         ide.openHomePage();
+        RecordedRequests.record();
         browser.openPath(APP + "/Shipment");
         assertEquals("S-1:IN_TRANSIT", poll(state -> state.startsWith("S-"), 60_000), "the list shows the shipment in transit");
 
@@ -152,6 +153,7 @@ class RefreshWhileHarmoniaIT extends UserInterfaceIntegrationTest {
     void a_settled_list_does_not_poll() {
         createShipment("S-2", 3);
         ide.openHomePage();
+        RecordedRequests.record();
         browser.openPath(APP + "/Shipment");
         assertEquals("S-2:DELIVERED", poll(state -> state.startsWith("S-"), 60_000));
         Selenide.sleep(1_000);
@@ -164,6 +166,7 @@ class RefreshWhileHarmoniaIT extends UserInterfaceIntegrationTest {
     void an_edit_in_progress_is_not_overwritten() {
         int id = createShipment("S-3", 2);
         ide.openHomePage();
+        RecordedRequests.record();
         browser.openPath(APP + "/Shipment/" + id + "/edit");
         Selenide.$("#f_Reference")
                 .shouldBe(Condition.visible)
@@ -179,9 +182,9 @@ class RefreshWhileHarmoniaIT extends UserInterfaceIntegrationTest {
         assertEquals(0, reads(), "a record being edited is never re-read");
     }
 
-    /** Forgets the requests so far - the browser's buffer of them is bounded, and the SPA fills it. */
+    /** Forgets the requests the page made so far. */
     private static void resetReads() {
-        Selenide.executeJavaScript("performance.clearResourceTimings();");
+        Selenide.executeJavaScript(RecordedRequests.RECORDED + ".length = 0;");
     }
 
     private static long reads() {
