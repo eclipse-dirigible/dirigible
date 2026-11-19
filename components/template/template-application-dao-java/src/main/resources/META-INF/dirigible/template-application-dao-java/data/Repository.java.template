@@ -2770,8 +2770,21 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     }
 
     @Override
+    public List<${name}Entity> findAll(int limit, int offset, String orderBy) {
+        // The generated controller's list reads its page through this overload when the entity
+        // declares orderBy: (#8670).
+        return Translator.translateList(super.findAll(limit, offset, orderBy), User.getLanguage(), "${tablePrefix}${dataName}");
+    }
+
+    @Override
     public List<${name}Entity> findAll(Criteria criteria) {
         return Translator.translateList(super.findAll(criteria), User.getLanguage(), "${tablePrefix}${dataName}");
+    }
+
+    @Override
+    public List<${name}Entity> findAll(Criteria criteria, int limit, int offset) {
+        // The generated "my" / partner controllers read their page through this overload (#8670).
+        return Translator.translateList(super.findAll(criteria, limit, offset), User.getLanguage(), "${tablePrefix}${dataName}");
     }
 
     @Override
