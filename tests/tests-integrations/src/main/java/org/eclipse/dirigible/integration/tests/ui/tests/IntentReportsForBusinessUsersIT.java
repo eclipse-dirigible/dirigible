@@ -31,11 +31,15 @@ import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.framework.security.SecurityUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WrapsDriver;
+import org.openqa.selenium.chromium.HasCdp;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import com.codeborne.selenide.Condition;
 import com.codeborne.selenide.Selenide;
 import com.codeborne.selenide.SelenideElement;
+import com.codeborne.selenide.WebDriverRunner;
 
 /**
  * A generated application's Reports section and dashboard tiles for a user who holds only the
@@ -47,6 +51,8 @@ import com.codeborne.selenide.SelenideElement;
  * Reports section although the report itself answered them. The intent now generates the reports
  * into the shell's configuration: the user the report's {@code can:} grants sees its entry and its
  * KPI tile, one who may not read it sees neither, and no page asks the repository API anything.
+ * Which reports a reader may read is answered from the reports' declared read gates, never by
+ * running each report on every page load (#8699).
  *
  * <p>
  * The application shell, which aggregates every published app, reads the same manifest in one
@@ -92,6 +98,12 @@ class IntentReportsForBusinessUsersIT extends UserInterfaceIntegrationTest {
     private static final String CONTROLLER_REQUESTS =
             "return performance.getEntriesByType('resource').map(e => e.name).filter(n => n.indexOf('/InvoiceTallyController') >= 0);";
 
+    /**
+     * The requests the page fetched from the report's controller, recorded by {@link #recordFetches()}.
+     */
+    private static final String FETCHED_CONTROLLER_REQUESTS =
+            "return (window.__fetched || []).filter(n => n.indexOf('/InvoiceTallyController') >= 0);";
+
     /** Whether the page ever requested anything from the core repository API. */
     private static final String REPOSITORY_REQUESTS =
             "return performance.getEntriesByType('resource').map(e => e.name).filter(n => n.indexOf('/services/core/repository/') >= 0);";
@@ -135,6 +147,17 @@ class IntentReportsForBusinessUsersIT extends UserInterfaceIntegrationTest {
                 .shouldHave(Condition.text("2"));
         assertEquals(List.of(), Selenide.executeJavaScript(REPOSITORY_REQUESTS), "the shell lists its reports from its own configuration");
 
+        // Off its dashboard the generated app runs no report: which reports the Viewer may read is the
+        // platform's answer from their declared read gates, not a probe of each report (#8699).
+        recordFetches();
+        viewer.getBrowser()
+              .openPath(APP + "Invoice");
+        Selenide.refresh();
+        waitForReports();
+        assertEquals(List.of("InvoiceTally"), reportNames());
+        assertEquals(List.of(), Selenide.executeJavaScript(FETCHED_CONTROLLER_REQUESTS),
+                "no report runs to decide what the reader may read");
+
         // The application shell, opened on another route than its dashboard, lists the report from
         // the one aggregated manifest and runs no KPI query; entering the dashboard runs it.
         openShell(viewer, "#/inbox");
@@ -153,6 +176,11 @@ class IntentReportsForBusinessUsersIT extends UserInterfaceIntegrationTest {
         // The Clerk may not read the report: no entry, no Reports section, no tile.
         IDE clerk = openApp("clerk");
         assertEquals(List.of(), reportNames());
+        recordFetches();
+        Selenide.refresh();
+        waitForReports();
+        assertEquals(List.of(), Selenide.executeJavaScript(FETCHED_CONTROLLER_REQUESTS),
+                "the report the Clerk may not read is not probed either");
         assertFalse(Selenide.$$("[x-h-sidebar-group]")
                             .findBy(Condition.text("Reports"))
                             .is(Condition.visible),
@@ -248,6 +276,24 @@ class IntentReportsForBusinessUsersIT extends UserInterfaceIntegrationTest {
         userIde.getBrowser()
                .openPath(SHELL + route);
         waitForReports();
+    }
+
+    /**
+     * Records every {@code fetch} the pages the tab loads from now on make, before any page script
+     * runs, in {@code window.__fetched} - which {@link #FETCHED_CONTROLLER_REQUESTS} reads.
+     */
+    private static void recordFetches() {
+        WebDriver driver = WebDriverRunner.getWebDriver();
+        while (driver instanceof WrapsDriver wrapper) {
+            driver = wrapper.getWrappedDriver();
+        }
+        ((HasCdp) driver).executeCdpCommand("Page.addScriptToEvaluateOnNewDocument", Map.of("source", """
+                window.__fetched = [];
+                const fetched = window.fetch;
+                window.fetch = function (input) {
+                  window.__fetched.push(String(input && input.url ? input.url : input));
+                  return fetched.apply(this, arguments);
+                };"""));
     }
 
     private static void waitForReports() {

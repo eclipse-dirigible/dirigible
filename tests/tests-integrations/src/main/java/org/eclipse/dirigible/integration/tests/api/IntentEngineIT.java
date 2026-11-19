@@ -3675,8 +3675,9 @@ class IntentEngineIT extends IntegrationTest {
         // The shell lists the reports from the manifest the intent baked into its configuration
         // (#8277), not from a walk of the registry through the core repository API - which only
         // ADMINISTRATOR and OPERATOR may call. Run the SHIPPED reports store over the GENERATED
-        // config.js: every report is listed in the intent's order, one the reader may not read (its
-        // count probe answered 403) is left out, and nothing but those probes is requested.
+        // config.js: every report is listed in the intent's order, one the reader may not read (the
+        // platform leaves it out of the project's readable reports) is left out, and the platform's
+        // one answer is all that is requested - no report runs to decide it (#8699).
         String config = contentOf("gen/orders/js/config.js");
         String store = runReportsStore(config, "OrdersByCustomer");
         String[] listed = store.split("\n--\n", -1)[0].split("\n");
@@ -3687,9 +3688,8 @@ class IntentEngineIT extends IntegrationTest {
                                 .toList(),
                 "every report but the forbidden OrdersByCustomer, in the intent's order: " + store);
         assertFalse(requested.contains("/services/core/repository/"), "the store asks the repository API nothing: " + requested);
-        for (String line : requested.split("\n")) {
-            assertTrue(line.endsWith("Controller/count"), "the store only probes the reports' controllers: " + requested);
-        }
+        assertEquals("/services/platform/reports?project=" + PROJECT, requested,
+                "the store asks the platform once which reports the reader may read, and runs none of them: " + requested);
         // The manifest's URLs are the paths the report-file template generated the page and controller
         // to - asserted on the files, for the report generated just above.
         String byMonth = java.util.Arrays.stream(listed)
@@ -5531,7 +5531,9 @@ class IntentEngineIT extends IntegrationTest {
 
     /**
      * Runs the SHIPPED reports store over a generated {@code config.js}, with {@code fetch} answering
-     * 403 for the named report's requests and 200 for every other, and returns the listed reports as
+     * the platform's readable-reports request with every report of the manifest but the named one (as
+     * {@code /services/platform/reports?project=} answers a reader who may not read it), 403 for the
+     * named report's requests and 200 for every other, and returns the listed reports as
      * {@code name|url|apiBase|widget label} lines, a {@code --} line, and the requested URLs, one per
      * line.
      */
@@ -5539,11 +5541,15 @@ class IntentEngineIT extends IntegrationTest {
         try (Context context = Context.newBuilder("js")
                                       .option("engine.WarnInterpreterOnly", "false")
                                       .build()) {
-            context.eval("js", "var window = this; var App = {}; var stores = {}; var requested = [];"
-                    + " var document = { addEventListener: (event, callback) => { if (event === 'alpine:init') callback(); } };"
-                    + " var Alpine = { store: (name, definition) => { stores[name] = definition; } };"
-                    + " var fetch = async (url) => { requested.push(url); const status = url.indexOf('/" + forbiddenReport
-                    + "Controller') >= 0 ? 403 : 200;" + " return { ok: status === 200, status, json: async () => ({ count: 0 }) }; };");
+            context.eval("js",
+                    "var window = this; var App = {}; var stores = {}; var requested = [];"
+                            + " var document = { addEventListener: (event, callback) => { if (event === 'alpine:init') callback(); } };"
+                            + " var Alpine = { store: (name, definition) => { stores[name] = definition; } };"
+                            + " var fetch = async (url) => { requested.push(url);"
+                            + " if (url.indexOf('/services/platform/reports?') === 0) { return { ok: true, status: 200, json: async () =>"
+                            + " App.config.reports.filter(r => r.name !== '" + forbiddenReport + "').map(r => ({ name: r.name })) }; }"
+                            + " const status = url.indexOf('/" + forbiddenReport + "Controller') >= 0 ? 403 : 200;"
+                            + " return { ok: status === 200, status, json: async () => ({ count: 0 }) }; };");
             context.eval("js", config);
             context.eval("js", shellScript("stores/reports.js"));
             context.eval("js",
