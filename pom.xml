@@ -197,7 +197,7 @@
 
 
         <!-- Velocity -->
-        <velocity.version>2.4</velocity.version>
+        <velocity.version>2.4.1</velocity.version>
 
         <!-- JGit -->
         <jgit.version>7.8.1.202611041320-r</jgit.version>
