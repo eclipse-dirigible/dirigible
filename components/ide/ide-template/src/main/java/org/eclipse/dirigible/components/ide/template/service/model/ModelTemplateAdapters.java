@@ -311,6 +311,12 @@ final class ModelTemplateAdapters {
             if ("Date".equals(dataType.typescript())) {
                 model.put("hasDates", Boolean.TRUE);
             }
+            // The column's caption (#8671, #8621): the page heads it with its catalog entry, of which
+            // the label is the default-language text - an authored measure caption, otherwise the
+            // alias. A report from before the translation ids falls back to the alias for both.
+            String alias = strOr(column, "alias", "");
+            column.put("tIdJs", JsLiterals.escape(strOr(column, "tId", ModelTranslations.translationId(alias))));
+            column.put("labelJs", JsLiterals.escape(strOr(column, "label", alias)));
             // Rendering defaults for reports authored before the column alignment and pattern
             // metadata: a numeric column right-aligns, a decimal one gets the platform money pattern.
             if (!truthy(column, "align")) {

@@ -509,7 +509,7 @@ ${importsCode}
 
 @Repository
 @Component("${javaGenFolderName}_${name}Repository")
-public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTargetDeleteRules || $hasTargetAgreementRules || $share) implements #if($hasTargetDeleteRules)org.eclipse.dirigible.sdk.db.TargetDeleteRule#if($hasTargetAgreementRules || $share), #end#end#if($hasTargetAgreementRules)org.eclipse.dirigible.sdk.db.TargetAgreementRule#if($share), #end#end#if($share)org.eclipse.dirigible.components.engine.share.ShareSubject#end#end {
+public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTargetDeleteRules || $hasTargetAgreementRules || $share || $periodStatusProperty) implements #if($hasTargetDeleteRules)org.eclipse.dirigible.sdk.db.TargetDeleteRule#if($hasTargetAgreementRules || $share || $periodStatusProperty), #end#end#if($hasTargetAgreementRules)org.eclipse.dirigible.sdk.db.TargetAgreementRule#if($share || $periodStatusProperty), #end#end#if($share)org.eclipse.dirigible.components.engine.share.ShareSubject#if($periodStatusProperty), #end#end#if($periodStatusProperty)org.eclipse.dirigible.sdk.db.PeriodRegister#end#end {
 
 #if($reportedOnUpdate.size() > 0 || ($guardChecks && $guardChecks.size() > 0))
     /**
@@ -605,8 +605,6 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($periodLock)
         requirePeriodOpen(entity.${periodLock.dateProperty});
 #end
-#rollupGuardCheck()
-#gatedRollupGuardCheck()
 #aggregateGuardCheck()
 #if($hasLabel)
         computeName(entity);
@@ -620,6 +618,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
 #end
 #end
+## The capacity guards run AFTER the create-time calculated fields (#7943): the summed field may be one
+## of them (Amount = Quantity * Price, a signed cash outflow), and guarded before it was assigned it read
+## null, counted as 0, so no create was ever refused while the roll-up then summed the real value.
+#rollupGuardCheck()
+#gatedRollupGuardCheck()
 ## A uuid field (intent type: uuid) is platform-generated: assign a random UUID on create when empty.
 ## A number: {} field with stampOn:issue also carries generatedUuid, so its create-time placeholder is
 ## a UUID (the real number is stamped at the issue step); stampOn:create fields are handled just below.
@@ -795,8 +798,6 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($hasAgreeGuards)
         requireAgreementKept(entity);
 #end
-#rollupGuardCheck()
-#gatedRollupGuardCheck()
 #aggregateGuardCheck()
 #if($preservedOnUpdate.size() > 0)
         // System-owned fields survive a partial payload: a caller's update carries only the fields
@@ -866,6 +867,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
 #end
 #end
+## The capacity guards run after the update-time calculated fields, as on create (#7943).
+#rollupGuardCheck()
+#gatedRollupGuardCheck()
 #measuredBalances()
 #rollupFitCheck()
 #if($documentChecks && $documentChecks.size() > 0)
@@ -1574,11 +1578,35 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      * scope. A write that sets one takes it over - the row holding it in the same scope is demoted by a
      * targeted write publishing its "-updated", in this write's unit of work - or, declared
      * {@code onConflict: refuse}, is answered 409 while another row holds it.
+#if($hasRequiredSingleFlags)
+     * A flag declared {@code required: true} is not given up by its holder while no other row of the
+     * scope holds it (a 400): it moves by being set on another row.
+#end
      */
 ## ponytail: two concurrent writers that each find no other holder can both commit one; a database
 ## partial unique index (not portable to H2) or a lock on the scope would close it.
+#set($refusalCatalog = "null")
+#if($messageCatalogJava)#set($refusalCatalog = $messageCatalogJava)#end
+#set($refusalEntityLabel = '"' + $name + '"')
+#if($entityLabelJava)#set($refusalEntityLabel = $entityLabelJava)#end
+#set($refusalEntityLabelKey = "null")
+#if($labelCatalogKeyJava)#set($refusalEntityLabelKey = $labelCatalogKeyJava)#end
     private void enforceSingleFlags(${name}Entity entity) {
+#if($hasRequiredSingleFlags)
+        ${name}Entity singleStored = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
+#end
 #foreach($flag in $singleFlags)
+#if($flag.required == "true")
+        // Given up by its holder - un-flagged#if($flag.per), or moved to another ${flag.per}#end (#8700).
+        if (singleStored != null && Boolean.TRUE.equals(singleStored.${flag.property})
+                && (!Boolean.TRUE.equals(entity.${flag.property})#if($flag.per) || !java.util.Objects.equals(singleStored.${flag.per}, entity.${flag.per})#end)) {
+#if($flag.per)
+            require${flag.property}HandedOver(singleStored, java.util.Objects.equals(singleStored.${flag.per}, entity.${flag.per}));
+#else
+            require${flag.property}HandedOver(singleStored, true);
+#end
+        }
+#end
         if (Boolean.TRUE.equals(entity.${flag.property})) {
             for (${name}Entity holder : findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
                                                                                                           .eq("${flag.property}", true)#if($flag.per)
@@ -1587,8 +1615,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
                     continue;
                 }
 #if($flag.refuse == "true")
-                throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
-                        org.eclipse.dirigible.sdk.db.CheckMessages.message(${flag.messageArgsJava}));
+                // Refused in the reader's language, naming the flag (#8700), answered 409 like a business key.
+                throw new org.eclipse.dirigible.sdk.db.DuplicateKeyException(org.eclipse.dirigible.sdk.db.FieldRefusals.#if($flag.per)singleTakenInScope#{else}singleTaken#end(
+                        ${refusalCatalog}, ${refusalEntityLabel}, ${refusalEntityLabelKey}, ${flag.takenRefusalArgsJava}));
 #else
                 updateProperties(holder.${pkPropertyName}, java.util.Map.<String, Object>of("${flag.property}", false),
                         "${projectName}-${perspectiveName}-${name}-updated");
@@ -1597,6 +1626,52 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         }
 #end
     }
+#if($hasRequiredSingleFlags)
+
+    /**
+     * Refuses the delete of a stored ${name} that holds a {@code single: { required: true }} flag while
+     * other rows of its scope remain and none of them holds it (#8700): the flag is moved first, by
+     * setting it on another row. The last row of a scope may go - an empty scope needs no holder. The
+     * generated REST deletes ask it; a cascade, which deletes a scope together with its master, does not.
+     *
+     * @param stored the ${name} about to be deleted, as stored
+     */
+    public void requireSingleFlagsKept(${name}Entity stored) {
+#foreach($flag in $singleFlags)
+#if($flag.required == "true")
+        if (Boolean.TRUE.equals(stored.${flag.property})) {
+            require${flag.property}HandedOver(stored, false);
+        }
+#end
+#end
+    }
+#foreach($flag in $singleFlags)
+#if($flag.required == "true")
+
+    /**
+     * The holder of the required single flag ${flag.property} gives it up (#8700): refused 400, naming
+     * the flag, unless another row of the holder's scope holds it, or no other row remains in that
+     * scope while the holder leaves it.
+     *
+     * @param holder the holder as stored
+     * @param staysInScope whether the holder remains a row of its scope after the write
+     */
+    private void require${flag.property}HandedOver(${name}Entity holder, boolean staysInScope) {
+        org.eclipse.dirigible.components.data.store.java.repository.Criteria others = org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                                                                                                                                                     .ne("${pkPropertyName}", holder.${pkPropertyName})#if($flag.per)
+                                                                                                                                                     .eq("${flag.per}", holder.${flag.per})#end;
+        if (!staysInScope && count(others) == 0) {
+            // The holder leaves a scope it is the last row of: an empty scope needs no holder.
+            return;
+        }
+        if (count(others.eq("${flag.property}", true)) == 0) {
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.singleRequired(${refusalCatalog}, ${refusalEntityLabel}, ${refusalEntityLabelKey},
+                    ${flag.requiredRefusalArgsJava});
+        }
+    }
+#end
+#end
+#end
 #end
 #if($hasUniqueIgnoringCase)
 
@@ -2770,8 +2845,21 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     }
 
     @Override
+    public List<${name}Entity> findAll(int limit, int offset, String orderBy) {
+        // The generated controller's list reads its page through this overload when the entity
+        // declares orderBy: (#8670).
+        return Translator.translateList(super.findAll(limit, offset, orderBy), User.getLanguage(), "${tablePrefix}${dataName}");
+    }
+
+    @Override
     public List<${name}Entity> findAll(Criteria criteria) {
         return Translator.translateList(super.findAll(criteria), User.getLanguage(), "${tablePrefix}${dataName}");
+    }
+
+    @Override
+    public List<${name}Entity> findAll(Criteria criteria, int limit, int offset) {
+        // The generated "my" / partner controllers read their page through this overload (#8670).
+        return Translator.translateList(super.findAll(criteria, limit, offset), User.getLanguage(), "${tablePrefix}${dataName}");
     }
 
     @Override
@@ -2960,6 +3048,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     }
 
     private boolean isPeriodClosed(${periodLock.dateJavaClass} date) {
+#if($periodLock.foreignModel)
+        // The register belongs to the ${periodLock.foreignModel} model (#8687): asked at runtime, and
+        // open while that model is not deployed.
+        return org.eclipse.dirigible.sdk.db.PeriodRegisters.isClosed("${periodLock.foreignModel}", "${periodLock.entity}", date);
+#else
         if (date == null) {
             return false;
         }
@@ -2972,6 +3065,42 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             }
             for (String closed : "${periodLock.closedValues}".split(",")) {
                 if (closed.equals(String.valueOf(period.${periodLock.statusProperty}))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+#end
+    }
+#end
+#if($periodStatusProperty)
+
+    // A period register answers for the records of OTHER models too (intent `immutableInPeriod:` with
+    // `model:`, #8687): a source document whose module this model uses cannot reference this register
+    // at compile time, so it asks every PeriodRegister by model and name at runtime.
+    @Override
+    public String periodModel() {
+        return "${javaGenFolderName}";
+    }
+
+    @Override
+    public String periodRegister() {
+        return "${name}";
+    }
+
+    @Override
+    public boolean isClosedOn(java.time.LocalDate date) {
+        if (date == null) {
+            return false;
+        }
+        for (${name}Entity period : findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                                                                                                         .le("${periodStartProperty}", date)
+                                                                                                         .ge("${periodEndProperty}", date))) {
+            if (period.${periodStatusProperty} == null) {
+                continue;
+            }
+            for (String closed : "${periodClosedValues}".split(",")) {
+                if (closed.equals(String.valueOf(period.${periodStatusProperty}))) {
                     return true;
                 }
             }

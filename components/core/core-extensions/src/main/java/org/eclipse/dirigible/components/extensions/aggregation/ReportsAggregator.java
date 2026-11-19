@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import org.eclipse.dirigible.commons.api.helpers.NamingHelper;
 import org.eclipse.dirigible.repository.api.ICollection;
@@ -55,6 +56,9 @@ class ReportsAggregator {
     private static final List<String> DISPLAY_KEYS =
             List.of("label", "description", "dashboard", "chart", "tId", "descriptionTId", "period");
 
+    /** A project name: one path segment, never a way out of the registry. */
+    private static final Pattern PROJECT_NAME = Pattern.compile("(?!\\.{1,2}$)[^/\\\\]+");
+
     private static final JsonMapper JSON = JsonMapper.builder()
                                                      .build();
 
@@ -77,12 +81,36 @@ class ReportsAggregator {
      * @return one manifest entry per report
      */
     List<Map<String, Object>> aggregate() {
+        return aggregate(null);
+    }
+
+    /**
+     * The readable reports of one published project, or of every one for a {@code null} project. A
+     * generated application asks for its own, to learn which of the reports its manifest lists the
+     * reader may read without running any of them (#8699).
+     *
+     * @param projectName the project, {@code null} for every project
+     * @return one manifest entry per report
+     */
+    List<Map<String, Object>> aggregate(String projectName) {
         List<Map<String, Object>> reports = new ArrayList<>();
         ICollection registry = repository.getCollection(IRepositoryStructure.PATH_REGISTRY_PUBLIC);
         if (!registry.exists()) {
             return reports;
         }
-        for (ICollection project : registry.getCollections()) {
+        List<ICollection> projects;
+        if (projectName == null) {
+            projects = registry.getCollections();
+        } else if (!PROJECT_NAME.matcher(projectName)
+                                .matches()) {
+            return reports;
+        } else {
+            projects = List.of(registry.getCollection(projectName));
+        }
+        for (ICollection project : projects) {
+            if (!project.exists()) {
+                continue;
+            }
             ICollection gen = project.getCollection(GEN);
             if (!gen.exists()) {
                 continue;

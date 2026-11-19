@@ -429,6 +429,10 @@ public class ${name}MyController {
         // its update - the delete is the third affordance the master-detail panel hides (#7372).
         requireDeletable(existing);
 #end
+#if($hasRequiredSingleFlags)
+        // The holder of a `single: { required: true }` flag goes only once another row holds it (#8700).
+        repository.requireSingleFlagsKept(existing);
+#end
         try {
             repository.deleteById(id);
         } catch (RuntimeException e) {
@@ -604,6 +608,9 @@ public class ${name}MyController {
     // recomputes the document's totals, so a document dated in a closed period freezes its lines with
     // it - exactly as a locked status does.
     private boolean isMasterPeriodOpen(${masterLock.period.dateJavaClass} date) {
+#if($masterLock.period.foreignModel)
+        return !org.eclipse.dirigible.sdk.db.PeriodRegisters.isClosed("${masterLock.period.foreignModel}", "${masterLock.period.entity}", date);
+#else
         if (date == null) {
             return true;
         }
@@ -620,6 +627,7 @@ public class ${name}MyController {
             }
         }
         return true;
+#end
     }
 #end
 #foreach($ancestor in $masterLock.ancestors)
@@ -645,6 +653,9 @@ public class ${name}MyController {
 #if($ancestor.period)
 
     private boolean isAncestor${ancestorIndex}PeriodOpen(${ancestor.period.dateJavaClass} date) {
+#if($ancestor.period.foreignModel)
+        return !org.eclipse.dirigible.sdk.db.PeriodRegisters.isClosed("${ancestor.period.foreignModel}", "${ancestor.period.entity}", date);
+#else
         if (date == null) {
             return true;
         }
@@ -661,6 +672,7 @@ public class ${name}MyController {
             }
         }
         return true;
+#end
     }
 #end
 #end
@@ -879,6 +891,11 @@ public class ${name}MyController {
     // A date covered by no period at all is open: periods are declared as they are needed, and an
     // unopened future month must not freeze the present. A record carrying no date falls in none.
     private boolean isPeriodOpen(${periodLock.dateJavaClass} date) {
+#if($periodLock.foreignModel)
+        // The register belongs to the ${periodLock.foreignModel} model (#8687): asked at runtime, and
+        // open while that model is not deployed.
+        return !org.eclipse.dirigible.sdk.db.PeriodRegisters.isClosed("${periodLock.foreignModel}", "${periodLock.entity}", date);
+#else
         if (date == null) {
             return true;
         }
@@ -895,6 +912,7 @@ public class ${name}MyController {
             }
         }
         return true;
+#end
     }
 #end
 

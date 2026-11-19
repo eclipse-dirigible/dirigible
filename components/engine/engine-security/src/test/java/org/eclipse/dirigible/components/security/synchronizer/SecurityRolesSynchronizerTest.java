@@ -24,6 +24,7 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.text.ParseException;
 import java.util.List;
@@ -123,5 +124,30 @@ class SecurityRolesSynchronizerTest {
         assertNotNull(list);
         assertEquals("/META-INF/dirigible/test/test.roles", list.get(0)
                                                                 .getLocation());
+    }
+
+    /**
+     * A {@code .roles} entry may mark a role a tenant's Owner can give and say how it reads (#8728); an
+     * entry without the marks stays unassignable.
+     *
+     * @throws ParseException the parse exception
+     */
+    @Test
+    public void testAssignableAndLabelArePersisted() throws ParseException {
+        String content = "[{\"name\":\"Accountant\",\"label\":\"Accountant\",\"description\":\"Enters invoices.\",\"assignable\":true},"
+                + "{\"name\":\"acme.Invoices.InvoiceReadOnly\"}]";
+        List<Role> list = rolesSynchronizer.parse("/acme/assignable.roles", content.getBytes(StandardCharsets.UTF_8));
+
+        Role accountant = rolesSynchronizer.getService()
+                                           .findByKey(list.get(0)
+                                                          .getKey());
+        assertTrue(accountant.isAssignable());
+        assertEquals("Accountant", accountant.getLabel());
+        assertEquals("Enters invoices.", accountant.getDescription());
+        Role convention = rolesSynchronizer.getService()
+                                           .findByKey(list.get(1)
+                                                          .getKey());
+        assertFalse(convention.isAssignable());
+        assertNull(convention.getLabel());
     }
 }

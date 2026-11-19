@@ -47,8 +47,9 @@ import com.google.gson.JsonParser;
  * <li>the request language's own catalog - an overlay a translator maintains;</li>
  * <li>the default-language text, the one the model authors.</li>
  * </ol>
- * Placeholders ({@code {count}}, {@code {match}}, and their i18next spelling {@code {{count}}}) are
- * interpolated AFTER translation, so a translation may move them.
+ * Placeholders ({@code {count}}, {@code {match}}, a value of the record such as
+ * {@code {taxRateCap}} or {@code {Category.code}} (#8665), and their i18next spelling
+ * {@code {{count}}}) are interpolated AFTER translation, so a translation may move them.
  *
  * <p>
  * Resolution never fails the refusal it serves: a catalog that cannot be read is skipped and the
@@ -58,8 +59,11 @@ public final class CheckMessages {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(CheckMessages.class);
 
-    /** {@code {{name}}} (i18next) or {@code {name}} (the authored DSL form). */
-    private static final Pattern PLACEHOLDER = Pattern.compile("\\{\\{\\s*(\\w+)\\s*\\}\\}|\\{(\\w+)\\}");
+    /**
+     * {@code {{name}}} (i18next) or {@code {name}} (the authored DSL form); a name may be a one-hop
+     * path, {@code {Category.code}} (#8665).
+     */
+    private static final Pattern PLACEHOLDER = Pattern.compile("\\{\\{\\s*([\\w.]+)\\s*\\}\\}|\\{([\\w.]+)\\}");
 
     /** Reads the request language's own catalog entry for a key. */
     @FunctionalInterface

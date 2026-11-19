@@ -501,6 +501,15 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                     int before = columns.size();
                     addMeasure(context, model, source, baseAlias, measure.trim(), joins, columns);
                     if (columns.size() > before) {
+                        // An authored caption (#8671, #8621) is the column's label only: the alias (the
+                        // row key) and the translation id stay derived from the expression, so the REST
+                        // rows and an existing catalog entry keep their key.
+                        String caption = report.getMeasureLabels()
+                                               .get(measure.trim());
+                        if (caption != null) {
+                            columns.get(before)
+                                   .put("label", caption);
+                        }
                         measureColumns.put(expressionKey(measure), columns.get(before));
                     }
                 }

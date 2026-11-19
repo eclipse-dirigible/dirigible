@@ -64,6 +64,40 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * #8665: the record's values a check message names are appended to the resolution arguments as
+     * name/value pairs - an own value read off {@code entity}, a value one hop away read off the record
+     * the foreign key loads through its generated repository.
+     */
+    @Test
+    void checkMessageParamsAreAppendedAsNameValuePairs() {
+        Map<String, Object> hop = new LinkedHashMap<>();
+        hop.put("sourceExpression", "entity.Category");
+        hop.put("entity", "Category");
+        hop.put("perspective", "Category");
+        hop.put("crossModel", false);
+        hop.put("targetModel", "");
+        Map<String, Object> check = new LinkedHashMap<>();
+        check.put("kind", "compare");
+        check.put("message", "At most {taxRateCap}% for {Category.code}");
+        check.put("messageKey", "Asset_compare_0");
+        check.put("messageParams", List.of(Map.of("name", "taxRateCap", "property", "TaxRateCap"),
+                Map.of("name", "Category.code", "property", "Code", "hop", hop)));
+        Map<String, Object> asset = entity("Asset", "Assets", property("Id", "INTEGER"));
+        asset.put("checks", List.of(check));
+        Map<String, Object> parameters = parameters();
+        parameters.put("filePath", "assets.model");
+
+        ModelParameterProcessor.process(model(asset), parameters);
+
+        String args = (String) check.get("messageArgsJava");
+        assertTrue(args.endsWith(
+                ", \"taxRateCap\", entity.TaxRateCap, \"Category.code\", java.util.Optional.ofNullable((Object) entity.Category)"
+                        + ".flatMap(messageFk -> new gen.sales_order.data.category.CategoryRepository().findOne(messageFk))"
+                        + ".map(messageHop -> (Object) messageHop.Code).orElse(null)"),
+                args);
+    }
+
+    /**
      * #7749: a pattern carrying the author's message refuses with it - the controllers get its catalog
      * key and default text, the forms the key and the JS-escaped text - and the message seeds the en-US
      * catalog under {@code checks}. A pattern without a message gets none of them.
@@ -198,18 +232,25 @@ class ModelParameterProcessorTest {
     }
 
     /**
-     * #8101: a refusing single flag's conflict message is translated like a check's, and a demoting
-     * flag, which refuses nothing, has no message to translate.
+     * #8101 / #8700: a refusing single flag's conflict is the shared {@code fieldSingleTaken} sentence
+     * - {@code fieldSingleTakenInScope} for a scoped flag, naming the scope by its relation's label -
+     * so the flag and the scope are named by their labels' catalog keys like the other field refusals.
+     * A demoting flag refuses nothing, and the sentences reach the en-US catalog only for a model
+     * declaring a refusing flag.
      */
     @Test
-    void refusingSingleFlagMessageBecomesACatalogKey() {
+    void refusingSingleFlagRefusalNamesTheFlagAndItsScopeByTheirLabels() {
         Map<String, Object> refusing = new LinkedHashMap<>();
         refusing.put("property", "Preferred");
+        refusing.put("per", "Owner");
         refusing.put("refuse", "true");
-        refusing.put("message", "Another Wallet is already Preferred");
         Map<String, Object> demoting = new LinkedHashMap<>();
         demoting.put("property", "Base");
-        Map<String, Object> wallet = entity("Wallet", "Wallets", property("Id", "INTEGER"));
+        Map<String, Object> preferred = property("Preferred", "BOOLEAN");
+        preferred.put("dataName", "WALLET_PREFERRED");
+        Map<String, Object> owner = property("Owner", "INTEGER");
+        owner.put("dataName", "WALLET_OWNER");
+        Map<String, Object> wallet = entity("Wallet", "Wallets", property("Id", "INTEGER"), preferred, owner);
         wallet.put("singleFlags", List.of(refusing, demoting));
         Map<String, Object> model = model(wallet);
         Map<String, Object> parameters = parameters();
@@ -217,12 +258,49 @@ class ModelParameterProcessorTest {
 
         ModelParameterProcessor.process(model, parameters);
 
-        assertEquals("\"bookstore:billing-model.checks.Wallet_single_Preferred\", \"Another Wallet is already Preferred\"",
-                refusing.get("messageArgsJava"));
-        assertFalse(demoting.containsKey("messageArgsJava"));
+        assertEquals("\"Preferred\", \"Preferred\", \"bookstore:billing-model.t.WALLET_PREFERRED\", \"Owner\", "
+                + "\"bookstore:billing-model.t.WALLET_OWNER\"", refusing.get("takenRefusalArgsJava"));
+        assertFalse(demoting.containsKey("takenRefusalArgsJava"));
         Map<String, Object> catalog = ModelTranslations.checkMessages(model);
-        assertEquals("Another Wallet is already Preferred", catalog.get("Wallet_single_Preferred"));
-        assertFalse(catalog.containsKey("Wallet_single_Base"));
+        assertEquals("Another {entity} is already '{label}'", catalog.get("fieldSingleTaken"));
+        assertEquals("Another {entity} is already '{label}' for this {scope}", catalog.get("fieldSingleTakenInScope"));
+        assertFalse(catalog.containsKey("Wallet_single_Preferred"));
+        demoting.remove("refuse");
+        refusing.remove("refuse");
+        assertFalse(ModelTranslations.checkMessages(model)
+                                     .containsKey("fieldSingleTaken"));
+    }
+
+    /**
+     * #8700: a required single flag's refusal is the shared {@code fieldSingleRequired} sentence,
+     * naming the flag by its label's catalog key like the other field refusals; the entity is marked,
+     * so the repository and the REST deletes render the guard. The sentence reaches the en-US catalog
+     * only for a model declaring such a flag.
+     */
+    @Test
+    void requiredSingleFlagRefusalNamesTheFlagByItsLabel() {
+        Map<String, Object> required = new LinkedHashMap<>();
+        required.put("property", "Base");
+        required.put("required", "true");
+        Map<String, Object> base = property("Base", "BOOLEAN");
+        base.put("dataName", "CURRENCY_BASE");
+        Map<String, Object> currency = entity("Currency", "Currencies", property("Id", "INTEGER"), base);
+        currency.put("singleFlags", List.of(required));
+        Map<String, Object> plain = entity("Country", "Countries", property("Id", "INTEGER"));
+        plain.put("singleFlags", List.of(new LinkedHashMap<>(Map.of("property", "Base"))));
+        Map<String, Object> model = model(currency, plain);
+        Map<String, Object> parameters = parameters();
+        parameters.put("filePath", "billing.model");
+
+        ModelParameterProcessor.process(model, parameters);
+
+        assertEquals("\"Base\", \"Base\", \"bookstore:billing-model.t.CURRENCY_BASE\"", required.get("requiredRefusalArgsJava"));
+        assertEquals(Boolean.TRUE, currency.get("hasRequiredSingleFlags"));
+        assertFalse(plain.containsKey("hasRequiredSingleFlags"));
+        assertEquals("One {entity} must stay '{label}' - mark another one '{label}' first", ModelTranslations.checkMessages(model)
+                                                                                                             .get("fieldSingleRequired"));
+        assertFalse(ModelTranslations.checkMessages(model(plain))
+                                     .containsKey("fieldSingleRequired"));
     }
 
     /**
@@ -1682,6 +1760,34 @@ class ModelParameterProcessorTest {
         assertEquals("2", lock.get("closedValues"));
         // The register itself is not guarded by anything - closing a period is a write to the register.
         assertNull(register.get("periodLock"));
+    }
+
+    /**
+     * A register of ANOTHER model (#8687): nothing of it is local - not even a same-named entity of
+     * this model is taken for it - so the lock carries the owner's generated folder and the register's
+     * name, which the templates ask {@code PeriodRegisters} with at runtime.
+     */
+    @Test
+    void aGuardedEntityLockedByAnotherModelsRegisterCarriesItsOwner() {
+        Map<String, Object> decoy = entity("FiscalPeriod", "Periods", property("Id", "INTEGER"));
+        decoy.put("periodStartProperty", "StartDate");
+        decoy.put("periodEndProperty", "EndDate");
+        decoy.put("periodStatusProperty", "Status");
+        decoy.put("periodClosedValues", "2");
+        Map<String, Object> order = entity("CashOrder", "CashOrders", property("Date", "DATE"));
+        order.put("periodLockEntity", "FiscalPeriod");
+        order.put("periodLockDateProperty", "Date");
+        order.put("periodLockModel", "journal-entries");
+
+        ModelParameterProcessor.process(model(decoy, order), javaParameters());
+
+        Map<String, Object> lock = (Map<String, Object>) order.get("periodLock");
+        assertEquals("Date", lock.get("dateProperty"));
+        assertEquals("java.time.LocalDate", lock.get("dateJavaClass"));
+        assertEquals("FiscalPeriod", lock.get("entity"));
+        assertEquals("journal_entries", lock.get("foreignModel"));
+        assertNull(lock.get("entityClass"), "a foreign register is never addressed by a generated type");
+        assertNull(lock.get("repositoryClass"));
     }
 
     /**

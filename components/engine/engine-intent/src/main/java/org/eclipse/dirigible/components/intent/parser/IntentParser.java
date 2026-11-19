@@ -30,6 +30,7 @@ import javax.lang.model.SourceVersion;
 import org.eclipse.dirigible.components.intent.generator.ArrivalSupport;
 import org.eclipse.dirigible.components.intent.generator.EventBinding;
 import org.eclipse.dirigible.components.intent.generator.CaptureSupport;
+import org.eclipse.dirigible.components.intent.generator.CheckMessageParams;
 import org.eclipse.dirigible.components.intent.generator.ImportSupport;
 import org.eclipse.dirigible.components.intent.generator.IntegrationSupport;
 import org.eclipse.dirigible.components.intent.generator.ExportSupport;
@@ -383,6 +384,7 @@ public final class IntentParser {
         wrapScalarNormalize(tree);
         expandFieldFlagShorthands(tree);
         normalizeOrderBy(tree);
+        normalizeMeasures(tree);
         normalizeActionPrompts(tree);
         // A key the typed model does not declare is dropped by the Gson mapping without a sound, so it
         // is collected here - on the raw tree, while the author's spelling still exists - and reported
@@ -3127,7 +3129,11 @@ public final class IntentParser {
                     + "]) with the moment [" + condition.getValue() + "]");
             return;
         }
-        if (fieldShape != moment.shape()) {
+        if (fieldShape != moment.shape() && moment.start() != null) {
+            // A period start (#8664) is the first DAY of the run's month / quarter / year.
+            issues.add(subject + " where-condition compares the [" + field.getType() + "] field [" + condition.getField() + "] with ["
+                    + condition.getValue() + "] - a period start is a date, so it compares only with a date field");
+        } else if (fieldShape != moment.shape()) {
             issues.add(subject + " where-condition compares the [" + field.getType() + "] field [" + condition.getField()
                     + "] with a moment of the other shape - use "
                     + (fieldShape == ScheduleSupport.Moment.Shape.DATE ? "CURRENT_DATE" : "CURRENT_TIMESTAMP"));
@@ -5567,6 +5573,9 @@ public final class IntentParser {
                                         + " fixedWhenReferenced - fixedAfterCreate already refuses every change after create; keep one");
                     }
                 }
+                if (relation.isReadOnly()) {
+                    validateReadOnlyRelation(entity, relation, issues);
+                }
                 if (relation.isPersonal()) {
                     personalCount++;
                     validatePersonal(entity, relation, byName, issues);
@@ -5812,6 +5821,9 @@ public final class IntentParser {
         }
         if (relation.isFixedWhenReferenced()) {
             unsupported.add("fixedWhenReferenced");
+        }
+        if (relation.isReadOnly()) {
+            unsupported.add("readOnly");
         }
         if (relation.getShow() != null && !relation.getShow()
                                                    .isEmpty()) {
@@ -6309,19 +6321,26 @@ public final class IntentParser {
      * while the register row covering that date is closed. The register must be an entity of THIS model
      * declaring {@code period:} - the guard is generated into this model's controllers, which can only
      * query a repository generated alongside them - and the date must be this entity's own {@code date}
-     * field, matching the register's own bounds.
+     * field, matching the register's own bounds. With {@code model:} the register belongs to that model
+     * instead and is asked at runtime (#8687), so it cannot be checked here: only its name is required.
      */
     private static void validateImmutableInPeriod(EntityIntent entity, Map<String, EntityIntent> byName, List<String> issues) {
         String subject = "entity [" + entity.getName() + "] immutableInPeriod";
         PeriodLockIntent lock = entity.getImmutableInPeriod();
+        if (lock.getModel() != null && lock.getModel()
+                                           .isBlank()) {
+            issues.add(subject + " model is blank - name the model that owns the period register, or leave model: out");
+        }
         if (lock.getPeriod() == null || lock.getPeriod()
                                             .isBlank()) {
             issues.add(subject + " declares no period - name the entity that declares period:");
-        } else {
+        } else if (lock.getModel() == null) {
+            // Another model's register is resolved at runtime by model + name, never against this model.
             EntityIntent register = byName.get(lock.getPeriod());
             if (register == null) {
                 issues.add(subject + " period [" + lock.getPeriod()
-                        + "] is not an entity of this model - a period register must be generated alongside what it locks");
+                        + "] is not an entity of this model - a period register must be generated alongside what it locks,"
+                        + " or named with model: when another model owns it");
             } else if (register.getPeriod() == null) {
                 issues.add(subject + " period [" + lock.getPeriod() + "] does not declare period: - it is not a period register");
             }
@@ -6717,6 +6736,57 @@ public final class IntentParser {
         if (!isBlank(relation.getCalculatedActionOnUpdate())) {
             issues.add(subject + " declares both " + key + " and calculatedActionOnUpdate - the update action recomputes the"
                     + " value on every update, so it cannot also be fixed; keep one");
+        }
+    }
+
+    /**
+     * {@code readOnly: true} on a relation (dirigible #8662): a to-one only the system sets - a
+     * storno's link to the order it reverses. It needs a single FK no user picks anyway on some other
+     * ground: a plain {@code manyToOne}/{@code oneToOne} that is not an EntityStatus (moved by its
+     * workflow), not a composition parent (set by the master's detail panel), not the
+     * personal/partner/owner relation (filled from the caller), not computed by a calculated action,
+     * and not fixed by {@code fixedAfterCreate}/{@code fixedWhenReferenced}, which only make sense for
+     * a value a user picks.
+     *
+     * @param entity the entity declaring the relation
+     * @param relation the relation
+     * @param issues the issue list to add to
+     */
+    private static void validateReadOnlyRelation(EntityIntent entity, RelationIntent relation, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
+        boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+        if (!toOne) {
+            issues.add(subject + " declares readOnly but only a manyToOne/oneToOne relation has an FK the system sets");
+            return;
+        }
+        List<String> conflicting = new ArrayList<>();
+        if (relation.isEntityStatus()) {
+            conflicting.add("function: EntityStatus");
+        }
+        if (relation.isComposition()) {
+            conflicting.add("composition");
+        }
+        if (relation.isPersonal() || relation.isPersonalReadOnly()) {
+            conflicting.add("personal");
+        }
+        if (relation.isPartner()) {
+            conflicting.add("partner");
+        }
+        if (relation.isOwner()) {
+            conflicting.add("owner");
+        }
+        if (relation.isCalculated()) {
+            conflicting.add("calculatedAction");
+        }
+        if (relation.isFixedAfterCreate()) {
+            conflicting.add("fixedAfterCreate");
+        }
+        if (relation.isFixedWhenReferenced()) {
+            conflicting.add("fixedWhenReferenced");
+        }
+        if (!conflicting.isEmpty()) {
+            issues.add(subject + " declares readOnly (only the system sets it) beside " + String.join(", ", conflicting)
+                    + ", which describe a value the platform or a user chooses - keep readOnly or drop it");
         }
     }
 
@@ -7391,6 +7461,13 @@ public final class IntentParser {
         String kind = check.getKind();
         validateSeverity(check, subject, issues);
         validateVerbs(check, subject, issues);
+        // A message may name the record's values (#8665): each {field} / {Relation.field} must resolve.
+        for (String placeholder : CheckMessageParams.placeholders(check.getMessage())) {
+            String failure = CheckMessageParams.failure(entity, byName, placeholder);
+            if (failure != null) {
+                issues.add(subject + " message names " + failure);
+            }
+        }
         if ("duplicate".equals(kind)) {
             validateDuplicateCheck(entity, check, subject, issues);
             return;
@@ -8416,7 +8493,7 @@ public final class IntentParser {
             }
             for (Object fieldNode : fields) {
                 if (fieldNode instanceof Map<?, ?> field) {
-                    expandFlagShorthand(entity, field, "single", "per: and onConflict:", issues);
+                    expandFlagShorthand(entity, field, "single", "per:, onConflict: and required:", issues);
                     expandFlagShorthand(entity, field, "unique", "ignoreCase:", issues);
                 }
             }
@@ -8517,6 +8594,62 @@ public final class IntentParser {
                 expanded.add(term instanceof String field ? new LinkedHashMap<>(Map.of("field", field)) : term);
             }
             writable.put("orderBy", expanded);
+        }
+    }
+
+    /**
+     * A report measure may be captioned (dirigible #8671, #8621): {@code { of: "sum(residual)", label:
+     * Carrying amount }} beside the bare {@code "sum(residual)"}. Done on the raw tree, before the
+     * typed mapping, for the reason {@link #normalizeOrderBy} is: the object form is reduced to its
+     * expression, so {@code measures} stays the list of strings every validator and generator reads,
+     * and its caption moves to the report's {@code measureLabels}, keyed by that expression.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     */
+    @SuppressWarnings("unchecked")
+    private static void normalizeMeasures(Object tree) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("reports") instanceof List<?> reports)) {
+            return;
+        }
+        List<String> issues = new ArrayList<>();
+        for (Object reportNode : reports) {
+            if (!(reportNode instanceof Map<?, ?> report) || !(report.get("measures") instanceof List<?> measures)) {
+                continue;
+            }
+            String prefix = "report [" + report.get("name") + "] measure ";
+            List<Object> expressions = new ArrayList<>(measures.size());
+            Map<String, String> labels = new LinkedHashMap<>();
+            for (Object measure : measures) {
+                if (!(measure instanceof Map<?, ?> captioned)) {
+                    expressions.add(measure);
+                    continue;
+                }
+                Object of = captioned.get("of");
+                Object label = captioned.get("label");
+                for (Object key : captioned.keySet()) {
+                    if (!"of".equals(key) && !"label".equals(key)) {
+                        issues.add(prefix + captioned + " has unknown key [" + key + "] - the object form takes of: and label:");
+                    }
+                }
+                if (!(of instanceof String expression) || expression.isBlank()) {
+                    issues.add(prefix + captioned + " needs of: - the measure expression, e.g. of: \"sum(total)\"");
+                    continue;
+                }
+                if (!(label instanceof String caption) || caption.isBlank()) {
+                    issues.add(prefix + "[" + expression + "] needs a non-blank label: - or write it as the bare expression");
+                    continue;
+                }
+                expressions.add(expression);
+                labels.put(expression.trim(), caption.trim());
+            }
+            Map<Object, Object> writable = (Map<Object, Object>) report;
+            writable.put("measures", expressions);
+            if (!labels.isEmpty()) {
+                writable.put("measureLabels", labels);
+            }
+        }
+        if (!issues.isEmpty()) {
+            throw new IntentValidationException(issues);
         }
     }
 

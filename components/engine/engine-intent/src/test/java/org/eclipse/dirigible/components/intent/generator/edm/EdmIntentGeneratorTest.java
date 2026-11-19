@@ -1205,6 +1205,25 @@ class EdmIntentGeneratorTest {
         assertNull(period.get("periodLockEntity"));
     }
 
+    /** A register of another model (#8687) travels as its owner's name; nothing local is looked up. */
+    @Test
+    void aPeriodLockOfAnotherModelCarriesTheOwnerModel() {
+        String yaml = """
+                name: cashdesk
+                entities:
+                  - name: CashOrder
+                    immutableInPeriod: { period: FiscalPeriod, model: journal, date: date }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: date, type: date }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "cashdesk");
+        Map<String, Object> order = entityByName(entities(model), "CashOrder");
+        assertEquals("FiscalPeriod", order.get("periodLockEntity"));
+        assertEquals("Date", order.get("periodLockDateProperty"));
+        assertEquals("journal", order.get("periodLockModel"));
+    }
+
     @Test
     void lifecycleEmitsTheStateMachineTheRepositoryEnforces() {
         String yaml = """

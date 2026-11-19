@@ -50,10 +50,11 @@ document.addEventListener('alpine:init', () => {
     columns: [],        // derived from the data — the controller returns rows keyed by column alias
     // The report's typed output columns (generation-time metadata) — the filterable surface. Each
     // entry is { key: <result-set alias>, kind: date|number|boolean|text }, driving the per-column
-    // filter controls (date/number ranges, boolean select, text contains).
+    // filter controls (date/number ranges, boolean select, text contains), plus the column's catalog
+    // id and default-language label (tId, label) that head it (#8671).
     reportColumns: [
 #foreach($column in $columns)
-      { key: '${column.alias}', kind: #if($column.typeTypescript == "Date")'date'#elseif($column.typeTypescript == "number")'number'#elseif($column.typeTypescript == "boolean")'boolean'#{else}'text'#end, align: '${column.align}', agg: '${column.aggregate}'#if($column.pattern), pattern: '${column.pattern}'#end },
+      { key: '${column.alias}', kind: #if($column.typeTypescript == "Date")'date'#elseif($column.typeTypescript == "number")'number'#elseif($column.typeTypescript == "boolean")'boolean'#{else}'text'#end, align: '${column.align}', agg: '${column.aggregate}'#if($column.pattern), pattern: '${column.pattern}'#end, tId: '${column.tIdJs}', label: '${column.labelJs}' },
 #end
     ],
     // The report's declared runtime parameters (the .report `parameters` block - e.g. the balance
@@ -444,7 +445,7 @@ document.addEventListener('alpine:init', () => {
       let series = this.reportColumns.filter(c => c.agg && c.agg !== 'NONE');
       if (!series.length) series = this.reportColumns.filter(c => c !== category);
       const labels = this.rows.map(r => this.axisLabel(category ? r[category.key] : '', category));
-      const data = series.map(c => ({ name: c.key, data: this.rows.map(r => Number(r[c.key]) || 0) }));
+      const data = series.map(c => ({ name: this.columnLabel(c.key), data: this.rows.map(r => Number(r[c.key]) || 0) }));
       // A circular chart slices the FIRST measure by the dimension, so the dimension values are named
       // by the legend alone - it stays on whatever the series count - and each legend entry carries
       // the slice's share of the measure total. Pie and doughnut additionally suppress the in-slice
@@ -511,6 +512,13 @@ document.addEventListener('alpine:init', () => {
 
 #end
     columnMeta(key) { return this.reportColumns.find(c => c.key === key) || null; },
+
+    // A column's caption (#8671, #8621): its catalog entry, whose default-language text is the
+    // column's label - an authored measure caption, otherwise the alias. The row key stays the alias.
+    columnLabel(key) {
+      const meta = this.columnMeta(key);
+      return meta && meta.tId ? T('$projectName:${tprefix}.t.' + meta.tId, meta.label) : key;
+    },
 
     // Numeric columns right-align (from the .report column metadata).
     alignClass(key) {
@@ -623,7 +631,7 @@ document.addEventListener('alpine:init', () => {
         if (!rows.length) return;
         const cols = Object.keys(rows[0]);
         const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const th = cols.map(c => '<th class="' + this.alignClass(c) + '">' + esc(c) + '</th>').join('');
+        const th = cols.map(c => '<th class="' + this.alignClass(c) + '">' + esc(this.columnLabel(c)) + '</th>').join('');
         const body = rows.map(r => '<tr>' + cols.map(c => '<td class="' + this.alignClass(c) + '">' + esc(this.cellText(c, r)) + '</td>').join('') + '</tr>').join('');
         // Fixed table layout + column-count font scaling so a wide table fits the page instead of
         // being clipped at the right edge (mirrors the server-side XslFoRenderer PDF path).

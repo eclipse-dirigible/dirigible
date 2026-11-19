@@ -137,6 +137,33 @@ class ScheduleSupportTest {
                 rendered(s));
     }
 
+    /**
+     * A period start (#8664) - the moments report filters take - is the first day of the run's month,
+     * quarter or year, a date, optionally offset by a date period: a month-end run selects "dated
+     * before this month" with {@code lt START_OF_MONTH}, which no fixed offset from today can say.
+     */
+    @Test
+    void aPeriodStartIsTheFirstDayOfTheRunsPeriod() {
+        ScheduleIntent s = schedule(List.of(cond("commissioningDate", "lt", "START_OF_MONTH"), cond("since", "ge", "START_OF_QUARTER"),
+                cond("openedOn", "ge", "START_OF_YEAR-P1Y")));
+        assertEquals(
+                "Criteria.create().lt(\"CommissioningDate\", java.time.LocalDate.now().withDayOfMonth(1))"
+                        + ".ge(\"Since\", java.time.LocalDate.now().with(java.time.temporal.IsoFields.DAY_OF_QUARTER, 1L))"
+                        + ".ge(\"OpenedOn\", java.time.LocalDate.now().withDayOfYear(1).minus(java.time.Period.parse(\"P1Y\")))",
+                rendered(s));
+
+        ScheduleSupport.Moment month = ScheduleSupport.moment("START_OF_MONTH+P1M");
+        assertEquals(ScheduleSupport.Moment.Shape.DATE, month.shape(), "a period start is a date");
+        assertEquals("month", month.start());
+        assertTrue(month.offsetValid());
+        assertFalse(ScheduleSupport.moment("START_OF_MONTH-PT1H")
+                                   .offsetValid(),
+                "a period start is a date, so it takes a date period only");
+        assertNull(ScheduleSupport.moment("START_OF_WEEK"), "only the report filters' three period starts are moments");
+        assertNull(ScheduleSupport.moment("CURRENT_DATE")
+                                  .start());
+    }
+
     @Test
     void momentReadsTheTokenAndItsOffset() {
         assertNull(ScheduleSupport.moment("Provisioning"), "an ordinary literal is not a moment");

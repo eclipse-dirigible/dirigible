@@ -90,4 +90,30 @@ class ModelTemplateAdaptersTest {
                                                             .model();
         assertNull(orphaned.get("periodJs"));
     }
+
+    /**
+     * A report column reaches the page with its catalog id and its caption as JS literals (#8671): an
+     * authored caption is escaped, and a column from before the translation ids falls back to its alias
+     * for both.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aColumnReachesTheReportPageWithItsCaption() {
+        String report = """
+                { "name": "Assets", "query": "SELECT 1", "parameters": [],
+                  "columns": [ { "alias": "Sum Residual", "type": "DECIMAL", "tId": "SumResidual", "label": "Owner's amount" },
+                               { "alias": "Count", "type": "INTEGER" } ] }
+                """;
+        Map<String, Object> model = ModelTemplateAdapters.prepare(REPORT_FILE_TEMPLATE, report, new java.util.HashMap<>())
+                                                         .model();
+        List<Map<String, Object>> columns = (List<Map<String, Object>>) model.get("columns");
+        assertEquals("SumResidual", columns.get(0)
+                                           .get("tIdJs"));
+        assertEquals("Owner\\'s amount", columns.get(0)
+                                                .get("labelJs"));
+        assertEquals("Count", columns.get(1)
+                                     .get("tIdJs"));
+        assertEquals("Count", columns.get(1)
+                                     .get("labelJs"));
+    }
 }

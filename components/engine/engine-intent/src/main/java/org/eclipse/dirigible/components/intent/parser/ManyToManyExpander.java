@@ -211,6 +211,9 @@ final class ManyToManyExpander {
         if (relation.isFixedWhenReferenced()) {
             unsupported.add("fixedWhenReferenced");
         }
+        if (relation.isReadOnly()) {
+            unsupported.add("readOnly");
+        }
         return unsupported;
     }
 

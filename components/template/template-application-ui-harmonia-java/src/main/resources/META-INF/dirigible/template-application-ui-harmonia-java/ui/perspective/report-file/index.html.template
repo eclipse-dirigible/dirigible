@@ -57,7 +57,7 @@
             </template>
             <template x-if="editedFilterColumn && editedFilterColumn.kind === 'boolean'">
               <select x-model="filterDraft.equals" class="w-full text-sm rounded-md border border-border px-2 py-1"
-                      :aria-label="editedFilterColumn.key">
+                      :aria-label="columnLabel(editedFilterColumn.key)">
                 <option value="" x-text="T('application-core:shell.report.all', 'All')"></option>
                 <option value="true" x-text="T('application-core:shell.report.true', 'Yes')"></option>
                 <option value="false" x-text="T('application-core:shell.report.false', 'No')"></option>
@@ -65,7 +65,7 @@
             </template>
             <template x-if="editedFilterColumn && editedFilterColumn.kind === 'text'">
               <input x-h-input type="text" class="w-full" x-model="filterDraft.contains" @keydown.enter="${dismiss}applyFilterDraft()"
-                     :aria-label="editedFilterColumn.key" :placeholder="T('application-core:shell.report.contains', 'contains...')" />
+                     :aria-label="columnLabel(editedFilterColumn.key)" :placeholder="T('application-core:shell.report.contains', 'contains...')" />
             </template>
 #end
 <html lang="en">
@@ -121,7 +121,7 @@
               <template x-for="col in reportColumns" :key="col.key">
                 <button x-h-button data-variant="transparent" class="h-auto justify-start py-2" @click="filterMenuEditing = true; openFilterEditor(col.key)">
                   <span class="vbox min-w-0 flex-1 items-start">
-                    <span class="truncate" x-text="col.key"></span>
+                    <span class="truncate" x-text="columnLabel(col.key)"></span>
                     <span class="truncate text-xs text-muted-foreground" x-show="filterHasValue(col)" x-text="filterValueText(col)"></span>
                   </span>
                 </button>
@@ -134,7 +134,7 @@
                         :aria-label="T('application-core:shell.report.back', 'Back')">
                   <svg role="presentation" x-h-lucide data-lucide="chevron-left"></svg>
                 </button>
-                <span x-h-toolbar-title class="truncate" x-text="editedFilterColumn ? editedFilterColumn.key : ''"></span>
+                <span x-h-toolbar-title class="truncate" x-text="editedFilterColumn ? columnLabel(editedFilterColumn.key) : ''"></span>
               </div>
               <div class="p-3">
 #reportFilterEditor("")
@@ -257,10 +257,10 @@
         <template x-for="chip in activeFilterChips" :key="chip.key">
           <div x-h-chip data-variant="information" class="relative z-20" x-data="{ open: false }" @click.outside="open = false">
             <button x-h-chip-button x-h-popover-trigger="open" @click="open = !open; open && openFilterEditor(chip.key)">
-              <span class="text-muted-foreground" x-text="chip.key + ':'"></span>
+              <span class="text-muted-foreground" x-text="columnLabel(chip.key) + ':'"></span>
               <span class="truncate" style="max-width: 14rem" x-text="chip.text"></span>
             </button>
-            <button x-h-chip-close :aria-label="T('application-core:shell.report.removeFilter', 'Remove {{name}} filter', { name: chip.key })"
+            <button x-h-chip-close :aria-label="T('application-core:shell.report.removeFilter', 'Remove {{name}} filter', { name: columnLabel(chip.key) })"
                     @click="removeFilter(chip.key)"></button>
             <div x-h-popover.no-scroll data-align="bottom-start" data-innerclicks="true" class="overflow-visible" style="min-width: 18rem">
               <div class="p-3">
@@ -347,7 +347,7 @@
           <table x-h-table :data-borders="preview ? null : 'both'">
             <thead x-h-table-header>
               <tr x-h-table-row>
-                <template x-for="(col, i) in columns" :key="i"><th x-h-table-head scope="col" :data-sticky="i === 0 ? 'start' : null" :class="alignClass(col)" x-text="col"></th></template>
+                <template x-for="(col, i) in columns" :key="i"><th x-h-table-head scope="col" :data-sticky="i === 0 ? 'start' : null" :class="alignClass(col)" x-text="columnLabel(col)"></th></template>
               </tr>
             </thead>
             <tbody x-h-table-body>

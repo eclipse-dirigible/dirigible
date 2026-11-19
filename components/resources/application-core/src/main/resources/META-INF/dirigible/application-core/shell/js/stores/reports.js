@@ -118,7 +118,7 @@ document.addEventListener('alpine:init', () => {
       }
       if (Array.isArray(manifest)) {
         // Assigned once, after the probe, so a report the reader may not read never flashes in.
-        this.items = await this._readable(manifest.map(r => this._fromManifest(r, project)));
+        this.items = await this._readable(manifest.map(r => this._fromManifest(r, project)), project);
         return;
       }
       if (!project) return;
@@ -162,19 +162,21 @@ document.addEventListener('alpine:init', () => {
     // The reports the reader may read. A report's page and controller sit behind the role gate its
     // permissions declare, so a report the user may not read is left out of the sidebar - as
     // kpiReports() hides a widget tile on a 403 - rather than listed as an entry that fails when
-    // opened. One count probe per report decides it; any answer but 403 (or no answer) keeps it.
-    async _readable(items) {
-      const allowed = await Promise.all(items.map(async (it) => {
-        try {
-          const r = await fetch(it.apiBase + '/count', {
-            headers: { 'Accept': 'application/json' }, credentials: 'same-origin',
-          });
-          return r.status !== 403;
-        } catch (e) {
-          return true;
-        }
-      }));
-      return items.filter((it, i) => allowed[i]);
+    // opened. The platform decides it from each report's declared read gate, in one request for the
+    // whole project (#8699): probing each report's /count ran every report's query on every page load
+    // of the app. No answer keeps them all - the controller's 403 stays the guard.
+    async _readable(items, project) {
+      if (!items.length || !project) return items;
+      try {
+        const r = await fetch('/services/platform/reports?project=' + encodeURIComponent(project), {
+          headers: { 'Accept': 'application/json' }, credentials: 'same-origin',
+        });
+        if (!r.ok) return items;
+        const readable = new Set((await r.json()).map(it => it.name));
+        return items.filter(it => readable.has(it.name));
+      } catch (e) {
+        return items;
+      }
     },
 
     // Enrich each discovered report from its .report model file (project root): the human label, the
