@@ -215,7 +215,8 @@ class HarmoniaLocaleStoreIT {
                             if (value === undefined) return __stores[name];
                             __stores[name] = value;
                             if (typeof value.init === 'function') value.init();
-                          }
+                          },
+                          reactive: function (target) { return target; }
                         };
                         var App = { services: {}, config: { restBase: '/api' } };
                         var i18next = {

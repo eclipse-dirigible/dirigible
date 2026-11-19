@@ -3478,7 +3478,7 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(itemForm.contains("isContextLocked('Order')"), "the composition-parent FK must render context-aware, got: " + itemForm);
         assertTrue(itemForm.contains("contextLabel(form.Order, optionsOrder)"),
                 "a context-locked parent must render the referenced record's label read-only");
-        assertTrue(itemForm.contains("<template x-if=\"!isContextLocked('Order')\">"),
+        assertTrue(itemForm.contains("<template x-if=\"!isContextLocked('Order') &amp;&amp; !readRefused("),
                 "the parent combobox must be confined to the un-implied branch");
         assertTrue(itemForm.contains("f_Quantity\""), "the detail's own fields still render as inputs");
 
