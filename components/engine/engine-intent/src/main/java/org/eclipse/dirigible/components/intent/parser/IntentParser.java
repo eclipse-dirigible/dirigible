@@ -15798,6 +15798,19 @@ public final class IntentParser {
                 issues.add(prefix + " limit must be a positive number");
             }
         }
+        // The dashboard runs the tile's report with no parameter of its own, so the report binds each
+        // parameter's declared initial (#8749). A parameter without one - an authored one, or a period
+        // whose default is custom - would leave the tile's value to whatever an empty input means, so
+        // the tile must say what it runs with. Runs after the period expansion, so the period's
+        // from/to pair is among the parameters here.
+        for (ReportParameterIntent parameter : report.getParameters()) {
+            if (parameter.getName() != null && (parameter.getInitial() == null || parameter.getInitial()
+                                                                                           .isBlank())) {
+                issues.add(prefix + " runs the report on the dashboard without its parameters, but parameter [" + parameter.getName()
+                                                                                                                           .trim()
+                        + "] has no initial - declare the initial the tile runs with, a period default other than custom, or drop the widget");
+            }
+        }
     }
 
     /** Whitespace/case-insensitive compare key for measure and dimension expressions. */

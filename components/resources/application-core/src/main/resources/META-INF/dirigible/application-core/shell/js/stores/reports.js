@@ -40,6 +40,14 @@ function sanitizeJavaIdentifier(name) {
   return s === '' ? '_' : s;
 }
 
+// The names of a .report's parameters that declare no initial value - a dashboard tile, which sends
+// no parameter of its own, has nothing to run the report with (#8749). Mirrors ReportsAggregator.
+function requiredParameters(definition) {
+  return ((definition && definition.parameters) || [])
+    .filter(p => p && p.name && (p.initial === undefined || p.initial === null || String(p.initial).trim() === ''))
+    .map(p => p.name);
+}
+
 // "MembersWithLoansDue" -> "Members With Loans Due" (PascalCase/camelCase -> spaced Title Case).
 function humanizeReportName(s) {
   return String(s || '')
@@ -150,6 +158,7 @@ document.addEventListener('alpine:init', () => {
       if (r.widget) {
         it.widget = r.widget;
         it.columns = r.columns || [];
+        if (r.requiredParameters) it.requiredParameters = r.requiredParameters;
       }
       // A report whose rows open the records they count (#8374): the generated app's list tile links
       // each row there. Read by that dashboard only.
@@ -207,6 +216,8 @@ document.addEventListener('alpine:init', () => {
           if (def.widget) {
             it.widget = def.widget;
             it.columns = def.columns || [];
+            const required = requiredParameters(def);
+            if (required.length) it.requiredParameters = required;
           }
           if (def.drill) it.drill = def.drill;
           if (def.period) it.period = def.period;
@@ -221,9 +232,10 @@ document.addEventListener('alpine:init', () => {
     //     per-app dashboard and the application shell so both render identical KPI tiles. ---
 
     // Reports carrying a KPI widget and allowed on the dashboard; a role-guarded report the user may
-    // not read (403 on the value fetch) is hidden, not shown as an error tile.
+    // not read (403 on the value fetch) is hidden, not shown as an error tile, and so is one the
+    // dashboard cannot run for want of a parameter value (#8749).
     kpiReports() {
-      return this.items.filter(r => r.widget && r.dashboard !== false)
+      return this.items.filter(r => r.widget && r.dashboard !== false && !(r.requiredParameters && r.requiredParameters.length))
         .filter(r => !(this.widgetData[r.name] && this.widgetData[r.name].forbidden));
     },
 
@@ -321,6 +333,8 @@ document.addEventListener('alpine:init', () => {
     //   { rows }                for kind list,
     //   { forbidden: true }     when the report is role-guarded and the user lacks the role
     //                           (the tile should be hidden, not shown as an error),
+    //   { error: true, skipped: true } without a request, when the report has a parameter without an
+    //                           initial (the application shell hides that tile),
     //   { error: true }         on any other failure.
     // `at` pins become typed EQ conditions over the report's output columns — the same
     // per-column filter contract the report page's filter panel uses. The `now` token is
@@ -329,6 +343,12 @@ document.addEventListener('alpine:init', () => {
     async loadWidgetValue(it) {
       const w = it.widget;
       if (!w || !it.apiBase) return { error: true };
+      // The tile sends no parameter, so the report binds each declared initial. A parameter without
+      // one has nothing to run with: the report is never called without it (#8749).
+      if (it.requiredParameters && it.requiredParameters.length) {
+        console.warn('reports: widget of ' + it.name + ' skipped - parameters without an initial: ' + it.requiredParameters.join(', '));
+        return { error: true, skipped: true };
+      }
       try {
         const conditions = (w.at || []).map(pin => ({ column: pin.column, operator: 'EQ', value: this._pinValue(pin) }));
         if (w.kind === 'value') {

@@ -149,11 +149,32 @@ class ReportsAggregator {
         if (definition.get("widget") != null) {
             entry.put("widget", definition.get("widget"));
             entry.put("columns", definition.get("columns") instanceof List<?> columns ? columns : List.of());
+            // The dashboard runs the tile with no parameter of its own, so the report binds each declared
+            // initial; one without an initial has nothing to run with and the tile is skipped (#8749).
+            List<String> required = requiredParameters(definition);
+            if (!required.isEmpty()) {
+                entry.put("requiredParameters", required);
+            }
         }
         entry.put("url", "/services/web/" + project + "/" + GEN + "/" + folder + "/" + REPORTS + "/" + name + "/" + PAGE);
         entry.put("apiBase", "/services/java/" + project + "/" + GEN + "/" + NamingHelper.sanitizeJavaIdentifier(folder) + "/api/" + REPORTS
                 + "/" + name + "Controller");
         return entry;
+    }
+
+    /** The names of the report's parameters that declare no initial value to run with. */
+    private static List<String> requiredParameters(Map<String, Object> definition) {
+        List<String> required = new ArrayList<>();
+        if (definition.get("parameters") instanceof List<?> parameters) {
+            for (Object parameter : parameters) {
+                if (parameter instanceof Map<?, ?> map && map.get("name") != null
+                        && (map.get("initial") == null || String.valueOf(map.get("initial"))
+                                                                .isBlank())) {
+                    required.add(String.valueOf(map.get("name")));
+                }
+            }
+        }
+        return required;
     }
 
     /** Whether the caller passes the report's read gate; a report without one is readable. */

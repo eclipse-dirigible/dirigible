@@ -99,6 +99,34 @@ class ReportsAggregatorTest {
                                                                             .toList());
     }
 
+    /**
+     * A KPI tile runs its report with no parameter of its own, so the entry names the parameters that
+     * declare no initial and the dashboard skips the tile rather than call the report without them
+     * (#8749).
+     */
+    @Test
+    void names_the_parameters_a_widget_report_cannot_run_without() {
+        page("shop", "ledger", "Ledger");
+        report("shop", "Ledger", "{\"widget\": {\"kind\": \"count\"}, \"parameters\": [{\"name\": \"account\", \"initial\": \"\"},"
+                + " {\"name\": \"fromDate\", \"initial\": \"1900-01-01\"}, {\"name\": \"toDate\"}]}");
+        page("shop", "defaulted", "Defaulted");
+        report("shop", "Defaulted",
+                "{\"widget\": {\"kind\": \"count\"}, \"parameters\": [{\"name\": \"fromDate\", \"initial\": \"1900-01-01\"}]}");
+        page("shop", "tileless", "Tileless");
+        report("shop", "Tileless", "{\"parameters\": [{\"name\": \"account\"}]}");
+
+        Map<String, Map<String, Object>> byName = new java.util.HashMap<>();
+        aggregate().forEach(entry -> byName.put(String.valueOf(entry.get("name")), entry));
+        assertEquals(List.of("account", "toDate"), byName.get("Ledger")
+                                                         .get("requiredParameters"));
+        assertFalse(byName.get("Defaulted")
+                          .containsKey("requiredParameters"),
+                "every parameter declares an initial: the tile runs with them");
+        assertFalse(byName.get("Tileless")
+                          .containsKey("requiredParameters"),
+                "a report without a tile is not run by the dashboard");
+    }
+
     @Test
     void lists_a_page_without_its_report_file_under_its_name_alone() {
         page("legacy", "legacy", "Totals");
