@@ -3025,7 +3025,11 @@ public final class IntentParser {
                     + "]) with the moment [" + condition.getValue() + "]");
             return;
         }
-        if (fieldShape != moment.shape()) {
+        if (fieldShape != moment.shape() && moment.start() != null) {
+            // A period start (#8664) is the first DAY of the run's month / quarter / year.
+            issues.add(subject + " where-condition compares the [" + field.getType() + "] field [" + condition.getField() + "] with ["
+                    + condition.getValue() + "] - a period start is a date, so it compares only with a date field");
+        } else if (fieldShape != moment.shape()) {
             issues.add(subject + " where-condition compares the [" + field.getType() + "] field [" + condition.getField()
                     + "] with a moment of the other shape - use "
                     + (fieldShape == ScheduleSupport.Moment.Shape.DATE ? "CURRENT_DATE" : "CURRENT_TIMESTAMP"));

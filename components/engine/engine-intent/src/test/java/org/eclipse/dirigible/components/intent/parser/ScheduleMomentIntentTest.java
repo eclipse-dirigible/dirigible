@@ -71,6 +71,31 @@ class ScheduleMomentIntentTest {
                 """);
     }
 
+    /** A month-end run selects the rows dated before the current month (#8664). */
+    @Test
+    void aPeriodStartOnADateFieldParses() {
+        IntentParser.parse(ENTITIES + """
+                schedules:
+                  - name: beforeThisMonth
+                    cron: "0 0 22 L * ?"
+                    entity: TenantApplication
+                    where:
+                      - { field: sentOn, op: lt, value: START_OF_MONTH }
+                      - { field: sentOn, op: ge, value: "START_OF_YEAR-P1Y" }
+                    notify: { to: ops@example.com, subject: "Month end", body: "Sent before this month." }
+                """);
+    }
+
+    @Test
+    void aPeriodStartOnATimestampFieldFailsTheParse() {
+        assertFails("""
+                      - { field: changedAt, op: lt, value: START_OF_MONTH }
+                """, "a period start is a date, so it compares only with a date field");
+        assertFails("""
+                      - { field: sentOn, op: lt, value: "START_OF_MONTH-PT1H" }
+                """, "a date takes a date-only amount");
+    }
+
     @Test
     void aTimeOffsetOnADateFieldFailsTheParse() {
         assertFails("""

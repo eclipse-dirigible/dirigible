@@ -634,6 +634,7 @@ Every action below has a real SDK surface to generate against, so none of this n
        where:
          - { field: dueOn,  op: lt, value: CURRENT_DATE }   # eq/ne/gt/ge/lt/le/like; CURRENT_DATE/CURRENT_TIMESTAMP -> now()
          - { field: changedAt, op: lt, value: "CURRENT_TIMESTAMP-PT30M" }  # a moment RELATIVE to now (#6764)
+         - { field: sentOn, op: lt, value: START_OF_MONTH }                # a period start, date fields only (#8664)
          - { field: status, op: eq, value: "ACTIVE" }
        notify: { to: member.email, subject: "Overdue: {book.title}", body: "Your loan is overdue." }
    ```
