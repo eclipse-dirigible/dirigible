@@ -10,8 +10,10 @@
 package org.eclipse.dirigible.components.intent.model;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Report / aggregation. {@link #source} names the entity to aggregate; {@link #dimensions} are the
@@ -106,6 +108,14 @@ public class ReportIntent {
     private List<String> columns = new ArrayList<>();
     private List<String> measures = new ArrayList<>();
     /**
+     * The authored caption of a measure column, keyed by the measure as written (dirigible #8671,
+     * #8621). Filled by the parser from the object form of a measure, {@code { of: "count(*)", label:
+     * Lines }}, which it reduces to the bare expression in {@link #measures}. The caption is the
+     * column's label - the default-language text of its catalog entry - while its alias (the row key)
+     * and its translation id stay derived from the expression.
+     */
+    private Map<String, String> measureLabels = new LinkedHashMap<>();
+    /**
      * User-set parameters rendered as inputs above the report and bound into the generated query's
      * {@code WHERE} - a from/to window bound, an amount threshold, a name search. Empty (the default)
      * -> the report takes no input beyond the generic per-column filters.
@@ -129,6 +139,18 @@ public class ReportIntent {
      * 30 days" without a parameter (dirigible #8435).
      */
     private String filter;
+    /**
+     * A filter over the GROUPS of an aggregating report (dirigible #7914) - SQL {@code HAVING}, applied
+     * after the {@code GROUP BY}: comparisons over aggregate calls ({@code count(*) > 1},
+     * {@code sum(total) <> 0}), joined by {@code AND} / {@code OR}. Only the groups that satisfy it are
+     * listed - the duplicates among thousands of groups of one.
+     */
+    private String having;
+    /**
+     * An anti-join (dirigible #7914): the report keeps only the source rows no row of another entity
+     * matches. See {@link ReportNotExistsIntent}.
+     */
+    private ReportNotExistsIntent notExists;
     /**
      * The order of the report's rows: each term names one of the report's {@link #dimensions} or
      * {@link #measures} exactly as authored ({@code customer.name}, {@code sum(quantity)}), optionally
@@ -370,6 +392,14 @@ public class ReportIntent {
         this.measures = measures == null ? new ArrayList<>() : measures;
     }
 
+    public Map<String, String> getMeasureLabels() {
+        return measureLabels;
+    }
+
+    public void setMeasureLabels(Map<String, String> measureLabels) {
+        this.measureLabels = measureLabels == null ? new LinkedHashMap<>() : measureLabels;
+    }
+
     public List<ReportParameterIntent> getParameters() {
         return parameters;
     }
@@ -405,6 +435,27 @@ public class ReportIntent {
 
     public void setFilter(String filter) {
         this.filter = filter;
+    }
+
+    public String getHaving() {
+        return having;
+    }
+
+    public void setHaving(String having) {
+        this.having = having;
+    }
+
+    /** Whether the report filters its groups ({@code having:}). */
+    public boolean hasHaving() {
+        return having != null && !having.isBlank();
+    }
+
+    public ReportNotExistsIntent getNotExists() {
+        return notExists;
+    }
+
+    public void setNotExists(ReportNotExistsIntent notExists) {
+        this.notExists = notExists;
     }
 
     /** The authored lifecycle scope, trimmed and lower-cased, or {@code null} when none is declared. */

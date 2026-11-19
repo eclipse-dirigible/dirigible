@@ -13504,6 +13504,80 @@
           }
         ]
       }
+    },
+    {
+      "changeSet": {
+        "id": "add-DIRIGIBLE_SECURITY_ROLES_ROLE_ASSIGNABLE",
+        "author": "dirigible",
+        "comment": "Whether a tenant's Owner may give the role to a person of the tenant - the .roles entry's assignable attribute (#8728).",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "columnExists": {
+                  "tableName": "DIRIGIBLE_SECURITY_ROLES",
+                  "columnName": "ROLE_ASSIGNABLE"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addColumn": {
+              "tableName": "DIRIGIBLE_SECURITY_ROLES",
+              "columns": [
+                {
+                  "column": {
+                    "name": "ROLE_ASSIGNABLE",
+                    "type": "BOOLEAN"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "add-DIRIGIBLE_SECURITY_ROLES_ROLE_LABEL",
+        "author": "dirigible",
+        "comment": "How the role reads to a tenant's Owner - the .roles entry's label attribute (#8728).",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "columnExists": {
+                  "tableName": "DIRIGIBLE_SECURITY_ROLES",
+                  "columnName": "ROLE_LABEL"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addColumn": {
+              "tableName": "DIRIGIBLE_SECURITY_ROLES",
+              "columns": [
+                {
+                  "column": {
+                    "name": "ROLE_LABEL",
+                    "type": "VARCHAR(255)"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
     }
   ]
 }

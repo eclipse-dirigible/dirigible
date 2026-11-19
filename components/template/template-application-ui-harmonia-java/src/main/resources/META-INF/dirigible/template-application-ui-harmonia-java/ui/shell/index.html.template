@@ -128,16 +128,20 @@
             </div>
 #end
 #set($hasEntities = false)
-#foreach($entity in $models)#if(($entity.layoutType == "LIST" || $entity.layoutType == "MANAGE" || $entity.layoutType == "LIST_MASTER" || $entity.layoutType == "MANAGE_MASTER" || $entity.layoutType == "MANAGE_DOCUMENT") && $entity.type == "PRIMARY")#set($hasEntities = true)#end#end
+#set($hasOpenEntities = false)
+#set($gatedEntityIds = [])
+#foreach($entity in $models)#if(($entity.layoutType == "LIST" || $entity.layoutType == "MANAGE" || $entity.layoutType == "LIST_MASTER" || $entity.layoutType == "MANAGE_MASTER" || $entity.layoutType == "MANAGE_DOCUMENT") && $entity.type == "PRIMARY")#set($hasEntities = true)#if($entity.perspectiveRole || $entity.roleRead || $entity.roleWrite)#set($ignore = $gatedEntityIds.add("${projectName}-${entity.name}"))#{else}#set($hasOpenEntities = true)#end#end#end
 #if($hasEntities)
-            <!-- Entities: the top-level model entities (list / manage / master). -->
-            <div x-h-sidebar-group>
+            <!-- Entities: the top-level model entities (list / manage / master). An entity whose perspective
+                 carries a role is listed only when the platform offers the caller that perspective (#8728),
+                 the rule the application shell navigates by; the group goes with its last entry. -->
+            <div x-h-sidebar-group#if(!$hasOpenEntities) x-show="#foreach($gatedId in $gatedEntityIds)navReadable('${gatedId}')#if($foreach.hasNext) || #end#end"#end>
               <div x-h-sidebar-group-label x-text="T('application-core:shell.nav.entities', 'Entities')"></div>
               <div x-h-sidebar-group-content>
                 <ul x-h-sidebar-menu>
 #foreach($entity in $models)
 #if(($entity.layoutType == "LIST" || $entity.layoutType == "MANAGE" || $entity.layoutType == "LIST_MASTER" || $entity.layoutType == "MANAGE_MASTER" || $entity.layoutType == "MANAGE_DOCUMENT") && $entity.type == "PRIMARY")
-                  <li x-h-sidebar-menu-item>
+                  <li x-h-sidebar-menu-item#if($entity.perspectiveRole || $entity.roleRead || $entity.roleWrite) x-show="navReadable('${projectName}-${entity.name}')"#end>
                     <button x-h-sidebar-menu-nav :data-active="isActive('/${entity.name}')" @click="navigate('/${entity.name}')">
                       <svg role="presentation" x-h-lucide data-lucide="#if($entity.iconName && $entity.iconName != '')${entity.iconName}#{else}list#end"></svg>
                       <span x-text="T('$projectName:${tprefix}.t.${entity.dataName}_plural', navLabel('#if($entity.menuLabel && $entity.menuLabel != '')${entity.menuLabel}#{else}${entity.name}#end'))"></span>
@@ -652,6 +656,11 @@
         "${entity.name}": "$projectName:${tprefix}.t.${entity.dataName}_plural",
 #end
       };
+#if($hasEntities)
+      // The perspective ids of the sidebar entities whose perspective carries a role (#8728): appShell
+      // lists each only when the platform offers the caller its perspective.
+      window.__harmoniaGuardedNav = [#foreach($gatedId in $gatedEntityIds)"${gatedId}"#if($foreach.hasNext), #end#end];
+#end
     </script>
 
     <!-- 1. Plugins (vendored, no CDN) -->

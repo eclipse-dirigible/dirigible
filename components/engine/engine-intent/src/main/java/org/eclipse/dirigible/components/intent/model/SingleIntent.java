@@ -18,11 +18,14 @@ package org.eclipse.dirigible.components.intent.model;
  *   - { name: base, type: boolean, single: true }                                  # one base currency
  *   - { name: base, type: boolean, single: { per: Company } }                      # one per company
  *   - { name: base, type: boolean, single: { per: Company, onConflict: refuse } }  # 409 instead
+ *   - { name: base, type: boolean, single: { required: true } }                    # never none
  * </pre>
  *
  * A write that sets the flag demotes the row that held it in the same scope, in the same unit of
- * work; with {@code onConflict: refuse} it is answered 409 while another row holds it. The
- * shorthand {@code single: true} is the empty mapping (fleet-wide, demote).
+ * work; with {@code onConflict: refuse} it is answered 409 while another row holds it. With
+ * {@code required: true} the flag is kept on at least one row of a scope that has rows (#8700): an
+ * update that un-flags the holder, or a delete of the holder, is refused 400 while no other row of
+ * its scope holds it. The shorthand {@code single: true} is the empty mapping (fleet-wide, demote).
  */
 public class SingleIntent {
 
@@ -31,6 +34,9 @@ public class SingleIntent {
 
     /** {@code demote} (the default) or {@code refuse}. */
     private String onConflict;
+
+    /** Whether a scope that has rows always has one holding the flag (#8700). */
+    private boolean required;
 
     public String getPer() {
         return per;
@@ -47,5 +53,14 @@ public class SingleIntent {
      */
     public boolean isRefuse() {
         return "refuse".equals(onConflict);
+    }
+
+    /**
+     * Whether the holder may not give the flag up while no other row of its scope holds it.
+     *
+     * @return true for {@code required: true}
+     */
+    public boolean isRequired() {
+        return required;
     }
 }

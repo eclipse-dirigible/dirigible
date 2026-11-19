@@ -34,6 +34,10 @@ import org.eclipse.dirigible.repository.api.IResource;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 /**
  * The intent's {@code permissions[].can:} tokens are what the generated application's gates are
  * bound from (dirigible #6760). Before this, {@code permissions[].role} became {@code .roles} while
@@ -170,6 +174,27 @@ class PermissionGatesTest {
         String roles = written(YAML, settings(Map.of("extraRoles", List.of("SalesViewer", "Owner"))), "/sales.roles");
         assertEquals(1, roles.split("\"SalesViewer\"", -1).length - 1, roles);
         assertTrue(roles.contains("\"name\": \"Owner\""), roles);
+    }
+
+    /**
+     * Every role the intent authors is a role for the application's people, so a tenant's Owner may
+     * give it in Settings → Users (dirigible #8728): the {@code .roles} marks the {@code permissions:}
+     * roles and the extra roles {@code assignable}.
+     */
+    @Test
+    void everyAuthoredRoleIsAssignable() {
+        String roles =
+                written(YAML, settings(Map.of("extraRoles", List.of("Owner"), "extraRolesReadOnly", List.of("Auditor"))), "/sales.roles");
+        Map<String, Boolean> assignable = new LinkedHashMap<>();
+        for (JsonElement element : JsonParser.parseString(roles)
+                                             .getAsJsonArray()) {
+            JsonObject role = element.getAsJsonObject();
+            assignable.put(role.get("name")
+                               .getAsString(),
+                    role.has("assignable") && role.get("assignable")
+                                                  .getAsBoolean());
+        }
+        assertEquals(Map.of("SalesAdmin", true, "SalesViewer", true, "Owner", true, "Auditor", true), assignable, roles);
     }
 
     @Test

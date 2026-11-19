@@ -342,6 +342,9 @@ document.addEventListener('alpine:init', () => {
           await this.loadHistory();
 #end
           this.state = 'ready';
+#if($duplicable && $duplicateFocus)
+          this.focusDuplicate();
+#end
           await this.loadItems();
 #if($refreshWhile && $docStatusProp != "")
           this.pollCheck();
@@ -860,6 +863,22 @@ document.addEventListener('alpine:init', () => {
       return payload;
     },
 
+#if($duplicable && $duplicateFocus)
+    // The copy a Duplicate just opened focuses its `duplicable.focus` input with the text selected
+    // (#8663), so a user renames it straight away. One-shot: only the page of that very copy takes it.
+    focusDuplicate() {
+      const hint = window.__duplicateFocus;
+      if (!hint || hint.entity !== '${name}' || hint.id !== String(this.id) || !this.isEdit) return;
+      delete window.__duplicateFocus;
+      setTimeout(() => {
+        const input = document.getElementById('f_' + hint.field);
+        if (!input || input.disabled || input.readOnly) return;
+        input.focus();
+        if (typeof input.select === 'function') input.select();
+      }, 0);
+    },
+
+#end
 #if($duplicable)
     // Duplicate this document (header + line items) into a new draft and open it. Clones through the
     // normal create path, so the number (calculatedActionOnCreate), the initial status (init default),
@@ -899,10 +918,36 @@ document.addEventListener('alpine:init', () => {
 #foreach($d in $duplicateDefaults)
 #if($d.shape == "literal")
         header['${d.name}'] = ${d.js};
+#elseif($d.shape == "template")
+        // A {field} template of the source record (#8663).
+        header['${d.name}'] = ${d.js};
 #else
         header['${d.name}'] = App.utils.todayAs('${d.shape}');
 #end
 #end
+#end
+#if($duplicateUnique)
+        // `duplicable.unique` (#8663): while a record already holds the copy's values for
+        // [${duplicateUnique}], the templated name is numbered - "Rent (copy)" -> "Rent (copy 2)" - so the
+        // copy never meets the duplicate warning. Bounded: past the last try the create decides.
+        const numbered = {};
+#foreach($d in $duplicateDefaults)
+#if($d.unique == "true")
+        numbered['${d.name}'] = String(header['${d.name}'] ?? '');
+#end
+#end
+        for (let n = 2; n <= 50; n++) {
+          const equals = {};
+#foreach($u in $duplicateUnique.split(","))
+          if (header['${u}'] != null && header['${u}'] !== '') equals['${u}'] = header['${u}'];
+#end
+          const taken = await App.services.api.post(this.apiPath + '/search', { equals });
+          if (!Array.isArray(taken) || taken.length === 0) break;
+          Object.keys(numbered).forEach(f => {
+            const v = numbered[f];
+            header[f] = v.endsWith(')') ? v.slice(0, -1) + ' ' + n + ')' : v + ' (' + n + ')';
+          });
+        }
 #end
         const created = await App.services.api.post(this.apiPath, header);
         const newId = created && (created.${primaryKeysString} !== undefined ? created.${primaryKeysString} : created.id);
@@ -920,6 +965,10 @@ document.addEventListener('alpine:init', () => {
           }
         }
         this.clearPristine();
+#if($duplicateFocus)
+        // `duplicable.focus` (#8663): the copy's page focuses and selects this input once it has loaded.
+        window.__duplicateFocus = { entity: '${name}', id: String(newId), field: '${duplicateFocus}' };
+#end
         window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(newId) + '/edit');
       } catch (e) {
         this.applyApiError(e, { fallbackMessage: 'Could not duplicate the document.' });
@@ -1686,6 +1735,9 @@ document.addEventListener('alpine:init', () => {
 ## A field declaring emptyText (#8605) always shows its row, so it counts whenever the caller may see it.
 #if($property.roleRead)#set($emptyTextShown = "this.canSee('${property.name}') || null")#{else}#set($emptyTextShown = "true")#end
         ${emptyTextShown},
+#elseif($property.roleDisplay)
+## Withheld from the page only (#8692): the form still holds the value, so it counts only when shown.
+        this.canSee('${property.name}') ? this.form.${property.name} : null,
 #else
         this.form.${property.name},
 #end

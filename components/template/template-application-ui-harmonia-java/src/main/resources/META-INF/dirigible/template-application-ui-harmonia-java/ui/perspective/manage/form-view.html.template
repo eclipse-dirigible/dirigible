@@ -39,7 +39,10 @@
 #macro(emptyTextArgs $p)'$projectName:${tprefix}.t.${p.dataName}_empty', '${p.widgetEmptyTextJs}'#end
 #macro(emptyPlaceholder $p)#if($p.widgetEmptyText) :placeholder="T(#emptyTextArgs($p))"#end#end
 #macro(valueDisplay $property)#if($property.widgetEmptyText)orEmptyText(loadedRecord?.${property.name}, fieldText(loadedRecord?.${property.name}, #displayArgs($property)), #emptyTextArgs($property))#{else}fieldText(loadedRecord?.${property.name}, #displayArgs($property))#end#end
-#macro(valueGate $property)#if($property.widgetEmptyText)#if($property.roleRead || $property.visibleWhenJs)x-show="#if($property.roleRead)canSee('${property.name}')#if($property.visibleWhenJs) && #end#end$!{property.visibleWhenJs}"#end#{else}x-show="#if($property.roleRead)canSee('${property.name}') && #end#if($property.visibleWhenJs)${property.visibleWhenJs} && #{end}fieldDisplay(form.${property.name}, #displayArgs($property)) !== ''"#end#end
+## roleDisplay (#8692, systemProperties.processId) gates the row by the same /restricted answer as
+## roleRead - but only the row: the response still carries the value. Only generator-owned properties
+## carry it, and those declare no emptyText, so the emptyText branch needs no such gate.
+#macro(valueGate $property)#if($property.widgetEmptyText)#if($property.roleRead || $property.visibleWhenJs)x-show="#if($property.roleRead)canSee('${property.name}')#if($property.visibleWhenJs) && #end#end$!{property.visibleWhenJs}"#end#{else}x-show="#if($property.roleRead)canSee('${property.name}') && #end#if($property.roleDisplay)canSee('${property.name}') && #end#if($property.visibleWhenJs)${property.visibleWhenJs} && #{end}fieldDisplay(form.${property.name}, #displayArgs($property)) !== ''"#end#end
 ## The EntityStatus relation (widget DOCUMENT_STATUS) renders as a read-only coloured badge in the
 ## title bar (same treatment as the document layout), never as an editable input.
 #set($statusProp = "")

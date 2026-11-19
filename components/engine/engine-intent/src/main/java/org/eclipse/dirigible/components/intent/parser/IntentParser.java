@@ -30,6 +30,7 @@ import javax.lang.model.SourceVersion;
 import org.eclipse.dirigible.components.intent.generator.ArrivalSupport;
 import org.eclipse.dirigible.components.intent.generator.EventBinding;
 import org.eclipse.dirigible.components.intent.generator.CaptureSupport;
+import org.eclipse.dirigible.components.intent.generator.CheckMessageParams;
 import org.eclipse.dirigible.components.intent.generator.ImportSupport;
 import org.eclipse.dirigible.components.intent.generator.IntegrationSupport;
 import org.eclipse.dirigible.components.intent.generator.ExportSupport;
@@ -108,6 +109,8 @@ import org.eclipse.dirigible.components.intent.model.ResolveIntent;
 import org.eclipse.dirigible.components.intent.model.ShareIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
+import org.eclipse.dirigible.components.intent.model.ReportNotExistsIntent;
+import org.eclipse.dirigible.components.intent.generator.report.ReportHaving;
 import org.eclipse.dirigible.components.intent.generator.report.ReportMoments;
 import org.eclipse.dirigible.components.intent.generator.report.ReportUnion;
 import org.eclipse.dirigible.components.intent.model.ReportUnionMemberIntent;
@@ -383,6 +386,7 @@ public final class IntentParser {
         wrapScalarNormalize(tree);
         expandFieldFlagShorthands(tree);
         normalizeOrderBy(tree);
+        normalizeMeasures(tree);
         normalizeActionPrompts(tree);
         // A key the typed model does not declare is dropped by the Gson mapping without a sound, so it
         // is collected here - on the raw tree, while the author's spelling still exists - and reported
@@ -514,6 +518,7 @@ public final class IntentParser {
         validateSubtitles(model, issues);
         validateOrderBy(model, issues);
         validateProcesses(model, entityNames, issues);
+        validateSystemProperties(model, issues);
         validateForms(model, entityNames, issues);
         validateActions(model, entityNames, issues);
         // A reversal IS a create-from of its entity onto itself (issue #7886): expanded before the
@@ -757,8 +762,112 @@ public final class IntentParser {
                     continue;
                 }
                 validateDuplicableProperty(entity, subject + ".defaults", name.trim(), false, assignment.getValue(), issues);
+                validateDuplicableTemplate(entity, subject + ".defaults", name.trim(), assignment.getValue(), issues);
+            }
+            validateDuplicableUnique(entity, subject, duplicate, issues);
+            if (duplicate.getFocus() != null) {
+                String focus = duplicate.getFocus()
+                                        .trim();
+                FieldIntent field = duplicableField(entity, focus);
+                if (focus.isEmpty() || field == null) {
+                    issues.add(subject + ".focus names [" + focus + "] which is not a field of entity [" + entity.getName() + "]");
+                } else if (field.isPrimaryKey() || field.isReadOnly() || field.isAggregate() || field.getNumber() != null
+                        || "uuid".equalsIgnoreCase(field.getType())) {
+                    issues.add(subject + ".focus names [" + focus + "], which the copy's form renders no input for");
+                }
             }
         }
+    }
+
+    /** A {@code {field}} placeholder of a {@code duplicable.defaults} template (dirigible #8663). */
+    private static final java.util.regex.Pattern DUPLICATE_PLACEHOLDER = java.util.regex.Pattern.compile("\\{([^{}]*)\\}");
+
+    /**
+     * Whether a {@code duplicable.defaults} value is a template of the source record - it holds at
+     * least one {@code {field}} placeholder (dirigible #8663).
+     *
+     * @param value the authored value
+     * @return true for a template
+     */
+    public static boolean isDuplicateTemplate(String value) {
+        return value != null && DUPLICATE_PLACEHOLDER.matcher(value)
+                                                     .find();
+    }
+
+    /**
+     * A {@code {field}} template default (dirigible #8663): every placeholder names a field of the
+     * entity - read from the SOURCE record - and the result is text, so it is only a value for a
+     * {@code string}/{@code text} field.
+     */
+    private static void validateDuplicableTemplate(EntityIntent entity, String subject, String name, String value, List<String> issues) {
+        if (!isDuplicateTemplate(value)) {
+            return;
+        }
+        java.util.regex.Matcher placeholders = DUPLICATE_PLACEHOLDER.matcher(value);
+        while (placeholders.find()) {
+            String placeholder = placeholders.group(1)
+                                             .trim();
+            if (duplicableField(entity, placeholder) == null) {
+                issues.add(subject + " assigns [" + name + "] the template [" + value + "], whose {" + placeholder
+                        + "} is not a field of entity [" + entity.getName() + "] - a placeholder names a field of the record being copied");
+            }
+        }
+        FieldIntent target = duplicableField(entity, name);
+        String type = target == null || target.getType() == null ? ""
+                : target.getType()
+                        .toLowerCase(Locale.ROOT);
+        if (target != null && !"string".equals(type) && !"text".equals(type)) {
+            issues.add(subject + " assigns [" + name + "] the template [" + value + "], but a template builds text, so it is only a value"
+                    + " for a string / text field");
+        }
+    }
+
+    /**
+     * {@code duplicable.unique} (dirigible #8663): the fields whose values the copy must not share with
+     * an existing record. Each names a field or a to-one of the entity, and at least one of them must
+     * be assigned a {@code {field}} template - that is the value the probe numbers; without one there
+     * is nothing to vary and the probe could never succeed.
+     */
+    private static void validateDuplicableUnique(EntityIntent entity, String subject, DuplicateIntent duplicate, List<String> issues) {
+        if (duplicate.getUnique()
+                     .isEmpty()) {
+            return;
+        }
+        boolean numbered = false;
+        for (String name : duplicate.getUnique()) {
+            String trimmed = name == null ? "" : name.trim();
+            boolean relation = entity.getRelations()
+                                     .stream()
+                                     .anyMatch(r -> trimmed.equalsIgnoreCase(r.getName())
+                                             && ("manyToOne".equals(r.getKind()) || "oneToOne".equals(r.getKind())));
+            if (trimmed.isEmpty() || (duplicableField(entity, trimmed) == null && !relation)) {
+                issues.add(subject + ".unique names [" + trimmed + "] which is not a field or a to-one relation of entity ["
+                        + entity.getName() + "]");
+                continue;
+            }
+            for (Map.Entry<String, String> assignment : duplicate.getDefaults()
+                                                                 .entrySet()) {
+                if (trimmed.equalsIgnoreCase(String.valueOf(assignment.getKey())
+                                                   .trim())
+                        && isDuplicateTemplate(assignment.getValue())) {
+                    numbered = true;
+                }
+            }
+        }
+        if (!numbered) {
+            issues.add(subject + ".unique names no field that defaults: assigns a {field} template - the copy is numbered through such a"
+                    + " template (\"{name} (copy)\"), so one of " + duplicate.getUnique() + " needs one");
+        }
+    }
+
+    /** The entity's field of that name, ignoring case, or null. */
+    private static FieldIntent duplicableField(EntityIntent entity, String name) {
+        for (FieldIntent field : entity.getFields()) {
+            if (name.equalsIgnoreCase(field.getName())) {
+                return field;
+            }
+        }
+        return null;
     }
 
     /**
@@ -3023,7 +3132,11 @@ public final class IntentParser {
                     + "]) with the moment [" + condition.getValue() + "]");
             return;
         }
-        if (fieldShape != moment.shape()) {
+        if (fieldShape != moment.shape() && moment.start() != null) {
+            // A period start (#8664) is the first DAY of the run's month / quarter / year.
+            issues.add(subject + " where-condition compares the [" + field.getType() + "] field [" + condition.getField() + "] with ["
+                    + condition.getValue() + "] - a period start is a date, so it compares only with a date field");
+        } else if (fieldShape != moment.shape()) {
             issues.add(subject + " where-condition compares the [" + field.getType() + "] field [" + condition.getField()
                     + "] with a moment of the other shape - use "
                     + (fieldShape == ScheduleSupport.Moment.Shape.DATE ? "CURRENT_DATE" : "CURRENT_TIMESTAMP"));
@@ -5463,6 +5576,9 @@ public final class IntentParser {
                                         + " fixedWhenReferenced - fixedAfterCreate already refuses every change after create; keep one");
                     }
                 }
+                if (relation.isReadOnly()) {
+                    validateReadOnlyRelation(entity, relation, issues);
+                }
                 if (relation.isPersonal()) {
                     personalCount++;
                     validatePersonal(entity, relation, byName, issues);
@@ -5708,6 +5824,9 @@ public final class IntentParser {
         }
         if (relation.isFixedWhenReferenced()) {
             unsupported.add("fixedWhenReferenced");
+        }
+        if (relation.isReadOnly()) {
+            unsupported.add("readOnly");
         }
         if (relation.getShow() != null && !relation.getShow()
                                                    .isEmpty()) {
@@ -6205,19 +6324,26 @@ public final class IntentParser {
      * while the register row covering that date is closed. The register must be an entity of THIS model
      * declaring {@code period:} - the guard is generated into this model's controllers, which can only
      * query a repository generated alongside them - and the date must be this entity's own {@code date}
-     * field, matching the register's own bounds.
+     * field, matching the register's own bounds. With {@code model:} the register belongs to that model
+     * instead and is asked at runtime (#8687), so it cannot be checked here: only its name is required.
      */
     private static void validateImmutableInPeriod(EntityIntent entity, Map<String, EntityIntent> byName, List<String> issues) {
         String subject = "entity [" + entity.getName() + "] immutableInPeriod";
         PeriodLockIntent lock = entity.getImmutableInPeriod();
+        if (lock.getModel() != null && lock.getModel()
+                                           .isBlank()) {
+            issues.add(subject + " model is blank - name the model that owns the period register, or leave model: out");
+        }
         if (lock.getPeriod() == null || lock.getPeriod()
                                             .isBlank()) {
             issues.add(subject + " declares no period - name the entity that declares period:");
-        } else {
+        } else if (lock.getModel() == null) {
+            // Another model's register is resolved at runtime by model + name, never against this model.
             EntityIntent register = byName.get(lock.getPeriod());
             if (register == null) {
                 issues.add(subject + " period [" + lock.getPeriod()
-                        + "] is not an entity of this model - a period register must be generated alongside what it locks");
+                        + "] is not an entity of this model - a period register must be generated alongside what it locks,"
+                        + " or named with model: when another model owns it");
             } else if (register.getPeriod() == null) {
                 issues.add(subject + " period [" + lock.getPeriod() + "] does not declare period: - it is not a period register");
             }
@@ -6450,6 +6576,39 @@ public final class IntentParser {
     }
 
     /**
+     * {@code systemProperties: { processId: { visibleTo: [Role, ...] } }} (dirigible #8692) - who the
+     * generated pages show the generator's own {@code ProcessId} / {@code ProcessIds} to. The roles
+     * must be declared in {@code permissions}, as a field's {@code visibleTo:} must, and the list must
+     * name at least one: a setting that names nobody hides the value from every reader, which is not
+     * what an allow-list says.
+     */
+    private static void validateSystemProperties(IntentModel model, List<String> issues) {
+        if (model.getSystemProperties() == null || model.getSystemProperties()
+                                                        .getProcessId() == null) {
+            return;
+        }
+        String subject = "systemProperties.processId visibleTo";
+        List<String> roles = model.getSystemProperties()
+                                  .getProcessId()
+                                  .getVisibleTo();
+        if (roles.isEmpty()) {
+            issues.add(subject + " lists no role - list the roles the pages show ProcessId to, or remove systemProperties.processId");
+            return;
+        }
+        Set<String> declaredRoles = declaredRoles(model);
+        for (String role : roles) {
+            if (role == null || role.isBlank()) {
+                issues.add(subject + " lists a blank role");
+            } else if (!declaredRoles.contains(role)) {
+                List<String> known = new ArrayList<>(declaredRoles);
+                known.sort(null);
+                issues.add(subject + " names role [" + role + "], which the intent does not declare - add it to `permissions`"
+                        + (known.isEmpty() ? " (the intent declares no roles at all)" : " (declared: " + String.join(", ", known) + ")"));
+            }
+        }
+    }
+
+    /**
      * {@code visibleTo: [Role, ...]} - the field's role allow-list. Every listed role must be declared
      * in {@code permissions}: a role no permission grants is either a typo or a role the application
      * never issues, and in both cases the field would silently be invisible to everybody - the
@@ -6613,6 +6772,57 @@ public final class IntentParser {
         if (!isBlank(relation.getCalculatedActionOnUpdate())) {
             issues.add(subject + " declares both " + key + " and calculatedActionOnUpdate - the update action recomputes the"
                     + " value on every update, so it cannot also be fixed; keep one");
+        }
+    }
+
+    /**
+     * {@code readOnly: true} on a relation (dirigible #8662): a to-one only the system sets - a
+     * storno's link to the order it reverses. It needs a single FK no user picks anyway on some other
+     * ground: a plain {@code manyToOne}/{@code oneToOne} that is not an EntityStatus (moved by its
+     * workflow), not a composition parent (set by the master's detail panel), not the
+     * personal/partner/owner relation (filled from the caller), not computed by a calculated action,
+     * and not fixed by {@code fixedAfterCreate}/{@code fixedWhenReferenced}, which only make sense for
+     * a value a user picks.
+     *
+     * @param entity the entity declaring the relation
+     * @param relation the relation
+     * @param issues the issue list to add to
+     */
+    private static void validateReadOnlyRelation(EntityIntent entity, RelationIntent relation, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
+        boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+        if (!toOne) {
+            issues.add(subject + " declares readOnly but only a manyToOne/oneToOne relation has an FK the system sets");
+            return;
+        }
+        List<String> conflicting = new ArrayList<>();
+        if (relation.isEntityStatus()) {
+            conflicting.add("function: EntityStatus");
+        }
+        if (relation.isComposition()) {
+            conflicting.add("composition");
+        }
+        if (relation.isPersonal() || relation.isPersonalReadOnly()) {
+            conflicting.add("personal");
+        }
+        if (relation.isPartner()) {
+            conflicting.add("partner");
+        }
+        if (relation.isOwner()) {
+            conflicting.add("owner");
+        }
+        if (relation.isCalculated()) {
+            conflicting.add("calculatedAction");
+        }
+        if (relation.isFixedAfterCreate()) {
+            conflicting.add("fixedAfterCreate");
+        }
+        if (relation.isFixedWhenReferenced()) {
+            conflicting.add("fixedWhenReferenced");
+        }
+        if (!conflicting.isEmpty()) {
+            issues.add(subject + " declares readOnly (only the system sets it) beside " + String.join(", ", conflicting)
+                    + ", which describe a value the platform or a user chooses - keep readOnly or drop it");
         }
     }
 
@@ -7287,6 +7497,13 @@ public final class IntentParser {
         String kind = check.getKind();
         validateSeverity(check, subject, issues);
         validateVerbs(check, subject, issues);
+        // A message may name the record's values (#8665): each {field} / {Relation.field} must resolve.
+        for (String placeholder : CheckMessageParams.placeholders(check.getMessage())) {
+            String failure = CheckMessageParams.failure(entity, byName, placeholder);
+            if (failure != null) {
+                issues.add(subject + " message names " + failure);
+            }
+        }
         if ("duplicate".equals(kind)) {
             validateDuplicateCheck(entity, check, subject, issues);
             return;
@@ -8312,7 +8529,7 @@ public final class IntentParser {
             }
             for (Object fieldNode : fields) {
                 if (fieldNode instanceof Map<?, ?> field) {
-                    expandFlagShorthand(entity, field, "single", "per: and onConflict:", issues);
+                    expandFlagShorthand(entity, field, "single", "per:, onConflict: and required:", issues);
                     expandFlagShorthand(entity, field, "unique", "ignoreCase:", issues);
                 }
             }
@@ -8413,6 +8630,62 @@ public final class IntentParser {
                 expanded.add(term instanceof String field ? new LinkedHashMap<>(Map.of("field", field)) : term);
             }
             writable.put("orderBy", expanded);
+        }
+    }
+
+    /**
+     * A report measure may be captioned (dirigible #8671, #8621): {@code { of: "sum(residual)", label:
+     * Carrying amount }} beside the bare {@code "sum(residual)"}. Done on the raw tree, before the
+     * typed mapping, for the reason {@link #normalizeOrderBy} is: the object form is reduced to its
+     * expression, so {@code measures} stays the list of strings every validator and generator reads,
+     * and its caption moves to the report's {@code measureLabels}, keyed by that expression.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     */
+    @SuppressWarnings("unchecked")
+    private static void normalizeMeasures(Object tree) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("reports") instanceof List<?> reports)) {
+            return;
+        }
+        List<String> issues = new ArrayList<>();
+        for (Object reportNode : reports) {
+            if (!(reportNode instanceof Map<?, ?> report) || !(report.get("measures") instanceof List<?> measures)) {
+                continue;
+            }
+            String prefix = "report [" + report.get("name") + "] measure ";
+            List<Object> expressions = new ArrayList<>(measures.size());
+            Map<String, String> labels = new LinkedHashMap<>();
+            for (Object measure : measures) {
+                if (!(measure instanceof Map<?, ?> captioned)) {
+                    expressions.add(measure);
+                    continue;
+                }
+                Object of = captioned.get("of");
+                Object label = captioned.get("label");
+                for (Object key : captioned.keySet()) {
+                    if (!"of".equals(key) && !"label".equals(key)) {
+                        issues.add(prefix + captioned + " has unknown key [" + key + "] - the object form takes of: and label:");
+                    }
+                }
+                if (!(of instanceof String expression) || expression.isBlank()) {
+                    issues.add(prefix + captioned + " needs of: - the measure expression, e.g. of: \"sum(total)\"");
+                    continue;
+                }
+                if (!(label instanceof String caption) || caption.isBlank()) {
+                    issues.add(prefix + "[" + expression + "] needs a non-blank label: - or write it as the bare expression");
+                    continue;
+                }
+                expressions.add(expression);
+                labels.put(expression.trim(), caption.trim());
+            }
+            Map<Object, Object> writable = (Map<Object, Object>) report;
+            writable.put("measures", expressions);
+            if (!labels.isEmpty()) {
+                writable.put("measureLabels", labels);
+            }
+        }
+        if (!issues.isEmpty()) {
+            throw new IntentValidationException(issues);
         }
     }
 
@@ -13807,9 +14080,178 @@ public final class IntentParser {
             validateReportScope(model, report, issues);
             validateSubsetReportReferences(model, report, issues);
             validateReportOrderBy(report, issues);
+            validateReportHaving(model, report, issues);
+            validateReportNotExists(model, report, entityNames, issues);
             for (String problem : ReportMoments.problems(report.getFilter())) {
                 issues.add("report [" + report.getName() + "] filter " + problem);
             }
+        }
+    }
+
+    /**
+     * A report's {@code having:} (dirigible #7914) filters the GROUPS of an aggregating report, after
+     * its {@code GROUP BY}: so the report must aggregate, and it must not be a ledger kind, whose fixed
+     * columns are computed in their own query. Every aggregate call's argument is a path the report's
+     * source resolves, and nothing else in the clause may name a column - a group has no single value
+     * of a field it is not grouped by.
+     */
+    private static void validateReportHaving(IntentModel model, ReportIntent report, List<String> issues) {
+        if (!report.hasHaving()) {
+            return;
+        }
+        String subject = "report [" + report.getName() + "] having [" + report.getHaving()
+                                                                              .trim()
+                + "]";
+        if (report.isLedgerKind()) {
+            issues.add(subject + " cannot be combined with kind [" + report.getKind()
+                                                                           .trim()
+                    + "] - a ledger kind computes its own fixed columns");
+            return;
+        }
+        if (!report.isAggregated()) {
+            issues.add(subject + " filters the report's groups, so the report must aggregate - declare its measures");
+            return;
+        }
+        if (!ReportHaving.AGGREGATE_CALL.matcher(report.getHaving())
+                                        .find()) {
+            issues.add(subject + " compares no aggregate - write e.g. \"count(*) > 1\"; a row condition belongs in filter:");
+        }
+        for (String stray : ReportHaving.strayIdentifiers(report.getHaving())) {
+            issues.add(subject + " names [" + stray
+                    + "] outside an aggregate call - a group has no single value of it; aggregate it (count/sum/avg/min/max)"
+                    + " or move the row condition to filter:");
+        }
+        EntityIntent source = reportSource(model, report);
+        if (source != null) {
+            for (String path : ReportHaving.aggregatedPaths(report.getHaving())) {
+                reportPathField(model, source, subject + " aggregate", path, issues);
+            }
+        }
+    }
+
+    /**
+     * A report's {@code notExists:} (dirigible #7914) - the source rows no row of another entity
+     * matches. The target is an entity of this model or of a {@code uses:} model (whose properties are
+     * checked against its owner at generation, like a cross-model union member); {@code match} pairs a
+     * target field or to-one with a source path, {@code between} names the target's period bounds and
+     * the source date they must cover, and at least one of the two is declared - an anti-join with no
+     * condition would test whether the target is empty at all. A union or a ledger kind reads no single
+     * source row to correlate with, so neither takes one.
+     */
+    private static void validateReportNotExists(IntentModel model, ReportIntent report, Set<String> entityNames, List<String> issues) {
+        ReportNotExistsIntent notExists = report.getNotExists();
+        if (notExists == null) {
+            return;
+        }
+        String subject = "report [" + report.getName() + "] notExists";
+        if (report.isUnion()) {
+            issues.add(subject + " cannot be combined with union: - it correlates with one source entity's rows");
+            return;
+        }
+        if (report.isLedgerKind()) {
+            issues.add(subject + " cannot be combined with kind [" + report.getKind()
+                                                                           .trim()
+                    + "] - a ledger kind computes its own fixed rows");
+            return;
+        }
+        if (isBlank(notExists.getEntity())) {
+            issues.add(subject + " has no entity - name the entity whose matching rows must be absent");
+            return;
+        }
+        String name = notExists.getEntity()
+                               .trim();
+        EntityIntent target = null;
+        if (notExists.isCrossModel()) {
+            String alias = notExists.getModel()
+                                    .trim();
+            boolean known = model.getUses()
+                                 .stream()
+                                 .anyMatch(uses -> alias.equals(uses.getModel()));
+            if (!known) {
+                issues.add(subject + " uses unknown model alias [" + alias + "] - declare it under uses:");
+            }
+        } else if (!entityNames.contains(name)) {
+            issues.add(subject + " entity [" + name + "] is not an entity of this model - name its model: when it lives in another one");
+        } else {
+            target = entityByName(model, name);
+        }
+        if (notExists.getMatch()
+                     .isEmpty()
+                && notExists.getBetween()
+                            .isEmpty()) {
+            issues.add(subject + " declares neither match: nor between: - name what correlates the [" + name
+                    + "] rows with the report's rows");
+        }
+        EntityIntent source = isBlank(report.getSource()) ? null : entityByName(model, report.getSource());
+        for (Map.Entry<String, String> pair : notExists.getMatch()
+                                                       .entrySet()) {
+            String key = pair.getKey() == null ? ""
+                    : pair.getKey()
+                          .trim();
+            String value = pair.getValue() == null ? ""
+                    : pair.getValue()
+                          .trim();
+            if (key.isEmpty() || value.isEmpty()) {
+                issues.add(subject + " match has an empty pair - write { <" + name + " property>: <report source property> }");
+                continue;
+            }
+            if (target != null && fieldByName(target, key) == null && toOneRelationByName(target, key) == null) {
+                issues.add(subject + " match [" + key + "] is not a field or to-one relation of [" + name + "]");
+            }
+            if (source != null) {
+                validateNotExistsSourcePath(model, source, subject + " match [" + key + "]", value, issues);
+            }
+        }
+        Map<String, String> between = notExists.getBetween();
+        if (!between.isEmpty()) {
+            for (String bound : List.of("start", "end", "value")) {
+                if (isBlank(between.get(bound))) {
+                    issues.add(subject + " between has no " + bound + " - it is { start: <" + name + " field>, end: <" + name
+                            + " field>, value: <report source date> }");
+                }
+            }
+            for (String bound : List.of("start", "end")) {
+                String field = between.get(bound);
+                if (target != null && !isBlank(field)) {
+                    validateAgingDate(model, target, subject + " between " + bound, field.trim(), issues);
+                }
+            }
+            if (source != null && !isBlank(between.get("value"))) {
+                validateAgingDate(model, source, subject + " between value", between.get("value")
+                                                                                    .trim(),
+                        issues);
+            }
+        }
+        for (String problem : ReportMoments.problems(notExists.getFilter())) {
+            issues.add(subject + " filter " + problem);
+        }
+    }
+
+    /**
+     * The source side of a {@code notExists.match} pair: the source's own field or to-one (compared by
+     * its foreign key), or ONE hop to a field or to-one of the entity a source to-one points at.
+     */
+    private static void validateNotExistsSourcePath(IntentModel model, EntityIntent source, String subject, String path,
+            List<String> issues) {
+        String[] segments = path.split("\\.");
+        if (segments.length > 2) {
+            issues.add(subject + " [" + path + "] may reference the report source or ONE relation hop");
+            return;
+        }
+        if (segments.length == 1) {
+            if (fieldByName(source, path) == null && toOneRelationByName(source, path) == null) {
+                issues.add(subject + " [" + path + "] is not a field or to-one relation of [" + source.getName() + "]");
+            }
+            return;
+        }
+        RelationIntent hop = toOneRelationByName(source, segments[0]);
+        if (hop == null) {
+            issues.add(subject + " [" + segments[0] + "] is not a to-one relation of [" + source.getName() + "]");
+            return;
+        }
+        EntityIntent owner = hop.isCrossModel() || hop.getTo() == null ? null : entityByName(model, hop.getTo());
+        if (owner != null && fieldByName(owner, segments[1]) == null && toOneRelationByName(owner, segments[1]) == null) {
+            issues.add(subject + " [" + path + "] is not a field or to-one relation of [" + owner.getName() + "]");
         }
     }
 
@@ -14147,10 +14589,15 @@ public final class IntentParser {
     private static EntityIntent reportSource(IntentModel model, ReportIntent report) {
         if (report.isUnion()) {
             // The union's logical entity, so dimensions, measures and parameters are checked against the
-            // columns its members map (#7946).
-            RelationIntent counterparty = ReportUnion.sameModelCounterparty(model, report);
-            return ReportUnion.entity(report, counterparty == null ? null : counterparty.getTo(),
-                    counterparty == null ? null : counterparty.getModel());
+            // columns its members map (#7946), its to-one columns included (#8619).
+            Map<String, ReportUnion.Target> targets = new LinkedHashMap<>();
+            for (String column : ReportUnion.toOneColumns(report)) {
+                RelationIntent relation = ReportUnion.sameModelRelation(model, report, column);
+                if (relation != null) {
+                    targets.put(column, new ReportUnion.Target(relation.getTo(), relation.getModel()));
+                }
+            }
+            return ReportUnion.entity(report, targets);
         }
         return report.getSource() == null ? null : entityByName(model, report.getSource());
     }
@@ -14180,8 +14627,21 @@ public final class IntentParser {
         for (org.eclipse.dirigible.components.intent.model.UsesIntent uses : model.getUses()) {
             aliases.add(uses.getModel());
         }
-        RelationIntent counterparty = ReportUnion.sameModelCounterparty(model, report);
-        for (String column : List.of(ReportUnion.COUNTERPARTY, ReportUnion.DATE, ReportUnion.DUE)) {
+        List<String> passThrough = ReportUnion.toOneColumns(report)
+                                              .stream()
+                                              .filter(column -> !ReportUnion.COUNTERPARTY.equals(column))
+                                              .toList();
+        for (String column : passThrough) {
+            if (!REPORT_PARAMETER_NAME.matcher(column)
+                                      .matches()
+                    || UNION_LOGICAL_COLUMNS.contains(column.toLowerCase(Locale.ROOT))) {
+                issues.add(subject + " column [" + column + "] must be a plain name other than " + UNION_LOGICAL_COLUMNS
+                        + " - it is the name the report reads the column under");
+            }
+        }
+        List<String> mapped = new ArrayList<>(List.of(ReportUnion.COUNTERPARTY, ReportUnion.DATE, ReportUnion.DUE));
+        mapped.addAll(passThrough);
+        for (String column : mapped) {
             long declaring = report.getUnion()
                                    .stream()
                                    .filter(member -> member != null && !isBlank(unionMemberColumn(member, column)))
@@ -14249,30 +14709,39 @@ public final class IntentParser {
                     }
                 }
             }
-            if (!isBlank(member.getCounterparty())) {
-                RelationIntent relation = toOneRelationByName(entity, member.getCounterparty()
-                                                                            .trim());
+            for (String column : ReportUnion.toOneColumns(report)) {
+                String path = ReportUnion.mapping(member, column);
+                if (path == null) {
+                    continue;
+                }
+                // The member's own to-one, or one hop away - an allocation row reaches its customer
+                // through its invoice (#8619).
+                RelationIntent relation = ReportUnion.toOnePath(model, entity, path);
+                RelationIntent first = ReportUnion.sameModelRelation(model, report, column);
                 if (relation == null) {
-                    issues.add(memberSubject + " counterparty [" + member.getCounterparty()
-                                                                         .trim()
-                            + "] is not a to-one relation of [" + name + "]");
-                } else if (counterparty != null && (!java.util.Objects.equals(relation.getTo(), counterparty.getTo())
-                        || !java.util.Objects.equals(relation.getModel(), counterparty.getModel()))) {
-                    issues.add(memberSubject + " counterparty points at [" + relation.getTo() + "], but another member's points at ["
-                            + counterparty.getTo() + "] - every member must name the same entity");
+                    issues.add(memberSubject + " " + column + " [" + path + "] is not a to-one relation of [" + name
+                            + "], nor a to-one of an entity a to-one relation of it points at in this model");
+                } else if (first != null && (!java.util.Objects.equals(relation.getTo(), first.getTo())
+                        || !java.util.Objects.equals(relation.getModel(), first.getModel()))) {
+                    issues.add(memberSubject + " " + column + " points at [" + relation.getTo() + "], but another member's points at ["
+                            + first.getTo() + "] - every member must name the same entity");
                 }
             }
         }
     }
+
+    /** The logical columns of a union a pass-through {@code columns:} entry may not be named after. */
+    private static final Set<String> UNION_LOGICAL_COLUMNS =
+            Set.of(ReportUnion.SOURCE, ReportUnion.COUNTERPARTY, ReportUnion.DATE, ReportUnion.DUE, ReportUnion.AMOUNT);
 
     /**
      * A member's mapping of one of the logical columns {@code counterparty}, {@code date}, {@code due}.
      */
     private static String unionMemberColumn(ReportUnionMemberIntent member, String column) {
         return switch (column) {
-            case ReportUnion.COUNTERPARTY -> member.getCounterparty();
             case ReportUnion.DATE -> member.getDate();
-            default -> member.getDue();
+            case ReportUnion.DUE -> member.getDue();
+            default -> ReportUnion.mapping(member, column);
         };
     }
 
@@ -14280,6 +14749,12 @@ public final class IntentParser {
     private static List<String> unionMemberPaths(ReportUnionMemberIntent member, List<ReportAgingIntent.AmountTerm> terms) {
         List<String> paths = new ArrayList<>();
         for (String path : new String[] {member.getCounterparty(), member.getDate(), member.getDue()}) {
+            if (!isBlank(path)) {
+                paths.add(path.trim());
+            }
+        }
+        for (String path : member.getColumns()
+                                 .values()) {
             if (!isBlank(path)) {
                 paths.add(path.trim());
             }

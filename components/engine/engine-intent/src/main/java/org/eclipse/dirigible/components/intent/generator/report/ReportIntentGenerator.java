@@ -45,6 +45,7 @@ import org.eclipse.dirigible.components.intent.model.ReportAgingIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.components.intent.model.OrderByIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
+import org.eclipse.dirigible.components.intent.model.ReportNotExistsIntent;
 import org.eclipse.dirigible.components.intent.model.ReportParameterIntent;
 import org.eclipse.dirigible.components.intent.model.ReportPeriodIntent;
 import org.eclipse.dirigible.components.intent.model.ReportUnionMemberIntent;
@@ -452,6 +453,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         // decides whether its rows drill down to the source's list (#8374).
         List<ResolvedDimension> plainDimensions = List.of();
         boolean scoped = false;
+        HavingClause having = null;
         List<Map<String, Object>> parameters;
         List<Map<String, Object>> conditions;
         List<Map<String, Object>> joinRows;
@@ -501,6 +503,15 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                     int before = columns.size();
                     addMeasure(context, model, source, baseAlias, measure.trim(), joins, columns);
                     if (columns.size() > before) {
+                        // An authored caption (#8671, #8621) is the column's label only: the alias (the
+                        // row key) and the translation id stay derived from the expression, so the REST
+                        // rows and an existing catalog entry keep their key.
+                        String caption = report.getMeasureLabels()
+                                               .get(measure.trim());
+                        if (caption != null) {
+                            columns.get(before)
+                                   .put("label", caption);
+                        }
                         measureColumns.put(expressionKey(measure), columns.get(before));
                     }
                 }
@@ -516,6 +527,10 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             String filter = buildWhere(context, model, source, baseAlias, joins, report.getFilter());
             Map<String, Object> scope = scopeCondition(context, model, source, baseAlias, report, aggregated);
             scoped = scope != null;
+            // The integrity-check conditions (#7914): an anti-join narrows the rows, a HAVING the groups.
+            // Both resolve before the joins are emitted - a one-hop path registers its join here.
+            String absent = report.getNotExists() == null ? null : notExists(context, model, source, baseAlias, report, joins);
+            having = report.hasHaving() ? having(context, model, source, baseAlias, report.getHaving(), joins) : null;
             // A statement takes the balance window too: its ledger reduction is the balance report's,
             // and the authored `parameters:` are appended to the same list below.
             parameters = report.isLedgerKind() ? balanceParameters() : new ArrayList<>();
@@ -525,10 +540,12 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 parameterConditions.addAll(aging.conditions());
             }
             parameterConditions.addAll(parameterConditions(context, model, source, baseAlias, report, joins, parameters));
-            conditions = conditions(filter, scope);
+            // A NOT EXISTS is no comparison the editor's condition rows can hold, so a report carrying one
+            // keeps its predicate in the query alone and opens free-style.
+            conditions = absent != null ? null : conditions(filter, scope);
             String where;
             if (conditions == null) {
-                where = rawWhere(filter, scope, parameterConditions.isEmpty() ? null : predicate(parameterConditions));
+                where = rawWhere(filter, scope, and(parameterConditions.isEmpty() ? null : predicate(parameterConditions), absent));
             } else {
                 conditions.addAll(parameterConditions);
                 where = predicate(conditions);
@@ -536,6 +553,10 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             joinRows = joinRows(joins);
             query = statementQuery == null ? buildQuery(baseTable, baseAlias, joinRows, columns, where)
                     : statementQuery.sql(baseTable, baseAlias, joinRows, where);
+            if (having != null) {
+                // After the GROUP BY and before the ORDER BY appended below - the editor's own order.
+                query = query + "\nHAVING " + having.sql();
+            }
         }
 
         // The row order (dirigible #8435), on every report whose query buildQuery() produced - a
@@ -616,6 +637,12 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         // bare `WHERE`, and a partial one would have silently dropped the rest of the filter.
         if (!statement && conditions != null && !conditions.isEmpty()) {
             document.put("conditions", conditions);
+        }
+        // The editor's HAVING rows (#7914), when the clause is a conjunction of plain comparisons - the
+        // builder rebuilds them after its GROUP BY, token for token as the query carries them.
+        if (having != null && having.rows() != null && !having.rows()
+                                                              .isEmpty()) {
+            document.put("havings", having.rows());
         }
         // The editor's own ordering model, so its visual builder rebuilds the same ORDER BY and the
         // report keeps round-tripping (#6675); the generated repository reads it to keep the order
@@ -725,8 +752,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         boolean plain = (report.getKind() == null || report.getKind()
                                                            .isBlank())
                 && !report.isAging() && report.isAggregated();
-        boolean narrowed = scoped || (report.getFilter() != null && !report.getFilter()
-                                                                           .isBlank())
+        boolean narrowed = scoped || report.getNotExists() != null || (report.getFilter() != null && !report.getFilter()
+                                                                                                            .isBlank())
                 || (report.getParameters() != null && !report.getParameters()
                                                              .isEmpty());
         if (!plain || narrowed || source == null || dimensions.isEmpty() || context == null) {
@@ -891,6 +918,156 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * A report's {@code having:} as SQL, and as the editor's {@code havings} rows when it is a
+     * conjunction of plain comparisons ({@code null} otherwise - the query then carries it alone).
+     */
+    private record HavingClause(List<Map<String, Object>> rows, String sql) {
+    }
+
+    /**
+     * The {@code having:} clause (dirigible #7914) with every aggregate call over a field path
+     * rewritten to the aggregate of its qualified column - {@code count(*) > 1} ->
+     * {@code COUNT(*) > 1}, {@code sum(total) <> 0} -> {@code SUM(Invoice."INVOICE_TOTAL") <> 0} - the
+     * same expression a measure over that path SELECTs. Aggregates rather than output aliases, because
+     * PostgreSQL does not resolve a SELECT alias inside HAVING. The parser has already refused a column
+     * named outside an aggregate call.
+     */
+    private static HavingClause having(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
+            String having, Map<String, Join> joins) {
+        Matcher matcher = ReportHaving.AGGREGATE_CALL.matcher(having.trim());
+        StringBuilder out = new StringBuilder();
+        while (matcher.find()) {
+            String aggregate = matcher.group(1)
+                                      .toUpperCase(Locale.ROOT);
+            String argument = matcher.group(2)
+                                     .trim();
+            String term;
+            if (argument.isEmpty() || "*".equals(argument)) {
+                term = aggregate + "(*)";
+            } else {
+                ColumnRef ref = resolve(context, model, source, baseAlias, argument);
+                if (ref.join != null) {
+                    joins.putIfAbsent(ref.join.alias, ref.join);
+                }
+                term = aggregate + "(" + ref.qualified() + ")";
+            }
+            matcher.appendReplacement(out, Matcher.quoteReplacement(term));
+        }
+        matcher.appendTail(out);
+        String sql = normalizeEqualityOperator(out.toString()).trim();
+        List<Map<String, Object>> rows = conditions(sql, null);
+        return new HavingClause(rows, rows == null || rows.isEmpty() ? sql : predicate(rows));
+    }
+
+    /** The alias suffix of the entity a {@code notExists:} subquery reads (#7914). */
+    private static final String NOT_EXISTS_SUFFIX = "Absent";
+
+    /**
+     * A report's {@code notExists:} (dirigible #7914) as a correlated
+     * {@code NOT EXISTS (SELECT 1 FROM <target> WHERE ...)}: each {@code match} pair an equality
+     * between the target's column (a to-one by its foreign key) and the source row's, the
+     * {@code between} window the target's two bounds around the source's date - an empty bound
+     * open-ended, both inclusive, compared as dates - and the target's own {@code filter}. A target of
+     * another model is read from its owner's table, its properties checked against the owner's resolved
+     * {@code .model}, as a cross-model union member is. A NULL source value matches no target row, so
+     * the source row is listed: an entry with no company lies in no fiscal year of its company.
+     *
+     * @return the predicate, ANDed into the report's WHERE
+     */
+    private static String notExists(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
+            ReportIntent report, Map<String, Join> joins) {
+        ReportNotExistsIntent notExists = report.getNotExists();
+        String name = notExists.getEntity()
+                               .trim();
+        String alias = tableAlias(name + NOT_EXISTS_SUFFIX);
+        Map<String, Join> innerJoins = new LinkedHashMap<>();
+        String table;
+        Function<String, String> targetColumn;
+        String filter;
+        if (notExists.isCrossModel()) {
+            String modelAlias = notExists.getModel()
+                                         .trim();
+            UsesIntent uses = model.getUses()
+                                   .stream()
+                                   .filter(candidate -> modelAlias.equals(candidate.getModel()))
+                                   .findFirst()
+                                   .orElseThrow(() -> new IntentValidationException(List.of(
+                                           "report [" + report.getName() + "] notExists uses unknown model alias [" + modelAlias + "]")));
+            CrossModelSupport.TargetInfo info = CrossModelSupport.resolve(context, uses, name);
+            String subject = "report [" + report.getName() + "] notExists [" + name + "] of model [" + modelAlias + "]";
+            table = info.tableDataName();
+            targetColumn = property -> {
+                requireProperty(info, subject, property);
+                return alias + "." + quote(column(name, property));
+            };
+            filter = crossModelFilter(info, alias, name, notExists.getFilter());
+        } else {
+            EntityIntent target = entityByName(model, name);
+            table = IntentNaming.tableName(context, name);
+            targetColumn = property -> alias + "." + quote(column(name, property));
+            filter = buildWhere(context, model, target, alias, innerJoins, notExists.getFilter());
+        }
+        List<String> terms = new ArrayList<>();
+        for (Map.Entry<String, String> pair : notExists.getMatch()
+                                                       .entrySet()) {
+            terms.add(targetColumn.apply(pair.getKey()
+                                             .trim())
+                    + " = " + notExistsSourceColumn(context, model, source, baseAlias, pair.getValue()
+                                                                                           .trim(),
+                            joins));
+        }
+        Map<String, String> between = notExists.getBetween();
+        if (!between.isEmpty()) {
+            String value = "CAST(" + notExistsSourceColumn(context, model, source, baseAlias, between.get("value")
+                                                                                                     .trim(),
+                    joins) + " AS DATE)";
+            String start = targetColumn.apply(between.get("start")
+                                                     .trim());
+            String end = targetColumn.apply(between.get("end")
+                                                   .trim());
+            terms.add("(" + start + " IS NULL OR CAST(" + start + " AS DATE) <= " + value + ")");
+            terms.add("(" + end + " IS NULL OR CAST(" + end + " AS DATE) >= " + value + ")");
+        }
+        if (filter != null && !filter.isBlank()) {
+            terms.add("(" + filter + ")");
+        }
+        StringBuilder sql = new StringBuilder("NOT EXISTS (SELECT 1 FROM ").append(quote(table))
+                                                                           .append(" as ")
+                                                                           .append(alias);
+        for (Join join : innerJoins.values()) {
+            sql.append(' ')
+               .append(join.type)
+               .append(" JOIN ")
+               .append(quote(join.table))
+               .append(" as ")
+               .append(join.alias)
+               .append(" ON ")
+               .append(join.on);
+        }
+        return sql.append(" WHERE ")
+                  .append(String.join(" AND ", terms))
+                  .append(')')
+                  .toString();
+    }
+
+    /**
+     * The source side of a {@code notExists:} pair: a bare to-one of the source is its foreign key (not
+     * the label a dimension shows), anything else - an own field, a one-hop {@code Relation.field} or
+     * {@code Relation.Relation} - resolves like a dimension, its join registered on the report query.
+     */
+    private static String notExistsSourceColumn(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
+            String path, Map<String, Join> joins) {
+        if (path.indexOf('.') < 0 && fieldByName(source, path) == null && relationByName(source, path) != null) {
+            return baseAlias + "." + quote(column(source.getName(), path));
+        }
+        ColumnRef ref = resolve(context, model, source, baseAlias, path);
+        if (ref.join != null) {
+            joins.putIfAbsent(ref.join.alias, ref.join);
+        }
+        return ref.qualified();
+    }
+
+    /**
      * The six balance totals - opening / period / closing debit and credit sums around the runtime
      * {@code :fromDate}/{@code :toDate} window. Opening is strictly before {@code fromDate}, the period
      * is inclusive of both bounds, closing is everything up to and including {@code toDate} - so
@@ -1047,16 +1224,12 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     private record UnionPrepared(EntityIntent entity, ViewArtifact view) {
     }
 
-    /** The entity a union's {@code counterparty} points at, and the {@code uses:} alias owning it. */
-    private record UnionTarget(String to, String model) {
-    }
-
     /**
      * A report's {@code union:} (dirigible #7946) as a parameter-free {@code UNION ALL} view - one arm
      * per member, every arm selecting the same logical columns ({@code source}, then
-     * {@code counterparty}, {@code date}, {@code due} where the members declare them, then
-     * {@code amount}) under the view's own column names - and the logical entity the report then reads
-     * that view as.
+     * {@code counterparty} and the pass-through to-one {@code columns:}, {@code date}, {@code due}
+     * where the members declare them, then {@code amount}) under the view's own column names - and the
+     * logical entity the report then reads that view as.
      *
      * <p>
      * Each arm carries what belongs to its member and to nothing else: the member's {@code filter}, and
@@ -1065,49 +1238,52 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      * share a column; the amount is the member's signed sum with every missing term read as zero.
      */
     private static UnionPrepared prepareUnion(IntentGenerationContext context, IntentModel model, ReportIntent report, boolean aggregated) {
-        UnionTarget target = unionTarget(context, model, report);
-        EntityIntent entity = ReportUnion.entity(report, target == null ? null : target.to(), target == null ? null : target.model());
+        Map<String, ReportUnion.Target> targets = new LinkedHashMap<>();
+        for (String column : ReportUnion.toOneColumns(report)) {
+            targets.put(column, unionTarget(context, model, report, column));
+        }
+        EntityIntent entity = ReportUnion.entity(report, targets);
         List<String> arms = new ArrayList<>();
         for (ReportUnionMemberIntent member : report.getUnion()) {
-            arms.add(member.isCrossModel() ? crossModelUnionArm(context, model, report, member, target, aggregated)
-                    : unionArm(context, model, report, member, target, aggregated));
+            arms.add(member.isCrossModel() ? crossModelUnionArm(context, model, report, member, targets, aggregated)
+                    : unionArm(context, model, report, member, targets, aggregated));
         }
         String viewName = IntentNaming.tableName(context, report.getName()) + "_UNION";
         return new UnionPrepared(entity, new ViewArtifact(report.getName() + "Union.view", viewName, String.join("\nUNION ALL\n", arms)));
     }
 
     /**
-     * What the union's {@code counterparty} points at: the target of a same-model member's relation, or
-     * - when every member naming one lives in another model - the entity those members' relation
-     * references, provided this model declares it too.
+     * What one of the union's to-one columns - its {@code counterparty}, or a pass-through
+     * {@code columns:} entry (#8619) - points at: the target of a same-model member's relation (its own
+     * or one hop away), or - when every member mapping it lives in another model - the entity those
+     * members' relation references, provided this model declares it too.
      *
-     * @return the target, or null when the union declares no counterparty
+     * @return the target
      */
-    private static UnionTarget unionTarget(IntentGenerationContext context, IntentModel model, ReportIntent report) {
-        if (!ReportUnion.declares(report, ReportUnionMemberIntent::getCounterparty)) {
-            return null;
-        }
-        RelationIntent relation = ReportUnion.sameModelCounterparty(model, report);
+    private static ReportUnion.Target unionTarget(IntentGenerationContext context, IntentModel model, ReportIntent report, String column) {
+        RelationIntent relation = ReportUnion.sameModelRelation(model, report, column);
         if (relation != null) {
-            return new UnionTarget(relation.getTo(), relation.isCrossModel() ? relation.getModel() : null);
+            return new ReportUnion.Target(relation.getTo(), relation.isCrossModel() ? relation.getModel() : null);
         }
         for (ReportUnionMemberIntent member : report.getUnion()) {
+            String path = ReportUnion.mapping(member, column);
+            if (!member.isCrossModel() || path == null) {
+                continue;
+            }
             Map<String, String> relations = unionMemberInfo(context, model, member).propertyRelations();
-            String to = relations == null ? null
-                    : relations.get(IntentNaming.pascalCase(member.getCounterparty()
-                                                                  .trim()));
+            String to = relations == null ? null : relations.get(IntentNaming.pascalCase(path));
             if (to != null && entityByName(model, to) != null) {
-                return new UnionTarget(to, null);
+                return new ReportUnion.Target(to, null);
             }
         }
-        throw new IntentValidationException(List.of("report [" + report.getName()
-                + "] union counterparty cannot be resolved - no member of this model names it, and the entity the other models'"
-                + " members point at is not declared here. Add a member of this model, or declare the counterparty entity here."));
+        throw new IntentValidationException(List.of("report [" + report.getName() + "] union " + column
+                + " cannot be resolved - no member of this model names it, and the entity the other models'"
+                + " members point at is not declared here. Add a member of this model, or declare the " + column + " entity here."));
     }
 
     /** One same-model member's arm of the union view. */
     private static String unionArm(IntentGenerationContext context, IntentModel model, ReportIntent report, ReportUnionMemberIntent member,
-            UnionTarget target, boolean aggregated) {
+            Map<String, ReportUnion.Target> targets, boolean aggregated) {
         String name = member.getSource()
                             .trim();
         EntityIntent entity = entityByName(model, name);
@@ -1118,7 +1294,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             registerJoin(joins, ref);
             return ref.qualified();
         };
-        List<Map<String, Object>> columns = unionColumns(report, member, target, alias, name, qualify);
+        List<Map<String, Object>> columns = unionColumns(report, member, targets, alias, name, qualify);
         String filter = buildWhere(context, model, entity, alias, joins, member.getFilter());
         RelationIntent status = LifecycleStages.statusRelation(entity);
         Map<String, Object> scope = status != null && mentionsWord(member.getFilter(), status.getName()) ? null
@@ -1134,7 +1310,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      * they are known.
      */
     private static String crossModelUnionArm(IntentGenerationContext context, IntentModel model, ReportIntent report,
-            ReportUnionMemberIntent member, UnionTarget target, boolean aggregated) {
+            ReportUnionMemberIntent member, Map<String, ReportUnion.Target> targets, boolean aggregated) {
         String name = member.getSource()
                             .trim();
         CrossModelSupport.TargetInfo info = unionMemberInfo(context, model, member);
@@ -1146,19 +1322,25 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             requireProperty(info, subject, field);
             return alias + "." + quote(column(name, field));
         };
-        if (target != null && info.propertyRelations() != null) {
-            String counterparty = member.getCounterparty()
-                                        .trim();
-            requireProperty(info, subject, counterparty);
+        for (Map.Entry<String, ReportUnion.Target> target : targets.entrySet()) {
+            if (info.propertyRelations() == null) {
+                break;
+            }
+            String path = ReportUnion.mapping(member, target.getKey());
+            requireProperty(info, subject, path);
             String to = info.propertyRelations()
-                            .get(IntentNaming.pascalCase(counterparty));
-            if (!target.to()
+                            .get(IntentNaming.pascalCase(path));
+            if (!target.getValue()
+                       .to()
                        .equals(to)) {
-                throw new IntentValidationException(List.of(subject + " counterparty [" + counterparty + "] points at [" + to
-                        + "], but the union's counterparty is [" + target.to() + "] - every member must name the same entity"));
+                throw new IntentValidationException(List
+                                                        .of(subject + " " + target.getKey() + " [" + path + "] points at [" + to
+                                                                + "], but the union's " + target.getKey() + " is [" + target.getValue()
+                                                                                                                            .to()
+                                                                + "] - every member must name the same entity"));
             }
         }
-        List<Map<String, Object>> columns = unionColumns(report, member, target, alias, name, qualify);
+        List<Map<String, Object>> columns = unionColumns(report, member, targets, alias, name, qualify);
         String filter = crossModelFilter(info, alias, name, member.getFilter());
         String scope = crossModelScope(context, report, member, info, alias, aggregated);
         String where = scope == null ? filter : filter == null ? scope : "(" + filter + ") AND " + scope;
@@ -1193,14 +1375,17 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      *
      * @param qualify a member field path to its qualified column
      */
-    private static List<Map<String, Object>> unionColumns(ReportIntent report, ReportUnionMemberIntent member, UnionTarget target,
-            String alias, String name, Function<String, String> qualify) {
+    private static List<Map<String, Object>> unionColumns(ReportIntent report, ReportUnionMemberIntent member,
+            Map<String, ReportUnion.Target> targets, String alias, String name, Function<String, String> qualify) {
         String union = report.getName();
         List<Map<String, Object>> columns = new ArrayList<>();
         columns.add(unionColumn(union, ReportUnion.SOURCE, "CAST(" + sqlLiteral(name) + " AS " + LEDGER_TEXT_TYPE + ")"));
-        if (target != null) {
-            columns.add(unionColumn(union, ReportUnion.COUNTERPARTY, alias + "." + quote(column(name, member.getCounterparty()
-                                                                                                            .trim()))));
+        for (String column : targets.keySet()) {
+            // The member's own to-one is its foreign key column; one hop away (#8619) it is the hop
+            // target's foreign key, read over the hop's join - the column `qualify` resolves it to.
+            String path = ReportUnion.mapping(member, column);
+            String expression = path.indexOf('.') < 0 ? alias + "." + quote(column(name, path)) : qualify.apply(path);
+            columns.add(unionColumn(union, column, expression));
         }
         if (ReportUnion.declares(report, ReportUnionMemberIntent::getDate)) {
             columns.add(unionColumn(union, ReportUnion.DATE, "CAST(" + qualify.apply(member.getDate()

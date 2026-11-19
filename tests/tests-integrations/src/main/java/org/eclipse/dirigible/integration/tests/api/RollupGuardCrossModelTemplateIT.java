@@ -134,6 +134,34 @@ class RollupGuardCrossModelTemplateIT {
                 "the gated guard must run wherever the row is persisted carrying the gate: " + rendered);
     }
 
+    /**
+     * The summed field may itself be calculated (#7943): the guard must read it AFTER the calculated
+     * fields are assigned, on create and on update, or it reads null, counts 0 and refuses nothing.
+     */
+    @Test
+    void theGuardRunsAfterTheCalculatedFieldsOnCreateAndOnUpdate() throws Exception {
+        Map<String, Object> parameters = context(guard(""));
+        Map<String, Object> amount = amount();
+        amount.put("isCalculatedProperty", Boolean.TRUE);
+        amount.put("calculatedPropertyExpressionCreate", "Quantity * Price");
+        amount.put("calculatedPropertyExpressionUpdate", "Quantity * Price");
+        parameters.put("properties", List.of(primaryKey(), amount));
+        parameters.put("haveCalculatedPropertyOnCreate", Boolean.TRUE);
+        parameters.put("haveCalculatedPropertyOnUpdate", Boolean.TRUE);
+        String rendered = render(parameters);
+
+        String assign = "entity.Amount = Calc.eval(\"Quantity * Price\", entity, 0);";
+        String guard = "CustomerPaymentEntity guardParent = new CustomerPaymentRepository().findById(";
+        int createAssign = rendered.indexOf(assign);
+        int createGuard = rendered.indexOf(guard);
+        int updateAssign = rendered.indexOf(assign, createAssign + 1);
+        int updateGuard = rendered.indexOf(guard, createGuard + 1);
+        assertTrue(createAssign >= 0 && updateAssign > createAssign, "both write paths must assign the calculated amount: " + rendered);
+        assertTrue(createGuard > createAssign && createGuard < updateAssign,
+                "on create the guard must read the calculated amount, not the null before it: " + rendered);
+        assertTrue(updateGuard > updateAssign, "on update the guard must read the recalculated amount: " + rendered);
+    }
+
     /** The authored refusal, with the figures the guard has in hand spliced in where it placed them. */
     @Test
     void anAuthoredMessageReplacesTheGeneratedOne() throws Exception {

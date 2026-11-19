@@ -241,6 +241,16 @@ not as an apology.
   field or relation is (the primary key, a calculated or derived field, a composition parent, an
   `EntityStatus`, a collection, ...) and beside `fixedAfterCreate`, which already fixes it outright.
   On a relation the FK is compared by id: `CompanyBankAccount.Currency`, `Product.Type`.
+- **`readOnly: true` on a plain `manyToOne`/`oneToOne` = a link only the system sets** (#8662): a
+  storno's link to the order it reverses, a document's link to the record a delegate created it from.
+  The New and Edit forms render no picker for it; once set it is shown in the record's read-only
+  details as the target's label. A user create that carries it is stored without it, a user update
+  keeps the stored value (the same contract as a `readOnly` field), while repository writers -
+  create-from `map:`, postings, delegates, `setRelationField` steps - set it. Refused on an
+  `EntityStatus`, a composition parent, the `personal`/`partner`/`owner` relation, a collection,
+  `subset` or `manyToMany`, and beside a calculated action, `fixedAfterCreate` or
+  `fixedWhenReferenced` (those describe a value a user or the platform picks). Pair it with
+  `inlineCreate: false` when the target is the same entity.
 - **`whenTargetDeleted: restrict | nullify | cascade | keep` on a plain (non-composition) `manyToOne`/
   `oneToOne` = what deleting the record it points at does to the records pointing at it** (#7547).
   - `restrict` is the DEFAULT, also when the key is absent: the delete is refused with ONE 409 naming
@@ -602,6 +612,34 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   ```
   Also for a netted total: revenue = `{ source: Invoice, date: date, amount: total }` + `{ source: CreditNote, date:
   date, amount: "-total" }` with `dimensions: [source]`, `measures: ["sum(amount)"]`. Not with a ledger `kind:`.
+  A member's `counterparty` may be one hop away (`counterparty: SalesInvoice.Customer` on an allocation row), and
+  `columns: { currency: Currency }` passes further to-one columns through (mapped by every member or none, same
+  target entity), read like `counterparty` - e.g. `dimensions: [counterparty.name, currency.code]`. An aging AS OF a
+  past date nets the payments as dated negative members instead of reading the live balance:
+  ```yaml
+  - name: AgedReceivables
+    union:
+      - { source: SalesInvoice, counterparty: Customer, columns: { currency: Currency }, date: date, due: due, amount: payable }
+      - { source: SalesInvoiceCustomerPayment, counterparty: SalesInvoice.Customer,
+          columns: { currency: SalesInvoice.Currency }, date: CustomerPayment.date, due: SalesInvoice.due,
+          amount: "-amount", filter: "SalesInvoice.Status >= 3" }
+    dimensions: [counterparty.name, currency.code]
+    aging: { buckets: [30, 60, 90] }
+  ```
+- `having:` (on an aggregating report) - **keep only the groups an aggregate condition holds for** (SQL HAVING):
+  comparisons over `count(*)` / `sum(x)` / `avg(x)` / `min(x)` / `max(x)` joined by `AND`/`OR`, e.g. duplicate
+  supplier numbers per supplier and year: `dimensions: [Supplier, "year(date)", supplierNumber]`,
+  `measures: ["count(*)"]`, `having: "count(*) > 1"`. A plain field outside an aggregate call is refused - a row
+  condition belongs in `filter:`. Not with a ledger `kind:`.
+- `notExists:` (on a report) - **keep only the source rows no row of another entity matches** (an anti-join), for
+  integrity checks before a period close: `notExists: { entity: JournalEntry, model: journal, match: { SalesInvoice: id } }`
+  lists the invoices no journal entry points back at. `match` maps a target property (a field, or a to-one compared by
+  its key) to the source's own field / to-one or a one-hop `Relation.field`; `model:` names a `uses:` model owning the
+  target; `between: { start: startDate, end: endDate, value: date }` requires the target's period (an empty bound is
+  open-ended, both inclusive) to cover the source date - e.g. entries outside every fiscal year of their company:
+  `notExists: { entity: FiscalYear, match: { Company: Company }, between: { start: startDate, end: endDate, value: date } }`;
+  `filter:` narrows the target's own rows (`filter: "reversed = false"`). A source row whose match value is empty is
+  listed. Combines with `having:`; not with `union:` or a ledger `kind:`.
 - `where` (on a user-picked to-one relation) - **a static option filter**: a single
   `<target property>: <literal>` pair that permanently narrows the dropdown's option list to matching
   target rows. Unlike `dependsOn` (which reacts to a sibling selection) the condition is constant.
@@ -695,9 +733,12 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   unposted and on which period, and re-runs itself for those documents the moment that period
   reopens, so a closed month no longer costs an issued document its ledger entry for good. A date
   covered by no period is open (periods are opened as they are needed) and an unset date falls in
-  none. The lock reaches composition CHILDREN exactly as the status one does. Boundary: the register
-  must be an entity of the SAME model - the guard is generated into this model's controllers, which
-  can only query a repository generated alongside them.
+  none. The lock reaches composition CHILDREN exactly as the status one does. The register is an
+  entity of the SAME model, or of another model named with `model:` -
+  `immutableInPeriod: { period: FiscalPeriod, model: journal, date: date }` - for a source document
+  whose module the ledger's model uses (so it cannot `uses:` the ledger back). That register is asked
+  at runtime by model + name; while its model is not deployed nothing is locked, and a POSTING into
+  such a record gets no pre-check or reopen re-run (its repository still refuses the write).
 - `lifecycle: { edges: [ { from: <status>, to: [<status>, ...] }, ... ] }` (entity-level) - **the
   declarative state machine**: the WHOLE set of legal status moves, declared once and enforced on
   EVERY status write. Without it the status machinery is a set of point constructs - `init:` names
@@ -772,6 +813,11 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   `uuid`), and together with `major: true`, `visibleWhen:`, the entity's `list:` or a `related:`
   register's `show:`. Unlike `visibleTo:`, which also strips the value from REST, `hidden` only keeps
   it off the pages.
+- `systemProperties: { processId: { visibleTo: [Support] } }` (top level, **once per intent**) - who
+  the record pages show the generated `ProcessId` / `ProcessIds` to (the "Process Id" in the Details
+  rail of every entity a process starts on). Display only: the REST responses keep the value, because
+  the page matches the record's process tasks on it. Every role must be declared in `permissions`, and
+  the list must name at least one. Absent, every reader sees them, as before.
 - `emptyText: <text>` (on a **field**) - **what an empty value reads as** when "empty" means
   something: `{ name: maxLoans, type: integer, readOnly: true, label: Loan limit, emptyText: No limit }`,
   `{ name: expiresOn, type: date, emptyText: Never }`, `{ name: nickname, type: string, emptyText: Not set }`.
@@ -993,6 +1039,14 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   language's catalog, else the default text; placeholders (`{count}`, `{match}`) are filled in AFTER
   translation, so a translation may move them. A refusal's 400 body and each warning of a 428 carry
   `messageKey` and `messageParams` next to the resolved `message`.
+  **A message may name the record's values (#8665)** so the refusal says which limit applies:
+  `{taxRateCap}` is a field (or to-one) of the record as the check judged it, `{Category.code}` a
+  value one to-one hop away (loaded only when the check fires) - `message: "The tax depreciation
+  rate exceeds the statutory maximum of {taxRateCap}% for category {Category.code}"`. They are filled
+  in after translation like `{count}`, so a translator keeps them in the translated sentence, and the
+  body's `messageParams` carries each by its placeholder name. A placeholder that is not a field or
+  to-one of the record, or walks more than one hop, is a parse error; `count`, `match`, `remaining`,
+  `capacity` and `requested` stay the generator's own.
 - `postings:` (top-level) - **declarative posting**: when a (usually cross-model) source document
   reaches a status - or, for a source with no status lifecycle, when it is created; or when it
   reaches a declared enrichment `phases:` moment, the only trigger that may read an amount a
@@ -1266,6 +1320,26 @@ that does not hold a moment (not a date / timestamp / month / week); and a `rese
 field with neither a `defaultValue` nor a create-time rule, which would make every duplicate fail on
 the server's own "field is required".
 
+A copy that must carry its own name (#8663) - a recurring bill template whose name has a soft
+`duplicate` check, so a verbatim copy is always answered with the duplicate warning - builds it from
+the SOURCE record with a `{field}` template, numbers it past the names already taken, and opens with
+the name selected:
+
+```yaml
+- name: RecurringBill
+  duplicable:
+    defaults: { name: "{name} (copy)", active: false }  # {field} = the source record's value
+    unique: [name, Company]   # while a record holds these values: "(copy 2)", "(copy 3)", ...
+    focus: name               # the copy opens in edit with this input focused and selected
+```
+
+A template is text, so it is only a value for a `string` / `text` field, and each placeholder names a
+field of the entity (no `relation.field` paths). `unique:` lists fields and to-one relations - usually
+the fields of the entity's `duplicate` check - and at least one of them must carry a template, since
+that is the value being numbered: a value ending in `)` gets the number inside it (`(copy 2)`), any
+other value gets ` (2)` appended. The probe asks the entity's own `/search` before the create (at most
+50 tries; past them the create decides). `focus:` names a field with an input.
+
 **Control order (`order:`):** by default the generated UI controls (form inputs, list columns, detail
 rows) follow the declaration order - all fields first, then the to-one relations, so relations end up
 last. Give an entity an `order:` list of property names to sequence them explicitly, interleaving
@@ -1515,9 +1589,15 @@ default bank account of a company", declare `single:` on the `boolean` field ins
 holder in the whole table; `single: { per: <relation> }` keeps one per value of one of the entity's own
 `manyToOne`/`oneToOne` relations. A write that sets the flag hands it over: the row that held it in
 the same scope is set to `false` in the same transaction. Add `onConflict: refuse` when taking the flag
-must be a deliberate act - the write is then answered 409 while another row holds it. A document that
-defaults to the flagged row names it with `init: { flag: base }` on its relation (fleet-wide flags
-only). The form keeps the ordinary checkbox:
+must be a deliberate act - the write is then answered 409 while another row holds it (naming the
+field, in the reader's language). Add
+`required: true` when the flag provides a default that must always exist (the base currency, the base
+company): the holder can then neither be un-ticked nor deleted while no other row of its scope holds
+the flag (400, naming the field) - the flag moves only by being set on another row. The first row of a
+scope may still be created without it, and the last row of a scope may be deleted. Pair it with
+`required: true` on the field itself when the value may never be empty. A document that defaults to
+the flagged row names it with `init: { flag: base }` on its relation (fleet-wide flags only). The form
+keeps the ordinary checkbox:
 
 ```yaml
 entities:
@@ -3411,6 +3491,11 @@ reports:
     filter: "dueOn <= CURRENT_DATE"
 ```
 
+A measure's column is captioned from its expression ("Count", "Sum Residual"). To caption it otherwise,
+write the measure as an object: `measures: [{ of: "count(*)", label: Lines }, "sum(total)"]`. The label is
+the column header (the en default of the report catalog entry); the row key and the catalog key stay
+derived from the expression, so an existing translation keeps working.
+
 **Rules:** `source` is a declared entity. A bare to-one relation dimension shows the target's label,
 
 A dimension may bucket a date for aggregation: `month(field)` (a sortable YYYYMM integer, e.g.
@@ -4461,6 +4546,24 @@ authoring **error**, never a comparison that silently never matches: a token of 
 the field, a time offset on a date field, a second offset, an offset that is not an ISO-8601 duration
 (`-30M`), and a moment compared with a non-temporal field. Do NOT model the clock into the data (a
 stored "deadline" column every writer must maintain) to work around this - the moment is the value.
+
+**Period starts (#8664).** A `date` field also takes `START_OF_MONTH`, `START_OF_QUARTER` and
+`START_OF_YEAR` - the first day of the run's month, quarter or year, the same tokens report filters
+take - with at most one signed date period (`START_OF_MONTH-P1M` is the first day of last month).
+That is what a month-end run needs to select "dated before this month": `CURRENT_DATE-P27D` lands on
+day 1 to 4 depending on the month's length.
+
+```yaml
+schedules:
+  - name: monthly-depreciation
+    cron: "0 0 22 L * ?"
+    entity: Asset
+    where:
+      - { field: commissioningDate, op: lt, value: START_OF_MONTH }   # not the ones put in use this month
+```
+
+A period start is a date, so a `timestamp` field refuses it. The same values work in a create-from's
+`items: where:`, a `children[].where` and a `compare` check's `value:`.
 
 **generate** (scheduled record generation) - e.g. "on the 1st of every month, create an
 EmployeeTimesheet for each active employee". Per matching row, a new target record is created and
@@ -5888,7 +5991,7 @@ or a seeded name.
 | `setField` / `clearField` / `setRelationField` path | `<member>` of the trigger entity, or `<relation>.<member>` - one hop through a local `manyToOne`/`oneToOne` relation, written through the target's repository |
 | field `stampOn` | `{ status: <seeded name or id> }` of the entity's `function: EntityStatus` relation, on a `timestamp`/`date` field that is not `required` and has no other writer |
 | field `unique` | `true`, or `{ ignoreCase: true }` on a `string`/`text` field - a value another record holds in any letter case is refused |
-| field `single` | `true`, or `{ per: <own manyToOne/oneToOne relation>, onConflict: demote \| refuse }` (both optional), on a `boolean` field |
+| field `single` | `true`, or `{ per: <own manyToOne/oneToOne relation>, onConflict: demote \| refuse, required: true }` (all optional), on a `boolean` field |
 | process `vars` | `[{ name: <identifier>, clearAfter: <serviceTask/userTask step> }]`; step `produces:`/`uses:` list declared var names |
 | process `abortOn` | `{ status: <id> \| [ids], then: <serviceTask> \| end }` (trigger entity needs a `function: EntityStatus` relation) |
 | relation `whenMasterDeleted` | `cascade` (default - a delete of the master deletes the children it owns), `refuse` (the master's delete is rejected while children exist); composition relations only |
@@ -5896,6 +5999,7 @@ or a seeded name.
 | field `fixedAfterCreate` | `true` - a caller-written field (not the key, `generated`, `uuid`, `number:`, `stampOn:`, `readOnly`, derived, `aggregate`, `dependsOn`, a `timestamp`, nor a translatable string of a `multilingual` entity): editable on create, read-only on edit, a changed value in an update answered 409 |
 | field `fixedWhenReferenced` | `true` - a caller-written field (the same refusals as field `fixedAfterCreate`, and not beside it): editable while no record references the row, a changed value in an update answered 409 once one does |
 | relation `fixedWhenReferenced` | `true` - a plain `manyToOne`/`oneToOne` (the same refusals as relation `fixedAfterCreate`, and not beside it): re-pickable while no record references the row, a changed FK in an update answered 409 once one does |
+| relation `readOnly` | `true` - a plain `manyToOne`/`oneToOne` only the system sets (not an `EntityStatus`, a composition parent, the `personal`/`partner`/`owner` relation, nor beside a calculated action, `fixedAfterCreate` or `fixedWhenReferenced`): no picker on New or Edit, a set value shown in the read-only details, a user create carrying it stored without it, a user update keeps the stored value; repository writers (create-from, postings, delegates, workflow steps) set it |
 | relation `owner` | `true` - a `manyToOne`/`oneToOne` to an entity that declares `identity` (at most one per entity): the entity's own list offers All / Mine, and `?mine=true` narrows its list, count and search to the caller's rows (none when no identity record maps the caller) |
 | relation `whenTargetDeleted` | `restrict` (default - the target's delete is answered 409 while this relation still references it), `nullify` (the target is deleted and this relation cleared; not on a required relation), `cascade` (this record is deleted with the target), `keep` (the target is deleted and this relation still names it; cross-model only); plain to-one relations, same-model or cross-model |
 | process `whenDeleted` | `abort` (default - deleting the trigger row cancels the in-flight instance), `refuse` (the REST delete answers 409 while the instance runs); needs an entity trigger |

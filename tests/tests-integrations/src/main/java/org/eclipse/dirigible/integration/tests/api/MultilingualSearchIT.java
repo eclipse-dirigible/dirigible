@@ -43,7 +43,9 @@ import io.restassured.specification.RequestSpecification;
  * A relation picker over a multilingual entity reads the generated controller's
  * {@code POST /search} (dirigible #8633): its rows come back in the caller's language, and a
  * {@code CONTAINS} typed in that language finds the row by its translation - with
- * {@code POST /count} counting the same rows.
+ * {@code POST /count} counting the same rows. The entity declares {@code orderBy:}, so its list
+ * ({@code GET /}) reads the ordered {@code findAll(limit, offset, order)}, which is translated too
+ * (dirigible #8670).
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class MultilingualSearchIT extends IntegrationTest {
@@ -62,6 +64,8 @@ class MultilingualSearchIT extends IntegrationTest {
               - name: Country
                 kind: setting
                 multilingual: true
+                # The list reads the ordered findAll(limit, offset, order) - translated too (#8670).
+                orderBy: [name]
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string,  required: true, length: 100 }
@@ -90,6 +94,34 @@ class MultilingualSearchIT extends IntegrationTest {
 
     @Autowired
     private SynchronizationProcessor synchronizationProcessor;
+
+    @Test
+    void ordered_list_reads_the_callers_language() {
+        writeResource(projectPath() + "/app.intent", INTENT);
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        // GET / and GET /{id} come back in the caller's language - the list through the ordered
+        // findAll(limit, offset, order) that orderBy: switches it to (#8670).
+        assertList("bg", contains("Афганистан", "Албания", "България"));
+        assertList(null, contains("Afghanistan", "Albania", "Bulgaria"));
+        restAssuredExecutor.execute(() -> request("bg").when()
+                                                       .get(COUNTRIES + "/3")
+                                                       .then()
+                                                       .statusCode(200)
+                                                       .body("Name", equalTo("България")),
+                TIMEOUT_SECONDS);
+    }
+
+    private void assertList(String language, Matcher<?> matcher) {
+        restAssuredExecutor.execute(() -> request(language).when()
+                                                           .get(COUNTRIES + "?$limit=10")
+                                                           .then()
+                                                           .statusCode(200)
+                                                           .body("Name", matcher),
+                TIMEOUT_SECONDS);
+    }
 
     @Test
     void search_reads_and_matches_the_callers_language() {
