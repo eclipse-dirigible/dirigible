@@ -4680,6 +4680,16 @@ class IntentEngineIT extends IntegrationTest {
         String repository = codeOf("gen/orders/data/settings/CountryRepository.java");
         assertTrue(repository.contains("Translator.translateList(super.findAll(), User.getLanguage(), \"ORDERS_COUNTRY\")"),
                 "the multilingual repository should overlay translations on findAll");
+        // orderBy: switches the list to the ordered page, and the my/partner lists read a Criteria page
+        // - both must be translated too (#8670).
+        assertTrue(
+                repository.contains(
+                        "Translator.translateList(super.findAll(limit, offset, orderBy), User.getLanguage(), \"ORDERS_COUNTRY\")"),
+                "the multilingual repository should overlay translations on the ordered findAll(limit, offset, order)");
+        assertTrue(
+                repository.contains(
+                        "Translator.translateList(super.findAll(criteria, limit, offset), User.getLanguage(), \"ORDERS_COUNTRY\")"),
+                "the multilingual repository should overlay translations on the paged findAll(criteria, limit, offset)");
         assertTrue(repository.contains("Translator.translateEntity(super.findById(id)"),
                 "the multilingual repository should overlay translations on findById");
         assertTrue(repository.contains("public java.util.Optional<CountryEntity> findOne(Object id)"),
