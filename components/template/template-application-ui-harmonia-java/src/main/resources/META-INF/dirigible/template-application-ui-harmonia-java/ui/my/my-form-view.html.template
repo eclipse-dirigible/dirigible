@@ -312,7 +312,7 @@
         <span x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete') + '?'"></span>
         <button type="button" x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
       </div>
-      <div x-h-dialog-content><p x-h-text.muted x-text="T('$projectName:${tprefix}.messages.deleteConfirm', 'Are you sure? This cannot be undone.')"></p></div>
+      <div x-h-dialog-content><p x-h-text.muted x-text="T('$projectName:${tprefix}.messages.deleteConfirm', 'Are you sure you want to delete {{name}}? This action cannot be undone.', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></p></div>
       <div x-h-dialog-footer>
         <button x-h-button data-variant="transparent" @click="deleteOpen = false" :disabled="deleteBusy"
                 x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
