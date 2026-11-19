@@ -1686,6 +1686,9 @@ document.addEventListener('alpine:init', () => {
 ## A field declaring emptyText (#8605) always shows its row, so it counts whenever the caller may see it.
 #if($property.roleRead)#set($emptyTextShown = "this.canSee('${property.name}') || null")#{else}#set($emptyTextShown = "true")#end
         ${emptyTextShown},
+#elseif($property.roleDisplay)
+## Withheld from the page only (#8692): the form still holds the value, so it counts only when shown.
+        this.canSee('${property.name}') ? this.form.${property.name} : null,
 #else
         this.form.${property.name},
 #end

@@ -7,7 +7,7 @@ package gen.${javaGenFolderName}.api.${javaPerspectiveName};
 ## A read-scoped property (the modeler's roleRead, or the intent's `visibleTo:` allow-list) is stripped
 ## from every response for a caller outside its roles - and the generated pages ask which ones those are
 ## so they can leave the column/input out instead of rendering a permanently empty one.
-#if($property.roleRead)
+#if($property.roleRead || $property.roleDisplay)
 #set($hasRestrictedReads = "true")
 #end
 ## A single-column `unique: true` is a column-level UNIQUE the SCHEMA leaves for the database to name,
@@ -283,6 +283,11 @@ public class ${name}Controller {
 #foreach ($property in $properties)
 #if($property.roleRead)
         if (!isInAnyRole("${property.roleRead}")) {
+            restricted.add("${property.name}");
+        }
+#elseif($property.roleDisplay)
+        // Withheld from the page only (#8692): the responses keep the value, which the page needs.
+        if (!isInAnyRole("${property.roleDisplay}")) {
             restricted.add("${property.name}");
         }
 #end
@@ -1865,7 +1870,7 @@ public class ${name}Controller {
 #end
     }
 #end
-#if($needsRoles || $isEntityPropertySecurityEnabled || $share)
+#if($needsRoles || $isEntityPropertySecurityEnabled || $share || $hasRestrictedReads)
 
     /**
      * Whether the caller holds ANY of a comma-separated role list. One role name is what the entity

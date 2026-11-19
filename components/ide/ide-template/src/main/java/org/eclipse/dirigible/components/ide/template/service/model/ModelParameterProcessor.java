@@ -2062,7 +2062,8 @@ final class ModelParameterProcessor {
 
     /**
      * Flags the entities carrying a read-scoped property - the entity modeler's per-property read role,
-     * or the intent's {@code visibleTo:} allow-list, which is emitted as the same attribute. The
+     * or the intent's {@code visibleTo:} allow-list, which is emitted as the same attribute - or a
+     * display-scoped one ({@code roleDisplay}, the intent's {@code systemProperties.processId}). The
      * generated pages ask the controller which of those fields the caller may not see only when there
      * is such a field, so an application that uses none of this pays nothing for it.
      *
@@ -2071,7 +2072,9 @@ final class ModelParameterProcessor {
     private static void collectRestrictedProperties(List<Map<String, Object>> entities) {
         for (Map<String, Object> entity : entities) {
             for (Map<String, Object> property : asMaps(entity.get("properties"))) {
-                if (truthy(property, "roleRead")) {
+                // roleDisplay (#8692) withholds a property from the PAGE only - the controller's
+                // /restricted lists it the same way, so the page asks.
+                if (truthy(property, "roleRead") || truthy(property, "roleDisplay")) {
                     entity.put("hasRestrictedFields", Boolean.TRUE);
                     break;
                 }
