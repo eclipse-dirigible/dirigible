@@ -602,6 +602,20 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   ```
   Also for a netted total: revenue = `{ source: Invoice, date: date, amount: total }` + `{ source: CreditNote, date:
   date, amount: "-total" }` with `dimensions: [source]`, `measures: ["sum(amount)"]`. Not with a ledger `kind:`.
+- `having:` (on an aggregating report) - **keep only the groups an aggregate condition holds for** (SQL HAVING):
+  comparisons over `count(*)` / `sum(x)` / `avg(x)` / `min(x)` / `max(x)` joined by `AND`/`OR`, e.g. duplicate
+  supplier numbers per supplier and year: `dimensions: [Supplier, "year(date)", supplierNumber]`,
+  `measures: ["count(*)"]`, `having: "count(*) > 1"`. A plain field outside an aggregate call is refused - a row
+  condition belongs in `filter:`. Not with a ledger `kind:`.
+- `notExists:` (on a report) - **keep only the source rows no row of another entity matches** (an anti-join), for
+  integrity checks before a period close: `notExists: { entity: JournalEntry, model: journal, match: { SalesInvoice: id } }`
+  lists the invoices no journal entry points back at. `match` maps a target property (a field, or a to-one compared by
+  its key) to the source's own field / to-one or a one-hop `Relation.field`; `model:` names a `uses:` model owning the
+  target; `between: { start: startDate, end: endDate, value: date }` requires the target's period (an empty bound is
+  open-ended, both inclusive) to cover the source date - e.g. entries outside every fiscal year of their company:
+  `notExists: { entity: FiscalYear, match: { Company: Company }, between: { start: startDate, end: endDate, value: date } }`;
+  `filter:` narrows the target's own rows (`filter: "reversed = false"`). A source row whose match value is empty is
+  listed. Combines with `having:`; not with `union:` or a ledger `kind:`.
 - `where` (on a user-picked to-one relation) - **a static option filter**: a single
   `<target property>: <literal>` pair that permanently narrows the dropdown's option list to matching
   target rows. Unlike `dependsOn` (which reacts to a sibling selection) the condition is constant.

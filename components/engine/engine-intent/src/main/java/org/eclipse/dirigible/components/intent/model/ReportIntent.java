@@ -130,6 +130,18 @@ public class ReportIntent {
      */
     private String filter;
     /**
+     * A filter over the GROUPS of an aggregating report (dirigible #7914) - SQL {@code HAVING}, applied
+     * after the {@code GROUP BY}: comparisons over aggregate calls ({@code count(*) > 1},
+     * {@code sum(total) <> 0}), joined by {@code AND} / {@code OR}. Only the groups that satisfy it are
+     * listed - the duplicates among thousands of groups of one.
+     */
+    private String having;
+    /**
+     * An anti-join (dirigible #7914): the report keeps only the source rows no row of another entity
+     * matches. See {@link ReportNotExistsIntent}.
+     */
+    private ReportNotExistsIntent notExists;
+    /**
      * The order of the report's rows: each term names one of the report's {@link #dimensions} or
      * {@link #measures} exactly as authored ({@code customer.name}, {@code sum(quantity)}), optionally
      * with {@code dir: desc}. Absent, a report with a {@code month(x)} / {@code year(x)} dimension is
@@ -405,6 +417,27 @@ public class ReportIntent {
 
     public void setFilter(String filter) {
         this.filter = filter;
+    }
+
+    public String getHaving() {
+        return having;
+    }
+
+    public void setHaving(String having) {
+        this.having = having;
+    }
+
+    /** Whether the report filters its groups ({@code having:}). */
+    public boolean hasHaving() {
+        return having != null && !having.isBlank();
+    }
+
+    public ReportNotExistsIntent getNotExists() {
+        return notExists;
+    }
+
+    public void setNotExists(ReportNotExistsIntent notExists) {
+        this.notExists = notExists;
     }
 
     /** The authored lifecycle scope, trimmed and lower-cased, or {@code null} when none is declared. */
