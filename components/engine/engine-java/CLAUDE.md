@@ -28,7 +28,10 @@ component shapes. Read this before changing anything under `engine-java`, `data-
   while the source was listed `FAILED`.
 - `JavaLoader.rebuild()` order each generation: compile → load classes → unload-notify consumers for
   removed/replaced FQNs → swap the loader → **`componentContainer.rebuild(...)`** → load-notify
-  consumers. So when a consumer runs, every bean is already built and injected.
+  consumers. So when a consumer runs, every bean is already built and injected. The unload pass runs
+  the consumers in **reverse** `@Order` (websockets, listeners, jobs, controllers, entities), the load
+  pass in order: unloaded in load order, the entities left a second before the jobs were unscheduled,
+  and an every-minute job firing in between failed with "is not a registered @Entity" (#8703).
 - The `Compiled batch: [N] units, [M] class file(s), ...` line is the LAST step of that install
   (`JavaLoader.logBatch`, after every consumer's `endGeneration()` - the entity consumer's is the
   Hibernate `SessionFactory` rebuild). Tooling waits for it as "the new code is serving", so keep it

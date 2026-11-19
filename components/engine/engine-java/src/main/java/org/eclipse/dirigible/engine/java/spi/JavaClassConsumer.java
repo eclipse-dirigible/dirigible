@@ -19,6 +19,11 @@ package org.eclipse.dirigible.engine.java.spi;
  * will receive a paired {@link #onClassLoaded} / {@link #onClassUnloaded} for the class.
  *
  * <p>
+ * Consumers are notified in {@code @Order} sequence on the load pass and in reverse sequence on the
+ * unload pass, so a consumer may rely on every consumer ordered before it (a job on the entities it
+ * reads) for as long as it is itself registered.
+ *
+ * <p>
  * Built-in consumers:
  * <ul>
  * <li>{@code HandlerClassConsumer} — claims classes that implement
