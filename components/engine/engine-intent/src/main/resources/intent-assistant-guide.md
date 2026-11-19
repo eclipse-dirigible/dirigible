@@ -3411,6 +3411,11 @@ reports:
     filter: "dueOn <= CURRENT_DATE"
 ```
 
+A measure's column is captioned from its expression ("Count", "Sum Residual"). To caption it otherwise,
+write the measure as an object: `measures: [{ of: "count(*)", label: Lines }, "sum(total)"]`. The label is
+the column header (the en default of the report catalog entry); the row key and the catalog key stay
+derived from the expression, so an existing translation keeps working.
+
 **Rules:** `source` is a declared entity. A bare to-one relation dimension shows the target's label,
 
 A dimension may bucket a date for aggregation: `month(field)` (a sortable YYYYMM integer, e.g.

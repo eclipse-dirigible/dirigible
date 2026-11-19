@@ -383,6 +383,7 @@ public final class IntentParser {
         wrapScalarNormalize(tree);
         expandFieldFlagShorthands(tree);
         normalizeOrderBy(tree);
+        normalizeMeasures(tree);
         normalizeActionPrompts(tree);
         // A key the typed model does not declare is dropped by the Gson mapping without a sound, so it
         // is collected here - on the raw tree, while the author's spelling still exists - and reported
@@ -8413,6 +8414,62 @@ public final class IntentParser {
                 expanded.add(term instanceof String field ? new LinkedHashMap<>(Map.of("field", field)) : term);
             }
             writable.put("orderBy", expanded);
+        }
+    }
+
+    /**
+     * A report measure may be captioned (dirigible #8671, #8621): {@code { of: "sum(residual)", label:
+     * Carrying amount }} beside the bare {@code "sum(residual)"}. Done on the raw tree, before the
+     * typed mapping, for the reason {@link #normalizeOrderBy} is: the object form is reduced to its
+     * expression, so {@code measures} stays the list of strings every validator and generator reads,
+     * and its caption moves to the report's {@code measureLabels}, keyed by that expression.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     */
+    @SuppressWarnings("unchecked")
+    private static void normalizeMeasures(Object tree) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("reports") instanceof List<?> reports)) {
+            return;
+        }
+        List<String> issues = new ArrayList<>();
+        for (Object reportNode : reports) {
+            if (!(reportNode instanceof Map<?, ?> report) || !(report.get("measures") instanceof List<?> measures)) {
+                continue;
+            }
+            String prefix = "report [" + report.get("name") + "] measure ";
+            List<Object> expressions = new ArrayList<>(measures.size());
+            Map<String, String> labels = new LinkedHashMap<>();
+            for (Object measure : measures) {
+                if (!(measure instanceof Map<?, ?> captioned)) {
+                    expressions.add(measure);
+                    continue;
+                }
+                Object of = captioned.get("of");
+                Object label = captioned.get("label");
+                for (Object key : captioned.keySet()) {
+                    if (!"of".equals(key) && !"label".equals(key)) {
+                        issues.add(prefix + captioned + " has unknown key [" + key + "] - the object form takes of: and label:");
+                    }
+                }
+                if (!(of instanceof String expression) || expression.isBlank()) {
+                    issues.add(prefix + captioned + " needs of: - the measure expression, e.g. of: \"sum(total)\"");
+                    continue;
+                }
+                if (!(label instanceof String caption) || caption.isBlank()) {
+                    issues.add(prefix + "[" + expression + "] needs a non-blank label: - or write it as the bare expression");
+                    continue;
+                }
+                expressions.add(expression);
+                labels.put(expression.trim(), caption.trim());
+            }
+            Map<Object, Object> writable = (Map<Object, Object>) report;
+            writable.put("measures", expressions);
+            if (!labels.isEmpty()) {
+                writable.put("measureLabels", labels);
+            }
+        }
+        if (!issues.isEmpty()) {
+            throw new IntentValidationException(issues);
         }
     }
 

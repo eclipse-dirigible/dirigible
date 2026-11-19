@@ -10,8 +10,10 @@
 package org.eclipse.dirigible.components.intent.model;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Report / aggregation. {@link #source} names the entity to aggregate; {@link #dimensions} are the
@@ -105,6 +107,14 @@ public class ReportIntent {
      */
     private List<String> columns = new ArrayList<>();
     private List<String> measures = new ArrayList<>();
+    /**
+     * The authored caption of a measure column, keyed by the measure as written (dirigible #8671,
+     * #8621). Filled by the parser from the object form of a measure, {@code { of: "count(*)", label:
+     * Lines }}, which it reduces to the bare expression in {@link #measures}. The caption is the
+     * column's label - the default-language text of its catalog entry - while its alias (the row key)
+     * and its translation id stay derived from the expression.
+     */
+    private Map<String, String> measureLabels = new LinkedHashMap<>();
     /**
      * User-set parameters rendered as inputs above the report and bound into the generated query's
      * {@code WHERE} - a from/to window bound, an amount threshold, a name search. Empty (the default)
@@ -368,6 +378,14 @@ public class ReportIntent {
 
     public void setMeasures(List<String> measures) {
         this.measures = measures == null ? new ArrayList<>() : measures;
+    }
+
+    public Map<String, String> getMeasureLabels() {
+        return measureLabels;
+    }
+
+    public void setMeasureLabels(Map<String, String> measureLabels) {
+        this.measureLabels = measureLabels == null ? new LinkedHashMap<>() : measureLabels;
     }
 
     public List<ReportParameterIntent> getParameters() {
