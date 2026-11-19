@@ -1064,9 +1064,9 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 		}).then((form) => {
 			if (form) {
 				$scope.$evalAsync(() => {
-					$scope.report.conditions[$scope.editConditionIndex].left = form['teiLeft'];
-					$scope.report.conditions[$scope.editConditionIndex].operation = form['tedOperation'];
-					$scope.report.conditions[$scope.editConditionIndex].right = form['teiRight'];
+					$scope.report.havings[$scope.editHavingIndex].left = form['teiLeft'];
+					$scope.report.havings[$scope.editHavingIndex].operation = form['tedOperation'];
+					$scope.report.havings[$scope.editHavingIndex].right = form['teiRight'];
 				});
 			}
 		}, (error) => {
