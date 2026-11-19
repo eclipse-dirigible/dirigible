@@ -48,8 +48,6 @@ public class JobEmailProcessor {
     public static final String EMAIL_TEMPLATE_DISABLE = "/job/templates/template-disable.txt";
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(JobEmailProcessor.class);
-    /** The Constant DIRIGIBLE_SCHEDULER_LOGS_RETENTION_PERIOD. */
-    private static final String DIRIGIBLE_SCHEDULER_LOGS_RETENTION_PERIOD = "DIRIGIBLE_SCHEDULER_LOGS_RETENTION_PERIOD";
     /** The Constant DIRIGIBLE_SCHEDULER_EMAIL_SENDER. */
     private static final String DIRIGIBLE_SCHEDULER_EMAIL_SENDER = "DIRIGIBLE_SCHEDULER_EMAIL_SENDER";
     /** The Constant DIRIGIBLE_SCHEDULER_EMAIL_RECIPIENTS. */
@@ -100,8 +98,6 @@ public class JobEmailProcessor {
     public static String emailTemplateEnable = null;
     /** The email template disable. */
     public static String emailTemplateDisable = null;
-    /** The logs retantion in hours. */
-    private static int logsRetantionInHours = 24 * 7;
     /** The email sender. */
     private static String emailSender = null;
     /** The email recipients line. */
@@ -116,16 +112,6 @@ public class JobEmailProcessor {
     private static String emailUrlPort = null;
 
     static {
-        try {
-            logsRetantionInHours = Configuration.getAsInt(DIRIGIBLE_SCHEDULER_LOGS_RETENTION_PERIOD, logsRetantionInHours);
-        } catch (Throwable e) {
-            if (logger.isWarnEnabled()) {
-                logger.warn(DIRIGIBLE_SCHEDULER_LOGS_RETENTION_PERIOD
-                        + " is not correctly set, so it will be backed up to a week timeframe (24x7)");
-            }
-            logsRetantionInHours = 24 * 7;
-        }
-
         emailSender = Configuration.get(DIRIGIBLE_SCHEDULER_EMAIL_SENDER);
 
         emailRecipientsLine = Configuration.get(DIRIGIBLE_SCHEDULER_EMAIL_RECIPIENTS);
