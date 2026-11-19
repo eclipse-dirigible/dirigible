@@ -93,6 +93,21 @@ class DerivedWriteTest {
     }
 
     @Test
+    void aDerivedWritePersistsItsColumnsUntilItsEventIsRecorded() {
+        assertFalse(DerivedWrite.persists("Allocated"), "outside a derived write nothing is derived");
+        List<Boolean> seen = DerivedWrite.run(List.of("Allocated"), () -> {
+            boolean before = DerivedWrite.persists("Allocated");
+            boolean other = DerivedWrite.persists("Amount");
+            DerivedWrite.mark(ROW);
+            return List.of(before, other, DerivedWrite.persists("Allocated"));
+        });
+
+        assertEquals(List.of(true, false, false), seen,
+                "its own column before the event, never another one, and nothing a later write in the scope carries");
+        assertFalse(DerivedWrite.persists("Allocated"), "the scope ends with the call");
+    }
+
+    @Test
     void anUnparseablePayloadIsNotDerived() {
         assertNull(DerivedWrite.columns("not json"));
         assertNull(DerivedWrite.columns(null));

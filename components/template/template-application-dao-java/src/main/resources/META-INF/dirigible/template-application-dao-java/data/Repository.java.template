@@ -1293,9 +1293,10 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      * roll-up whose own parent sits above this row - keep cascading exactly as they did when the handler
      * persisted the full row, carrying the written column names under {@code DerivedWrite.MARKER} so an
      * authored-change listener can skip a recompute that moved nothing it watches. Routed through
-     * {@link #updateProperties} so an entity that declares
-     * {@code checks:} still runs its gate, a labelled entity still refreshes its stored display Name,
-     * and a document line still resums the master it belongs to.
+     * {@link #updateProperties} so a labelled entity still refreshes its stored display Name, a
+     * lifecycle still guards a status move and a document line still resums the master it belongs to.
+     * The entity's {@code checks:} do not gate the recomputed columns: they are written after the
+     * child's change has committed, so a refusal could only leave a stale total behind (#8443).
      */
     public int updateDerived(Object id, java.util.Map<String, Object> values) {
         if (values == null || values.isEmpty()) {
@@ -1820,12 +1821,20 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      * bookkeeping. A write of the second kind cannot move this document into a gated status, nor break
      * what the gate checks, so the gate has nothing to say about it.
      *
+     * <p>
+     * The columns of a DERIVED write ({@link #updateDerived}: a roll-up total, the status a roll-up
+     * owns, a keyed aggregate) are bookkeeping too (#8443). That write runs in a handler after the
+     * child's change has committed, so a refusal here could not stop the child - it only left this row
+     * with a total that is not the sum of its children, logged and lost. The gate keeps applying to
+     * what a person or a workflow writes.
+     *
      * @param values the properties the write carries
      * @return true when at least one of them is authored
      */
     private static boolean touchesAuthoredColumn(java.util.Map<String, Object> values) {
         for (String property : values.keySet()) {
-            if (!SYSTEM_PROPERTIES.contains(property)) {
+            if (!SYSTEM_PROPERTIES.contains(property)
+                    && !org.eclipse.dirigible.components.data.store.java.repository.DerivedWrite.persists(property)) {
                 return true;
             }
         }
