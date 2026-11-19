@@ -5463,6 +5463,9 @@ public final class IntentParser {
                                         + " fixedWhenReferenced - fixedAfterCreate already refuses every change after create; keep one");
                     }
                 }
+                if (relation.isReadOnly()) {
+                    validateReadOnlyRelation(entity, relation, issues);
+                }
                 if (relation.isPersonal()) {
                     personalCount++;
                     validatePersonal(entity, relation, byName, issues);
@@ -5708,6 +5711,9 @@ public final class IntentParser {
         }
         if (relation.isFixedWhenReferenced()) {
             unsupported.add("fixedWhenReferenced");
+        }
+        if (relation.isReadOnly()) {
+            unsupported.add("readOnly");
         }
         if (relation.getShow() != null && !relation.getShow()
                                                    .isEmpty()) {
@@ -6613,6 +6619,57 @@ public final class IntentParser {
         if (!isBlank(relation.getCalculatedActionOnUpdate())) {
             issues.add(subject + " declares both " + key + " and calculatedActionOnUpdate - the update action recomputes the"
                     + " value on every update, so it cannot also be fixed; keep one");
+        }
+    }
+
+    /**
+     * {@code readOnly: true} on a relation (dirigible #8662): a to-one only the system sets - a
+     * storno's link to the order it reverses. It needs a single FK no user picks anyway on some other
+     * ground: a plain {@code manyToOne}/{@code oneToOne} that is not an EntityStatus (moved by its
+     * workflow), not a composition parent (set by the master's detail panel), not the
+     * personal/partner/owner relation (filled from the caller), not computed by a calculated action,
+     * and not fixed by {@code fixedAfterCreate}/{@code fixedWhenReferenced}, which only make sense for
+     * a value a user picks.
+     *
+     * @param entity the entity declaring the relation
+     * @param relation the relation
+     * @param issues the issue list to add to
+     */
+    private static void validateReadOnlyRelation(EntityIntent entity, RelationIntent relation, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
+        boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+        if (!toOne) {
+            issues.add(subject + " declares readOnly but only a manyToOne/oneToOne relation has an FK the system sets");
+            return;
+        }
+        List<String> conflicting = new ArrayList<>();
+        if (relation.isEntityStatus()) {
+            conflicting.add("function: EntityStatus");
+        }
+        if (relation.isComposition()) {
+            conflicting.add("composition");
+        }
+        if (relation.isPersonal() || relation.isPersonalReadOnly()) {
+            conflicting.add("personal");
+        }
+        if (relation.isPartner()) {
+            conflicting.add("partner");
+        }
+        if (relation.isOwner()) {
+            conflicting.add("owner");
+        }
+        if (relation.isCalculated()) {
+            conflicting.add("calculatedAction");
+        }
+        if (relation.isFixedAfterCreate()) {
+            conflicting.add("fixedAfterCreate");
+        }
+        if (relation.isFixedWhenReferenced()) {
+            conflicting.add("fixedWhenReferenced");
+        }
+        if (!conflicting.isEmpty()) {
+            issues.add(subject + " declares readOnly (only the system sets it) beside " + String.join(", ", conflicting)
+                    + ", which describe a value the platform or a user chooses - keep readOnly or drop it");
         }
     }
 
