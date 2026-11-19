@@ -30,9 +30,9 @@ import org.flowable.common.engine.impl.interceptor.CommandContext;
 import org.flowable.task.service.impl.persistence.entity.TaskEntity;
 
 /**
- * Makes a task completion take the task's row lock BEFORE the process moves on from the task, so
- * of two concurrent completions of one task only the one that answers 2xx runs the service steps
- * after it (issue #8547).
+ * Makes a task completion take the task's row lock BEFORE the process moves on from the task, so of
+ * two concurrent completions of one task only the one that answers 2xx runs the service steps after
+ * it (issue #8547).
  *
  * <p>
  * The engine writes nothing until its command ends: two COMPLETEs of the same task (the double
@@ -71,9 +71,10 @@ public final class TaskCompletionLock implements FlowableEventListener {
      * @param configuration the engine configuration, before the engine is built
      */
     public static void register(AbstractEngineConfiguration configuration) {
-        Map<String, List<FlowableEventListener>> typed = configuration.getTypedEventListeners() == null ? new HashMap<>()
-                : new HashMap<>(configuration.getTypedEventListeners());
-        List<FlowableEventListener> listeners = new ArrayList<>(typed.getOrDefault(FlowableEngineEventType.TASK_COMPLETED.name(), List.of()));
+        Map<String, List<FlowableEventListener>> typed =
+                configuration.getTypedEventListeners() == null ? new HashMap<>() : new HashMap<>(configuration.getTypedEventListeners());
+        List<FlowableEventListener> listeners =
+                new ArrayList<>(typed.getOrDefault(FlowableEngineEventType.TASK_COMPLETED.name(), List.of()));
         listeners.add(new TaskCompletionLock());
         typed.put(FlowableEngineEventType.TASK_COMPLETED.name(), listeners);
         configuration.setTypedEventListeners(typed);
@@ -104,8 +105,8 @@ public final class TaskCompletionLock implements FlowableEventListener {
             throw new FlowableException("Could not lock task [" + task.getId() + "] for its completion", e);
         }
         if (locked == 0) {
-            throw new FlowableOptimisticLockingException(
-                    "Task [" + task.getId() + "] was completed or changed by another transaction concurrently - this completion runs none of its steps");
+            throw new FlowableOptimisticLockingException("Task [" + task.getId()
+                    + "] was completed or changed by another transaction concurrently - this completion runs none of its steps");
         }
     }
 

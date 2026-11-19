@@ -42,13 +42,13 @@ import org.junit.jupiter.api.Test;
  * the task (#8547), on a REAL Flowable engine (in-memory H2 with the platform's lock timeout).
  *
  * <p>
- * The step stands for a generated {@code JavaTask} delegate - a number stamp, a status setter - whose
- * write goes to the application's records outside the engine's transaction: it is recorded in a
- * plain list, which the engine's rollback cannot undo, exactly like a committed data-store write.
+ * The step stands for a generated {@code JavaTask} delegate - a number stamp, a status setter -
+ * whose write goes to the application's records outside the engine's transaction: it is recorded in
+ * a plain list, which the engine's rollback cannot undo, exactly like a committed data-store write.
  * The first completion is held inside the step; the second is started only then, so without the
  * lock it has nothing to wait for and runs the step too (the list ends with both actions), while
- * with the lock it waits on the task row until the first one commits and then fails without
- * running it.
+ * with the lock it waits on the task row until the first one commits and then fails without running
+ * it.
  */
 class TaskCompletionLockEngineTest {
 
@@ -152,7 +152,8 @@ class TaskCompletionLockEngineTest {
         assertFalse(secondRanTheStep, "the losing completion must not reach the step while the first one runs it");
         assertNull(approveFailure, "the first completion succeeds");
         assertNotNull(rejectFailure, "the losing completion must fail");
-        assertTrue(rejectFailure instanceof FlowableOptimisticLockingException, "the engine's optimistic-lock failure, which the endpoints answer with 409: " + rejectFailure);
+        assertTrue(rejectFailure instanceof FlowableOptimisticLockingException,
+                "the engine's optimistic-lock failure, which the endpoints answer with 409: " + rejectFailure);
         assertNull(engine.getRuntimeService()
                          .createProcessInstanceQuery()
                          .processInstanceId(instance.getId())
