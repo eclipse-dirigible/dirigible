@@ -757,8 +757,112 @@ public final class IntentParser {
                     continue;
                 }
                 validateDuplicableProperty(entity, subject + ".defaults", name.trim(), false, assignment.getValue(), issues);
+                validateDuplicableTemplate(entity, subject + ".defaults", name.trim(), assignment.getValue(), issues);
+            }
+            validateDuplicableUnique(entity, subject, duplicate, issues);
+            if (duplicate.getFocus() != null) {
+                String focus = duplicate.getFocus()
+                                        .trim();
+                FieldIntent field = duplicableField(entity, focus);
+                if (focus.isEmpty() || field == null) {
+                    issues.add(subject + ".focus names [" + focus + "] which is not a field of entity [" + entity.getName() + "]");
+                } else if (field.isPrimaryKey() || field.isReadOnly() || field.isAggregate() || field.getNumber() != null
+                        || "uuid".equalsIgnoreCase(field.getType())) {
+                    issues.add(subject + ".focus names [" + focus + "], which the copy's form renders no input for");
+                }
             }
         }
+    }
+
+    /** A {@code {field}} placeholder of a {@code duplicable.defaults} template (dirigible #8663). */
+    private static final java.util.regex.Pattern DUPLICATE_PLACEHOLDER = java.util.regex.Pattern.compile("\\{([^{}]*)\\}");
+
+    /**
+     * Whether a {@code duplicable.defaults} value is a template of the source record - it holds at
+     * least one {@code {field}} placeholder (dirigible #8663).
+     *
+     * @param value the authored value
+     * @return true for a template
+     */
+    public static boolean isDuplicateTemplate(String value) {
+        return value != null && DUPLICATE_PLACEHOLDER.matcher(value)
+                                                     .find();
+    }
+
+    /**
+     * A {@code {field}} template default (dirigible #8663): every placeholder names a field of the
+     * entity - read from the SOURCE record - and the result is text, so it is only a value for a
+     * {@code string}/{@code text} field.
+     */
+    private static void validateDuplicableTemplate(EntityIntent entity, String subject, String name, String value, List<String> issues) {
+        if (!isDuplicateTemplate(value)) {
+            return;
+        }
+        java.util.regex.Matcher placeholders = DUPLICATE_PLACEHOLDER.matcher(value);
+        while (placeholders.find()) {
+            String placeholder = placeholders.group(1)
+                                             .trim();
+            if (duplicableField(entity, placeholder) == null) {
+                issues.add(subject + " assigns [" + name + "] the template [" + value + "], whose {" + placeholder
+                        + "} is not a field of entity [" + entity.getName() + "] - a placeholder names a field of the record being copied");
+            }
+        }
+        FieldIntent target = duplicableField(entity, name);
+        String type = target == null || target.getType() == null ? ""
+                : target.getType()
+                        .toLowerCase(Locale.ROOT);
+        if (target != null && !"string".equals(type) && !"text".equals(type)) {
+            issues.add(subject + " assigns [" + name + "] the template [" + value + "], but a template builds text, so it is only a value"
+                    + " for a string / text field");
+        }
+    }
+
+    /**
+     * {@code duplicable.unique} (dirigible #8663): the fields whose values the copy must not share with
+     * an existing record. Each names a field or a to-one of the entity, and at least one of them must
+     * be assigned a {@code {field}} template - that is the value the probe numbers; without one there
+     * is nothing to vary and the probe could never succeed.
+     */
+    private static void validateDuplicableUnique(EntityIntent entity, String subject, DuplicateIntent duplicate, List<String> issues) {
+        if (duplicate.getUnique()
+                     .isEmpty()) {
+            return;
+        }
+        boolean numbered = false;
+        for (String name : duplicate.getUnique()) {
+            String trimmed = name == null ? "" : name.trim();
+            boolean relation = entity.getRelations()
+                                     .stream()
+                                     .anyMatch(r -> trimmed.equalsIgnoreCase(r.getName())
+                                             && ("manyToOne".equals(r.getKind()) || "oneToOne".equals(r.getKind())));
+            if (trimmed.isEmpty() || (duplicableField(entity, trimmed) == null && !relation)) {
+                issues.add(subject + ".unique names [" + trimmed + "] which is not a field or a to-one relation of entity ["
+                        + entity.getName() + "]");
+                continue;
+            }
+            for (Map.Entry<String, String> assignment : duplicate.getDefaults()
+                                                                 .entrySet()) {
+                if (trimmed.equalsIgnoreCase(String.valueOf(assignment.getKey())
+                                                   .trim())
+                        && isDuplicateTemplate(assignment.getValue())) {
+                    numbered = true;
+                }
+            }
+        }
+        if (!numbered) {
+            issues.add(subject + ".unique names no field that defaults: assigns a {field} template - the copy is numbered through such a"
+                    + " template (\"{name} (copy)\"), so one of " + duplicate.getUnique() + " needs one");
+        }
+    }
+
+    /** The entity's field of that name, ignoring case, or null. */
+    private static FieldIntent duplicableField(EntityIntent entity, String name) {
+        for (FieldIntent field : entity.getFields()) {
+            if (name.equalsIgnoreCase(field.getName())) {
+                return field;
+            }
+        }
+        return null;
     }
 
     /**

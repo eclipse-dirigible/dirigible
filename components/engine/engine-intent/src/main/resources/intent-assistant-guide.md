@@ -1266,6 +1266,26 @@ that does not hold a moment (not a date / timestamp / month / week); and a `rese
 field with neither a `defaultValue` nor a create-time rule, which would make every duplicate fail on
 the server's own "field is required".
 
+A copy that must carry its own name (#8663) - a recurring bill template whose name has a soft
+`duplicate` check, so a verbatim copy is always answered with the duplicate warning - builds it from
+the SOURCE record with a `{field}` template, numbers it past the names already taken, and opens with
+the name selected:
+
+```yaml
+- name: RecurringBill
+  duplicable:
+    defaults: { name: "{name} (copy)", active: false }  # {field} = the source record's value
+    unique: [name, Company]   # while a record holds these values: "(copy 2)", "(copy 3)", ...
+    focus: name               # the copy opens in edit with this input focused and selected
+```
+
+A template is text, so it is only a value for a `string` / `text` field, and each placeholder names a
+field of the entity (no `relation.field` paths). `unique:` lists fields and to-one relations - usually
+the fields of the entity's `duplicate` check - and at least one of them must carry a template, since
+that is the value being numbered: a value ending in `)` gets the number inside it (`(copy 2)`), any
+other value gets ` (2)` appended. The probe asks the entity's own `/search` before the create (at most
+50 tries; past them the create decides). `focus:` names a field with an input.
+
 **Control order (`order:`):** by default the generated UI controls (form inputs, list columns, detail
 rows) follow the declaration order - all fields first, then the to-one relations, so relations end up
 last. Give an entity an `order:` list of property names to sequence them explicitly, interleaving

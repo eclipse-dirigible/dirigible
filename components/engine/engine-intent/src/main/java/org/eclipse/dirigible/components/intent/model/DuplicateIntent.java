@@ -28,6 +28,11 @@ import java.util.Map;
  * duplicable:
  *   defaults: { date: now }        # constants written into the clone
  *   reset: [due, taxEventDate]     # dropped, so the entity's own create-time rule refills them
+ *
+ * duplicable:
+ *   defaults: { name: "{name} (copy)" }   # a {field} of the SOURCE record (#8663)
+ *   unique: [name, Company]               # numbered "(copy 2)", ... until no record holds them
+ *   focus: name                           # the copy opens with this input focused and selected
  * </pre>
  *
  * <p>
@@ -54,6 +59,22 @@ public class DuplicateIntent {
      */
     private List<String> reset = new ArrayList<>();
 
+    /**
+     * The entity's fields that make the copy's identity clash (dirigible #8663) - typically the same
+     * fields as the entity's soft {@code duplicate} check, such as {@code [name, Company]}. When the
+     * copy's values for all of them are already held by a record, every {@code {field}} template
+     * default among them is numbered - {@code "Rent (copy)"} becomes {@code "Rent (copy 2)"},
+     * {@code "(copy 3)"}, ... - until no record holds them, so the copy never meets the duplicate
+     * warning. Empty means no probe.
+     */
+    private List<String> unique = new ArrayList<>();
+
+    /**
+     * The field the copy opens with focused and its text selected (dirigible #8663), so a user can
+     * rename it straight away. Blank means no focus.
+     */
+    private String focus;
+
     /** The constants written into the clone, keyed by authored property name; never null. */
     public Map<String, String> getDefaults() {
         return defaults == null ? new LinkedHashMap<>() : defaults;
@@ -70,5 +91,22 @@ public class DuplicateIntent {
 
     public void setReset(List<String> reset) {
         this.reset = reset == null ? new ArrayList<>() : reset;
+    }
+
+    /** The fields whose values the copy must not share with an existing record; never null. */
+    public List<String> getUnique() {
+        return unique == null ? new ArrayList<>() : unique;
+    }
+
+    public void setUnique(List<String> unique) {
+        this.unique = unique == null ? new ArrayList<>() : unique;
+    }
+
+    public String getFocus() {
+        return focus;
+    }
+
+    public void setFocus(String focus) {
+        this.focus = focus;
     }
 }
