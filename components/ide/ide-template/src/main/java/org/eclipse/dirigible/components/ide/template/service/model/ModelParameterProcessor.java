@@ -1616,6 +1616,11 @@ final class ModelParameterProcessor {
 
     private static void resolvePeriodLock(List<Map<String, Object>> entities, Map<String, Object> parameters) {
         for (Map<String, Object> entity : entities) {
+            String foreignModel = str(entity, "periodLockModel");
+            if (foreignModel != null && !foreignModel.isEmpty()) {
+                resolveForeignPeriodLock(entity, foreignModel);
+                continue;
+            }
             Map<String, Object> register = findEntity(entities, str(entity, "periodLockEntity"));
             String dateProperty = str(entity, "periodLockDateProperty");
             if (register == null || dateProperty == null || dateProperty.isEmpty()) {
@@ -1636,6 +1641,31 @@ final class ModelParameterProcessor {
             periodLock.put("closedValues", str(register, "periodClosedValues"));
             entity.put("periodLock", periodLock);
         }
+    }
+
+    /**
+     * A lock by the period register of ANOTHER model (intent {@code immutableInPeriod.model}, #8687).
+     * Nothing of the register is known here - its owner uses this model and is generated after it - so
+     * the lock carries only what the runtime question needs: the owner's generated folder (the key the
+     * register's repository answers to as a {@code PeriodRegister}) and the register's name. The
+     * templates ask {@code PeriodRegisters.isClosed} instead of querying a repository of their own.
+     *
+     * @param entity the locked entity
+     * @param foreignModel the model owning the register, as authored
+     */
+    private static void resolveForeignPeriodLock(Map<String, Object> entity, String foreignModel) {
+        String register = str(entity, "periodLockEntity");
+        String dateProperty = str(entity, "periodLockDateProperty");
+        if (register == null || register.isEmpty() || dateProperty == null || dateProperty.isEmpty()) {
+            return;
+        }
+        Map<String, Object> date = findProperty(entity, dateProperty);
+        Map<String, Object> periodLock = new LinkedHashMap<>();
+        periodLock.put("dateProperty", dateProperty);
+        periodLock.put("dateJavaClass", date == null ? "java.time.LocalDate" : str(date, "dataTypeJavaClass"));
+        periodLock.put("entity", register);
+        periodLock.put("foreignModel", NamingHelper.sanitizeJavaIdentifier(foreignModel));
+        entity.put("periodLock", periodLock);
     }
 
     /**

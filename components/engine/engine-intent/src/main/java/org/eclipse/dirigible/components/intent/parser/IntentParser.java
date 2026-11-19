@@ -6205,19 +6205,26 @@ public final class IntentParser {
      * while the register row covering that date is closed. The register must be an entity of THIS model
      * declaring {@code period:} - the guard is generated into this model's controllers, which can only
      * query a repository generated alongside them - and the date must be this entity's own {@code date}
-     * field, matching the register's own bounds.
+     * field, matching the register's own bounds. With {@code model:} the register belongs to that model
+     * instead and is asked at runtime (#8687), so it cannot be checked here: only its name is required.
      */
     private static void validateImmutableInPeriod(EntityIntent entity, Map<String, EntityIntent> byName, List<String> issues) {
         String subject = "entity [" + entity.getName() + "] immutableInPeriod";
         PeriodLockIntent lock = entity.getImmutableInPeriod();
+        if (lock.getModel() != null && lock.getModel()
+                                           .isBlank()) {
+            issues.add(subject + " model is blank - name the model that owns the period register, or leave model: out");
+        }
         if (lock.getPeriod() == null || lock.getPeriod()
                                             .isBlank()) {
             issues.add(subject + " declares no period - name the entity that declares period:");
-        } else {
+        } else if (lock.getModel() == null) {
+            // Another model's register is resolved at runtime by model + name, never against this model.
             EntityIntent register = byName.get(lock.getPeriod());
             if (register == null) {
                 issues.add(subject + " period [" + lock.getPeriod()
-                        + "] is not an entity of this model - a period register must be generated alongside what it locks");
+                        + "] is not an entity of this model - a period register must be generated alongside what it locks,"
+                        + " or named with model: when another model owns it");
             } else if (register.getPeriod() == null) {
                 issues.add(subject + " period [" + lock.getPeriod() + "] does not declare period: - it is not a period register");
             }

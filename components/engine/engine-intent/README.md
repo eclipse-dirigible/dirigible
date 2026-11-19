@@ -307,8 +307,24 @@ and what CLOSED means, once, where the period lives.
 A date covered by **no** period is open (periods are opened as they are needed, and an undeclared
 month must not freeze what is booked into it), and a record whose date is unset falls in none. The
 lock reaches a composition CHILD of a guarded master, as the status lock does, since a line write
-recomputes the document's totals. The register must be an entity of the SAME model - the guard is
-generated into this model's controllers, which can only query a repository generated alongside them.
+recomputes the document's totals.
+
+The register is an entity of the SAME model, or - with `model:` - of another model that this one
+cannot `uses:` (the ledger's model uses the source documents' modules to post them, so they cannot
+use it back):
+
+```yaml
+- name: CashOrder
+  immutableInPeriod: { period: FiscalPeriod, model: journal, date: date }
+```
+
+`model:` is the owner model's name (its generated folder, as for a cross-model relation). Nothing of
+the register is read at generation time: the register's generated repository answers as a
+`PeriodRegister` (`org.eclipse.dirigible.sdk.db`), and the lock asks it at runtime by model and
+name, with the same semantics - 409 on user writes, the repository's refusal on system writes. While
+the owner model is not deployed, the record is not locked. A POSTING into a record locked this way is
+still refused by its repository, but does not pre-check the period or re-run itself when the period
+reopens (that needs the register's facts, which only a local register provides).
 
 ## lifecycle - the legal status graph
 

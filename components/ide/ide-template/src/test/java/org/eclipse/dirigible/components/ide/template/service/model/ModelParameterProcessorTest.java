@@ -1685,6 +1685,34 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * A register of ANOTHER model (#8687): nothing of it is local - not even a same-named entity of
+     * this model is taken for it - so the lock carries the owner's generated folder and the register's
+     * name, which the templates ask {@code PeriodRegisters} with at runtime.
+     */
+    @Test
+    void aGuardedEntityLockedByAnotherModelsRegisterCarriesItsOwner() {
+        Map<String, Object> decoy = entity("FiscalPeriod", "Periods", property("Id", "INTEGER"));
+        decoy.put("periodStartProperty", "StartDate");
+        decoy.put("periodEndProperty", "EndDate");
+        decoy.put("periodStatusProperty", "Status");
+        decoy.put("periodClosedValues", "2");
+        Map<String, Object> order = entity("CashOrder", "CashOrders", property("Date", "DATE"));
+        order.put("periodLockEntity", "FiscalPeriod");
+        order.put("periodLockDateProperty", "Date");
+        order.put("periodLockModel", "journal-entries");
+
+        ModelParameterProcessor.process(model(decoy, order), javaParameters());
+
+        Map<String, Object> lock = (Map<String, Object>) order.get("periodLock");
+        assertEquals("Date", lock.get("dateProperty"));
+        assertEquals("java.time.LocalDate", lock.get("dateJavaClass"));
+        assertEquals("FiscalPeriod", lock.get("entity"));
+        assertEquals("journal_entries", lock.get("foreignModel"));
+        assertNull(lock.get("entityClass"), "a foreign register is never addressed by a generated type");
+        assertNull(lock.get("repositoryClass"));
+    }
+
+    /**
      * A line's writes recompute its master's totals, so a document dated in a closed period freezes its
      * lines with it - the same argument that made the status lock reach the children.
      */

@@ -33,10 +33,20 @@ package org.eclipse.dirigible.components.intent.model;
 public class PeriodLockIntent {
 
     /**
-     * The period register this record is locked by: an entity of THIS model declaring
-     * {@link PeriodIntent}.
+     * The period register this record is locked by: an entity declaring {@link PeriodIntent} - of THIS
+     * model, or of the model {@link #model} names.
      */
     private String period;
+
+    /**
+     * The model that owns the register, when it is not this one (dirigible #8687): the ledger's
+     * {@code FiscalPeriod} locking a cash order of a module the ledger's model uses, which therefore
+     * cannot use it back. The register is then asked at runtime, through
+     * {@code org.eclipse.dirigible.sdk.db.PeriodRegisters}, by this name and the register's - no
+     * compile-time reference - and a register that is not deployed locks nothing. Absent (the default)
+     * means a register of this model.
+     */
+    private String model;
 
     /**
      * The {@code date} field of this record whose value decides which period it falls in - the tax
@@ -51,6 +61,14 @@ public class PeriodLockIntent {
 
     public void setPeriod(String period) {
         this.period = period;
+    }
+
+    public String getModel() {
+        return model;
+    }
+
+    public void setModel(String model) {
+        this.model = model;
     }
 
     public String getDate() {

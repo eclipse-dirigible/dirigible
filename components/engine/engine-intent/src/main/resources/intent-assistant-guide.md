@@ -695,9 +695,12 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   unposted and on which period, and re-runs itself for those documents the moment that period
   reopens, so a closed month no longer costs an issued document its ledger entry for good. A date
   covered by no period is open (periods are opened as they are needed) and an unset date falls in
-  none. The lock reaches composition CHILDREN exactly as the status one does. Boundary: the register
-  must be an entity of the SAME model - the guard is generated into this model's controllers, which
-  can only query a repository generated alongside them.
+  none. The lock reaches composition CHILDREN exactly as the status one does. The register is an
+  entity of the SAME model, or of another model named with `model:` -
+  `immutableInPeriod: { period: FiscalPeriod, model: journal, date: date }` - for a source document
+  whose module the ledger's model uses (so it cannot `uses:` the ledger back). That register is asked
+  at runtime by model + name; while its model is not deployed nothing is locked, and a POSTING into
+  such a record gets no pre-check or reopen re-run (its repository still refuses the write).
 - `lifecycle: { edges: [ { from: <status>, to: [<status>, ...] }, ... ] }` (entity-level) - **the
   declarative state machine**: the WHOLE set of legal status moves, declared once and enforced on
   EVERY status write. Without it the status machinery is a set of point constructs - `init:` names
