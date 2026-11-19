@@ -38,6 +38,7 @@ import org.eclipse.dirigible.components.intent.generator.ImportSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.ReportItemsSupport;
+import org.eclipse.dirigible.components.intent.generator.CheckMessageParams;
 import org.eclipse.dirigible.components.intent.generator.CheckSupport;
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
@@ -3176,6 +3177,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                                                                                 .isBlank() ? check.getId()
                                                                                                                   .trim()
                                                                                                         : check.getKind() + "_" + index));
+            // The record's values the message names (#8665), filled in after translation like {count}.
+            List<Map<String, Object>> messageParams =
+                    CheckMessageParams.params(entity, byName, compositionParents, crossModel, check.getMessage());
+            if (!messageParams.isEmpty()) {
+                checkMap.put("messageParams", messageParams);
+            }
             if (check.isWarning()) {
                 // The soft tier (#7466): the check is asked of the person writing instead of refusing
                 // the write. The code is what a caller echoes back to confirm it - stable across saves

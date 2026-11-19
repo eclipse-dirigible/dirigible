@@ -30,6 +30,7 @@ import javax.lang.model.SourceVersion;
 import org.eclipse.dirigible.components.intent.generator.ArrivalSupport;
 import org.eclipse.dirigible.components.intent.generator.EventBinding;
 import org.eclipse.dirigible.components.intent.generator.CaptureSupport;
+import org.eclipse.dirigible.components.intent.generator.CheckMessageParams;
 import org.eclipse.dirigible.components.intent.generator.ImportSupport;
 import org.eclipse.dirigible.components.intent.generator.IntegrationSupport;
 import org.eclipse.dirigible.components.intent.generator.ExportSupport;
@@ -7345,6 +7346,13 @@ public final class IntentParser {
         String kind = check.getKind();
         validateSeverity(check, subject, issues);
         validateVerbs(check, subject, issues);
+        // A message may name the record's values (#8665): each {field} / {Relation.field} must resolve.
+        for (String placeholder : CheckMessageParams.placeholders(check.getMessage())) {
+            String failure = CheckMessageParams.failure(entity, byName, placeholder);
+            if (failure != null) {
+                issues.add(subject + " message names " + failure);
+            }
+        }
         if ("duplicate".equals(kind)) {
             validateDuplicateCheck(entity, check, subject, issues);
             return;

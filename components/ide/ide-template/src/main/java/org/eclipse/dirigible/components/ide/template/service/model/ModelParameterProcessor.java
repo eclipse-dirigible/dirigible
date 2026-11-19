@@ -505,7 +505,44 @@ final class ModelParameterProcessor {
         String catalogKey = ModelTranslations.catalogKey(parameters, ModelTranslations.CHECKS_CATALOG + "." + messageKey);
         check.put("messageCatalogKey", catalogKey);
         check.put("messageCatalogKeyJavaLiteral", JavaLiterals.escape(catalogKey));
-        check.put("messageArgsJava", "\"" + JavaLiterals.escape(catalogKey) + "\", \"" + JavaLiterals.escape(message) + "\"");
+        check.put("messageArgsJava", "\"" + JavaLiterals.escape(catalogKey) + "\", \"" + JavaLiterals.escape(message) + "\""
+                + messageParamArgs(check, parameters));
+    }
+
+    /**
+     * The record's values a check message names (intent {@code {field}} / {@code {Relation.field}}
+     * placeholders, issue #8665), as the name/value pairs appended to {@code messageArgsJava}: an own
+     * value read off {@code entity} - the record every check site judges - and a value one hop away
+     * read off the related record, loaded through its generated repository only when the check fires.
+     * Empty for a check whose message names none, so its generated code is unchanged.
+     *
+     * @param check the check
+     * @param parameters the generation parameters
+     * @return the pairs, each preceded by {@code ", "}
+     */
+    private static String messageParamArgs(Map<String, Object> check, Map<String, Object> parameters) {
+        StringBuilder args = new StringBuilder();
+        for (Map<String, Object> param : asMaps(check.get("messageParams"))) {
+            String name = str(param, "name");
+            String property = str(param, "property");
+            if (name == null || property == null) {
+                continue;
+            }
+            Map<String, Object> hop = asMap(param.get("hop"));
+            String value;
+            if (hop == null) {
+                value = "entity." + property;
+            } else {
+                value = "java.util.Optional.ofNullable((Object) " + str(hop, "sourceExpression") + ").flatMap(messageFk -> new "
+                        + generatedClass(hop, parameters) + "Repository().findOne(messageFk)).map(messageHop -> (Object) messageHop."
+                        + property + ").orElse(null)";
+            }
+            args.append(", \"")
+                .append(JavaLiterals.escape(name))
+                .append("\", ")
+                .append(value);
+        }
+        return args.toString();
     }
 
     /**

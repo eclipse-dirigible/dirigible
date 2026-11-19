@@ -1003,6 +1003,14 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   language's catalog, else the default text; placeholders (`{count}`, `{match}`) are filled in AFTER
   translation, so a translation may move them. A refusal's 400 body and each warning of a 428 carry
   `messageKey` and `messageParams` next to the resolved `message`.
+  **A message may name the record's values (#8665)** so the refusal says which limit applies:
+  `{taxRateCap}` is a field (or to-one) of the record as the check judged it, `{Category.code}` a
+  value one to-one hop away (loaded only when the check fires) - `message: "The tax depreciation
+  rate exceeds the statutory maximum of {taxRateCap}% for category {Category.code}"`. They are filled
+  in after translation like `{count}`, so a translator keeps them in the translated sentence, and the
+  body's `messageParams` carries each by its placeholder name. A placeholder that is not a field or
+  to-one of the record, or walks more than one hop, is a parse error; `count`, `match`, `remaining`,
+  `capacity` and `requested` stay the generator's own.
 - `postings:` (top-level) - **declarative posting**: when a (usually cross-model) source document
   reaches a status - or, for a source with no status lifecycle, when it is created; or when it
   reaches a declared enrichment `phases:` moment, the only trigger that may read an amount a

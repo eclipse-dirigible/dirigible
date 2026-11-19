@@ -64,6 +64,40 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * #8665: the record's values a check message names are appended to the resolution arguments as
+     * name/value pairs - an own value read off {@code entity}, a value one hop away read off the record
+     * the foreign key loads through its generated repository.
+     */
+    @Test
+    void checkMessageParamsAreAppendedAsNameValuePairs() {
+        Map<String, Object> hop = new LinkedHashMap<>();
+        hop.put("sourceExpression", "entity.Category");
+        hop.put("entity", "Category");
+        hop.put("perspective", "Category");
+        hop.put("crossModel", false);
+        hop.put("targetModel", "");
+        Map<String, Object> check = new LinkedHashMap<>();
+        check.put("kind", "compare");
+        check.put("message", "At most {taxRateCap}% for {Category.code}");
+        check.put("messageKey", "Asset_compare_0");
+        check.put("messageParams", List.of(Map.of("name", "taxRateCap", "property", "TaxRateCap"),
+                Map.of("name", "Category.code", "property", "Code", "hop", hop)));
+        Map<String, Object> asset = entity("Asset", "Assets", property("Id", "INTEGER"));
+        asset.put("checks", List.of(check));
+        Map<String, Object> parameters = parameters();
+        parameters.put("filePath", "assets.model");
+
+        ModelParameterProcessor.process(model(asset), parameters);
+
+        String args = (String) check.get("messageArgsJava");
+        assertTrue(args.endsWith(
+                ", \"taxRateCap\", entity.TaxRateCap, \"Category.code\", java.util.Optional.ofNullable((Object) entity.Category)"
+                        + ".flatMap(messageFk -> new gen.sales_order.data.category.CategoryRepository().findOne(messageFk))"
+                        + ".map(messageHop -> (Object) messageHop.Code).orElse(null)"),
+                args);
+    }
+
+    /**
      * #7749: a pattern carrying the author's message refuses with it - the controllers get its catalog
      * key and default text, the forms the key and the JS-escaped text - and the message seeds the en-US
      * catalog under {@code checks}. A pattern without a message gets none of them.
