@@ -9,6 +9,9 @@
  */
 package org.eclipse.dirigible.components.intent.model;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * One member of a report's {@code union:} (dirigible #7946) - an entity whose rows join the
  * report's rows, each mapped onto the same logical columns:
@@ -33,7 +36,8 @@ public class ReportUnionMemberIntent {
     /** The {@code uses:} alias of the model owning {@link #source}, when it is not this model's. */
     private String model;
     /**
-     * The member's to-one relation the report reads as {@code counterparty}. Every member that names
+     * The member's to-one relation the report reads as {@code counterparty} - its own, or one hop away
+     * ({@code SalesInvoice.Customer} on an allocation row, dirigible #8619). Every member that names
      * one must point at the same entity.
      */
     private String counterparty;
@@ -49,6 +53,13 @@ public class ReportUnionMemberIntent {
     private String amount;
     /** An optional predicate over the member's own fields, narrowing the rows it contributes. */
     private String filter;
+    /**
+     * Further to-one columns the member passes through (dirigible #8619), by logical name: the member's
+     * to-one relation - or a one-hop {@code Relation.Relation} path - the report reads under that name,
+     * e.g. {@code { currency: Currency }}. Like {@link #counterparty}, a column is mapped by every
+     * member or by none, and every member's points at the same entity.
+     */
+    private Map<String, String> columns = new LinkedHashMap<>();
 
     public String getSource() {
         return source;
@@ -109,5 +120,13 @@ public class ReportUnionMemberIntent {
 
     public void setFilter(String filter) {
         this.filter = filter;
+    }
+
+    public Map<String, String> getColumns() {
+        return columns;
+    }
+
+    public void setColumns(Map<String, String> columns) {
+        this.columns = columns == null ? new LinkedHashMap<>() : columns;
     }
 }

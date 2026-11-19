@@ -14147,10 +14147,15 @@ public final class IntentParser {
     private static EntityIntent reportSource(IntentModel model, ReportIntent report) {
         if (report.isUnion()) {
             // The union's logical entity, so dimensions, measures and parameters are checked against the
-            // columns its members map (#7946).
-            RelationIntent counterparty = ReportUnion.sameModelCounterparty(model, report);
-            return ReportUnion.entity(report, counterparty == null ? null : counterparty.getTo(),
-                    counterparty == null ? null : counterparty.getModel());
+            // columns its members map (#7946), its to-one columns included (#8619).
+            Map<String, ReportUnion.Target> targets = new LinkedHashMap<>();
+            for (String column : ReportUnion.toOneColumns(report)) {
+                RelationIntent relation = ReportUnion.sameModelRelation(model, report, column);
+                if (relation != null) {
+                    targets.put(column, new ReportUnion.Target(relation.getTo(), relation.getModel()));
+                }
+            }
+            return ReportUnion.entity(report, targets);
         }
         return report.getSource() == null ? null : entityByName(model, report.getSource());
     }
@@ -14180,8 +14185,21 @@ public final class IntentParser {
         for (org.eclipse.dirigible.components.intent.model.UsesIntent uses : model.getUses()) {
             aliases.add(uses.getModel());
         }
-        RelationIntent counterparty = ReportUnion.sameModelCounterparty(model, report);
-        for (String column : List.of(ReportUnion.COUNTERPARTY, ReportUnion.DATE, ReportUnion.DUE)) {
+        List<String> passThrough = ReportUnion.toOneColumns(report)
+                                              .stream()
+                                              .filter(column -> !ReportUnion.COUNTERPARTY.equals(column))
+                                              .toList();
+        for (String column : passThrough) {
+            if (!REPORT_PARAMETER_NAME.matcher(column)
+                                      .matches()
+                    || UNION_LOGICAL_COLUMNS.contains(column.toLowerCase(Locale.ROOT))) {
+                issues.add(subject + " column [" + column + "] must be a plain name other than " + UNION_LOGICAL_COLUMNS
+                        + " - it is the name the report reads the column under");
+            }
+        }
+        List<String> mapped = new ArrayList<>(List.of(ReportUnion.COUNTERPARTY, ReportUnion.DATE, ReportUnion.DUE));
+        mapped.addAll(passThrough);
+        for (String column : mapped) {
             long declaring = report.getUnion()
                                    .stream()
                                    .filter(member -> member != null && !isBlank(unionMemberColumn(member, column)))
@@ -14249,30 +14267,39 @@ public final class IntentParser {
                     }
                 }
             }
-            if (!isBlank(member.getCounterparty())) {
-                RelationIntent relation = toOneRelationByName(entity, member.getCounterparty()
-                                                                            .trim());
+            for (String column : ReportUnion.toOneColumns(report)) {
+                String path = ReportUnion.mapping(member, column);
+                if (path == null) {
+                    continue;
+                }
+                // The member's own to-one, or one hop away - an allocation row reaches its customer
+                // through its invoice (#8619).
+                RelationIntent relation = ReportUnion.toOnePath(model, entity, path);
+                RelationIntent first = ReportUnion.sameModelRelation(model, report, column);
                 if (relation == null) {
-                    issues.add(memberSubject + " counterparty [" + member.getCounterparty()
-                                                                         .trim()
-                            + "] is not a to-one relation of [" + name + "]");
-                } else if (counterparty != null && (!java.util.Objects.equals(relation.getTo(), counterparty.getTo())
-                        || !java.util.Objects.equals(relation.getModel(), counterparty.getModel()))) {
-                    issues.add(memberSubject + " counterparty points at [" + relation.getTo() + "], but another member's points at ["
-                            + counterparty.getTo() + "] - every member must name the same entity");
+                    issues.add(memberSubject + " " + column + " [" + path + "] is not a to-one relation of [" + name
+                            + "], nor a to-one of an entity a to-one relation of it points at in this model");
+                } else if (first != null && (!java.util.Objects.equals(relation.getTo(), first.getTo())
+                        || !java.util.Objects.equals(relation.getModel(), first.getModel()))) {
+                    issues.add(memberSubject + " " + column + " points at [" + relation.getTo() + "], but another member's points at ["
+                            + first.getTo() + "] - every member must name the same entity");
                 }
             }
         }
     }
+
+    /** The logical columns of a union a pass-through {@code columns:} entry may not be named after. */
+    private static final Set<String> UNION_LOGICAL_COLUMNS =
+            Set.of(ReportUnion.SOURCE, ReportUnion.COUNTERPARTY, ReportUnion.DATE, ReportUnion.DUE, ReportUnion.AMOUNT);
 
     /**
      * A member's mapping of one of the logical columns {@code counterparty}, {@code date}, {@code due}.
      */
     private static String unionMemberColumn(ReportUnionMemberIntent member, String column) {
         return switch (column) {
-            case ReportUnion.COUNTERPARTY -> member.getCounterparty();
             case ReportUnion.DATE -> member.getDate();
-            default -> member.getDue();
+            case ReportUnion.DUE -> member.getDue();
+            default -> ReportUnion.mapping(member, column);
         };
     }
 
@@ -14280,6 +14307,12 @@ public final class IntentParser {
     private static List<String> unionMemberPaths(ReportUnionMemberIntent member, List<ReportAgingIntent.AmountTerm> terms) {
         List<String> paths = new ArrayList<>();
         for (String path : new String[] {member.getCounterparty(), member.getDate(), member.getDue()}) {
+            if (!isBlank(path)) {
+                paths.add(path.trim());
+            }
+        }
+        for (String path : member.getColumns()
+                                 .values()) {
             if (!isBlank(path)) {
                 paths.add(path.trim());
             }

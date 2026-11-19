@@ -1047,16 +1047,12 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     private record UnionPrepared(EntityIntent entity, ViewArtifact view) {
     }
 
-    /** The entity a union's {@code counterparty} points at, and the {@code uses:} alias owning it. */
-    private record UnionTarget(String to, String model) {
-    }
-
     /**
      * A report's {@code union:} (dirigible #7946) as a parameter-free {@code UNION ALL} view - one arm
      * per member, every arm selecting the same logical columns ({@code source}, then
-     * {@code counterparty}, {@code date}, {@code due} where the members declare them, then
-     * {@code amount}) under the view's own column names - and the logical entity the report then reads
-     * that view as.
+     * {@code counterparty} and the pass-through to-one {@code columns:}, {@code date}, {@code due}
+     * where the members declare them, then {@code amount}) under the view's own column names - and the
+     * logical entity the report then reads that view as.
      *
      * <p>
      * Each arm carries what belongs to its member and to nothing else: the member's {@code filter}, and
@@ -1065,49 +1061,52 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      * share a column; the amount is the member's signed sum with every missing term read as zero.
      */
     private static UnionPrepared prepareUnion(IntentGenerationContext context, IntentModel model, ReportIntent report, boolean aggregated) {
-        UnionTarget target = unionTarget(context, model, report);
-        EntityIntent entity = ReportUnion.entity(report, target == null ? null : target.to(), target == null ? null : target.model());
+        Map<String, ReportUnion.Target> targets = new LinkedHashMap<>();
+        for (String column : ReportUnion.toOneColumns(report)) {
+            targets.put(column, unionTarget(context, model, report, column));
+        }
+        EntityIntent entity = ReportUnion.entity(report, targets);
         List<String> arms = new ArrayList<>();
         for (ReportUnionMemberIntent member : report.getUnion()) {
-            arms.add(member.isCrossModel() ? crossModelUnionArm(context, model, report, member, target, aggregated)
-                    : unionArm(context, model, report, member, target, aggregated));
+            arms.add(member.isCrossModel() ? crossModelUnionArm(context, model, report, member, targets, aggregated)
+                    : unionArm(context, model, report, member, targets, aggregated));
         }
         String viewName = IntentNaming.tableName(context, report.getName()) + "_UNION";
         return new UnionPrepared(entity, new ViewArtifact(report.getName() + "Union.view", viewName, String.join("\nUNION ALL\n", arms)));
     }
 
     /**
-     * What the union's {@code counterparty} points at: the target of a same-model member's relation, or
-     * - when every member naming one lives in another model - the entity those members' relation
-     * references, provided this model declares it too.
+     * What one of the union's to-one columns - its {@code counterparty}, or a pass-through
+     * {@code columns:} entry (#8619) - points at: the target of a same-model member's relation (its own
+     * or one hop away), or - when every member mapping it lives in another model - the entity those
+     * members' relation references, provided this model declares it too.
      *
-     * @return the target, or null when the union declares no counterparty
+     * @return the target
      */
-    private static UnionTarget unionTarget(IntentGenerationContext context, IntentModel model, ReportIntent report) {
-        if (!ReportUnion.declares(report, ReportUnionMemberIntent::getCounterparty)) {
-            return null;
-        }
-        RelationIntent relation = ReportUnion.sameModelCounterparty(model, report);
+    private static ReportUnion.Target unionTarget(IntentGenerationContext context, IntentModel model, ReportIntent report, String column) {
+        RelationIntent relation = ReportUnion.sameModelRelation(model, report, column);
         if (relation != null) {
-            return new UnionTarget(relation.getTo(), relation.isCrossModel() ? relation.getModel() : null);
+            return new ReportUnion.Target(relation.getTo(), relation.isCrossModel() ? relation.getModel() : null);
         }
         for (ReportUnionMemberIntent member : report.getUnion()) {
+            String path = ReportUnion.mapping(member, column);
+            if (!member.isCrossModel() || path == null) {
+                continue;
+            }
             Map<String, String> relations = unionMemberInfo(context, model, member).propertyRelations();
-            String to = relations == null ? null
-                    : relations.get(IntentNaming.pascalCase(member.getCounterparty()
-                                                                  .trim()));
+            String to = relations == null ? null : relations.get(IntentNaming.pascalCase(path));
             if (to != null && entityByName(model, to) != null) {
-                return new UnionTarget(to, null);
+                return new ReportUnion.Target(to, null);
             }
         }
-        throw new IntentValidationException(List.of("report [" + report.getName()
-                + "] union counterparty cannot be resolved - no member of this model names it, and the entity the other models'"
-                + " members point at is not declared here. Add a member of this model, or declare the counterparty entity here."));
+        throw new IntentValidationException(List.of("report [" + report.getName() + "] union " + column
+                + " cannot be resolved - no member of this model names it, and the entity the other models'"
+                + " members point at is not declared here. Add a member of this model, or declare the " + column + " entity here."));
     }
 
     /** One same-model member's arm of the union view. */
     private static String unionArm(IntentGenerationContext context, IntentModel model, ReportIntent report, ReportUnionMemberIntent member,
-            UnionTarget target, boolean aggregated) {
+            Map<String, ReportUnion.Target> targets, boolean aggregated) {
         String name = member.getSource()
                             .trim();
         EntityIntent entity = entityByName(model, name);
@@ -1118,7 +1117,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             registerJoin(joins, ref);
             return ref.qualified();
         };
-        List<Map<String, Object>> columns = unionColumns(report, member, target, alias, name, qualify);
+        List<Map<String, Object>> columns = unionColumns(report, member, targets, alias, name, qualify);
         String filter = buildWhere(context, model, entity, alias, joins, member.getFilter());
         RelationIntent status = LifecycleStages.statusRelation(entity);
         Map<String, Object> scope = status != null && mentionsWord(member.getFilter(), status.getName()) ? null
@@ -1134,7 +1133,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      * they are known.
      */
     private static String crossModelUnionArm(IntentGenerationContext context, IntentModel model, ReportIntent report,
-            ReportUnionMemberIntent member, UnionTarget target, boolean aggregated) {
+            ReportUnionMemberIntent member, Map<String, ReportUnion.Target> targets, boolean aggregated) {
         String name = member.getSource()
                             .trim();
         CrossModelSupport.TargetInfo info = unionMemberInfo(context, model, member);
@@ -1146,19 +1145,25 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             requireProperty(info, subject, field);
             return alias + "." + quote(column(name, field));
         };
-        if (target != null && info.propertyRelations() != null) {
-            String counterparty = member.getCounterparty()
-                                        .trim();
-            requireProperty(info, subject, counterparty);
+        for (Map.Entry<String, ReportUnion.Target> target : targets.entrySet()) {
+            if (info.propertyRelations() == null) {
+                break;
+            }
+            String path = ReportUnion.mapping(member, target.getKey());
+            requireProperty(info, subject, path);
             String to = info.propertyRelations()
-                            .get(IntentNaming.pascalCase(counterparty));
-            if (!target.to()
+                            .get(IntentNaming.pascalCase(path));
+            if (!target.getValue()
+                       .to()
                        .equals(to)) {
-                throw new IntentValidationException(List.of(subject + " counterparty [" + counterparty + "] points at [" + to
-                        + "], but the union's counterparty is [" + target.to() + "] - every member must name the same entity"));
+                throw new IntentValidationException(List
+                                                        .of(subject + " " + target.getKey() + " [" + path + "] points at [" + to
+                                                                + "], but the union's " + target.getKey() + " is [" + target.getValue()
+                                                                                                                            .to()
+                                                                + "] - every member must name the same entity"));
             }
         }
-        List<Map<String, Object>> columns = unionColumns(report, member, target, alias, name, qualify);
+        List<Map<String, Object>> columns = unionColumns(report, member, targets, alias, name, qualify);
         String filter = crossModelFilter(info, alias, name, member.getFilter());
         String scope = crossModelScope(context, report, member, info, alias, aggregated);
         String where = scope == null ? filter : filter == null ? scope : "(" + filter + ") AND " + scope;
@@ -1193,14 +1198,17 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      *
      * @param qualify a member field path to its qualified column
      */
-    private static List<Map<String, Object>> unionColumns(ReportIntent report, ReportUnionMemberIntent member, UnionTarget target,
-            String alias, String name, Function<String, String> qualify) {
+    private static List<Map<String, Object>> unionColumns(ReportIntent report, ReportUnionMemberIntent member,
+            Map<String, ReportUnion.Target> targets, String alias, String name, Function<String, String> qualify) {
         String union = report.getName();
         List<Map<String, Object>> columns = new ArrayList<>();
         columns.add(unionColumn(union, ReportUnion.SOURCE, "CAST(" + sqlLiteral(name) + " AS " + LEDGER_TEXT_TYPE + ")"));
-        if (target != null) {
-            columns.add(unionColumn(union, ReportUnion.COUNTERPARTY, alias + "." + quote(column(name, member.getCounterparty()
-                                                                                                            .trim()))));
+        for (String column : targets.keySet()) {
+            // The member's own to-one is its foreign key column; one hop away (#8619) it is the hop
+            // target's foreign key, read over the hop's join - the column `qualify` resolves it to.
+            String path = ReportUnion.mapping(member, column);
+            String expression = path.indexOf('.') < 0 ? alias + "." + quote(column(name, path)) : qualify.apply(path);
+            columns.add(unionColumn(union, column, expression));
         }
         if (ReportUnion.declares(report, ReportUnionMemberIntent::getDate)) {
             columns.add(unionColumn(union, ReportUnion.DATE, "CAST(" + qualify.apply(member.getDate()
