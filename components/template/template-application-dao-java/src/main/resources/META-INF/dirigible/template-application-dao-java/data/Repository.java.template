@@ -1197,7 +1197,14 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             }
 #end
 #if($lifecycleEdges)
-            enforceLifecycleMove(lifecyclePrevious, entity.${lifecycleStatusProperty});
+            // A status a DERIVED write carries (a roll-up's statusWhenFull / statusWhenPartial, or the
+            // displaced status it restores) is not a move anybody makes (#8750): the handler runs after
+            // the child's change committed, so a refusal could not stop the child - it left this row with
+            // a stale total and status, retried into the dead-letter queue. Every authored move - a
+            // transition, a workflow setter, a glue action - is still held to the lifecycle.
+            if (!org.eclipse.dirigible.components.data.store.java.repository.DerivedWrite.persists("${lifecycleStatusProperty}")) {
+                enforceLifecycleMove(lifecyclePrevious, entity.${lifecycleStatusProperty});
+            }
 #end
 #if($hasAgreeGuards)
             requireAgreementKept(id, agreedBefore, entity);
@@ -1293,10 +1300,10 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      * roll-up whose own parent sits above this row - keep cascading exactly as they did when the handler
      * persisted the full row, carrying the written column names under {@code DerivedWrite.MARKER} so an
      * authored-change listener can skip a recompute that moved nothing it watches. Routed through
-     * {@link #updateProperties} so a labelled entity still refreshes its stored display Name, a
-     * lifecycle still guards a status move and a document line still resums the master it belongs to.
-     * The entity's {@code checks:} do not gate the recomputed columns: they are written after the
-     * child's change has committed, so a refusal could only leave a stale total behind (#8443).
+     * {@link #updateProperties} so a labelled entity still refreshes its stored display Name and a
+     * document line still resums the master it belongs to. Neither the entity's {@code checks:} nor its
+     * {@code lifecycle:} gate the recomputed columns: they are written after the child's change has
+     * committed, so a refusal could only leave a stale total behind (#8443, #8750).
      */
     public int updateDerived(Object id, java.util.Map<String, Object> values) {
         if (values == null || values.isEmpty()) {
