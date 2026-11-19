@@ -8312,7 +8312,7 @@ public final class IntentParser {
             }
             for (Object fieldNode : fields) {
                 if (fieldNode instanceof Map<?, ?> field) {
-                    expandFlagShorthand(entity, field, "single", "per: and onConflict:", issues);
+                    expandFlagShorthand(entity, field, "single", "per:, onConflict: and required:", issues);
                     expandFlagShorthand(entity, field, "unique", "ignoreCase:", issues);
                 }
             }

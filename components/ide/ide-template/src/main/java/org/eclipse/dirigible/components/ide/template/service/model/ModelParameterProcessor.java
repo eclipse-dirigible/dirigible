@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.asMap;
@@ -150,8 +151,7 @@ final class ModelParameterProcessor {
         resolveFixedProperties(entity, parameters);
         resolveRefusalCatalog(entity, parameters);
         for (Map<String, Object> flag : asMaps(entity.get("singleFlags"))) {
-            // A refusing single flag's conflict message (#8101), resolved for the reader's language.
-            resolveMessageCatalog(flag, ModelTranslations.singleFlagMessageKey(entity, flag), parameters);
+            resolveSingleFlagRefusals(entity, flag, parameters);
         }
         resolveSlotRules(entity, parameters);
         resolveLifecycleStatusNames(entity);
@@ -509,6 +509,59 @@ final class ModelParameterProcessor {
     }
 
     /**
+     * Hands a single flag the arguments of its refusals, each a shared sentence naming the entity, the
+     * flag and the scope by their labels in the reader's language: {@code takenRefusalArgsJava} for
+     * {@code onConflict: refuse} (#8101) - the flag property's {@code refusalFieldArgsJava} (its name,
+     * its label and the label's catalog key), followed for a scoped flag by the scope relation's label
+     * and its catalog key - and {@code requiredRefusalArgsJava} for {@code required: true} (#8700), the
+     * flag property's {@code refusalFieldArgsJava}. A required flag marks the entity
+     * {@code hasRequiredSingleFlags}, which the repository and the REST deletes are rendered on.
+     *
+     * @param entity the entity, its properties' refusal arguments already resolved
+     * @param flag the single flag
+     * @param parameters the generation parameters (project name and model file path)
+     */
+    private static void resolveSingleFlagRefusals(Map<String, Object> entity, Map<String, Object> flag, Map<String, Object> parameters) {
+        String property = str(flag, "property");
+        String fieldArgs = propertyNamed(entity, property).map(candidate -> str(candidate, "refusalFieldArgsJava"))
+                                                          .orElse("\"" + JavaLiterals.escape(property) + "\", "
+                                                                  + labelArgsJava(property, null, null));
+        if ("true".equals(str(flag, "refuse"))) {
+            String per = str(flag, "per");
+            flag.put("takenRefusalArgsJava",
+                    per == null ? fieldArgs
+                            : fieldArgs + ", "
+                                    + propertyNamed(entity, per).map(scope -> labelArgsJava(scope, ModelTranslations.catalog(parameters)))
+                                                                .orElse(labelArgsJava(per, null, null)));
+        }
+        if ("true".equals(str(flag, "required"))) {
+            entity.put("hasRequiredSingleFlags", Boolean.TRUE);
+            flag.put("requiredRefusalArgsJava", fieldArgs);
+        }
+    }
+
+    /** The entity's property of the given name. */
+    private static Optional<Map<String, Object>> propertyNamed(Map<String, Object> entity, String name) {
+        return asMaps(entity.get("properties")).stream()
+                                               .filter(candidate -> name.equals(str(candidate, "name")))
+                                               .findFirst();
+    }
+
+    /**
+     * A property's default-language label and that label's catalog key, as the two Java arguments a
+     * refusal names it by.
+     */
+    private static String labelArgsJava(Map<String, Object> property, String catalog) {
+        Object label = ModelTranslations.propertyLabel(property);
+        return labelArgsJava(label == null ? str(property, "name") : label.toString(), catalog, str(property, "dataName"));
+    }
+
+    private static String labelArgsJava(String label, String catalog, String dataName) {
+        return "\"" + JavaLiterals.escape(label) + "\", "
+                + (catalog == null || dataName == null ? "null" : "\"" + JavaLiterals.escape(catalog + ".t." + dataName) + "\"");
+    }
+
+    /**
      * Derives the Java twins of a check's NEUTRAL halves - the literal a {@code compare} tests against
      * and the condition a {@code requiredWhen} / {@code forbidWhen} is gated by (issue #7405).
      *
@@ -632,12 +685,7 @@ final class ModelParameterProcessor {
             }
             propertyNames.add(name);
             // A refusal of this property's value (#8596): its name, its label and the label's catalog key.
-            Object label = ModelTranslations.propertyLabel(property);
-            String propertyDataName = str(property, "dataName");
-            property.put("refusalFieldArgsJava",
-                    "\"" + JavaLiterals.escape(name) + "\", \"" + JavaLiterals.escape(label == null ? name : label.toString()) + "\", "
-                            + (catalog == null || propertyDataName == null ? "null"
-                                    : "\"" + JavaLiterals.escape(catalog + ".t." + propertyDataName) + "\""));
+            property.put("refusalFieldArgsJava", "\"" + JavaLiterals.escape(name) + "\", " + labelArgsJava(property, catalog));
             // The author's message for a value off the pattern (#7749): its catalog key and its
             // default-language text, for the controllers' refusal and the form inputs' hint.
             String patternKey = ModelTranslations.patternMessageKey(entity, property);

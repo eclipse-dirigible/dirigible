@@ -133,6 +133,26 @@ final class ModelTranslations {
             Map.entry("fieldDuplicate", "A {entity} with this '{label}' already exists"));
 
     /**
+     * The default-language texts of the refusal of a {@code single: { onConflict: refuse }} flag
+     * another record holds (dirigible #8101) - fleet-wide, and within the flag's {@code per:} scope -
+     * by their key under the catalog's {@code checks}: the ones
+     * {@code org.eclipse.dirigible.sdk.db.FieldRefusals} falls back to, written into the en-US catalog
+     * of a model that declares such a flag, for a translator to copy into another language's.
+     */
+    static final List<Map.Entry<String, String>> SINGLE_TAKEN_MESSAGES = List.of( //
+            Map.entry("fieldSingleTaken", "Another {entity} is already '{label}'"), //
+            Map.entry("fieldSingleTakenInScope", "Another {entity} is already '{label}' for this {scope}"));
+
+    /**
+     * The default-language text of the refusal to leave a {@code single: { required: true }} flag
+     * without a holder (dirigible #8700), by its key under the catalog's {@code checks}: the one
+     * {@code org.eclipse.dirigible.sdk.db.FieldRefusals} falls back to, written into the en-US catalog
+     * of a model that declares such a flag, for a translator to copy into another language's.
+     */
+    static final Map.Entry<String, String> SINGLE_REQUIRED_MESSAGE =
+            Map.entry("fieldSingleRequired", "One {entity} must stay '{label}' - mark another one '{label}' first");
+
+    /**
      * The default-language text of the refusal of a value that is no IBAN (dirigible #8302), by its key
      * under the catalog's {@code checks}: written only into the catalog of a model with a
      * {@code format: iban} field, so every other model's catalog stays as it was.
@@ -192,17 +212,6 @@ final class ModelTranslations {
             return null;
         }
         return str(entity, "name") + "_unique_" + name.replaceAll("[^A-Za-z0-9_]", "_");
-    }
-
-    /**
-     * The catalog key of a refusing single flag's conflict message (issue #8101).
-     *
-     * @param entity the entity
-     * @param flag the single flag
-     * @return the key, relative to the catalog's {@code checks} sub-object
-     */
-    static String singleFlagMessageKey(Map<String, Object> entity, Map<String, Object> flag) {
-        return str(entity, "name") + "_single_" + str(flag, "property");
     }
 
     /**
@@ -497,6 +506,12 @@ final class ModelTranslations {
         if (!entities.isEmpty()) {
             DELETE_REFUSAL_MESSAGES.forEach(message -> messages.put(message.getKey(), message.getValue()));
             FIELD_REFUSAL_MESSAGES.forEach(message -> messages.put(message.getKey(), message.getValue()));
+            if (hasSingleFlag(entities, "refuse")) {
+                SINGLE_TAKEN_MESSAGES.forEach(message -> messages.put(message.getKey(), message.getValue()));
+            }
+            if (hasSingleFlag(entities, "required")) {
+                messages.put(SINGLE_REQUIRED_MESSAGE.getKey(), SINGLE_REQUIRED_MESSAGE.getValue());
+            }
             GENERATE_REFUSAL_MESSAGES.forEach(message -> messages.put(message.getKey(), message.getValue()));
         }
         // A create-from's authored refusal sentences (#8646), keyed by the intent.
@@ -517,12 +532,6 @@ final class ModelTranslations {
                 String key = uniqueMessageKey(entity, constraint);
                 if (key != null) {
                     messages.put(key, constraint.get("message"));
-                }
-            }
-            for (Map<String, Object> flag : asMaps(entity.get("singleFlags"))) {
-                String message = str(flag, "message");
-                if (message != null && !message.isBlank()) {
-                    messages.put(singleFlagMessageKey(entity, flag), message);
                 }
             }
             slotMessages(entity).forEach((rule, message) -> messages.put(slotMessageKey(entity, rule), message));
@@ -770,4 +779,13 @@ final class ModelTranslations {
         }
     }
 
+    /**
+     * Whether an entity of the model declares a single flag with the given option set - {@code refuse}
+     * ({@code onConflict: refuse}, #8101) or {@code required} ({@code required: true}, #8700).
+     */
+    private static boolean hasSingleFlag(List<Map<String, Object>> entities, String option) {
+        return entities.stream()
+                       .flatMap(entity -> asMaps(entity.get("singleFlags")).stream())
+                       .anyMatch(flag -> "true".equals(str(flag, option)));
+    }
 }

@@ -1574,11 +1574,35 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      * scope. A write that sets one takes it over - the row holding it in the same scope is demoted by a
      * targeted write publishing its "-updated", in this write's unit of work - or, declared
      * {@code onConflict: refuse}, is answered 409 while another row holds it.
+#if($hasRequiredSingleFlags)
+     * A flag declared {@code required: true} is not given up by its holder while no other row of the
+     * scope holds it (a 400): it moves by being set on another row.
+#end
      */
 ## ponytail: two concurrent writers that each find no other holder can both commit one; a database
 ## partial unique index (not portable to H2) or a lock on the scope would close it.
+#set($refusalCatalog = "null")
+#if($messageCatalogJava)#set($refusalCatalog = $messageCatalogJava)#end
+#set($refusalEntityLabel = '"' + $name + '"')
+#if($entityLabelJava)#set($refusalEntityLabel = $entityLabelJava)#end
+#set($refusalEntityLabelKey = "null")
+#if($labelCatalogKeyJava)#set($refusalEntityLabelKey = $labelCatalogKeyJava)#end
     private void enforceSingleFlags(${name}Entity entity) {
+#if($hasRequiredSingleFlags)
+        ${name}Entity singleStored = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
+#end
 #foreach($flag in $singleFlags)
+#if($flag.required == "true")
+        // Given up by its holder - un-flagged#if($flag.per), or moved to another ${flag.per}#end (#8700).
+        if (singleStored != null && Boolean.TRUE.equals(singleStored.${flag.property})
+                && (!Boolean.TRUE.equals(entity.${flag.property})#if($flag.per) || !java.util.Objects.equals(singleStored.${flag.per}, entity.${flag.per})#end)) {
+#if($flag.per)
+            require${flag.property}HandedOver(singleStored, java.util.Objects.equals(singleStored.${flag.per}, entity.${flag.per}));
+#else
+            require${flag.property}HandedOver(singleStored, true);
+#end
+        }
+#end
         if (Boolean.TRUE.equals(entity.${flag.property})) {
             for (${name}Entity holder : findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
                                                                                                           .eq("${flag.property}", true)#if($flag.per)
@@ -1587,8 +1611,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
                     continue;
                 }
 #if($flag.refuse == "true")
-                throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
-                        org.eclipse.dirigible.sdk.db.CheckMessages.message(${flag.messageArgsJava}));
+                // Refused in the reader's language, naming the flag (#8700), answered 409 like a business key.
+                throw new org.eclipse.dirigible.sdk.db.DuplicateKeyException(org.eclipse.dirigible.sdk.db.FieldRefusals.#if($flag.per)singleTakenInScope#{else}singleTaken#end(
+                        ${refusalCatalog}, ${refusalEntityLabel}, ${refusalEntityLabelKey}, ${flag.takenRefusalArgsJava}));
 #else
                 updateProperties(holder.${pkPropertyName}, java.util.Map.<String, Object>of("${flag.property}", false),
                         "${projectName}-${perspectiveName}-${name}-updated");
@@ -1597,6 +1622,52 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         }
 #end
     }
+#if($hasRequiredSingleFlags)
+
+    /**
+     * Refuses the delete of a stored ${name} that holds a {@code single: { required: true }} flag while
+     * other rows of its scope remain and none of them holds it (#8700): the flag is moved first, by
+     * setting it on another row. The last row of a scope may go - an empty scope needs no holder. The
+     * generated REST deletes ask it; a cascade, which deletes a scope together with its master, does not.
+     *
+     * @param stored the ${name} about to be deleted, as stored
+     */
+    public void requireSingleFlagsKept(${name}Entity stored) {
+#foreach($flag in $singleFlags)
+#if($flag.required == "true")
+        if (Boolean.TRUE.equals(stored.${flag.property})) {
+            require${flag.property}HandedOver(stored, false);
+        }
+#end
+#end
+    }
+#foreach($flag in $singleFlags)
+#if($flag.required == "true")
+
+    /**
+     * The holder of the required single flag ${flag.property} gives it up (#8700): refused 400, naming
+     * the flag, unless another row of the holder's scope holds it, or no other row remains in that
+     * scope while the holder leaves it.
+     *
+     * @param holder the holder as stored
+     * @param staysInScope whether the holder remains a row of its scope after the write
+     */
+    private void require${flag.property}HandedOver(${name}Entity holder, boolean staysInScope) {
+        org.eclipse.dirigible.components.data.store.java.repository.Criteria others = org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                                                                                                                                                     .ne("${pkPropertyName}", holder.${pkPropertyName})#if($flag.per)
+                                                                                                                                                     .eq("${flag.per}", holder.${flag.per})#end;
+        if (!staysInScope && count(others) == 0) {
+            // The holder leaves a scope it is the last row of: an empty scope needs no holder.
+            return;
+        }
+        if (count(others.eq("${flag.property}", true)) == 0) {
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.singleRequired(${refusalCatalog}, ${refusalEntityLabel}, ${refusalEntityLabelKey},
+                    ${flag.requiredRefusalArgsJava});
+        }
+    }
+#end
+#end
+#end
 #end
 #if($hasUniqueIgnoringCase)
 

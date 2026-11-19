@@ -1515,9 +1515,15 @@ default bank account of a company", declare `single:` on the `boolean` field ins
 holder in the whole table; `single: { per: <relation> }` keeps one per value of one of the entity's own
 `manyToOne`/`oneToOne` relations. A write that sets the flag hands it over: the row that held it in
 the same scope is set to `false` in the same transaction. Add `onConflict: refuse` when taking the flag
-must be a deliberate act - the write is then answered 409 while another row holds it. A document that
-defaults to the flagged row names it with `init: { flag: base }` on its relation (fleet-wide flags
-only). The form keeps the ordinary checkbox:
+must be a deliberate act - the write is then answered 409 while another row holds it (naming the
+field, in the reader's language). Add
+`required: true` when the flag provides a default that must always exist (the base currency, the base
+company): the holder can then neither be un-ticked nor deleted while no other row of its scope holds
+the flag (400, naming the field) - the flag moves only by being set on another row. The first row of a
+scope may still be created without it, and the last row of a scope may be deleted. Pair it with
+`required: true` on the field itself when the value may never be empty. A document that defaults to
+the flagged row names it with `init: { flag: base }` on its relation (fleet-wide flags only). The form
+keeps the ordinary checkbox:
 
 ```yaml
 entities:
@@ -5888,7 +5894,7 @@ or a seeded name.
 | `setField` / `clearField` / `setRelationField` path | `<member>` of the trigger entity, or `<relation>.<member>` - one hop through a local `manyToOne`/`oneToOne` relation, written through the target's repository |
 | field `stampOn` | `{ status: <seeded name or id> }` of the entity's `function: EntityStatus` relation, on a `timestamp`/`date` field that is not `required` and has no other writer |
 | field `unique` | `true`, or `{ ignoreCase: true }` on a `string`/`text` field - a value another record holds in any letter case is refused |
-| field `single` | `true`, or `{ per: <own manyToOne/oneToOne relation>, onConflict: demote \| refuse }` (both optional), on a `boolean` field |
+| field `single` | `true`, or `{ per: <own manyToOne/oneToOne relation>, onConflict: demote \| refuse, required: true }` (all optional), on a `boolean` field |
 | process `vars` | `[{ name: <identifier>, clearAfter: <serviceTask/userTask step> }]`; step `produces:`/`uses:` list declared var names |
 | process `abortOn` | `{ status: <id> \| [ids], then: <serviceTask> \| end }` (trigger entity needs a `function: EntityStatus` relation) |
 | relation `whenMasterDeleted` | `cascade` (default - a delete of the master deletes the children it owns), `refuse` (the master's delete is rejected while children exist); composition relations only |
