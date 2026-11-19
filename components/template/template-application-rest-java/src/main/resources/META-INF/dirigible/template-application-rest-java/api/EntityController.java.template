@@ -489,6 +489,118 @@ public class ${name}Controller {
         return repository.findOne(saved.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end).orElse(saved);
 #end
     }
+#if($duplicable && !$systemWritten && !$attachmentReadOnly)
+## The server-side Duplicate (intent `duplicable`, #8752): the copy the document page's duplicate() built
+## from a GET and a create, made in ONE unit of work. The predicate below is the page's clone-strip list
+## (document-page.js.template duplicate()) - keep the two in step.
+#set($dupPkType = "")
+#foreach($property in $properties)
+#if($property.dataPrimaryKey)
+#set($dupPkType = $property.dataTypeJavaClass)
+#end
+#end
+#set($dupSystemNames = ["ProcessId", "ProcessIds", "CreatedAt", "CreatedBy", "UpdatedAt", "UpdatedBy", "Uuid"])
+#set($dupNumbered = [])
+#if($duplicateUnique && $duplicateDefaults)
+#foreach($dupDefault in $duplicateDefaults)
+#if("$!dupDefault.unique" == "true")
+#set($ignore = $dupNumbered.add($dupDefault.name))
+#end
+#end
+#end
+
+    /**
+     * Duplicates a ${name} into a new record and answers it (intent {@code duplicable}, #8752): the
+     * source's ordinary fields - not its key, status, number, read-only, aggregate, audit or process
+     * columns, nor a {@code duplicable.reset} field - with the {@code duplicable.defaults} values the
+     * request body carries (the document page sends the ones it computed: {@code now} in the user's
+     * calendar, a {@code {field}} template of the source), created through {@link #create} with every
+     * gate and check a create has. With {@code duplicable.unique}, the templated name is numbered past
+     * the names already taken - inside the same unit of work that holds the source row locked, so two
+     * duplicates of one record never pick the same free name. Line items are not copied here.
+     *
+     * @param id the record to copy
+     * @param values the copy's {@code duplicable.defaults} values; a field left out keeps the source's
+     * @return the created copy
+     */
+    @Post("/{id}/duplicate")
+    @Documentation("Duplicate ${name} by id")
+    public ${name}Entity duplicate(@PathParam("id") ${dupPkType} id, @Body ${name}Entity values) {
+#if($needsRoles)
+        // The copy is read like a GET and written like a POST: both gates, create() asks the second.
+        checkPermissions("read");
+#end
+#if($hasDuplicateKeys)
+        try {
+            return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> duplicateLocked(id, values));
+        } catch (RuntimeException e) {
+            // Outside the unit: a duplicate business key is raised by its commit.
+            throw repository.duplicateKeyOr(e);
+        }
+#else
+        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> duplicateLocked(id, values));
+#end
+    }
+
+    private ${name}Entity duplicateLocked(${dupPkType} id, ${name}Entity values) {
+        // Duplicates of one record wait for each other here, so the name probe below sees every copy
+        // committed before it.
+        if (!repository.lockForUpdate(id)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found");
+        }
+        ${name}Entity source = repository.findOne(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found"));
+#if($isEntityPropertySecurityEnabled)
+        // What the caller may not read is not copied - the page's copy never saw it either.
+        redactRead(source);
+#end
+        ${name}Entity copy = new ${name}Entity();
+#foreach($property in $properties)
+#if(!$property.dataPrimaryKey && !$dupSystemNames.contains($property.name) && "$!property.isReadOnlyProperty" != "true" && "$!property.aggregate" != "true" && "$!property.widgetType" != "DOCUMENT_STATUS" && "$!property.widgetType" != "DOCUMENT_NUMBER" && !($duplicateReset && $duplicateReset.contains($property.name)))
+        copy.${property.name} = source.${property.name};
+#end
+#end
+#if($duplicateDefaults)
+        // `duplicable.defaults`: the values the copy carries instead of the source's.
+        if (values != null) {
+#foreach($dupDefault in $duplicateDefaults)
+            if (values.${dupDefault.name} != null) {
+                copy.${dupDefault.name} = values.${dupDefault.name};
+            }
+#end
+        }
+#end
+#if($dupNumbered.size() > 0)
+        // `duplicable.unique` (#8663): while a record already holds the copy's values for
+        // [${duplicateUnique}], the templated name is numbered - "Rent (copy)" -> "Rent (copy 2)". Bounded:
+        // past the last try the create decides.
+#foreach($dupName in $dupNumbered)
+        String base${dupName} = copy.${dupName} == null ? "" : copy.${dupName};
+#end
+        for (int n = 2; n <= 50 && isDuplicateTaken(copy); n++) {
+#foreach($dupName in $dupNumbered)
+            copy.${dupName} = base${dupName}.endsWith(")") ? base${dupName}.substring(0, base${dupName}.length() - 1) + " " + n + ")"
+                    : base${dupName} + " (" + n + ")";
+#end
+        }
+#end
+        return create(copy);
+    }
+#if($dupNumbered.size() > 0)
+
+    /** Whether a record already holds the copy's {@code duplicable.unique} values. */
+    private boolean isDuplicateTaken(${name}Entity copy) {
+        org.eclipse.dirigible.components.data.store.java.repository.Criteria criteria =
+                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create();
+#foreach($dupUnique in $duplicateUnique.split(","))
+        if (copy.${dupUnique} != null && !"".equals(copy.${dupUnique})) {
+            criteria.eq("${dupUnique}", copy.${dupUnique});
+        }
+#end
+        return repository.count(criteria) > 0;
+    }
+#end
+#end
 #if($attachmentEntity)
 #if(!$attachmentReadOnly)
 

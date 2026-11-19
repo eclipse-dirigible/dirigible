@@ -926,30 +926,47 @@ document.addEventListener('alpine:init', () => {
 #end
 #end
 #end
+        // The server copies the record, numbers its name and creates it in one unit of work (#8752), so
+        // two Duplicates of one record never pick the same free name. A controller generated without
+        // that endpoint answers 404 / 405, and the copy is then created from the header built above.
+        let created = null;
+        try {
+          const values = {};
+#if($duplicateDefaults)
+#foreach($d in $duplicateDefaults)
+          values['${d.name}'] = header['${d.name}'];
+#end
+#end
+          created = await App.services.api.post(this.apiPath + '/' + encodeURIComponent(this.id) + '/duplicate', values);
+        } catch (e) {
+          if (!e || (e.httpStatus !== 404 && e.httpStatus !== 405)) throw e;
+        }
+        if (!created) {
 #if($duplicateUnique)
-        // `duplicable.unique` (#8663): while a record already holds the copy's values for
-        // [${duplicateUnique}], the templated name is numbered - "Rent (copy)" -> "Rent (copy 2)" - so the
-        // copy never meets the duplicate warning. Bounded: past the last try the create decides.
-        const numbered = {};
+          // `duplicable.unique` (#8663): while a record already holds the copy's values for
+          // [${duplicateUnique}], the templated name is numbered - "Rent (copy)" -> "Rent (copy 2)" - so the
+          // copy never meets the duplicate warning. Bounded: past the last try the create decides.
+          const numbered = {};
 #foreach($d in $duplicateDefaults)
 #if($d.unique == "true")
-        numbered['${d.name}'] = String(header['${d.name}'] ?? '');
+          numbered['${d.name}'] = String(header['${d.name}'] ?? '');
 #end
 #end
-        for (let n = 2; n <= 50; n++) {
-          const equals = {};
+          for (let n = 2; n <= 50; n++) {
+            const equals = {};
 #foreach($u in $duplicateUnique.split(","))
-          if (header['${u}'] != null && header['${u}'] !== '') equals['${u}'] = header['${u}'];
+            if (header['${u}'] != null && header['${u}'] !== '') equals['${u}'] = header['${u}'];
 #end
-          const taken = await App.services.api.post(this.apiPath + '/search', { equals });
-          if (!Array.isArray(taken) || taken.length === 0) break;
-          Object.keys(numbered).forEach(f => {
-            const v = numbered[f];
-            header[f] = v.endsWith(')') ? v.slice(0, -1) + ' ' + n + ')' : v + ' (' + n + ')';
-          });
+            const taken = await App.services.api.post(this.apiPath + '/search', { equals });
+            if (!Array.isArray(taken) || taken.length === 0) break;
+            Object.keys(numbered).forEach(f => {
+              const v = numbered[f];
+              header[f] = v.endsWith(')') ? v.slice(0, -1) + ' ' + n + ')' : v + ' (' + n + ')';
+            });
+          }
+#end
+          created = await App.services.api.post(this.apiPath, header);
         }
-#end
-        const created = await App.services.api.post(this.apiPath, header);
         const newId = created && (created.${primaryKeysString} !== undefined ? created.${primaryKeysString} : created.id);
         if (newId == null) throw new Error('No id returned for the duplicated document.');
         // Clone the line items, repointed at the new header (editable inputs only; calculated item
