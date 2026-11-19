@@ -19,11 +19,13 @@ import java.util.List;
  * @param canManage whether the caller may invite, change roles and remove
  * @param canRead whether the caller may see the users
  * @param ownerRole the owner role
- * @param roles the grantable roles
+ * @param roles the names of the roles an Owner may give, in the order the page offers them
+ * @param catalog the same roles with the label and the description the application gives them
+ *        (#8728)
  * @param caller who the caller is, as the change requests record them - so a page can mark "you"
  * @param seatLimit the most users the tenant may hold at once, or null for no limit (#8593) - the
  *        page counts the seats taken from the users it lists
  */
 record TenantUsersContext(boolean enabled, String tenantId, boolean canManage, boolean canRead, String ownerRole, List<String> roles,
-        String caller, Integer seatLimit) {
+        List<TenantUserRoles.Offer> catalog, String caller, Integer seatLimit) {
 }

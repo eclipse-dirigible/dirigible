@@ -36,7 +36,7 @@ document.addEventListener('alpine:init', () => {
   const SLOW_AFTER_MS = 2 * 60 * 1000;
 
   Alpine.store('tenantUsers', {
-    /** What the platform says: { enabled, tenantId, canManage, canRead, ownerRole, roles, caller, seatLimit }; null until loaded. */
+    /** What the platform says: { enabled, tenantId, canManage, canRead, ownerRole, roles, catalog, caller, seatLimit }; null until loaded. */
     context: null,
     /** The live users of the tenant, as the provisioning system last reported them. */
     items: [],
@@ -75,6 +75,17 @@ document.addEventListener('alpine:init', () => {
     /** The roles an owner may grant. */
     get roles() {
       return (this.context && this.context.roles) || [];
+    },
+
+    /** The application's catalog entry of a role - { name, label, description } (#8728); undefined for a role it does not offer. */
+    roleOffer(role) {
+      return ((this.context && this.context.catalog) || []).find((entry) => entry.name === role);
+    },
+
+    /** How a role reads: the label the application gives it in its catalog, else its name. */
+    roleName(role) {
+      const offer = this.roleOffer(role);
+      return (offer && offer.label) || role;
     },
 
     /** The most users the tenant may hold at once, as the provisioning system set it; null for no limit. */
@@ -280,13 +291,15 @@ document.addEventListener('alpine:init', () => {
       this.showInvite();
     },
 
-    /** What a role lets a person do, for the role cards; empty for a role the platform does not describe. */
+    /** What a role lets a person do, for the role cards: the platform's words for its own two, else the application's catalog. */
     roleDescription(role) {
       const known = {
         Owner: 'Full access to the application, and manages its users.',
         User: 'Full access to the application.',
       };
-      return known[role] ? this.t('shell.tenantUsers.roleDescription.' + role, known[role]) : '';
+      if (known[role]) return this.t('shell.tenantUsers.roleDescription.' + role, known[role]);
+      const offer = this.roleOffer(role);
+      return (offer && offer.description) || '';
     },
 
     /** The roles ticked in the edit dialog that the user does not hold. */
@@ -433,9 +446,9 @@ document.addEventListener('alpine:init', () => {
 
     roleLabel(role) {
       switch (role.state) {
-        case 'ADDING': return '+ ' + role.role;
-        case 'REMOVING': return '− ' + role.role;
-        default: return role.role;
+        case 'ADDING': return '+ ' + this.roleName(role.role);
+        case 'REMOVING': return '− ' + this.roleName(role.role);
+        default: return this.roleName(role.role);
       }
     },
 

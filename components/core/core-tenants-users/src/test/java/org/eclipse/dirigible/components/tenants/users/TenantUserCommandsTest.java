@@ -31,6 +31,8 @@ import java.util.Optional;
 
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.components.security.domain.Role;
+import org.eclipse.dirigible.components.security.service.RoleService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,6 +51,8 @@ class TenantUserCommandsTest {
     private TenantUserChangePublisher publisher;
     private TenantUserCommands commands;
     private final List<TenantUserView> live = new ArrayList<>();
+    /** The application's registered roles - none unless a test declares some. */
+    private final List<Role> registered = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
@@ -62,7 +66,9 @@ class TenantUserCommandsTest {
         when(replica.list(TENANT, false)).thenReturn(live);
         // no seat limit unless a test sets one - a mock's Integer would otherwise read 0
         when(replica.seatLimit(anyString())).thenReturn(null);
-        commands = new TenantUserCommands(replica, publisher, access);
+        RoleService roleService = mock(RoleService.class);
+        when(roleService.getAll()).thenReturn(registered);
+        commands = new TenantUserCommands(replica, publisher, access, new TenantUserRoles(roleService));
     }
 
     @AfterEach
@@ -123,6 +129,40 @@ class TenantUserCommandsTest {
         assertFalse(new ObjectMapper().readTree(new ObjectMapper().writeValueAsString(request))
                                       .has("roles"),
                 "a removal carries no roles");
+    }
+
+    /**
+     * A role the application marks assignable is given on its own, without {@code User} (#8728).
+     */
+    @Test
+    void aRoleTheApplicationOffersIsGivenWithoutUser() {
+        registered.add(role("Accountant", true));
+
+        commands.invite(TENANT, new TenantUserCommands.Invite("ann@example.com", List.of("Accountant")));
+
+        assertEquals(List.of("Accountant"), published().roles());
+    }
+
+    /**
+     * Only the catalog is given: a convention role the application does not mark, and a role of the
+     * instance even when a {@code .roles} file marks it, are refused - and the refusal names the
+     * catalog (#8728).
+     */
+    @Test
+    void aRoleOutsideTheCatalogIsRefused() {
+        registered.add(role("Accountant", true));
+        registered.add(role("acme.Invoices.InvoiceReadOnly", false));
+        registered.add(role("ADMINISTRATOR", true));
+
+        TenantUsersException convention = assertThrows(TenantUsersException.class,
+                () -> commands.invite(TENANT, new TenantUserCommands.Invite("ann@example.com", List.of("acme.Invoices.InvoiceReadOnly"))));
+        assertEquals("INVALID_ROLE", convention.reason());
+        assertTrue(convention.getMessage()
+                             .contains("[Owner, User, Accountant]"),
+                convention.getMessage());
+        assertReason("INVALID_ROLE", HttpStatus.BAD_REQUEST,
+                () -> commands.invite(TENANT, new TenantUserCommands.Invite("ann@example.com", List.of("ADMINISTRATOR"))));
+        verify(publisher, never()).publish(any());
     }
 
     @Test
@@ -319,5 +359,11 @@ class TenantUserCommandsTest {
         assertEquals(status, refusal.status());
         assertTrue(refusal.getMessage() != null && !refusal.getMessage()
                                                            .isBlank());
+    }
+
+    private static Role role(String name, boolean assignable) {
+        Role role = new Role("/acme/acme.roles", name, null);
+        role.setAssignable(assignable);
+        return role;
     }
 }
