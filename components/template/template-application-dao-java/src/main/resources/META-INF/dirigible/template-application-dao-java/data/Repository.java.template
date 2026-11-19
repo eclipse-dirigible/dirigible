@@ -605,8 +605,6 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($periodLock)
         requirePeriodOpen(entity.${periodLock.dateProperty});
 #end
-#rollupGuardCheck()
-#gatedRollupGuardCheck()
 #aggregateGuardCheck()
 #if($hasLabel)
         computeName(entity);
@@ -620,6 +618,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
 #end
 #end
+## The capacity guards run AFTER the create-time calculated fields (#7943): the summed field may be one
+## of them (Amount = Quantity * Price, a signed cash outflow), and guarded before it was assigned it read
+## null, counted as 0, so no create was ever refused while the roll-up then summed the real value.
+#rollupGuardCheck()
+#gatedRollupGuardCheck()
 ## A uuid field (intent type: uuid) is platform-generated: assign a random UUID on create when empty.
 ## A number: {} field with stampOn:issue also carries generatedUuid, so its create-time placeholder is
 ## a UUID (the real number is stamped at the issue step); stampOn:create fields are handled just below.
@@ -795,8 +798,6 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($hasAgreeGuards)
         requireAgreementKept(entity);
 #end
-#rollupGuardCheck()
-#gatedRollupGuardCheck()
 #aggregateGuardCheck()
 #if($preservedOnUpdate.size() > 0)
         // System-owned fields survive a partial payload: a caller's update carries only the fields
@@ -866,6 +867,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
 #end
 #end
+## The capacity guards run after the update-time calculated fields, as on create (#7943).
+#rollupGuardCheck()
+#gatedRollupGuardCheck()
 #measuredBalances()
 #rollupFitCheck()
 #if($documentChecks && $documentChecks.size() > 0)
