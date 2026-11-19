@@ -31,7 +31,8 @@ document.addEventListener('alpine:init', () => {
         detail: '',
 #end
         value: null,
-        error: false
+        error: false,
+        forbidden: false
       },
 #end
     ],
@@ -81,8 +82,9 @@ document.addEventListener('alpine:init', () => {
     get summaryKpis() { return this.kpis.filter(r => r.widget.kind !== 'list'); },
     get listKpis() { return this.kpis.filter(r => r.widget.kind === 'list'); },
 
-    // Custom widgets, split by how they render: number tiles (kpi) vs embedded pages.
-    get customKpis() { return this.customWidgets.filter(w => w.kind !== 'page'); },
+    // Custom widgets, split by how they render: number tiles (kpi) vs embedded pages. A KPI whose
+    // endpoint refuses the caller (403) is left out, as a role-guarded report's KPI is (#8728).
+    get customKpis() { return this.customWidgets.filter(w => w.kind !== 'page' && !w.forbidden); },
     get customPages() { return this.customWidgets.filter(w => w.kind === 'page'); },
 
     // Fetch each custom KPI's { value, description? } from its endpoint — the developer's own
@@ -95,6 +97,10 @@ document.addEventListener('alpine:init', () => {
           w.value = (r && r.value !== undefined && r.value !== null) ? r.value : 0;
           if (r && r.description) w.detail = r.description;
         } catch (err) {
+          if (err && err.httpStatus === 403) {
+            w.forbidden = true;
+            return;
+          }
           w.error = true;
           console.error('[dashboard] custom widget failed for ' + w.name, err);
         }

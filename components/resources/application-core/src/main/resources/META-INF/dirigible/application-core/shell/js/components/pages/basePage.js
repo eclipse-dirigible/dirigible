@@ -525,6 +525,15 @@ function basePage() {
     },
 
     /**
+     * Whether the controller at `url` refused this page a read (#8728): a relation whose target the
+     * caller's role may not read. The picker then shows the stored value instead of a list it cannot
+     * load, and offers no New. Reactive - it turns true when the refusal arrives.
+     */
+    readRefused(url) {
+      return App.services.readRefusals.has(url);
+    },
+
+    /**
      * Whether a status-gated panel shows (intent `visibleWhen:` on a composition child, dirigible
      * #7502): every term - `{ property, equal, value }`, ANDed - holds against the master record the
      * panel is rendered under. Values compare as text, so a numeric status FK matches its seed id

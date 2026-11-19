@@ -405,11 +405,16 @@
              in-dropdown search box for longer option lists, which also asks the server for matches
              beyond the first page a large target lists (searchPicker, #8343). A non-setting association ($lookup) is laid
              out on one row with an "Add new" button (opens the target's own create page in an iframe
-             dialog) and a Refresh button. -->
-        <template x-if="isContextLocked('${property.name}')">
+             dialog) and a Refresh button.
+             A target the caller's role may not read (#8728) renders the same way: the stored value
+             read-only, with a line saying why, instead of an empty picker and a New that is refused. -->
+        <template x-if="isContextLocked('${property.name}') || readRefused('${property.widgetDropdownControllerUrl}')">
           <input x-h-input type="text" id="f_${property.name}" readonly :value="contextLabel(form.${property.name}, options${property.name})" />
         </template>
-        <template x-if="!isContextLocked('${property.name}')">
+        <template x-if="readRefused('${property.widgetDropdownControllerUrl}')">
+          <p x-h-field-description x-text="T('application-core:shell.related.unreadable', 'Your role cannot list these records, so the stored one is kept.')"></p>
+        </template>
+        <template x-if="!isContextLocked('${property.name}') &amp;&amp; !readRefused('${property.widgetDropdownControllerUrl}')">
 ## data-clearable (#8658): an optional picker is cleared by re-clicking its selected option; a
 ## required one keeps its value. Both branches below.
 #if($lookup)

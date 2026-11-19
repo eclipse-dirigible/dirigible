@@ -328,6 +328,15 @@
 #else
         <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${label}')"></span>#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end</label>
 #if($property.widgetType == "DROPDOWN")
+        <!-- A target the caller's role may not read (#8728): the stored value read-only, with a line
+             saying why, instead of an empty picker and a New that is refused. -->
+        <template x-if="readRefused('${property.widgetDropdownControllerUrl}')">
+          <div class="vbox gap-1">
+            <input x-h-input type="text" id="f_${property.name}" readonly :value="contextLabel(form.${property.name}, options${property.name})" />
+            <p x-h-field-description x-text="T('application-core:shell.related.unreadable', 'Your role cannot list these records, so the stored one is kept.')"></p>
+          </div>
+        </template>
+        <template x-if="!readRefused('${property.widgetDropdownControllerUrl}')">
 #if($lookup)
         <!-- Non-setting association: combobox + Add new (opens the target's own create page in an iframe
              dialog) + Refresh, all on one full-width row. -->
@@ -363,6 +372,7 @@
           </div>
         </div>
 #end
+        </template>
 #elseif($property.widgetType == "MULTISELECT")
         <!-- Subset (intent `kind: subset`): the record holds a SUBSET of the lookup's rows
              as one csv ("1,3"). Multiple mode comes from the bound model being an ARRAY (split on
@@ -993,7 +1003,15 @@
                    where the value is entered, so hiding which ones are mandatory only defers the
                    rejection to the server. -->
               <label x-h-label><span x-text="T(col.tkey, col.label)"></span><span x-show="col.required &amp;&amp; !col.readonly &amp;&amp; col.widget !== 'CHECKBOX'" class="text-negative"> *</span></label>
-              <template x-if="!col.readonly && col.widget === 'DROPDOWN'">
+              <!-- A line column whose target the caller's role may not read (#8728): the stored value and
+                   why, as in the header form. -->
+              <template x-if="!col.readonly && col.widget === 'DROPDOWN' && col.lookup && readRefused(col.lookup.url)">
+                <div class="vbox gap-1">
+                  <div class="text-sm py-2 text-secondary-foreground" x-text="draft[col.name] == null || draft[col.name] === '' ? '&#8212;' : draft[col.name]"></div>
+                  <p x-h-field-description x-text="T('application-core:shell.related.unreadable', 'Your role cannot list these records, so the stored one is kept.')"></p>
+                </div>
+              </template>
+              <template x-if="!col.readonly && col.widget === 'DROPDOWN' && !(col.lookup && readRefused(col.lookup.url))">
                 <div>
                   <!-- An optional column's picker is cleared by re-clicking its selected option (#8658). -->
                   <div x-h-select :data-clearable="col.required ? null : 'true'">
