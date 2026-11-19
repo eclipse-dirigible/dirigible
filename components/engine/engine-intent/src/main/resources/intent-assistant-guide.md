@@ -612,6 +612,20 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   ```
   Also for a netted total: revenue = `{ source: Invoice, date: date, amount: total }` + `{ source: CreditNote, date:
   date, amount: "-total" }` with `dimensions: [source]`, `measures: ["sum(amount)"]`. Not with a ledger `kind:`.
+  A member's `counterparty` may be one hop away (`counterparty: SalesInvoice.Customer` on an allocation row), and
+  `columns: { currency: Currency }` passes further to-one columns through (mapped by every member or none, same
+  target entity), read like `counterparty` - e.g. `dimensions: [counterparty.name, currency.code]`. An aging AS OF a
+  past date nets the payments as dated negative members instead of reading the live balance:
+  ```yaml
+  - name: AgedReceivables
+    union:
+      - { source: SalesInvoice, counterparty: Customer, columns: { currency: Currency }, date: date, due: due, amount: payable }
+      - { source: SalesInvoiceCustomerPayment, counterparty: SalesInvoice.Customer,
+          columns: { currency: SalesInvoice.Currency }, date: CustomerPayment.date, due: SalesInvoice.due,
+          amount: "-amount", filter: "SalesInvoice.Status >= 3" }
+    dimensions: [counterparty.name, currency.code]
+    aging: { buckets: [30, 60, 90] }
+  ```
 - `having:` (on an aggregating report) - **keep only the groups an aggregate condition holds for** (SQL HAVING):
   comparisons over `count(*)` / `sum(x)` / `avg(x)` / `min(x)` / `max(x)` joined by `AND`/`OR`, e.g. duplicate
   supplier numbers per supplier and year: `dimensions: [Supplier, "year(date)", supplierNumber]`,
