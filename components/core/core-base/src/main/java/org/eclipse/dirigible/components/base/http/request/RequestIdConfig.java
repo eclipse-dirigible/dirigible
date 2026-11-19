@@ -45,6 +45,22 @@ class RequestIdConfig {
     }
 
     /**
+     * Registers the {@code Accept-Language} guard right behind the request id, so its 400 carries the
+     * id, and ahead of Spring's {@code RequestContextFilter} and the security chain, which read the
+     * locale. Only the request dispatch: a later dispatch of the same request has its locales parsed.
+     *
+     * @return the registration
+     */
+    @Bean
+    FilterRegistrationBean<AcceptLanguageFilter> acceptLanguageFilterRegistrationBean() {
+        FilterRegistrationBean<AcceptLanguageFilter> registration = new FilterRegistrationBean<>(new AcceptLanguageFilter());
+        registration.addUrlPatterns("/*");
+        registration.setDispatcherTypes(DispatcherType.REQUEST);
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 1);
+        return registration;
+    }
+
+    /**
      * Spring Boot's error attributes plus {@value RequestIds#MDC_KEY}. Declaring the bean replaces the
      * default one, which backs off on any {@link ErrorAttributes}.
      *
