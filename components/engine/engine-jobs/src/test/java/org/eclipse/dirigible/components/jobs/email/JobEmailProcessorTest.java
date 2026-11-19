@@ -11,7 +11,13 @@ package org.eclipse.dirigible.components.jobs.email;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -19,6 +25,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
 
+import org.eclipse.dirigible.components.api.mail.MailClient;
+import org.eclipse.dirigible.components.api.mail.MailFacade;
+import org.eclipse.dirigible.components.engine.template.TemplateEngine;
 import org.eclipse.dirigible.components.engine.template.TemplateEnginesManager;
 import org.eclipse.dirigible.components.jobs.domain.Job;
 import org.eclipse.dirigible.components.jobs.domain.JobEmail;
@@ -27,6 +36,7 @@ import org.eclipse.dirigible.components.registry.accessor.RegistryAccessor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 import org.slf4j.LoggerFactory;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -118,6 +128,28 @@ class JobEmailProcessorTest {
                 JobEmailProcessor.EMAIL_TEMPLATE_ERROR);
 
         assertEquals(List.of(NO_TEMPLATE_ENGINE), errors());
+    }
+
+    @Test
+    void dueEmailIsSentWithTheJobNameInTheConfiguredSubject() throws Exception {
+        configure("scheduler@example.com", "ops@example.com");
+        when(jobEmailService.findAllByJobName(JOB_NAME)).thenReturn(List.of());
+        when(registryAccessor.getRegistryContent(any(), any())).thenReturn("{{job.name}}".getBytes(StandardCharsets.UTF_8));
+        TemplateEngine templateEngine = mock(TemplateEngine.class);
+        when(templateEngine.generate(anyMap(), any(), any())).thenReturn("body".getBytes(StandardCharsets.UTF_8));
+        when(templateEnginesManager.getTemplateEngine("mustache")).thenReturn(templateEngine);
+        MailClient mailClient = mock(MailClient.class);
+
+        try (MockedStatic<MailFacade> mailFacade = mockStatic(MailFacade.class)) {
+            mailFacade.when(MailFacade::getInstance)
+                      .thenReturn(mailClient);
+
+            processor.sendEmail(job(), "100% failed: [%s]", JobEmailProcessor.emailTemplateError, JobEmailProcessor.EMAIL_TEMPLATE_ERROR);
+        }
+
+        verify(mailClient).send(eq("scheduler@example.com"), eq(new String[] {"ops@example.com"}), isNull(), isNull(),
+                eq("100% failed: [" + JOB_NAME + "]"), anyList());
+        assertEquals(List.of(), errors());
     }
 
     private static void configure(String sender, String recipientsLine) {

@@ -183,12 +183,25 @@ public class JobEmailProcessor {
             map.put("text", emailContent);
             parts.add(map);
             MailFacade.getInstance()
-                      .send(emailSender, recipients, null, null, String.format(emailSubject, job.getName()), parts);
+                      .send(emailSender, recipients, null, null, subjectOf(emailSubject, job), parts);
         } catch (MessagingException e) {
             if (logger.isErrorEnabled()) {
                 logger.error("Sending an e-mail failed with: " + e.getMessage(), e);
             }
         }
+    }
+
+    /**
+     * Puts the job's name in place of the {@code %s} of the configured subject. The subject is
+     * configuration, so it is never used as a format string: any other {@code %} in it stays as it is
+     * instead of failing the job's status change.
+     *
+     * @param emailSubject the configured subject
+     * @param job the job
+     * @return the subject of the job's e-mail
+     */
+    private static String subjectOf(String emailSubject, Job job) {
+        return emailSubject.replace("%s", job.getName());
     }
 
     /**
