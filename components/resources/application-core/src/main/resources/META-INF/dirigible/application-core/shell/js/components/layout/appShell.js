@@ -21,6 +21,21 @@
  * navigation node / list perspective) — see template/ui/navigation.js.
  */
 document.addEventListener('alpine:init', () => {
+  // The perspectives the platform offers the caller - filtered server-side by each perspective's role,
+  // the listing the application shell builds its own navigation from.
+  const PERSPECTIVES_URL = '/services/platform/extensions/perspectives?extensionPoints=application-perspectives';
+
+  /** Adds the id of every perspective in a listing (its groups, their items, the standalone ones). */
+  const collectPerspectiveIds = (node, ids) => {
+    if (Array.isArray(node)) {
+      node.forEach((child) => collectPerspectiveIds(child, ids));
+    } else if (node && typeof node === 'object') {
+      if (node.id) ids.add(node.id);
+      collectPerspectiveIds(node.items, ids);
+      collectPerspectiveIds(node.perspectives, ids);
+    }
+  };
+
   window.PineconeRouter.settings({
     basePath: (App.config && App.config.basePath) || '',
     hash: true
@@ -59,12 +74,21 @@ document.addEventListener('alpine:init', () => {
     // used to label the breadcrumb's entity crumb the same way the sidebar labels it.
     navLabels: {},
 
+    // The role-gated sidebar entries the caller is offered (#8728): the ids of the perspectives the
+    // platform lists for them, null until that listing is in. `navUnfiltered` shows every entry -
+    // a page that declares no gated entry, the embedded mode (the host shell owns the navigation and
+    // filters it the same way), or a listing that could not be read, where the page's own 403 stays
+    // the guard.
+    offeredPerspectives: null,
+    navUnfiltered: false,
+
     init() {
       this.navLabels = window.__harmoniaNav || {};
       // The toast overlay is rendered by this component, so it lends its $notifications magic to
       // the shared store - a store has no component scope of its own to reach the magic from.
       Alpine.store('notifications').attachToaster(this.$notifications);
       try { this.embedded = new URLSearchParams(window.location.search).has('embedded'); } catch (e) { /* no URL */ }
+      this.loadOfferedPerspectives();
       const getPath = () => {
         const p = window.PineconeRouter.context?.path || '/';
         return p === '/' ? '/dashboard' : p;
@@ -149,6 +173,35 @@ document.addEventListener('alpine:init', () => {
     },
 
     isActive(route) { return this.currentPath === route; },
+
+    // Reads, once, which of the page's role-gated entities the caller is offered. The page declares
+    // them in window.__harmoniaGuardedNav - the perspective ids of the sidebar entities whose
+    // perspective carries a role; an entity without one is offered to everybody and is not asked
+    // about. A page generated before #8728 declares none and keeps its whole sidebar.
+    async loadOfferedPerspectives() {
+      const guarded = window.__harmoniaGuardedNav;
+      if (this.embedded || !Array.isArray(guarded) || guarded.length === 0) {
+        this.navUnfiltered = true;
+        return;
+      }
+      try {
+        const response = await fetch(PERSPECTIVES_URL, { credentials: 'same-origin' });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const ids = new Set();
+        collectPerspectiveIds(await response.json(), ids);
+        this.offeredPerspectives = ids;
+      } catch (e) {
+        console.error('appShell: could not read the offered perspectives; the sidebar lists every entity', e);
+        this.navUnfiltered = true;
+      }
+    },
+
+    // Whether a role-gated sidebar entry is shown: its perspective is in the caller's listing. Hidden
+    // while the listing is still being read, so an entry the role cannot open never flashes in.
+    navReadable(perspectiveId) {
+      if (this.navUnfiltered) return true;
+      return !!this.offeredPerspectives && this.offeredPerspectives.has(perspectiveId);
+    },
 
     // Open the task behind a (task-derived) notification, and mark it read.
     openNotification(n) {
