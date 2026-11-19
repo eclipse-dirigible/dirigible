@@ -20,6 +20,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
+import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
@@ -133,6 +135,8 @@ class DetailCollectionI18nHarmoniaIT extends UserInterfaceIntegrationTest {
         int companyId = createCompany("Acme");
 
         ide.openHomePage();
+        // The labels follow the language the instance offers, never a saved one it does not (#8632).
+        Configuration.set(DirigibleConfig.APPLICATION_LANGUAGES.getKey(), "en,bg");
         Selenide.executeJavaScript("localStorage.setItem('codbex.harmonia.language', 'bg');");
         browser.openPath(APP + "/Company/" + companyId + "/edit");
         Selenide.refresh();
@@ -146,8 +150,9 @@ class DetailCollectionI18nHarmoniaIT extends UserInterfaceIntegrationTest {
 
         browser.openPath(APP + "/Company/" + companyId + "/preview");
         Selenide.refresh();
-        assertEquals("Преглед", poll(LAST_CRUMB, crumb -> !"Edit".equals(crumb) && !"Редактиране".equals(crumb)),
-                "the Preview crumb must be translated");
+        // The crumb renders its English fallback first and swaps once the catalogs load: wait for the
+        // Preview page's crumb in the user's language, not the first one that is no longer Edit.
+        assertEquals("Преглед", poll(LAST_CRUMB, "Преглед"::equals), "the Preview crumb must be translated");
         assertEquals("Банкови сметки|Международна сметка", poll(PANEL_TEXT, text -> text.startsWith("Банкови")),
                 "the Preview page's section must be translated too");
     }
@@ -219,6 +224,7 @@ class DetailCollectionI18nHarmoniaIT extends UserInterfaceIntegrationTest {
     @AfterEach
     void cleanup() {
         Selenide.executeJavaScript("localStorage.removeItem('codbex.harmonia.language');");
+        Configuration.remove(DirigibleConfig.APPLICATION_LANGUAGES.getKey());
         restAssuredExecutor.execute(() -> given().when()
                                                  .delete("/services/ide/publisher/" + WORKSPACE + "/" + PROJECT)
                                                  .then()
