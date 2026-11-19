@@ -2478,11 +2478,17 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * (#8306): a PUT naming another master would move the line and its amounts there, so its refusal
      * says how a line does move. A {@code fixedWhenReferenced: true} relation (#8194) is emitted the
      * same way as {@code fixedWhenReferenced} + {@code fixedWhenReferencedMessage}, under
-     * {@code checks.<Entity>_fixedWhenReferenced_<Relation>}, as the field key is. Nothing is emitted
-     * for an ordinary relation.
+     * {@code checks.<Entity>_fixedWhenReferenced_<Relation>}, as the field key is. A
+     * {@code readOnly: true} relation (#8662) - one only the system sets - carries the
+     * {@code isReadOnlyProperty} flag a {@code readOnly} field does, so the same templates keep it off
+     * the New/Edit inputs, show a set value in the read-only details, drop it from a user create and
+     * keep the stored value on a user update. Nothing is emitted for an ordinary relation.
      */
     private static void putFixedRelation(Map<String, Object> p, String ownerEntity, RelationIntent relation) {
         String name = IntentNaming.pascalCase(relation.getName());
+        if (relation.isReadOnly()) {
+            p.put("isReadOnlyProperty", "true");
+        }
         if (relation.isFixedOnceCreated()) {
             p.put("fixedAfterCreate", "true");
             p.put("fixedAfterCreateMessage",

@@ -241,6 +241,16 @@ not as an apology.
   field or relation is (the primary key, a calculated or derived field, a composition parent, an
   `EntityStatus`, a collection, ...) and beside `fixedAfterCreate`, which already fixes it outright.
   On a relation the FK is compared by id: `CompanyBankAccount.Currency`, `Product.Type`.
+- **`readOnly: true` on a plain `manyToOne`/`oneToOne` = a link only the system sets** (#8662): a
+  storno's link to the order it reverses, a document's link to the record a delegate created it from.
+  The New and Edit forms render no picker for it; once set it is shown in the record's read-only
+  details as the target's label. A user create that carries it is stored without it, a user update
+  keeps the stored value (the same contract as a `readOnly` field), while repository writers -
+  create-from `map:`, postings, delegates, `setRelationField` steps - set it. Refused on an
+  `EntityStatus`, a composition parent, the `personal`/`partner`/`owner` relation, a collection,
+  `subset` or `manyToMany`, and beside a calculated action, `fixedAfterCreate` or
+  `fixedWhenReferenced` (those describe a value a user or the platform picks). Pair it with
+  `inlineCreate: false` when the target is the same entity.
 - **`whenTargetDeleted: restrict | nullify | cascade | keep` on a plain (non-composition) `manyToOne`/
   `oneToOne` = what deleting the record it points at does to the records pointing at it** (#7547).
   - `restrict` is the DEFAULT, also when the key is absent: the delete is refused with ONE 409 naming
@@ -5902,6 +5912,7 @@ or a seeded name.
 | field `fixedAfterCreate` | `true` - a caller-written field (not the key, `generated`, `uuid`, `number:`, `stampOn:`, `readOnly`, derived, `aggregate`, `dependsOn`, a `timestamp`, nor a translatable string of a `multilingual` entity): editable on create, read-only on edit, a changed value in an update answered 409 |
 | field `fixedWhenReferenced` | `true` - a caller-written field (the same refusals as field `fixedAfterCreate`, and not beside it): editable while no record references the row, a changed value in an update answered 409 once one does |
 | relation `fixedWhenReferenced` | `true` - a plain `manyToOne`/`oneToOne` (the same refusals as relation `fixedAfterCreate`, and not beside it): re-pickable while no record references the row, a changed FK in an update answered 409 once one does |
+| relation `readOnly` | `true` - a plain `manyToOne`/`oneToOne` only the system sets (not an `EntityStatus`, a composition parent, the `personal`/`partner`/`owner` relation, nor beside a calculated action, `fixedAfterCreate` or `fixedWhenReferenced`): no picker on New or Edit, a set value shown in the read-only details, a user create carrying it stored without it, a user update keeps the stored value; repository writers (create-from, postings, delegates, workflow steps) set it |
 | relation `owner` | `true` - a `manyToOne`/`oneToOne` to an entity that declares `identity` (at most one per entity): the entity's own list offers All / Mine, and `?mine=true` narrows its list, count and search to the caller's rows (none when no identity record maps the caller) |
 | relation `whenTargetDeleted` | `restrict` (default - the target's delete is answered 409 while this relation still references it), `nullify` (the target is deleted and this relation cleared; not on a required relation), `cascade` (this record is deleted with the target), `keep` (the target is deleted and this relation still names it; cross-model only); plain to-one relations, same-model or cross-model |
 | process `whenDeleted` | `abort` (default - deleting the trigger row cancels the in-flight instance), `refuse` (the REST delete answers 409 while the instance runs); needs an entity trigger |
