@@ -159,10 +159,14 @@ public class TableCreateProcessor {
                                                                    .getUniqueIndexes()) {
                     String uniqueIndexName = "\"" + uniqueIndex.getName() + "\"";
 
+                    // Only an index over a single column duplicates what that column's own UNIQUE or
+                    // PRIMARY KEY already creates. A composite index is built over every declared
+                    // column: without one of them it would be a different, stricter key.
+                    boolean singleColumnIndex = uniqueIndex.getColumns().length == 1;
                     List<String> uniqueIndexColumns = new ArrayList<>();
                     for (String column : uniqueIndex.getColumns()) {
                         TableColumn definedColumn = tableModel.getColumn(column);
-                        if (null != definedColumn && (definedColumn.isUnique() || definedColumn.isPrimaryKey())) {
+                        if (singleColumnIndex && null != definedColumn && (definedColumn.isUnique() || definedColumn.isPrimaryKey())) {
                             logger.debug(
                                     "Skipping creating index for column [{}] since it is marked as unique or primary key. The index will be automatically created when creating the table.",
                                     column);
