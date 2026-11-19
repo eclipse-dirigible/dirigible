@@ -86,6 +86,7 @@ import org.eclipse.dirigible.components.intent.model.SingleIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.components.intent.model.UniqueIntent;
+import org.eclipse.dirigible.components.intent.parser.IntentParser;
 import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -447,6 +448,17 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     List<Map<String, Object>> constants = duplicateDefaults(entity);
                     if (!constants.isEmpty()) {
                         entityMap.put("duplicateDefaults", constants);
+                    }
+                    // The copy's name probe and focus (#8663): scalars, so the .edm carries them as it is.
+                    List<String> unique = duplicateUnique(entity);
+                    if (!unique.isEmpty()) {
+                        entityMap.put("duplicateUnique", String.join(",", unique));
+                    }
+                    if (notBlank(entity.getDuplicable()
+                                       .getFocus())) {
+                        entityMap.put("duplicateFocus", IntentNaming.pascalCase(entity.getDuplicable()
+                                                                                      .getFocus()
+                                                                                      .trim()));
                     }
                 }
                 // Chat items: render the line-items pane as a conversation thread instead of the editable
@@ -5418,6 +5430,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if ("now".equals(value.trim())) {
                 entry.put("shape", NOW_SHAPES.contains(type) ? type : "date");
                 entry.put("js", "");
+            } else if (IntentParser.isDuplicateTemplate(value)) {
+                // A {field} template of the SOURCE record (#8663): `src` is the record the page copies.
+                entry.put("shape", "template");
+                entry.put("js", duplicateTemplate(value));
+                if (duplicateUnique(entity).contains(entry.get("name"))) {
+                    entry.put("unique", "true");
+                }
             } else {
                 entry.put("shape", "literal");
                 entry.put("js", duplicateLiteral(value.trim(), type));
@@ -5425,6 +5444,55 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             defaults.add(entry);
         }
         return defaults;
+    }
+
+    /**
+     * The generated property names of {@code duplicable.unique} (#8663), in authored order: the copy's
+     * values for all of them must not be held by an existing record.
+     *
+     * @param entity the duplicable document master
+     * @return the PascalCase property names, never null
+     */
+    private static List<String> duplicateUnique(EntityIntent entity) {
+        List<String> unique = new ArrayList<>();
+        for (String name : entity.getDuplicable()
+                                 .getUnique()) {
+            if (notBlank(name)) {
+                unique.add(IntentNaming.pascalCase(name.trim()));
+            }
+        }
+        return unique;
+    }
+
+    /** A {@code {field}} placeholder of a {@code duplicable.defaults} template (#8663). */
+    private static final java.util.regex.Pattern DUPLICATE_PLACEHOLDER = java.util.regex.Pattern.compile("\\{([^{}]*)\\}");
+
+    /**
+     * A {@code duplicable.defaults} template as the JavaScript expression the document page assigns:
+     * the literal parts quoted, each {@code {field}} read from the SOURCE record ({@code src}) - an
+     * empty value reads as nothing - joined into one string. {@code "{name} (copy)"} becomes
+     * {@code (src['Name'] ?? '') + " (copy)"}.
+     *
+     * @param template the authored template
+     * @return the JavaScript expression
+     */
+    private static String duplicateTemplate(String template) {
+        List<String> parts = new ArrayList<>();
+        java.util.regex.Matcher placeholder = DUPLICATE_PLACEHOLDER.matcher(template);
+        int at = 0;
+        while (placeholder.find()) {
+            if (placeholder.start() > at) {
+                parts.add(STRUCTURED_JSON.toJson(template.substring(at, placeholder.start())));
+            }
+            parts.add("String(src['" + IntentNaming.pascalCase(placeholder.group(1)
+                                                                          .trim())
+                    + "'] ?? '')");
+            at = placeholder.end();
+        }
+        if (at < template.length()) {
+            parts.add(STRUCTURED_JSON.toJson(template.substring(at)));
+        }
+        return String.join(" + ", parts);
     }
 
     /**
