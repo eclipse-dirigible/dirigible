@@ -98,9 +98,15 @@ public class PermissionIntentGenerator implements IntentTargetGenerator {
         }
     }
 
+    /**
+     * The intent's {@code .roles}: every role it authors - a {@code permissions:} role and an extra
+     * role of {@code .settings} - is a role for the application's people, so each one is marked
+     * {@code assignable}, which is what a tenant's Owner may give in Settings → Users (#8728). The
+     * per-entity convention roles are declared elsewhere and carry no mark.
+     */
     private static String buildRolesJson(IntentModel model, Set<String> extraRoles) {
         Set<String> seenNames = new LinkedHashSet<>();
-        List<Map<String, String>> roles = new ArrayList<>();
+        List<Map<String, Object>> roles = new ArrayList<>();
         for (PermissionIntent permission : model.getPermissions()) {
             String name = permission.getRole();
             if (name == null || name.isBlank()) {
@@ -110,19 +116,21 @@ public class PermissionIntentGenerator implements IntentTargetGenerator {
             if (!seenNames.add(name)) {
                 continue;
             }
-            Map<String, String> entry = new LinkedHashMap<>();
+            Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("name", name);
             if (permission.getDescription() != null && !permission.getDescription()
                                                                   .isBlank()) {
                 entry.put("description", permission.getDescription());
             }
+            entry.put("assignable", true);
             roles.add(entry);
         }
         for (String name : extraRoles) {
             if (seenNames.add(name)) {
-                Map<String, String> entry = new LinkedHashMap<>();
+                Map<String, Object> entry = new LinkedHashMap<>();
                 entry.put("name", name);
                 entry.put("description", "Admitted by every generated entity and report gate (.settings access.extraRoles).");
+                entry.put("assignable", true);
                 roles.add(entry);
             }
         }
