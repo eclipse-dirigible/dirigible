@@ -244,7 +244,13 @@ public class JavaLoader {
         // consumer runs. Bean instantiation + injection happens once, centrally, in the
         // ComponentContainer rebuild below; the consumers here only wire behaviour over the ready
         // instances they fetch from the container.
-        notifyAll(consumers, toUnload, /* loaded */ false);
+        //
+        // The unload pass runs the consumers in REVERSE @Order, the load pass in order: a consumer
+        // depends on the ones before it (a job, a listener or a controller on the entities), so it is
+        // torn down before them and set up after them. Unloaded in load order, the entities left about
+        // a second before the jobs were unscheduled, and a job firing in between failed with "is not a
+        // registered @Entity" (#8703).
+        notifyAll(consumers.reversed(), toUnload, /* loaded */ false);
 
         // Install the loader BEFORE notifying onClassLoaded so consumers see consistent state via
         // the holder if they look it up.
@@ -353,7 +359,7 @@ public class JavaLoader {
     }
 
     /**
-     * Iterate each consumer in {@code @Order} sequence and drain its claimed classes before moving on.
+     * Iterate each consumer in the given sequence and drain its claimed classes before moving on.
      * {@code loaded=true} dispatches {@code onClassLoaded}, {@code false} dispatches
      * {@code onClassUnloaded}.
      */

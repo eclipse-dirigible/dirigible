@@ -165,6 +165,24 @@ class JavaLoaderTest {
         assertEquals(List.of("begin", "load:" + FQN, "end", "begin", "unload:" + FQN, "load:" + FQN, "end"), generation.events);
     }
 
+    /**
+     * The unload pass runs the consumers in reverse {@code @Order}, so a consumer that depends on an
+     * earlier one (a job on its entities) is torn down before what it depends on, and the load pass
+     * keeps the declared order (#8703).
+     */
+    @Test
+    void unload_pass_runs_the_consumers_in_reverse_order_and_the_load_pass_in_order() {
+        List<String> events = new ArrayList<>();
+        JavaLoader localLoader = loaderWith(
+                List.of(new OrderConsumer("entities", events), new OrderConsumer("jobs", events), new OrderConsumer("listeners", events)));
+
+        localLoader.rebuild(List.of(handlerSource(FQN, "v1")));
+        events.clear();
+        localLoader.rebuild(List.of(handlerSource(FQN, "v2")));
+
+        assertEquals(List.of("unload:listeners", "unload:jobs", "unload:entities", "load:entities", "load:jobs", "load:listeners"), events);
+    }
+
     @Test
     void consumer_throwing_on_begin_generation_is_skipped_and_the_others_still_run() {
         GenerationConsumer throwing = new GenerationConsumer(true);
@@ -480,6 +498,32 @@ class JavaLoaderTest {
         @Override
         public void onClassUnloaded(LoadedClass info) {
             events.add("unload:" + info.fqn());
+        }
+    }
+
+    /** Test consumer that records its name against every load/unload in a log shared with others. */
+    private static final class OrderConsumer implements JavaClassConsumer {
+        private final String name;
+        private final List<String> events;
+
+        OrderConsumer(String name, List<String> events) {
+            this.name = name;
+            this.events = events;
+        }
+
+        @Override
+        public boolean accepts(Class<?> clazz) {
+            return true;
+        }
+
+        @Override
+        public void onClassLoaded(LoadedClass info) {
+            events.add("load:" + name);
+        }
+
+        @Override
+        public void onClassUnloaded(LoadedClass info) {
+            events.add("unload:" + name);
         }
     }
 
