@@ -109,6 +109,8 @@ import org.eclipse.dirigible.components.intent.model.ResolveIntent;
 import org.eclipse.dirigible.components.intent.model.ShareIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
+import org.eclipse.dirigible.components.intent.model.ReportNotExistsIntent;
+import org.eclipse.dirigible.components.intent.generator.report.ReportHaving;
 import org.eclipse.dirigible.components.intent.generator.report.ReportMoments;
 import org.eclipse.dirigible.components.intent.generator.report.ReportUnion;
 import org.eclipse.dirigible.components.intent.model.ReportUnionMemberIntent;
@@ -13974,9 +13976,178 @@ public final class IntentParser {
             validateReportScope(model, report, issues);
             validateSubsetReportReferences(model, report, issues);
             validateReportOrderBy(report, issues);
+            validateReportHaving(model, report, issues);
+            validateReportNotExists(model, report, entityNames, issues);
             for (String problem : ReportMoments.problems(report.getFilter())) {
                 issues.add("report [" + report.getName() + "] filter " + problem);
             }
+        }
+    }
+
+    /**
+     * A report's {@code having:} (dirigible #7914) filters the GROUPS of an aggregating report, after
+     * its {@code GROUP BY}: so the report must aggregate, and it must not be a ledger kind, whose fixed
+     * columns are computed in their own query. Every aggregate call's argument is a path the report's
+     * source resolves, and nothing else in the clause may name a column - a group has no single value
+     * of a field it is not grouped by.
+     */
+    private static void validateReportHaving(IntentModel model, ReportIntent report, List<String> issues) {
+        if (!report.hasHaving()) {
+            return;
+        }
+        String subject = "report [" + report.getName() + "] having [" + report.getHaving()
+                                                                              .trim()
+                + "]";
+        if (report.isLedgerKind()) {
+            issues.add(subject + " cannot be combined with kind [" + report.getKind()
+                                                                           .trim()
+                    + "] - a ledger kind computes its own fixed columns");
+            return;
+        }
+        if (!report.isAggregated()) {
+            issues.add(subject + " filters the report's groups, so the report must aggregate - declare its measures");
+            return;
+        }
+        if (!ReportHaving.AGGREGATE_CALL.matcher(report.getHaving())
+                                        .find()) {
+            issues.add(subject + " compares no aggregate - write e.g. \"count(*) > 1\"; a row condition belongs in filter:");
+        }
+        for (String stray : ReportHaving.strayIdentifiers(report.getHaving())) {
+            issues.add(subject + " names [" + stray
+                    + "] outside an aggregate call - a group has no single value of it; aggregate it (count/sum/avg/min/max)"
+                    + " or move the row condition to filter:");
+        }
+        EntityIntent source = reportSource(model, report);
+        if (source != null) {
+            for (String path : ReportHaving.aggregatedPaths(report.getHaving())) {
+                reportPathField(model, source, subject + " aggregate", path, issues);
+            }
+        }
+    }
+
+    /**
+     * A report's {@code notExists:} (dirigible #7914) - the source rows no row of another entity
+     * matches. The target is an entity of this model or of a {@code uses:} model (whose properties are
+     * checked against its owner at generation, like a cross-model union member); {@code match} pairs a
+     * target field or to-one with a source path, {@code between} names the target's period bounds and
+     * the source date they must cover, and at least one of the two is declared - an anti-join with no
+     * condition would test whether the target is empty at all. A union or a ledger kind reads no single
+     * source row to correlate with, so neither takes one.
+     */
+    private static void validateReportNotExists(IntentModel model, ReportIntent report, Set<String> entityNames, List<String> issues) {
+        ReportNotExistsIntent notExists = report.getNotExists();
+        if (notExists == null) {
+            return;
+        }
+        String subject = "report [" + report.getName() + "] notExists";
+        if (report.isUnion()) {
+            issues.add(subject + " cannot be combined with union: - it correlates with one source entity's rows");
+            return;
+        }
+        if (report.isLedgerKind()) {
+            issues.add(subject + " cannot be combined with kind [" + report.getKind()
+                                                                           .trim()
+                    + "] - a ledger kind computes its own fixed rows");
+            return;
+        }
+        if (isBlank(notExists.getEntity())) {
+            issues.add(subject + " has no entity - name the entity whose matching rows must be absent");
+            return;
+        }
+        String name = notExists.getEntity()
+                               .trim();
+        EntityIntent target = null;
+        if (notExists.isCrossModel()) {
+            String alias = notExists.getModel()
+                                    .trim();
+            boolean known = model.getUses()
+                                 .stream()
+                                 .anyMatch(uses -> alias.equals(uses.getModel()));
+            if (!known) {
+                issues.add(subject + " uses unknown model alias [" + alias + "] - declare it under uses:");
+            }
+        } else if (!entityNames.contains(name)) {
+            issues.add(subject + " entity [" + name + "] is not an entity of this model - name its model: when it lives in another one");
+        } else {
+            target = entityByName(model, name);
+        }
+        if (notExists.getMatch()
+                     .isEmpty()
+                && notExists.getBetween()
+                            .isEmpty()) {
+            issues.add(subject + " declares neither match: nor between: - name what correlates the [" + name
+                    + "] rows with the report's rows");
+        }
+        EntityIntent source = isBlank(report.getSource()) ? null : entityByName(model, report.getSource());
+        for (Map.Entry<String, String> pair : notExists.getMatch()
+                                                       .entrySet()) {
+            String key = pair.getKey() == null ? ""
+                    : pair.getKey()
+                          .trim();
+            String value = pair.getValue() == null ? ""
+                    : pair.getValue()
+                          .trim();
+            if (key.isEmpty() || value.isEmpty()) {
+                issues.add(subject + " match has an empty pair - write { <" + name + " property>: <report source property> }");
+                continue;
+            }
+            if (target != null && fieldByName(target, key) == null && toOneRelationByName(target, key) == null) {
+                issues.add(subject + " match [" + key + "] is not a field or to-one relation of [" + name + "]");
+            }
+            if (source != null) {
+                validateNotExistsSourcePath(model, source, subject + " match [" + key + "]", value, issues);
+            }
+        }
+        Map<String, String> between = notExists.getBetween();
+        if (!between.isEmpty()) {
+            for (String bound : List.of("start", "end", "value")) {
+                if (isBlank(between.get(bound))) {
+                    issues.add(subject + " between has no " + bound + " - it is { start: <" + name + " field>, end: <" + name
+                            + " field>, value: <report source date> }");
+                }
+            }
+            for (String bound : List.of("start", "end")) {
+                String field = between.get(bound);
+                if (target != null && !isBlank(field)) {
+                    validateAgingDate(model, target, subject + " between " + bound, field.trim(), issues);
+                }
+            }
+            if (source != null && !isBlank(between.get("value"))) {
+                validateAgingDate(model, source, subject + " between value", between.get("value")
+                                                                                    .trim(),
+                        issues);
+            }
+        }
+        for (String problem : ReportMoments.problems(notExists.getFilter())) {
+            issues.add(subject + " filter " + problem);
+        }
+    }
+
+    /**
+     * The source side of a {@code notExists.match} pair: the source's own field or to-one (compared by
+     * its foreign key), or ONE hop to a field or to-one of the entity a source to-one points at.
+     */
+    private static void validateNotExistsSourcePath(IntentModel model, EntityIntent source, String subject, String path,
+            List<String> issues) {
+        String[] segments = path.split("\\.");
+        if (segments.length > 2) {
+            issues.add(subject + " [" + path + "] may reference the report source or ONE relation hop");
+            return;
+        }
+        if (segments.length == 1) {
+            if (fieldByName(source, path) == null && toOneRelationByName(source, path) == null) {
+                issues.add(subject + " [" + path + "] is not a field or to-one relation of [" + source.getName() + "]");
+            }
+            return;
+        }
+        RelationIntent hop = toOneRelationByName(source, segments[0]);
+        if (hop == null) {
+            issues.add(subject + " [" + segments[0] + "] is not a to-one relation of [" + source.getName() + "]");
+            return;
+        }
+        EntityIntent owner = hop.isCrossModel() || hop.getTo() == null ? null : entityByName(model, hop.getTo());
+        if (owner != null && fieldByName(owner, segments[1]) == null && toOneRelationByName(owner, segments[1]) == null) {
+            issues.add(subject + " [" + path + "] is not a field or to-one relation of [" + owner.getName() + "]");
         }
     }
 

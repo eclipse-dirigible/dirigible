@@ -45,6 +45,7 @@ import org.eclipse.dirigible.components.intent.model.ReportAgingIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.components.intent.model.OrderByIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
+import org.eclipse.dirigible.components.intent.model.ReportNotExistsIntent;
 import org.eclipse.dirigible.components.intent.model.ReportParameterIntent;
 import org.eclipse.dirigible.components.intent.model.ReportPeriodIntent;
 import org.eclipse.dirigible.components.intent.model.ReportUnionMemberIntent;
@@ -452,6 +453,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         // decides whether its rows drill down to the source's list (#8374).
         List<ResolvedDimension> plainDimensions = List.of();
         boolean scoped = false;
+        HavingClause having = null;
         List<Map<String, Object>> parameters;
         List<Map<String, Object>> conditions;
         List<Map<String, Object>> joinRows;
@@ -525,6 +527,10 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             String filter = buildWhere(context, model, source, baseAlias, joins, report.getFilter());
             Map<String, Object> scope = scopeCondition(context, model, source, baseAlias, report, aggregated);
             scoped = scope != null;
+            // The integrity-check conditions (#7914): an anti-join narrows the rows, a HAVING the groups.
+            // Both resolve before the joins are emitted - a one-hop path registers its join here.
+            String absent = report.getNotExists() == null ? null : notExists(context, model, source, baseAlias, report, joins);
+            having = report.hasHaving() ? having(context, model, source, baseAlias, report.getHaving(), joins) : null;
             // A statement takes the balance window too: its ledger reduction is the balance report's,
             // and the authored `parameters:` are appended to the same list below.
             parameters = report.isLedgerKind() ? balanceParameters() : new ArrayList<>();
@@ -534,10 +540,12 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 parameterConditions.addAll(aging.conditions());
             }
             parameterConditions.addAll(parameterConditions(context, model, source, baseAlias, report, joins, parameters));
-            conditions = conditions(filter, scope);
+            // A NOT EXISTS is no comparison the editor's condition rows can hold, so a report carrying one
+            // keeps its predicate in the query alone and opens free-style.
+            conditions = absent != null ? null : conditions(filter, scope);
             String where;
             if (conditions == null) {
-                where = rawWhere(filter, scope, parameterConditions.isEmpty() ? null : predicate(parameterConditions));
+                where = rawWhere(filter, scope, and(parameterConditions.isEmpty() ? null : predicate(parameterConditions), absent));
             } else {
                 conditions.addAll(parameterConditions);
                 where = predicate(conditions);
@@ -545,6 +553,10 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             joinRows = joinRows(joins);
             query = statementQuery == null ? buildQuery(baseTable, baseAlias, joinRows, columns, where)
                     : statementQuery.sql(baseTable, baseAlias, joinRows, where);
+            if (having != null) {
+                // After the GROUP BY and before the ORDER BY appended below - the editor's own order.
+                query = query + "\nHAVING " + having.sql();
+            }
         }
 
         // The row order (dirigible #8435), on every report whose query buildQuery() produced - a
@@ -625,6 +637,12 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         // bare `WHERE`, and a partial one would have silently dropped the rest of the filter.
         if (!statement && conditions != null && !conditions.isEmpty()) {
             document.put("conditions", conditions);
+        }
+        // The editor's HAVING rows (#7914), when the clause is a conjunction of plain comparisons - the
+        // builder rebuilds them after its GROUP BY, token for token as the query carries them.
+        if (having != null && having.rows() != null && !having.rows()
+                                                              .isEmpty()) {
+            document.put("havings", having.rows());
         }
         // The editor's own ordering model, so its visual builder rebuilds the same ORDER BY and the
         // report keeps round-tripping (#6675); the generated repository reads it to keep the order
@@ -734,8 +752,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         boolean plain = (report.getKind() == null || report.getKind()
                                                            .isBlank())
                 && !report.isAging() && report.isAggregated();
-        boolean narrowed = scoped || (report.getFilter() != null && !report.getFilter()
-                                                                           .isBlank())
+        boolean narrowed = scoped || report.getNotExists() != null || (report.getFilter() != null && !report.getFilter()
+                                                                                                            .isBlank())
                 || (report.getParameters() != null && !report.getParameters()
                                                              .isEmpty());
         if (!plain || narrowed || source == null || dimensions.isEmpty() || context == null) {
@@ -897,6 +915,156 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             }
         }
         LOGGER.warn("Measure [{}] did not match the aggregate(field) convention - skipping", LoggedValue.of(measure));
+    }
+
+    /**
+     * A report's {@code having:} as SQL, and as the editor's {@code havings} rows when it is a
+     * conjunction of plain comparisons ({@code null} otherwise - the query then carries it alone).
+     */
+    private record HavingClause(List<Map<String, Object>> rows, String sql) {
+    }
+
+    /**
+     * The {@code having:} clause (dirigible #7914) with every aggregate call over a field path
+     * rewritten to the aggregate of its qualified column - {@code count(*) > 1} ->
+     * {@code COUNT(*) > 1}, {@code sum(total) <> 0} -> {@code SUM(Invoice."INVOICE_TOTAL") <> 0} - the
+     * same expression a measure over that path SELECTs. Aggregates rather than output aliases, because
+     * PostgreSQL does not resolve a SELECT alias inside HAVING. The parser has already refused a column
+     * named outside an aggregate call.
+     */
+    private static HavingClause having(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
+            String having, Map<String, Join> joins) {
+        Matcher matcher = ReportHaving.AGGREGATE_CALL.matcher(having.trim());
+        StringBuilder out = new StringBuilder();
+        while (matcher.find()) {
+            String aggregate = matcher.group(1)
+                                      .toUpperCase(Locale.ROOT);
+            String argument = matcher.group(2)
+                                     .trim();
+            String term;
+            if (argument.isEmpty() || "*".equals(argument)) {
+                term = aggregate + "(*)";
+            } else {
+                ColumnRef ref = resolve(context, model, source, baseAlias, argument);
+                if (ref.join != null) {
+                    joins.putIfAbsent(ref.join.alias, ref.join);
+                }
+                term = aggregate + "(" + ref.qualified() + ")";
+            }
+            matcher.appendReplacement(out, Matcher.quoteReplacement(term));
+        }
+        matcher.appendTail(out);
+        String sql = normalizeEqualityOperator(out.toString()).trim();
+        List<Map<String, Object>> rows = conditions(sql, null);
+        return new HavingClause(rows, rows == null || rows.isEmpty() ? sql : predicate(rows));
+    }
+
+    /** The alias suffix of the entity a {@code notExists:} subquery reads (#7914). */
+    private static final String NOT_EXISTS_SUFFIX = "Absent";
+
+    /**
+     * A report's {@code notExists:} (dirigible #7914) as a correlated
+     * {@code NOT EXISTS (SELECT 1 FROM <target> WHERE ...)}: each {@code match} pair an equality
+     * between the target's column (a to-one by its foreign key) and the source row's, the
+     * {@code between} window the target's two bounds around the source's date - an empty bound
+     * open-ended, both inclusive, compared as dates - and the target's own {@code filter}. A target of
+     * another model is read from its owner's table, its properties checked against the owner's resolved
+     * {@code .model}, as a cross-model union member is. A NULL source value matches no target row, so
+     * the source row is listed: an entry with no company lies in no fiscal year of its company.
+     *
+     * @return the predicate, ANDed into the report's WHERE
+     */
+    private static String notExists(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
+            ReportIntent report, Map<String, Join> joins) {
+        ReportNotExistsIntent notExists = report.getNotExists();
+        String name = notExists.getEntity()
+                               .trim();
+        String alias = tableAlias(name + NOT_EXISTS_SUFFIX);
+        Map<String, Join> innerJoins = new LinkedHashMap<>();
+        String table;
+        Function<String, String> targetColumn;
+        String filter;
+        if (notExists.isCrossModel()) {
+            String modelAlias = notExists.getModel()
+                                         .trim();
+            UsesIntent uses = model.getUses()
+                                   .stream()
+                                   .filter(candidate -> modelAlias.equals(candidate.getModel()))
+                                   .findFirst()
+                                   .orElseThrow(() -> new IntentValidationException(List.of(
+                                           "report [" + report.getName() + "] notExists uses unknown model alias [" + modelAlias + "]")));
+            CrossModelSupport.TargetInfo info = CrossModelSupport.resolve(context, uses, name);
+            String subject = "report [" + report.getName() + "] notExists [" + name + "] of model [" + modelAlias + "]";
+            table = info.tableDataName();
+            targetColumn = property -> {
+                requireProperty(info, subject, property);
+                return alias + "." + quote(column(name, property));
+            };
+            filter = crossModelFilter(info, alias, name, notExists.getFilter());
+        } else {
+            EntityIntent target = entityByName(model, name);
+            table = IntentNaming.tableName(context, name);
+            targetColumn = property -> alias + "." + quote(column(name, property));
+            filter = buildWhere(context, model, target, alias, innerJoins, notExists.getFilter());
+        }
+        List<String> terms = new ArrayList<>();
+        for (Map.Entry<String, String> pair : notExists.getMatch()
+                                                       .entrySet()) {
+            terms.add(targetColumn.apply(pair.getKey()
+                                             .trim())
+                    + " = " + notExistsSourceColumn(context, model, source, baseAlias, pair.getValue()
+                                                                                           .trim(),
+                            joins));
+        }
+        Map<String, String> between = notExists.getBetween();
+        if (!between.isEmpty()) {
+            String value = "CAST(" + notExistsSourceColumn(context, model, source, baseAlias, between.get("value")
+                                                                                                     .trim(),
+                    joins) + " AS DATE)";
+            String start = targetColumn.apply(between.get("start")
+                                                     .trim());
+            String end = targetColumn.apply(between.get("end")
+                                                   .trim());
+            terms.add("(" + start + " IS NULL OR CAST(" + start + " AS DATE) <= " + value + ")");
+            terms.add("(" + end + " IS NULL OR CAST(" + end + " AS DATE) >= " + value + ")");
+        }
+        if (filter != null && !filter.isBlank()) {
+            terms.add("(" + filter + ")");
+        }
+        StringBuilder sql = new StringBuilder("NOT EXISTS (SELECT 1 FROM ").append(quote(table))
+                                                                           .append(" as ")
+                                                                           .append(alias);
+        for (Join join : innerJoins.values()) {
+            sql.append(' ')
+               .append(join.type)
+               .append(" JOIN ")
+               .append(quote(join.table))
+               .append(" as ")
+               .append(join.alias)
+               .append(" ON ")
+               .append(join.on);
+        }
+        return sql.append(" WHERE ")
+                  .append(String.join(" AND ", terms))
+                  .append(')')
+                  .toString();
+    }
+
+    /**
+     * The source side of a {@code notExists:} pair: a bare to-one of the source is its foreign key (not
+     * the label a dimension shows), anything else - an own field, a one-hop {@code Relation.field} or
+     * {@code Relation.Relation} - resolves like a dimension, its join registered on the report query.
+     */
+    private static String notExistsSourceColumn(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
+            String path, Map<String, Join> joins) {
+        if (path.indexOf('.') < 0 && fieldByName(source, path) == null && relationByName(source, path) != null) {
+            return baseAlias + "." + quote(column(source.getName(), path));
+        }
+        ColumnRef ref = resolve(context, model, source, baseAlias, path);
+        if (ref.join != null) {
+            joins.putIfAbsent(ref.join.alias, ref.join);
+        }
+        return ref.qualified();
     }
 
     /**
