@@ -501,7 +501,6 @@
                     <artifactId>formatter-maven-plugin</artifactId>
                     <version>${maven-formatter-plugin.version}</version>
                     <configuration>
-                        <skip>${skip.code.formatting}</skip>
                         <configFile>${formatter.location}</configFile>
                         <compilerSource>${formatter.java.version}</compilerSource>
                         <compilerCompliance>${formatter.java.version}</compilerCompliance>
@@ -514,6 +513,12 @@
                             <goals>
                                 <goal>format</goal>
                             </goals>
+                            <!-- The skip belongs to this lifecycle-bound execution only, so that a profile
+                                 setting skip.code.formatting (quick-build, tests, ...) does not turn a directly
+                                 invoked formatter:format / formatter:validate into a silent no-op (#8746). -->
+                            <configuration>
+                                <skip>${skip.code.formatting}</skip>
+                            </configuration>
                         </execution>
                     </executions>
                 </plugin>
