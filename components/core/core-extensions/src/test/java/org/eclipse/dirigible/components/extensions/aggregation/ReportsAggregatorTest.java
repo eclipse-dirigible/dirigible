@@ -122,6 +122,27 @@ class ReportsAggregatorTest {
         assertEquals(List.of(), aggregate());
     }
 
+    /**
+     * A generated application asks for its own project's readable reports, so it never runs a report to
+     * learn whether the reader may read it (#8699).
+     */
+    @Test
+    void lists_only_the_readable_reports_of_the_project_asked_for() {
+        page("shop", "granted", "Granted");
+        report("shop", "Granted", "{\"security\": {\"roleRead\": \"Viewer\"}}");
+        page("shop", "refused", "Refused");
+        report("shop", "Refused", "{\"security\": {\"roleRead\": \"Clerk\"}}");
+        page("other", "elsewhere", "Elsewhere");
+
+        ReportsAggregator aggregator = new ReportsAggregator(repository);
+
+        assertEquals(List.of("Granted"), values(aggregator.aggregate("shop"), "name"));
+        assertEquals(List.of("Elsewhere"), values(aggregator.aggregate("other"), "name"));
+        assertEquals(List.of(), aggregator.aggregate("missing"), "an unpublished project has no reports");
+        assertEquals(List.of(), aggregator.aggregate(".."), "a project name never leaves the registry");
+        assertEquals(List.of(), aggregator.aggregate("shop/gen"), "a project name is one path segment");
+    }
+
     private List<Map<String, Object>> aggregate() {
         return new ReportsAggregator(repository).aggregate();
     }
