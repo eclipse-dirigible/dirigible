@@ -667,6 +667,12 @@
                                 <!-- Generated code committed as a fixture: kept byte-identical to what the
                                      intent generates, so the CLI generate check can tell (#7642). -->
                                 <exclude>**/src/main/resources/sample-intent-*/gen/**</exclude>
+                                <!-- ANTLR output committed without a header: antlr4 rewrites it without one, so a
+                                     header added here is a diff on every build (#8754). -->
+                                <exclude>**/src/main/java/org/eclipse/dirigible/parsers/typescript/TypeScriptLexer.java</exclude>
+                                <exclude>**/src/main/java/org/eclipse/dirigible/parsers/typescript/TypeScriptParser.java</exclude>
+                                <exclude>**/src/main/java/org/eclipse/dirigible/parsers/typescript/TypeScriptParser*Listener.java</exclude>
+                                <exclude>**/src/main/java/org/eclipse/dirigible/parsers/typescript/TypeScriptParser*Visitor.java</exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/font-awesome-4.7.0/**
                                 </exclude>

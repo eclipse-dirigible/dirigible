@@ -10,6 +10,12 @@
  */
 import * as esbuild from 'esbuild';
 
+// ../java-lsp-client.js is committed and rebuilt by every Maven build, so its output must not depend on
+// when `npm install` ran: package.json pins esbuild and every package that ends up in the bundle
+// (vscode-ws-jsonrpc, vscode-jsonrpc via "overrides", vscode-languageserver-types) to an exact version,
+// because there is no lockfile (package-lock.json is git-ignored). Bump a pin and commit the rebuilt
+// bundle in the same change (#8754).
+
 await esbuild.build({
     entryPoints: ['java-lsp-client.ts'],
     bundle: true,
