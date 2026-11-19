@@ -250,7 +250,9 @@ not as an apology.
   `EntityStatus`, a composition parent, the `personal`/`partner`/`owner` relation, a collection,
   `subset` or `manyToMany`, and beside a calculated action, `fixedAfterCreate` or
   `fixedWhenReferenced` (those describe a value a user or the platform picks). Pair it with
-  `inlineCreate: false` when the target is the same entity.
+  `inlineCreate: false` when the target is the same entity. Never `required: true` beside it (#8751):
+  the column would be NOT NULL while no user create can set it, so every New would fail - unless the
+  entity is `systemWritten: true` and only the system creates its rows.
 - **`whenTargetDeleted: restrict | nullify | cascade | keep` on a plain (non-composition) `manyToOne`/
   `oneToOne` = what deleting the record it points at does to the records pointing at it** (#7547).
   - `restrict` is the DEFAULT, also when the key is absent: the delete is refused with ONE 409 naming

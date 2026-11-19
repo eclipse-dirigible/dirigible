@@ -6782,7 +6782,8 @@ public final class IntentParser {
      * workflow), not a composition parent (set by the master's detail panel), not the
      * personal/partner/owner relation (filled from the caller), not computed by a calculated action,
      * and not fixed by {@code fixedAfterCreate}/{@code fixedWhenReferenced}, which only make sense for
-     * a value a user picks.
+     * a value a user picks. It is not {@code required} either (#8751) unless the entity is
+     * {@code systemWritten}: a NOT NULL FK no user create can fill fails every user create.
      *
      * @param entity the entity declaring the relation
      * @param relation the relation
@@ -6823,6 +6824,14 @@ public final class IntentParser {
         if (!conflicting.isEmpty()) {
             issues.add(subject + " declares readOnly (only the system sets it) beside " + String.join(", ", conflicting)
                     + ", which describe a value the platform or a user chooses - keep readOnly or drop it");
+        }
+        if (relation.isRequired() && !entity.isSystemWritten()) {
+            // #8751: a NOT NULL FK no user create can fill - the forms render no picker and the
+            // controllers drop a sent value - so every create through the form or REST would fail on
+            // the constraint. Only an entity whose rows the system alone creates may carry it.
+            issues.add(subject + " declares both required and readOnly - the column is NOT NULL but no user create can set it, so"
+                    + " every create through the form or REST would fail; drop required, or declare the entity systemWritten: true"
+                    + " if only the system (a create-from, a delegate, a reaction) creates its rows");
         }
     }
 
