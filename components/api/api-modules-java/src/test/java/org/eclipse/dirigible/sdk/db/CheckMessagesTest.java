@@ -11,7 +11,9 @@ package org.eclipse.dirigible.sdk.db;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -67,6 +69,22 @@ class CheckMessagesTest {
     void a_one_hop_placeholder_is_interpolated() {
         assertEquals("max 20% for 2.1 (and {Other.code})", CheckMessages.interpolate(
                 "max {taxRateCap}% for {Category.code} (and {Other.code})", Map.of("taxRateCap", 20, "Category.code", "2.1")));
+    }
+
+    /** A value of the record that is empty renders as nothing, not the text "null" (#8747). */
+    @Test
+    void a_present_but_null_placeholder_renders_empty() {
+        Map<String, Object> params = new HashMap<>();
+        params.put("Category.code", null);
+        params.put("count", null);
+        assertEquals("refused for category [] and [] and {other}",
+                CheckMessages.interpolate("refused for category [{Category.code}] and [{{ count }}] and {other}", params));
+        ValidationException refusal = CheckMessages.refusal(KEY, "for category {Category.code}", "Category.code", null);
+        assertEquals("for category ", refusal.getMessage());
+        assertTrue(refusal.getMessageParams()
+                          .containsKey("Category.code"));
+        assertNull(refusal.getMessageParams()
+                          .get("Category.code"));
     }
 
     @Test
