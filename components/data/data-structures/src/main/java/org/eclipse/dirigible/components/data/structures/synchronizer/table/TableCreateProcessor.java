@@ -12,7 +12,8 @@ package org.eclipse.dirigible.components.data.structures.synchronizer.table;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -20,6 +21,7 @@ import org.eclipse.dirigible.components.data.structures.domain.Table;
 import org.eclipse.dirigible.components.data.structures.domain.TableColumn;
 import org.eclipse.dirigible.components.data.structures.domain.TableConstraintCheck;
 import org.eclipse.dirigible.components.data.structures.domain.TableConstraintForeignKey;
+import org.eclipse.dirigible.components.data.structures.domain.TableConstraintPrimaryKey;
 import org.eclipse.dirigible.components.data.structures.domain.TableConstraintUnique;
 import org.eclipse.dirigible.components.data.structures.domain.TableIndex;
 import org.eclipse.dirigible.components.database.DatabaseSystem;
@@ -159,23 +161,17 @@ public class TableCreateProcessor {
                                                                    .getUniqueIndexes()) {
                     String uniqueIndexName = "\"" + uniqueIndex.getName() + "\"";
 
-                    List<String> uniqueIndexColumns = new ArrayList<>();
-                    for (String column : uniqueIndex.getColumns()) {
-                        TableColumn definedColumn = tableModel.getColumn(column);
-                        if (null != definedColumn && (definedColumn.isUnique() || definedColumn.isPrimaryKey())) {
-                            logger.debug(
-                                    "Skipping creating index for column [{}] since it is marked as unique or primary key. The index will be automatically created when creating the table.",
-                                    column);
-                            continue;
-                        }
-
-                        String columnValue = "\"" + column + "\"";
-                        uniqueIndexColumns.add(columnValue);
+                    if (isCreatedWithTheTable(tableModel, uniqueIndex)) {
+                        logger.debug(
+                                "Skipping creating unique index [{}] over {} since its columns are marked as unique or primary key. The index will be automatically created when creating the table.",
+                                uniqueIndex.getName(), Arrays.toString(uniqueIndex.getColumns()));
+                        continue;
                     }
 
-                    if (!uniqueIndexColumns.isEmpty()) {
-                        createTableBuilder.unique(uniqueIndexName, uniqueIndexColumns.toArray(new String[0]));
-                    }
+                    String[] uniqueIndexColumns = Arrays.stream(uniqueIndex.getColumns())
+                                                        .map(column -> "\"" + column + "\"")
+                                                        .toArray(String[]::new);
+                    createTableBuilder.unique(uniqueIndexName, uniqueIndexColumns);
                 }
             }
             if (tableModel.getConstraints()
@@ -221,6 +217,37 @@ public class TableCreateProcessor {
                 }
             }
         }
+    }
+
+    /**
+     * Whether creating the table already builds the index a declared unique index asks for: it is over
+     * one column that is unique or the primary key on its own, or over exactly the columns of the
+     * primary key (a database reports the key's own index among a table's unique indexes, and an
+     * exported model carries it). Any other index is its own key and is created over every column it
+     * declares - also when one of them is unique or part of the primary key.
+     */
+    private static boolean isCreatedWithTheTable(Table tableModel, TableConstraintUnique uniqueIndex) {
+        String[] indexColumns = uniqueIndex.getColumns();
+        if (indexColumns.length == 1) {
+            TableColumn column = tableModel.getColumn(indexColumns[0]);
+            return column != null && (column.isUnique() || column.isPrimaryKey());
+        }
+        return new HashSet<>(Arrays.asList(indexColumns)).equals(primaryKeyColumns(tableModel));
+    }
+
+    private static Set<String> primaryKeyColumns(Table tableModel) {
+        Set<String> primaryKeyColumns = new HashSet<>();
+        for (TableColumn column : tableModel.getColumns()) {
+            if (column.isPrimaryKey()) {
+                primaryKeyColumns.add(column.getName());
+            }
+        }
+        TableConstraintPrimaryKey primaryKey = tableModel.getConstraints()
+                                                         .getPrimaryKey();
+        if (primaryKey != null && primaryKey.getColumns() != null) {
+            primaryKeyColumns.addAll(Arrays.asList(primaryKey.getColumns()));
+        }
+        return primaryKeyColumns;
     }
 
 }
