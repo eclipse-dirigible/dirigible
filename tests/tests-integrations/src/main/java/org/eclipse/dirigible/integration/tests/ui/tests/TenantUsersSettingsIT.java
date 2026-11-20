@@ -174,8 +174,11 @@ class TenantUsersSettingsIT extends KeycloakUserInterfaceIntegrationTest {
 
         // 7. a removal, confirmed: one request without roles, and the row goes once the system reports it
         openMenu(ANN, "remove");
+        // the dialog names the tenant by its name, never by its (opaque) id
         Selenide.$(By.id("tenant-users-remove-dialog"))
-                .shouldBe(Condition.visible, WAIT);
+                .shouldBe(Condition.visible, WAIT)
+                .shouldHave(Condition.text("Remove " + ANN + " from " + tenant.getName() + "?"))
+                .shouldNotHave(Condition.text(tenant.getId()));
         Selenide.$(By.id("tenant-users-remove-confirm"))
                 .click();
         JsonNode removal = receive(QUEUE, 10_000);
