@@ -650,9 +650,8 @@ public class TableAlterProcessor {
         add.add()
            .check(check.getName(), check.getExpression());
         String sql = add.build();
-        logger.info(sql);
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.executeUpdate();
+        try {
+            executeStatement(connection, sql);
             return true;
         } catch (SQLException e) {
             long offending = rowsBreaking(connection, quotedTableName, check.getExpression());
