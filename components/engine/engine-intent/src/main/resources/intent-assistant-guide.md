@@ -1339,8 +1339,10 @@ A template is text, so it is only a value for a `string` / `text` field, and eac
 field of the entity (no `relation.field` paths). `unique:` lists fields and to-one relations - usually
 the fields of the entity's `duplicate` check - and at least one of them must carry a template, since
 that is the value being numbered: a value ending in `)` gets the number inside it (`(copy 2)`), any
-other value gets ` (2)` appended. The probe asks the entity's own `/search` before the create (at most
-50 tries; past them the create decides). `focus:` names a field with an input.
+other value gets ` (2)` appended. The server copies the record and numbers it inside one transaction
+that holds the source locked (`POST .../{id}/duplicate`, #8752), so two users duplicating the same
+record at the same moment get two different names (at most 50 tries; past them the create decides).
+`focus:` names a field with an input.
 
 **Control order (`order:`):** by default the generated UI controls (form inputs, list columns, detail
 rows) follow the declaration order - all fields first, then the to-one relations, so relations end up
