@@ -29,6 +29,11 @@
 	<properties>
 		<license.header.location>../../../licensing-header.txt</license.header.location>
 		<parent.pom.folder>../../../</parent.pom.folder>
+		<!-- The ANTLR sources under src/main/java are committed formatted. antlr4 regenerates them whenever
+		     it finds the grammar not older than its output (a fresh checkout, a git checkout of the files),
+		     so the formatter must run after it in every profile, quick-build included - otherwise the build
+		     leaves ~60k changed lines behind (#8754). -->
+		<skip.code.formatting>false</skip.code.formatting>
 	</properties>
 
 	<build>
