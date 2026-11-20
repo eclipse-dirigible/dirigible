@@ -14,6 +14,8 @@ import java.util.List;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.base.http.roles.ApplicationRoles;
 import org.eclipse.dirigible.components.base.http.roles.Roles.RoleNames;
+import org.eclipse.dirigible.components.tenants.domain.Tenant;
+import org.eclipse.dirigible.components.tenants.service.TenantService;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -62,6 +64,9 @@ class TenantUsersEndpoint extends BaseEndpoint {
     /** The roles an Owner may give. */
     private final TenantUserRoles roles;
 
+    /** The tenant registry, for the tenant's name. */
+    private final TenantService tenants;
+
     /**
      * Instantiates the endpoint.
      *
@@ -69,12 +74,15 @@ class TenantUsersEndpoint extends BaseEndpoint {
      * @param replica the replica
      * @param commands the commands
      * @param roles the roles an Owner may give
+     * @param tenants the tenant registry, for the tenant's name
      */
-    TenantUsersEndpoint(TenantUsersAccess access, TenantUserReplicaService replica, TenantUserCommands commands, TenantUserRoles roles) {
+    TenantUsersEndpoint(TenantUsersAccess access, TenantUserReplicaService replica, TenantUserCommands commands, TenantUserRoles roles,
+            TenantService tenants) {
         this.access = access;
         this.replica = replica;
         this.commands = commands;
         this.roles = roles;
+        this.tenants = tenants;
     }
 
     /**
@@ -92,8 +100,25 @@ class TenantUsersEndpoint extends BaseEndpoint {
         List<String> names = catalog.stream()
                                     .map(TenantUserRoles.Offer::name)
                                     .toList();
-        return ResponseEntity.ok(new TenantUsersContext(true, tenantId, canManage, canRead, ApplicationRoles.OWNER, names, catalog,
-                access.requestedBy(), seatLimit));
+        return ResponseEntity.ok(new TenantUsersContext(true, tenantId, nameOf(tenantId), canManage, canRead, ApplicationRoles.OWNER, names,
+                catalog, access.requestedBy(), seatLimit));
+    }
+
+    /**
+     * The name a person is shown for a tenant: its registered name, else its id - an id may be an
+     * opaque key, so it is the fallback, never the label of a tenant that has a name.
+     *
+     * @param tenantId the tenant id, or null in the default tenant
+     * @return the name, the id when the tenant has no name, or null for the default tenant
+     */
+    private String nameOf(String tenantId) {
+        if (tenantId == null) {
+            return null;
+        }
+        return tenants.findById(tenantId)
+                      .map(Tenant::getName)
+                      .filter(name -> !name.isBlank())
+                      .orElse(tenantId);
     }
 
     /**

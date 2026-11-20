@@ -414,6 +414,11 @@ document.addEventListener('alpine:init', () => {
         WORKSPACE_NOT_PROVISIONED: 'The application is not provisioned for this tenant yet.',
         ACCOUNT_MISSING: 'The person has no account.',
         SEAT_LIMIT: 'Every seat of the tenant was taken.',
+        IDENTITY_MISSING: 'The person has no sign-in.',
+        ORGANIZATION_NOT_ACTIVE: 'The organization is not active.',
+        ACCOUNT_NOT_PROVISIONED: 'The application is not provisioned for this tenant yet.',
+        ACCOUNT_SUSPENDED: 'This tenant is suspended. Users cannot be changed until it is resumed.',
+        WRONG_APPLICATION: "The request came from another application than the tenant's, so it was not applied.",
       };
       if (known[code]) return this.t('shell.tenantUsers.reason.' + code, known[code]);
       return message || code || '';

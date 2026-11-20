@@ -16,6 +16,8 @@ import java.util.List;
  *
  * @param enabled always true - the endpoint exists only when the feature does
  * @param tenantId the current tenant, or null in the default tenant
+ * @param tenantName the current tenant's name, which is what a person is shown - its id when it has
+ *        no name, null in the default tenant (#8724)
  * @param canManage whether the caller may invite, change roles and remove
  * @param canRead whether the caller may see the users
  * @param ownerRole the owner role
@@ -26,6 +28,6 @@ import java.util.List;
  * @param seatLimit the most users the tenant may hold at once, or null for no limit (#8593) - the
  *        page counts the seats taken from the users it lists
  */
-record TenantUsersContext(boolean enabled, String tenantId, boolean canManage, boolean canRead, String ownerRole, List<String> roles,
-        List<TenantUserRoles.Offer> catalog, String caller, Integer seatLimit) {
+record TenantUsersContext(boolean enabled, String tenantId, String tenantName, boolean canManage, boolean canRead, String ownerRole,
+        List<String> roles, List<TenantUserRoles.Offer> catalog, String caller, Integer seatLimit) {
 }
