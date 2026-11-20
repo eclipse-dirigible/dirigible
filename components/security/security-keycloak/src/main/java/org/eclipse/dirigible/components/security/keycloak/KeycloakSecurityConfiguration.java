@@ -16,6 +16,8 @@ import org.eclipse.dirigible.components.base.tenant.clients.IntegrationClientReg
 import org.eclipse.dirigible.components.security.oauth.ScopeRoleJwtAuthoritiesConverter;
 import org.eclipse.dirigible.components.security.oauth2.IdpHintAuthorizationRequestResolver;
 import org.eclipse.dirigible.components.security.oauth2.OAuth2SessionRevalidationFilter;
+import org.eclipse.dirigible.components.security.oauth2.login.OAuth2LoginFailureMessages;
+import org.eclipse.dirigible.components.security.oauth2.login.OAuth2LoginFailures;
 import org.eclipse.dirigible.components.security.oauth2.resourceserver.BearerUnauthorizedEntryPoint;
 import org.eclipse.dirigible.components.security.oauth2.resourceserver.ResourceServerJwtSettings;
 import org.eclipse.dirigible.components.security.oauth2.resourceserver.ResourceServerJwtSupport;
@@ -126,6 +128,10 @@ public class KeycloakSecurityConfiguration {
                                     .logoutSuccessHandler(keycloakLogoutSuccessHandler))
             // a bearer or anonymous request must not cost a session - only the login creates one
             .sessionManagement(sessionManagement -> sessionManagement.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED));
+
+        // a refused sign-in says why: the provider's sentence on the login page, its error in the log
+        // (#8801)
+        OAuth2LoginFailures.configure(http, loginPage, OAuth2LoginFailureMessages.descriptions());
 
         httpSecurityURIConfigurator.configure(http);
 

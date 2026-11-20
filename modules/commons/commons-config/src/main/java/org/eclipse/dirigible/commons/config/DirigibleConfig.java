@@ -343,7 +343,9 @@ public enum DirigibleConfig {
      * Optional application-owned login page for the OAuth2 login profiles (cognito, keycloak). When
      * set, unauthenticated browser requests are redirected to this page (typically under the already
      * public {@code /public/web/}) instead of the identity provider, so the application hosts its own
-     * sign-in UX. Blank keeps the standard redirect to the provider.
+     * sign-in UX. Blank keeps the standard redirect to the provider. A sign-in the provider refused
+     * comes back to this page with {@code ?error}, and {@code GET /login/oauth2/failure} answers the
+     * provider's {@code error} and the {@code description} to show, once.
      */
     SECURITY_LOGIN_PAGE("DIRIGIBLE_SECURITY_LOGIN_PAGE", null),
 
