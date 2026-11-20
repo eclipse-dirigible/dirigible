@@ -106,7 +106,7 @@
         <div class="vbox gap-3" style="margin-top: 2.5rem;">
           <template x-for="tenant in tenants" :key="tenant.id">
             <button type="button" class="tenant-tile hbox items-center gap-4 rounded-lg border border-border bg-card p-5"
-                    :disabled="!tenant.provisionedHere || busy" @click="select(tenant)"
+                    :data-tenant="tenant.id" :disabled="!tenant.provisionedHere || busy" @click="select(tenant)"
                     :aria-current="tenant.id === selectedTenantId ? 'true' : 'false'">
               <span class="tenant-tile-icon hbox items-center justify-center rounded-md bg-muted size-11 flex-none">
                   <svg x-h-lucide role="presentation" data-lucide="building-2" class="size-5"></svg>
@@ -121,8 +121,10 @@
                     <span x-h-badge data-variant="warning">Suspended</span>
                   </template>
                 </span>
-                <!-- The id is only worth a line of its own when it is not what the name already says. -->
-                <span class="text-sm text-muted-foreground" x-show="tenant.name && tenant.name !== tenant.id"
+                <!-- The name is what a person is shown; the id may be an opaque key. It gets a line of its
+                     own only when another tenant offered here has the same name, since nothing else tells
+                     the two apart then. A tenant without a name already shows its id as its label. -->
+                <span class="text-sm text-muted-foreground" data-tenant-id x-show="sharesName(tenant)"
                       x-text="tenant.id"></span>
                 <!-- Two reasons, two sentences. Waiting ends the first one and never ends the second,
                      so they must not share a line: this instance knows the tenant and is still working
@@ -179,6 +181,14 @@
 
               // Loaded, nothing went wrong, and still no tenant: the account has none here.
               get noAccess() { return !this.loading && !this.error && !this.tenants.length; },
+
+              // Whether another offered tenant shows the same label (name, else id), ignoring case
+              // and surrounding blanks - the one case where the id must be shown under a name.
+              sharesName(tenant) {
+                  if (!tenant.name) return false;
+                  const label = (t) => String(t.name || t.id).trim().toLowerCase();
+                  return this.tenants.some((other) => other.id !== tenant.id && label(other) === label(tenant));
+              },
 
               async init() {
                   const b = window.PlatformBranding || (window.top && window.top.PlatformBranding) || {};

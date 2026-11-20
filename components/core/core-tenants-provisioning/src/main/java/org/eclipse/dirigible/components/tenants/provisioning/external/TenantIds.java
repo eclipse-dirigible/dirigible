@@ -15,12 +15,12 @@ import java.util.regex.Pattern;
  * What a caller-supplied tenant id may look like.
  *
  * <p>
- * The id is supplied by the caller rather than generated, because one tenant is the same customer
- * in every application of a landscape, and it then travels into places that constrain its alphabet:
- * it is the default subdomain, it is the prefix of the tenant's data source name, and - under the
- * token groups resolution strategy - it is the first segment of the identity provider group name
- * {@code <tenantId>.<appId>.<role>}. A dot would make that group name unparseable, so a tenant
- * granted by such a group could never be entered.
+ * The id is supplied by the caller - a readable slug or an opaque key such as a UUID. It is an
+ * identifier, not a label: the tenant's name is what people are shown. The id travels into places
+ * that constrain its alphabet: it is the default subdomain, it is the prefix of the tenant's data
+ * source name, and - under the token groups resolution strategy - it is the first segment of the
+ * identity provider group name {@code <tenantId>.<appId>.<role>}. A dot would make that group name
+ * unparseable, so a tenant granted by such a group could never be entered.
  *
  * <p>
  * A DNS label covers all three: letters, digits and inner hyphens, at most 63 characters. Rejecting

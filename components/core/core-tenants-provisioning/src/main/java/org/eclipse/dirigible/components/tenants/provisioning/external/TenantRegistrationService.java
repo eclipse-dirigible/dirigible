@@ -47,8 +47,9 @@ class TenantRegistrationService {
      * <p>
      * An artefact's unique key is {@code type:location:name}, so a constant location would make the
      * <em>display name</em> the unique part - and display names are not unique. Two customers may both
-     * be called "Acme Ltd", and the second registration would fail on the key index. The tenant id is
-     * the identity here (ADR-010, ids are shared across applications), so it belongs in the key.
+     * be called "Acme Ltd", and the second registration would fail on the key index. The tenant id -
+     * supplied by the caller, a readable slug or an opaque key such as a UUID - is the identity here
+     * and not a label (the name is what people are shown), so it belongs in the key.
      *
      * @param tenantId the tenant id
      * @return the location

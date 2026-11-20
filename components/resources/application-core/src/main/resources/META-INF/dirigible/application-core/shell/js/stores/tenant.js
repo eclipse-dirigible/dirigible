@@ -108,6 +108,20 @@ document.addEventListener('alpine:init', () => {
       return !!this.current && tenant.id === this.current.id;
     },
 
+    /**
+     * Whether another listed tenant shows the same label (name, else id), ignoring case and
+     * surrounding blanks - the one case where the menu shows the id under a name, since an id may be
+     * an opaque key and is otherwise only noise.
+     *
+     * @param {object} tenant the offered tenant
+     * @return {boolean} true when the name alone does not tell it apart
+     */
+    sharesName(tenant) {
+      if (!tenant.name) return false;
+      const label = (t) => String(t.name || t.id).trim().toLowerCase();
+      return this.items.some((other) => other.id !== tenant.id && label(other) === label(tenant));
+    },
+
     /** A tenant the user can move to: entered here, and not the one they are in. */
     canEnter(tenant) {
       return tenant.state === 'READY' && !this.isCurrent(tenant);

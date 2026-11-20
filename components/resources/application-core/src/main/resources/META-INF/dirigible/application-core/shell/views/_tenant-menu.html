@@ -42,12 +42,12 @@
       <div x-h-menu-label x-text="$store.tenant.t('shell.tenant.title', 'Tenant')"></div>
       <template x-for="tenant in $store.tenant.items" :key="tenant.id">
         <!-- aria-disabled needs the explicit value: bound to null it is removed and the item stays usable. -->
-        <li x-h-menu-item :aria-disabled="tenant.state === 'READY' ? null : 'true'" @click="$store.tenant.switchTo(tenant)">
+        <li x-h-menu-item :data-tenant="tenant.id" :aria-disabled="tenant.state === 'READY' ? null : 'true'" @click="$store.tenant.switchTo(tenant)">
           <svg x-h-lucide role="presentation" data-lucide="building-2"></svg>
           <span class="vbox min-w-0 flex-1">
             <span x-text="tenant.name || tenant.id"></span>
-            <!-- The id is only worth a line when it is not what the name already says. -->
-            <span class="text-xs text-muted-foreground" x-show="tenant.name && tenant.name !== tenant.id" x-text="tenant.id"></span>
+            <!-- The id only when another tenant listed here has the same name: nothing else tells them apart. -->
+            <span class="text-xs text-muted-foreground" data-tenant-id x-show="$store.tenant.sharesName(tenant)" x-text="tenant.id"></span>
             <span class="text-xs text-muted-foreground" x-show="$store.tenant.stateText(tenant)" x-text="$store.tenant.stateText(tenant)"></span>
           </span>
           <svg x-h-lucide role="presentation" data-lucide="check" x-show="$store.tenant.isCurrent(tenant)"></svg>

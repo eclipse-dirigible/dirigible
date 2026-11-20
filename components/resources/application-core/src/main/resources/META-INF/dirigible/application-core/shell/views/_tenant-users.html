@@ -276,7 +276,7 @@
       <div x-h-dialog-header>
         <h2 x-h-dialog-title x-text="$store.tenantUsers.t('shell.tenantUsers.removeTitle', 'Remove user')"></h2>
         <p x-h-dialog-description
-           x-text="$store.tenantUsers.t('shell.tenantUsers.removeQuestion', 'Remove {{email}} from {{tenant}}? They lose access at their next sign-in.', { email: $store.tenantUsers.removeTarget?.email || '', tenant: $store.tenantUsers.context?.tenantId || '' })"></p>
+           x-text="$store.tenantUsers.t('shell.tenantUsers.removeQuestion', 'Remove {{email}} from {{tenant}}? They lose access at their next sign-in.', { email: $store.tenantUsers.removeTarget?.email || '', tenant: $store.tenantUsers.context?.tenantName || $store.tenantUsers.context?.tenantId || '' })"></p>
       </div>
       <div x-h-dialog-content class="vbox gap-3">
         <div x-show="$store.tenantUsers.isSelf($store.tenantUsers.removeTarget)" x-cloak x-h-alert data-variant="warning" role="alert">
