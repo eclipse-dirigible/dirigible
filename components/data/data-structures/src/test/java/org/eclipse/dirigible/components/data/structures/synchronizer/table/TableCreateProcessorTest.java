@@ -136,6 +136,30 @@ class TableCreateProcessorTest {
         }
     }
 
+    /**
+     * A database lists a primary key's own index among the table's unique indexes, so a model exported
+     * from one declares it. The table's PRIMARY KEY already is that index: created again, its name
+     * collides with the key's own (QRTZ_FIRED_TRIGGERS in the SystemDB export/import).
+     */
+    @Test
+    void uniqueIndexOverTheCompositePrimaryKeyIsStillSkipped() throws SQLException {
+        try (Connection connection = connect("create_composite_primary_key_index_skipped")) {
+            Table tableModel = new Table("T_ITEM");
+            tableModel.setSchema(null);
+            new TableColumn("SCHED_NAME", "VARCHAR", "120", false, true, tableModel);
+            new TableColumn("ENTRY_ID", "VARCHAR", "95", false, true, tableModel);
+            new TableColumn("STATE", "VARCHAR", "16", tableModel);
+            declareUnique(tableModel, "T_Primary", "ENTRY_ID", "SCHED_NAME");
+            declareUnique(tableModel, "T_Entry_State", "ENTRY_ID", "STATE");
+
+            TableCreateProcessor.execute(connection, tableModel);
+
+            assertEquals(Set.of(), uniqueColumns(connection, "T_Primary"), "the primary key is the index");
+            assertEquals(Set.of("ENTRY_ID", "STATE"), uniqueColumns(connection, "T_Entry_State"),
+                    "an index over part of the primary key and another column is its own key");
+        }
+    }
+
     private static void declareUnique(Table tableModel, String name, String... columns) {
         TableConstraints constraints = tableModel.getConstraints();
         constraints.getUniqueIndexes()
