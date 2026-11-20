@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.security.oauth2.login;
 
 import java.io.IOException;
 import java.util.Set;
+import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.AuthenticationException;
@@ -62,14 +63,17 @@ class OAuth2LoginFailureHandler extends SimpleUrlAuthenticationFailureHandler {
     @Override
     public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response, AuthenticationException exception)
             throws IOException, ServletException {
+        // the callback's path and the provider's text both come from the request: a control character in
+        // either must not forge a log entry
+        String callback = LogSanitizer.sanitize(request.getRequestURI());
         if (exception instanceof OAuth2AuthenticationException oauth2Exception) {
             OAuth2Error error = oauth2Exception.getError();
-            LOGGER.warn("The identity provider refused a sign-in at [{}]: error [{}], description [{}]", request.getRequestURI(),
-                    loggable(error.getErrorCode()), loggable(error.getDescription()));
-            LOGGER.debug("The refused sign-in at [{}]", request.getRequestURI(), exception);
+            LOGGER.warn("The identity provider refused a sign-in at [{}]: error [{}], description [{}]", callback,
+                    LogSanitizer.sanitize(error.getErrorCode()), LogSanitizer.sanitize(error.getDescription()));
+            LOGGER.debug("The refused sign-in at [{}]", callback, exception);
             new OAuth2LoginFailure(error.getErrorCode(), messageOf(error)).store(request);
         } else {
-            LOGGER.warn("A sign-in at [{}] failed: {}", request.getRequestURI(), loggable(exception.getMessage()), exception);
+            LOGGER.warn("A sign-in at [{}] failed: {}", callback, LogSanitizer.sanitize(exception.getMessage()), exception);
         }
         super.onAuthenticationFailure(request, response, exception);
     }
@@ -80,10 +84,5 @@ class OAuth2LoginFailureHandler extends SimpleUrlAuthenticationFailureHandler {
         }
         String message = messages.messageOf(error);
         return message == null || message.isBlank() ? null : message.strip();
-    }
-
-    /** Provider text goes to the log on one line: a line break in it must not forge a log entry. */
-    private static String loggable(String text) {
-        return text == null ? null : text.replaceAll("[\\r\\n\\t]+", " ");
     }
 }
