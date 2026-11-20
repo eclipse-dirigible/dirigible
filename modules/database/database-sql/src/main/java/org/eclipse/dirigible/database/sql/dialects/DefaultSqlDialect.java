@@ -34,6 +34,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.ArrayList;
@@ -352,10 +353,7 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
      */
     @Override
     public Map<String, List<String>> uniqueConstraints(Connection connection, String table) throws SQLException {
-        String schema = connection.getSchema();
-        if (schema == null) {
-            schema = connection.getCatalog();
-        }
+        String schema = constraintSchema(connection);
         String sql = "SELECT tc.CONSTRAINT_NAME, kcu.COLUMN_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc"
                 + " JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu ON kcu.CONSTRAINT_NAME = tc.CONSTRAINT_NAME"
                 + " AND kcu.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA AND kcu.TABLE_NAME = tc.TABLE_NAME"
@@ -368,6 +366,49 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
             }
             return readUniqueConstraints(statement);
         }
+    }
+
+    /**
+     * The standard INFORMATION_SCHEMA.TABLE_CONSTRAINTS form, scoped like {@link #uniqueConstraints}.
+     * PostgreSQL lists its NOT NULL constraints there too, under generated names no declared check
+     * carries.
+     *
+     * @param connection the connection
+     * @param table the table
+     * @return the constraint names
+     * @throws SQLException when the catalog read fails
+     */
+    @Override
+    public Set<String> checkConstraints(Connection connection, String table) throws SQLException {
+        String schema = constraintSchema(connection);
+        String sql = "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE CONSTRAINT_TYPE = 'CHECK' AND TABLE_NAME = ?"
+                + (schema != null ? " AND TABLE_SCHEMA = ?" : "");
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, table);
+            if (schema != null) {
+                statement.setString(2, schema);
+            }
+            Set<String> names = new LinkedHashSet<>();
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    names.add(resultSet.getString(1));
+                }
+            }
+            return names;
+        }
+    }
+
+    /**
+     * The schema the catalog reads of constraints are scoped to: the connection's schema, or where the
+     * driver reports none - MySQL and MariaDB call it the catalog - the catalog.
+     *
+     * @param connection the connection
+     * @return the schema, or {@code null} when the driver names neither
+     * @throws SQLException when the connection cannot name them
+     */
+    private static String constraintSchema(Connection connection) throws SQLException {
+        String schema = connection.getSchema();
+        return schema != null ? schema : connection.getCatalog();
     }
 
     /**

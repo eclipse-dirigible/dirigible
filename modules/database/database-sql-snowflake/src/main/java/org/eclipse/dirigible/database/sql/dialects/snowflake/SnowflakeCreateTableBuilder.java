@@ -146,4 +146,18 @@ public class SnowflakeCreateTableBuilder extends CreateTableBuilder<SnowflakeCre
            .append(tableName);
     }
 
+
+    /**
+     * Snowflake has no CHECK constraints - a CHECK clause fails the whole CREATE TABLE - so a declared
+     * check is left out of the statement.
+     *
+     * @param sql the sql
+     */
+    @Override
+    protected void generateChecks(StringBuilder sql) {
+        if (!checks.isEmpty()) {
+            logger.debug("Check constraints of table [{}] are not created - Snowflake has none", getTable());
+        }
+    }
+
 }

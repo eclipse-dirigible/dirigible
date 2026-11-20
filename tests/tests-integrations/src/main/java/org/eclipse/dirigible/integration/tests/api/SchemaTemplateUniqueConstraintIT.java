@@ -25,6 +25,7 @@ import java.util.Map;
 
 import org.eclipse.dirigible.components.data.structures.domain.Schema;
 import org.eclipse.dirigible.components.data.structures.domain.Table;
+import org.eclipse.dirigible.components.data.structures.domain.TableConstraintCheck;
 import org.eclipse.dirigible.components.data.structures.domain.TableConstraintUnique;
 import org.eclipse.dirigible.components.data.structures.synchronizer.SchemasSynchronizer;
 import org.eclipse.dirigible.components.engine.template.velocity.VelocityGenerationEngine;
@@ -89,6 +90,46 @@ class SchemaTemplateUniqueConstraintIT extends IntegrationTest {
                                     .isEmpty());
     }
 
+    /**
+     * #8794: a multilingual entity's language table holds one translation per record and language, its
+     * code in lower case - a unique key over {@code Id} and {@code Language} and a check, both reaching
+     * the table the synchronizer creates.
+     */
+    @Test
+    void aLanguageTableDeclaresOneLowerCaseTranslationPerRecordAndLanguage() throws Exception {
+        String schema = render(List.of(multilingualEntity()));
+
+        assertNotNull(GSON.fromJson(schema, JsonObject.class), "the emitted schema must be valid JSON");
+        Table languageTable = tableNamed(schema, "UNIT_LANG");
+        List<TableConstraintUnique> keys = languageTable.getConstraints()
+                                                        .getUniqueIndexes();
+        assertEquals(1, keys.size(), "one translation per record and language");
+        assertEquals("UNIT_LANG_UNIQUE", keys.get(0)
+                                             .getName());
+        assertEquals(List.of("Id", "Language"), Arrays.asList(keys.get(0)
+                                                                  .getColumns()));
+        List<TableConstraintCheck> checks = languageTable.getConstraints()
+                                                         .getChecks();
+        assertEquals(1, checks.size(), "the code in lower case - without it the key lets bg and BG both in");
+        assertEquals("UNIT_LANG_LOWER", checks.get(0)
+                                              .getName());
+        assertEquals("\"Language\" = LOWER(\"Language\")", checks.get(0)
+                                                                 .getExpression());
+        assertTrue(tableNamed(schema, "UNIT").getConstraints()
+                                             .getChecks()
+                                             .isEmpty(),
+                "the base table declares nothing new");
+    }
+
+    private Table tableNamed(String schema, String name) {
+        return schemasSynchronizer.parseSchema("/unique-it/application.schema", schema)
+                                  .getTables()
+                                  .stream()
+                                  .filter(table -> name.equals(table.getName()))
+                                  .findFirst()
+                                  .orElseThrow(() -> new AssertionError("no table [" + name + "] in " + schema));
+    }
+
     private Table onlyTable(String schema) {
         Schema parsed = schemasSynchronizer.parseSchema("/unique-it/application.schema", schema);
         assertEquals(1, parsed.getTables()
@@ -126,6 +167,20 @@ class SchemaTemplateUniqueConstraintIT extends IntegrationTest {
         constraint.put("columns", List.of(Map.of("name", "TENANT_APPLICATION_TENANT"), Map.of("name", "TENANT_APPLICATION_APPLICATION")));
         constraint.put("message", "This application is already provisioned for the tenant");
         model.put("uniqueConstraints", new ArrayList<>(List.of(constraint)));
+        return model;
+    }
+
+    /** A multilingual entity with one translatable property, as the EDM generator shapes it. */
+    private static Map<String, Object> multilingualEntity() {
+        Map<String, Object> model = new LinkedHashMap<>();
+        model.put("name", "Unit");
+        model.put("dataName", "UNIT");
+        model.put("type", "PRIMARY");
+        model.put("multilingual", "true");
+        Map<String, Object> name = column("Name", "UNIT_NAME");
+        name.put("dataType", "VARCHAR");
+        name.put("dataLength", "100");
+        model.put("properties", new ArrayList<>(Arrays.asList(pk("Id", "UNIT_ID"), name)));
         return model;
     }
 

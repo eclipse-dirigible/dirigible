@@ -193,6 +193,18 @@ public class MongoDBSqlDialect extends
     }
 
     /**
+     * A document store has no check-constraint catalog to reconcile against.
+     *
+     * @param connection the connection
+     * @param table the table
+     * @return {@code null} - no catalog
+     */
+    @Override
+    public Set<String> checkConstraints(Connection connection, String table) {
+        return null;
+    }
+
+    /**
      * A collection has no columns to rename.
      *
      * @param table the table
