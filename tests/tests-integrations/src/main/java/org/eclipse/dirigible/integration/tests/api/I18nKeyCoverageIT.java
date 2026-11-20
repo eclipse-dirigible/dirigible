@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -198,25 +199,49 @@ class I18nKeyCoverageIT {
     /**
      * One home per word (#8783): the standalone report page used to carry its own copy of the generated
      * pages' chrome under {@code shell.report.*}, translated twice and already disagreeing in
-     * Bulgarian. It now asks for the generated pages' keys, so the report catalog keeps only the words
-     * no generated page has. No word is shared on purpose, so the test allows no exception.
+     * Bulgarian. It now asks for the generated pages' keys, and no current template or shell file asks
+     * for a {@code shell.report} word the generated catalog also has. Those keys stay in the catalog
+     * only as aliases for report pages generated before the change - a project's page is rewritten by
+     * an explicit Generate alone, so dropping them would turn an older application's report page back
+     * to English - and an alias must read, in every language, exactly what its generated key reads.
      */
     @Test
     void aReportWordHasOneHome() {
-        Map<String, String> catalog = coreCatalog("en-US");
+        Map<String, String> english = coreCatalog("en-US");
+        Map<String, String> bulgarian = coreCatalog("bg-BG");
         Map<String, String> generatedKeyOf = new TreeMap<>();
-        catalog.forEach((key, value) -> {
+        english.forEach((key, value) -> {
             if (key.startsWith("generated.")) {
                 generatedKeyOf.putIfAbsent(value, key);
             }
         });
-        List<String> problems = new ArrayList<>();
-        catalog.forEach((key, value) -> {
+        Map<String, String> aliases = new TreeMap<>();
+        english.forEach((key, value) -> {
             if (key.startsWith("shell.report.") && generatedKeyOf.containsKey(value)) {
-                problems.add(key + " repeats " + generatedKeyOf.get(value) + " (\"" + value
-                        + "\") - the report page asks for the generated key");
+                aliases.put(key, generatedKeyOf.get(value));
             }
         });
+        List<String> problems = new ArrayList<>();
+        aliases.forEach((alias, generated) -> {
+            if (!Objects.equals(bulgarian.get(alias), bulgarian.get(generated))) {
+                problems.add(alias + " reads \"" + bulgarian.get(alias) + "\" in bg-BG, " + generated + " \"" + bulgarian.get(generated)
+                        + "\" - an alias must read what its generated key reads");
+            }
+        });
+        Pattern aliasUse = Pattern.compile("shell\\.report\\.([A-Za-z]+)\\b");
+        for (String location : List.of("classpath*:" + DIRIGIBLE + "template-application-ui-harmonia-java/**/*.template",
+                "classpath*:" + DIRIGIBLE + "application-core/shell/**/*.js",
+                "classpath*:" + DIRIGIBLE + "application-core/shell/**/*.html")) {
+            for (Resource resource : resources(location)) {
+                Matcher matcher = aliasUse.matcher(read(resource));
+                while (matcher.find()) {
+                    if (aliases.containsKey("shell.report." + matcher.group(1))) {
+                        problems.add(url(resource) + " asks for shell.report." + matcher.group(1) + " - ask for "
+                                + aliases.get("shell.report." + matcher.group(1)) + " instead");
+                    }
+                }
+            }
+        }
         assertNoneMissing("report words with a second home in the generated pages' catalog", problems);
     }
 
