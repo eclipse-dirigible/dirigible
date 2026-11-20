@@ -77,11 +77,25 @@ Never `mvn install` while an IT run is in progress in any worktree (`pgrep -fl m
   git-commit-id plugin, which cannot follow a worktree's `.git` file. Environment noise, not your bug:
   add `-Dmaven.gitcommitid.skip=true` to every worktree build. A warm `mvn -T 1C -P quick-build install
   -DskipTests -Dmaven.gitcommitid.skip=true` of the whole reactor takes about a minute.
-- **A full build dirties the tree**: `modules/parsers/typescript/**` are committed ANTLR-generated
-  sources that the build regenerates unformatted (six files, tens of thousands of lines). They are never
-  your change. `git status --short` before staging, stage intended paths explicitly, and
-  `git checkout -- modules/parsers/typescript` if they show up. This has reached CI as a `code-style`
-  failure on an unrelated PR more than once.
+- **Generated files are committed, and the build rewrites them.** Three generators write into tracked
+  paths; since #8754 a build of an unchanged tree leaves all three byte-identical. If one shows up in
+  `git status` anyway it is not your change - `git checkout --` it, and stage intended paths explicitly
+  (this has reached CI as a `code-style` failure on an unrelated PR more than once):
+  - `modules/parsers/typescript/src/main/java/**` - antlr4 regenerates the parser whenever the grammar is
+    not older than its output (any fresh checkout). The module runs the formatter in every profile, so
+    the output matches the committed (formatted) copy, and the six generated files are excluded from the
+    license header, which antlr4 would strip again. After editing a `.g4`, commit the regenerated files.
+  - `components/engine/engine-camel/src/generated/**` - `camel-component-maven-plugin` writes the
+    project version into `dirigible-java.json` / `dirigible-java-script.json`, so they go stale on every
+    version bump (`versions:set` commits only poms). Commit the two regenerated files when you see them
+    after a version change; the Java files there change only with a Camel upgrade.
+  - `components/ui/editor-monaco/.../js/java-lsp-client.js` - the esbuild bundle of `js/lsp/` (`npm install
+    && node build.js` in `generate-sources`). `package.json` pins esbuild and every bundled package
+    exactly (there is no lockfile); a floating range is what made the bundle change on its own. Bump a
+    pin and commit the rebuilt bundle together.
+
+  A build WITHOUT `-P quick-build` (license plugin active) also adds a second license header to the
+  database and monitoring shell `index.html` (#8763) - same rule, not your change.
 - **Stale H2 breaks IT runs after a killed JVM**: `rm -rf tests/tests-integrations/target/dirigible`
   before re-running locally.
 - **Run one IT**: `mvn -o -P integration-tests -pl tests/tests-integrations verify -Dit.test=<Name>
@@ -97,6 +111,12 @@ Never `mvn install` while an IT run is in progress in any worktree (`pgrep -fl m
 1. `mvn formatter:format` on the changed modules, then **wipe the formatter cache and validate with
    CI's exact command**: `find . -name formatter-maven-cache.properties -path '*/target/*' -delete`,
    then `mvn -T 1C formatter:validate`. The cache can report success on files CI will reject.
+   Run them without a profile, exactly as CI does. Since #8746 the profiles that set
+   `skip.code.formatting` (`quick-build`, `tests`, `unit-tests`, `integration-tests`) skip only the
+   formatting bound to the build lifecycle, so a directly invoked `formatter:format` /
+   `formatter:validate` works under them too; before that fix they printed `Formatting is skipped`
+   and BUILD SUCCESS without looking at a single file. If a formatter goal prints that line, your
+   branch predates the fix - drop the profile.
 2. The changed modules' unit suites green (`mvn -pl <module> -am test`).
 3. The integration tests that cover the change green, by name - and for a template or generator change,
    an IT that COMPILES and RUNS the generated output (`IntentEmissionCoverageIT`, `IntentEngineIT`, a

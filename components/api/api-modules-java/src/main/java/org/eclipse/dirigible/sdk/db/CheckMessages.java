@@ -162,7 +162,9 @@ public final class CheckMessages {
     }
 
     /**
-     * Interpolates {@code {name}} and {@code {{name}}} placeholders; an unknown name is left as it is.
+     * Interpolates {@code {name}} and {@code {{name}}} placeholders; an unknown name is left as it is,
+     * and a name present with a {@code null} value (an empty field of the record) becomes the empty
+     * string.
      *
      * @param text the text
      * @param params the values
@@ -177,8 +179,15 @@ public final class CheckMessages {
         while (matcher.find()) {
             String name = matcher.group(1) != null ? matcher.group(1) : matcher.group(2);
             Object value = params.get(name);
-            matcher.appendReplacement(out,
-                    Matcher.quoteReplacement(value == null && !params.containsKey(name) ? matcher.group() : String.valueOf(value)));
+            String replacement;
+            if (value != null) {
+                replacement = String.valueOf(value);
+            } else {
+                // A parameter present with no value - the record's field is empty (#8747) - reads as
+                // nothing, never the text "null"; the error body's messageParams keep the JSON null.
+                replacement = params.containsKey(name) ? "" : matcher.group();
+            }
+            matcher.appendReplacement(out, Matcher.quoteReplacement(replacement));
         }
         matcher.appendTail(out);
         return out.toString();

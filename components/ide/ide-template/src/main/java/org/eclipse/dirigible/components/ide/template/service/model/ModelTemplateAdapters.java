@@ -317,6 +317,11 @@ final class ModelTemplateAdapters {
             String alias = strOr(column, "alias", "");
             column.put("tIdJs", JsLiterals.escape(strOr(column, "tId", ModelTranslations.translationId(alias))));
             column.put("labelJs", JsLiterals.escape(strOr(column, "label", alias)));
+            // The rest of the page's column entry is a single-quoted JS string too (#8748): an
+            // apostrophe or a backslash in an authored alias, aggregate or pattern ended the literal and
+            // the page did not parse.
+            column.put("aliasJs", JsLiterals.escape(alias));
+            column.put("aggregateJs", JsLiterals.escape(strOr(column, "aggregate", "")));
             // Rendering defaults for reports authored before the column alignment and pattern
             // metadata: a numeric column right-aligns, a decimal one gets the platform money pattern.
             if (!truthy(column, "align")) {
@@ -325,6 +330,16 @@ final class ModelTemplateAdapters {
             String sqlType = strOr(column, "type", "").toUpperCase(java.util.Locale.ROOT);
             if (!truthy(column, "pattern") && ("DECIMAL".equals(sqlType) || "DOUBLE".equals(sqlType))) {
                 column.put("pattern", "### ### ### ##0.00");
+            }
+            column.put("alignJs", JsLiterals.escape(strOr(column, "align", "")));
+            if (truthy(column, "pattern")) {
+                column.put("patternJs", JsLiterals.escape(str(column, "pattern")));
+            }
+        }
+        // A drill link names the same aliases (#8748).
+        if (model.get("drill") instanceof Map<?, ?> drill) {
+            for (Map<String, Object> drillColumn : asMaps(drill.get("columns"))) {
+                drillColumn.put("aliasJs", JsLiterals.escape(strOr(drillColumn, "alias", "")));
             }
         }
         for (Map<String, Object> parameter : asMaps(model.get("parameters"))) {

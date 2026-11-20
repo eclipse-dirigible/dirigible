@@ -605,7 +605,6 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($periodLock)
         requirePeriodOpen(entity.${periodLock.dateProperty});
 #end
-#aggregateGuardCheck()
 #if($hasLabel)
         computeName(entity);
 #end
@@ -621,8 +620,10 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 ## The capacity guards run AFTER the create-time calculated fields (#7943): the summed field may be one
 ## of them (Amount = Quantity * Price, a signed cash outflow), and guarded before it was assigned it read
 ## null, counted as 0, so no create was ever refused while the roll-up then summed the real value.
+## The aggregate guard reads its summed field the same way, so it runs here too (#8743).
 #rollupGuardCheck()
 #gatedRollupGuardCheck()
+#aggregateGuardCheck()
 ## A uuid field (intent type: uuid) is platform-generated: assign a random UUID on create when empty.
 ## A number: {} field with stampOn:issue also carries generatedUuid, so its create-time placeholder is
 ## a UUID (the real number is stamped at the issue step); stampOn:create fields are handled just below.
@@ -798,7 +799,6 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($hasAgreeGuards)
         requireAgreementKept(entity);
 #end
-#aggregateGuardCheck()
 #if($preservedOnUpdate.size() > 0)
         // System-owned fields survive a partial payload: a caller's update carries only the fields
         // its form edits, and a value it leaves null must not erase what the write path computed -
@@ -867,9 +867,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
 #end
 #end
-## The capacity guards run after the update-time calculated fields, as on create (#7943).
+## The capacity guards and the aggregate guard run after the update-time calculated fields, as on
+## create (#7943, #8743).
 #rollupGuardCheck()
 #gatedRollupGuardCheck()
+#aggregateGuardCheck()
 #measuredBalances()
 #rollupFitCheck()
 #if($documentChecks && $documentChecks.size() > 0)
@@ -1197,7 +1199,14 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             }
 #end
 #if($lifecycleEdges)
-            enforceLifecycleMove(lifecyclePrevious, entity.${lifecycleStatusProperty});
+            // A status a DERIVED write carries (a roll-up's statusWhenFull / statusWhenPartial, or the
+            // displaced status it restores) is not a move anybody makes (#8750): the handler runs after
+            // the child's change committed, so a refusal could not stop the child - it left this row with
+            // a stale total and status, retried into the dead-letter queue. Every authored move - a
+            // transition, a workflow setter, a glue action - is still held to the lifecycle.
+            if (!org.eclipse.dirigible.components.data.store.java.repository.DerivedWrite.persists("${lifecycleStatusProperty}")) {
+                enforceLifecycleMove(lifecyclePrevious, entity.${lifecycleStatusProperty});
+            }
 #end
 #if($hasAgreeGuards)
             requireAgreementKept(id, agreedBefore, entity);
@@ -1293,10 +1302,10 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      * roll-up whose own parent sits above this row - keep cascading exactly as they did when the handler
      * persisted the full row, carrying the written column names under {@code DerivedWrite.MARKER} so an
      * authored-change listener can skip a recompute that moved nothing it watches. Routed through
-     * {@link #updateProperties} so a labelled entity still refreshes its stored display Name, a
-     * lifecycle still guards a status move and a document line still resums the master it belongs to.
-     * The entity's {@code checks:} do not gate the recomputed columns: they are written after the
-     * child's change has committed, so a refusal could only leave a stale total behind (#8443).
+     * {@link #updateProperties} so a labelled entity still refreshes its stored display Name and a
+     * document line still resums the master it belongs to. Neither the entity's {@code checks:} nor its
+     * {@code lifecycle:} gate the recomputed columns: they are written after the child's change has
+     * committed, so a refusal could only leave a stale total behind (#8443, #8750).
      */
     public int updateDerived(Object id, java.util.Map<String, Object> values) {
         if (values == null || values.isEmpty()) {

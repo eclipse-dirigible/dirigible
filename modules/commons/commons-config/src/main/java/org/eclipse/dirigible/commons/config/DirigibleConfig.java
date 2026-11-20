@@ -702,6 +702,40 @@ public enum DirigibleConfig {
     MESSAGING_CLIENT_ID_PREFIX("DIRIGIBLE_MESSAGING_CLIENT_ID_PREFIX", null),
 
     /**
+     * Milliseconds before the first redelivery of a message a listener failed to handle (#8745). The
+     * broker redelivers a failed message after this delay, then after the delay times
+     * {@link #MESSAGING_REDELIVERY_BACK_OFF_MULTIPLIER}, and so on, until
+     * {@link #MESSAGING_REDELIVERY_MAXIMUM_REDELIVERIES} are spent; then it moves the message to its
+     * dead-letter queue. While a message waits for its redelivery, its listener receives nothing else
+     * on that subscription. Applies to the client-Java listeners and the {@code .listener} artefacts
+     * alike.
+     */
+    MESSAGING_REDELIVERY_INITIAL_DELAY_MILLIS("DIRIGIBLE_MESSAGING_REDELIVERY_INITIAL_DELAY_MILLIS", "1000"),
+
+    /**
+     * What each redelivery delay after the first is multiplied by (#8745) - a decimal number, at least
+     * {@code 1}; {@code 1} redelivers at a fixed interval. With the defaults the deliveries come about
+     * 1, 6 and 31 seconds after the first one.
+     */
+    MESSAGING_REDELIVERY_BACK_OFF_MULTIPLIER("DIRIGIBLE_MESSAGING_REDELIVERY_BACK_OFF_MULTIPLIER", "5", // A decimal: typed as text, so an editor does not refuse 1.5 as a malformed whole number.
+            meta().type(ConfigType.STRING)),
+
+    /**
+     * The longest delay between two redeliveries, in milliseconds (#8745) - the cap the back-off stops
+     * growing at; {@code -1} (the default) sets none. Worth setting with a larger
+     * {@link #MESSAGING_REDELIVERY_MAXIMUM_REDELIVERIES}, which otherwise grows the delay
+     * geometrically.
+     */
+    MESSAGING_REDELIVERY_MAXIMUM_DELAY_MILLIS("DIRIGIBLE_MESSAGING_REDELIVERY_MAXIMUM_DELAY_MILLIS", "-1"),
+
+    /**
+     * How many times a message a listener failed to handle is redelivered before the broker moves it to
+     * its dead-letter queue (#8745) - so a message is delivered this many times plus one; {@code 0}
+     * dead-letters it on the first failure, {@code -1} redelivers it without limit.
+     */
+    MESSAGING_REDELIVERY_MAXIMUM_REDELIVERIES("DIRIGIBLE_MESSAGING_REDELIVERY_MAXIMUM_REDELIVERIES", "3"),
+
+    /**
      * Seconds an armed act-as (delegated entry) state survives before it expires on its own. The window
      * is absolute - it starts at arming and is never renewed by activity - so a state left armed and
      * forgotten stops hiding the real identity's world on its own.

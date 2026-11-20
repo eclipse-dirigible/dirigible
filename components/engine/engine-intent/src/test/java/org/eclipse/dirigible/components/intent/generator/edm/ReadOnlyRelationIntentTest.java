@@ -117,6 +117,24 @@ class ReadOnlyRelationIntentTest {
                 """, "beside personal");
     }
 
+    /**
+     * {@code required} beside {@code readOnly} is a NOT NULL column no user create can fill (#8751) -
+     * refused, unless only the system creates the entity's rows ({@code systemWritten: true}).
+     */
+    @Test
+    void requiredBesideReadOnlyIsRefusedUnlessTheEntityIsSystemWritten() {
+        assertIssue("""
+                  - { name: StornoOf, kind: manyToOne, to: CashOrder, readOnly: true, required: true }
+                """, "declares both required and readOnly");
+        String systemWritten = HEAD.replace("  - name: CashOrder\n", "  - name: CashOrder\n    systemWritten: true\n") + """
+                  - { name: StornoOf, kind: manyToOne, to: CashOrder, readOnly: true, required: true }
+                """.indent(6);
+        Map<String, Object> storno = propertyByName(
+                entityNamed(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(systemWritten), "cashdesk"), "CashOrder"),
+                "StornoOf");
+        assertEquals("true", storno.get("isReadOnlyProperty"));
+    }
+
     private static String withRelation(String relation) {
         return HEAD + relation.indent(6);
     }

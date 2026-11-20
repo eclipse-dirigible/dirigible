@@ -165,6 +165,34 @@ class GluePostingPeriodTest {
                 "and contribute no sweep");
     }
 
+    /**
+     * A target locked by ANOTHER model's register (#8755) carries the register's model and name, which
+     * is all the handler needs to ask it at runtime - and builds no sweep, whose topic it cannot name.
+     */
+    @Test
+    void aTargetLockedByAnotherModelsRegisterIsPreCheckedButNotSwept() {
+        String yaml = YAML.replace("immutableInPeriod: { period: AccountingPeriod, date: entryDate }",
+                "immutableInPeriod: { period: FiscalPeriod, model: journal, date: entryDate }");
+        Map<String, Object> posting = GlueIntentGenerator.buildPostingsForTest(IntentParser.parse(yaml))
+                                                         .get(0);
+
+        assertEquals("FiscalPeriod", posting.get("periodRegisterEntity"));
+        assertEquals("journal", posting.get("periodRegisterModel"));
+        assertEquals("EntryDate", posting.get("periodDateProperty"), "the TARGET column the lock tests");
+        assertNull(posting.get("periodStatusProperty"), "another model's register is not read here");
+        assertTrue(GlueIntentGenerator.buildPostingReopensForTest(IntentParser.parse(yaml))
+                                      .isEmpty(),
+                "no sweep: the register's status moves on its own model's topic");
+    }
+
+    @Test
+    void aLocalRegisterCarriesNoModel() {
+        assertNull(GlueIntentGenerator.buildPostingsForTest(IntentParser.parse(YAML))
+                                      .get(0)
+                                      .get("periodRegisterModel"),
+                "a same-model lock must generate byte-identically");
+    }
+
     @Test
     void aLockedTargetRendersOneSweepPerPosting() {
         List<Map<String, Object>> reopens = GlueIntentGenerator.buildPostingReopensForTest(IntentParser.parse(YAML));

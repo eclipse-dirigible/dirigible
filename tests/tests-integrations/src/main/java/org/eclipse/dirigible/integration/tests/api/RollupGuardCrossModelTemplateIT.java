@@ -162,6 +162,43 @@ class RollupGuardCrossModelTemplateIT {
         assertTrue(updateGuard > updateAssign, "on update the guard must read the recalculated amount: " + rendered);
     }
 
+    /**
+     * The aggregate guard ({@code checks: kind: guard}) reads its summed field the same way (#8743): it
+     * must run after the calculated fields on create and on update, or a calculated amount is guarded
+     * as null and counted 0.
+     */
+    @Test
+    void theAggregateGuardRunsAfterTheCalculatedFieldsOnCreateAndOnUpdate() throws Exception {
+        Map<String, Object> parameters = context(List.of());
+        Map<String, Object> amount = amount();
+        amount.put("isCalculatedProperty", Boolean.TRUE);
+        amount.put("calculatedPropertyExpressionCreate", "Quantity * Price");
+        amount.put("calculatedPropertyExpressionUpdate", "Quantity * Price");
+        parameters.put("properties", List.of(primaryKey(), amount));
+        parameters.put("haveCalculatedPropertyOnCreate", Boolean.TRUE);
+        parameters.put("haveCalculatedPropertyOnUpdate", Boolean.TRUE);
+        Map<String, Object> aggregateGuard = new LinkedHashMap<>();
+        aggregateGuard.put("aggregate", "paymentTotal");
+        aggregateGuard.put("keys", List.of(Map.of("key", "CustomerPayment")));
+        aggregateGuard.put("pk", "Id");
+        aggregateGuard.put("sumField", "Amount");
+        aggregateGuard.put("minimum", "0");
+        aggregateGuard.put("messageArgsJava", "\"key\", \"Below the minimum\"");
+        parameters.put("guardChecks", List.of(aggregateGuard));
+        String rendered = render(parameters);
+
+        String assign = "entity.Amount = Calc.eval(\"Quantity * Price\", entity, 0);";
+        String guard = "boolean guardKeyed = entity.CustomerPayment != null;";
+        int createAssign = rendered.indexOf(assign);
+        int createGuard = rendered.indexOf(guard);
+        int updateAssign = rendered.indexOf(assign, createAssign + 1);
+        int updateGuard = rendered.indexOf(guard, createGuard + 1);
+        assertTrue(createAssign >= 0 && updateAssign > createAssign, "both write paths must assign the calculated amount: " + rendered);
+        assertTrue(createGuard > createAssign && createGuard < updateAssign,
+                "on create the aggregate guard must read the calculated amount, not the null before it: " + rendered);
+        assertTrue(updateGuard > updateAssign, "on update the aggregate guard must read the recalculated amount: " + rendered);
+    }
+
     /** The authored refusal, with the figures the guard has in hand spliced in where it placed them. */
     @Test
     void anAuthoredMessageReplacesTheGeneratedOne() throws Exception {

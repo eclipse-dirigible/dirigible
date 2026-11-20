@@ -250,7 +250,9 @@ not as an apology.
   `EntityStatus`, a composition parent, the `personal`/`partner`/`owner` relation, a collection,
   `subset` or `manyToMany`, and beside a calculated action, `fixedAfterCreate` or
   `fixedWhenReferenced` (those describe a value a user or the platform picks). Pair it with
-  `inlineCreate: false` when the target is the same entity.
+  `inlineCreate: false` when the target is the same entity. Never `required: true` beside it (#8751):
+  the column would be NOT NULL while no user create can set it, so every New would fail - unless the
+  entity is `systemWritten: true` and only the system creates its rows.
 - **`whenTargetDeleted: restrict | nullify | cascade | keep` on a plain (non-composition) `manyToOne`/
   `oneToOne` = what deleting the record it points at does to the records pointing at it** (#7547).
   - `restrict` is the DEFAULT, also when the key is absent: the delete is refused with ONE 409 naming
@@ -738,7 +740,7 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   `immutableInPeriod: { period: FiscalPeriod, model: journal, date: date }` - for a source document
   whose module the ledger's model uses (so it cannot `uses:` the ledger back). That register is asked
   at runtime by model + name; while its model is not deployed nothing is locked, and a POSTING into
-  such a record gets no pre-check or reopen re-run (its repository still refuses the write).
+  such a record is pre-checked the same way (it waits instead of failing) but gets no reopen re-run.
 - `lifecycle: { edges: [ { from: <status>, to: [<status>, ...] }, ... ] }` (entity-level) - **the
   declarative state machine**: the WHOLE set of legal status moves, declared once and enforced on
   EVERY status write. Without it the status machinery is a set of point constructs - `init:` names
@@ -1337,8 +1339,10 @@ A template is text, so it is only a value for a `string` / `text` field, and eac
 field of the entity (no `relation.field` paths). `unique:` lists fields and to-one relations - usually
 the fields of the entity's `duplicate` check - and at least one of them must carry a template, since
 that is the value being numbered: a value ending in `)` gets the number inside it (`(copy 2)`), any
-other value gets ` (2)` appended. The probe asks the entity's own `/search` before the create (at most
-50 tries; past them the create decides). `focus:` names a field with an input.
+other value gets ` (2)` appended. The server copies the record and numbers it inside one transaction
+that holds the source locked (`POST .../{id}/duplicate`, #8752), so two users duplicating the same
+record at the same moment get two different names (at most 50 tries; past them the create decides).
+`focus:` names a field with an input.
 
 **Control order (`order:`):** by default the generated UI controls (form inputs, list columns, detail
 rows) follow the declaration order - all fields first, then the to-one relations, so relations end up

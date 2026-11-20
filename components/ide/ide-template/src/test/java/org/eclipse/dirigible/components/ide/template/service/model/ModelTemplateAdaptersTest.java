@@ -116,4 +116,43 @@ class ModelTemplateAdaptersTest {
         assertEquals("Count", columns.get(1)
                                      .get("labelJs"));
     }
+
+    /**
+     * Every authored value of a report column's page entry reaches it as a JS literal (#8748): an
+     * apostrophe or a backslash in an alias, aggregate, alignment or pattern - or in a drill link's
+     * alias - no longer ends the single-quoted string.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aColumnReachesTheReportPageWithItsAliasAggregateAndPatternEscaped() {
+        String report = """
+                { "name": "Assets", "query": "SELECT 1", "parameters": [],
+                  "columns": [ { "alias": "Owner's \\\\ amount", "type": "DECIMAL", "aggregate": "SU'M", "pattern": "#'##0.00",
+                                 "align": "ri'ght" },
+                               { "alias": "Count", "type": "INTEGER", "aggregate": "NONE" } ],
+                  "drill": { "app": "assets", "route": "/Asset",
+                             "columns": [ { "alias": "Owner's \\\\ amount", "property": "Owner", "by": "id" } ] } }
+                """;
+        Map<String, Object> model = ModelTemplateAdapters.prepare(REPORT_FILE_TEMPLATE, report, new java.util.HashMap<>())
+                                                         .model();
+        List<Map<String, Object>> columns = (List<Map<String, Object>>) model.get("columns");
+        assertEquals("Owner\\'s \\\\ amount", columns.get(0)
+                                                     .get("aliasJs"));
+        assertEquals("SU\\'M", columns.get(0)
+                                      .get("aggregateJs"));
+        assertEquals("#\\'##0.00", columns.get(0)
+                                          .get("patternJs"));
+        assertEquals("ri\\'ght", columns.get(0)
+                                        .get("alignJs"));
+        assertEquals("Count", columns.get(1)
+                                     .get("aliasJs"));
+        assertEquals("right", columns.get(1)
+                                     .get("alignJs"));
+        assertNull(columns.get(1)
+                          .get("patternJs"),
+                "a column without a pattern carries none");
+        Map<String, Object> drill = (Map<String, Object>) model.get("drill");
+        assertEquals("Owner\\'s \\\\ amount", ((List<Map<String, Object>>) drill.get("columns")).get(0)
+                                                                                                .get("aliasJs"));
+    }
 }

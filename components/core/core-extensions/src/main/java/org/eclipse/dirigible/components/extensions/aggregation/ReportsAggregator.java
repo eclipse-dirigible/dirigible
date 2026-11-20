@@ -35,9 +35,9 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p>
  * A report is a generated page {@code <project>/gen/<folder>/reports/<Name>/index.html}; its
- * display metadata and its read gate come from the {@code <project>/<Name>.report} beside it. A
- * report whose {@code security.roleRead} names roles the caller holds none of is left out - its
- * generated controller would refuse that caller anyway.
+ * display metadata and its read gates come from the {@code <project>/<Name>.report} beside it. A
+ * report whose {@code perspectiveRole} or {@code security.roleRead} names roles the caller holds
+ * none of is left out - its generated controller would refuse that caller anyway.
  */
 @Component
 class ReportsAggregator {
@@ -177,8 +177,15 @@ class ReportsAggregator {
         return required;
     }
 
-    /** Whether the caller passes the report's read gate; a report without one is readable. */
+    /**
+     * Whether the caller passes the gates the report's generated controller checks before it serves a
+     * read (reportFileEntity's {@code checkPermissions}): the top-level {@code perspectiveRole} and
+     * {@code security.roleRead} (#8753). A report declaring neither is readable.
+     */
     private static boolean readable(Map<String, Object> definition) {
+        if (definition.get("perspectiveRole") instanceof String roles && !CallerRoles.holdsAnyOf(roles)) {
+            return false;
+        }
         if (!(definition.get("security") instanceof Map<?, ?> security)) {
             return true;
         }

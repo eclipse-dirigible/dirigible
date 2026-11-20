@@ -3,12 +3,15 @@
     "private": true,
     "type": "module",
     "dependencies": {
-        "vscode-ws-jsonrpc": "^3.5.0"
+        "vscode-ws-jsonrpc": "3.5.0"
     },
     "devDependencies": {
-        "esbuild": "^0.24.0",
+        "esbuild": "0.24.2",
         "typescript": "^5.7.0",
         "monaco-editor": "^0.55.1",
-        "vscode-languageserver-types": "^3.17.0"
+        "vscode-languageserver-types": "3.18.4"
+    },
+    "overrides": {
+        "vscode-jsonrpc": "8.2.1"
     }
 }

@@ -15,6 +15,7 @@ import org.apache.activemq.RedeliveryPolicy;
 import org.apache.activemq.broker.region.policy.RedeliveryPolicyMap;
 import org.apache.activemq.command.ActiveMQDestination;
 import org.apache.activemq.transport.failover.FailoverTransport;
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,15 +33,6 @@ import jakarta.jms.Session;
 public class ActiveMQConnectionArtifactsFactory {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ActiveMQConnectionArtifactsFactory.class);
-
-    /** The Constant INITIAL_REDELIVERY_DELAY. */
-    private static final int INITIAL_REDELIVERY_DELAY = 1000;
-
-    /** The Constant REDELIVERY_DELAY. */
-    private static final int REDELIVERY_DELAY = 5000;
-
-    /** The Constant MAXIMUM_REDELIVERIES. */
-    private static final int MAXIMUM_REDELIVERIES = 3;
 
     /** The connection factory. */
     private final ActiveMQConnectionFactory connectionFactory;
@@ -180,21 +172,83 @@ public class ActiveMQConnectionArtifactsFactory {
      * Every listener path must apply this, so the retry budget is one number rather than one per
      * caller.
      *
+     * <p>
+     * The budget is the deployment's to choose (#8745):
+     * {@link DirigibleConfig#MESSAGING_REDELIVERY_INITIAL_DELAY_MILLIS},
+     * {@link DirigibleConfig#MESSAGING_REDELIVERY_BACK_OFF_MULTIPLIER},
+     * {@link DirigibleConfig#MESSAGING_REDELIVERY_MAXIMUM_DELAY_MILLIS} and
+     * {@link DirigibleConfig#MESSAGING_REDELIVERY_MAXIMUM_REDELIVERIES}, read each time a subscription
+     * is opened. Their defaults are the budget this method always applied: about 1, 6 and 31 seconds
+     * after the first delivery, then the dead-letter queue.
+     *
      * @param connection the connection
      * @param destination the destination
      */
     public void configureRedeliveryPolicy(Connection connection, Destination destination) {
         if (connection instanceof ActiveMQConnection amqConnection && destination instanceof ActiveMQDestination amqDestination) {
-            RedeliveryPolicy redeliveryPolicy = new RedeliveryPolicy();
-
-            redeliveryPolicy.setInitialRedeliveryDelay(INITIAL_REDELIVERY_DELAY);
-            redeliveryPolicy.setRedeliveryDelay(REDELIVERY_DELAY);
-            redeliveryPolicy.setUseExponentialBackOff(true);
-            redeliveryPolicy.setMaximumRedeliveries(MAXIMUM_REDELIVERIES);
-
             RedeliveryPolicyMap policyMap = amqConnection.getRedeliveryPolicyMap();
-            policyMap.put(amqDestination, redeliveryPolicy);
+            policyMap.put(amqDestination, redeliveryPolicy());
         }
+    }
+
+    /**
+     * The redelivery policy the configuration asks for. A value that is not a number, or is out of
+     * range, is reported and replaced by its default - a typo must not leave a deployment without a
+     * retry budget, nor fail every subscription.
+     *
+     * @return a new policy
+     */
+    static RedeliveryPolicy redeliveryPolicy() {
+        long initialDelay = readLong(DirigibleConfig.MESSAGING_REDELIVERY_INITIAL_DELAY_MILLIS, 0);
+        double multiplier = readMultiplier();
+        long maximumDelay = readLong(DirigibleConfig.MESSAGING_REDELIVERY_MAXIMUM_DELAY_MILLIS, -1);
+        int maximumRedeliveries = (int) readLong(DirigibleConfig.MESSAGING_REDELIVERY_MAXIMUM_REDELIVERIES, -1);
+
+        RedeliveryPolicy redeliveryPolicy = new RedeliveryPolicy();
+        // ActiveMQ waits the initial delay before the first redelivery and multiplies the previous
+        // delay for each one after; the plain redelivery delay is used only when there is no previous
+        // one to multiply, so it is kept equal to the initial delay.
+        redeliveryPolicy.setInitialRedeliveryDelay(initialDelay);
+        redeliveryPolicy.setRedeliveryDelay(initialDelay);
+        redeliveryPolicy.setUseExponentialBackOff(multiplier > 1);
+        redeliveryPolicy.setBackOffMultiplier(multiplier);
+        redeliveryPolicy.setMaximumRedeliveryDelay(maximumDelay);
+        redeliveryPolicy.setMaximumRedeliveries(maximumRedeliveries);
+        return redeliveryPolicy;
+    }
+
+    private static long readLong(DirigibleConfig key, long minimum) {
+        String value = key.getStringValue();
+        try {
+            long parsed = Long.parseLong(String.valueOf(value)
+                                               .trim());
+            if (parsed >= minimum) {
+                return parsed;
+            }
+        } catch (NumberFormatException ex) {
+            LOGGER.debug("[{}] is not a whole number: [{}]", key.getKey(), value, ex);
+        }
+        return invalid(key, value, "a whole number of at least " + minimum);
+    }
+
+    private static double readMultiplier() {
+        DirigibleConfig key = DirigibleConfig.MESSAGING_REDELIVERY_BACK_OFF_MULTIPLIER;
+        String value = key.getStringValue();
+        try {
+            double parsed = Double.parseDouble(String.valueOf(value)
+                                                     .trim());
+            if (parsed >= 1 && Double.isFinite(parsed)) {
+                return parsed;
+            }
+        } catch (NumberFormatException ex) {
+            LOGGER.debug("[{}] is not a number: [{}]", key.getKey(), value, ex);
+        }
+        return invalid(key, value, "a number of at least 1");
+    }
+
+    private static long invalid(DirigibleConfig key, String value, String expected) {
+        LOGGER.warn("Ignoring [{}={}]: expected {}. Using the default [{}].", key.getKey(), value, expected, key.getDefaultValue());
+        return Long.parseLong(key.getDefaultValue());
     }
 
 }

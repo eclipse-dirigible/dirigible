@@ -66,6 +66,63 @@ App.services.recentFailures = {
   },
 };
 
+/**
+ * The generated controllers that refused this page a READ (#8728). A role may write invoices without
+ * reading customers, and every page that shows an invoice's customer asks the customer controller -
+ * its list for the picker, the stored row by id, the label of an Inbox subject. The first 403 on a read
+ * is remembered per controller; every later read of that controller fails at once with the same
+ * refusal and sends nothing, so a narrow role costs one refusal per controller and page instead of a
+ * row of them. A page asks `readRefused(url)` (basePage) to show what it cannot list as a stored value.
+ *
+ * Only a generated Java controller (`/services/java/.../<Name>Controller`) is tracked, and only its
+ * reads: a GET, or a POST to `/search` or `/count`. `/access` is never refused - it is what answers
+ * which gates the caller passes. A reload starts afresh, as does a role the caller gains meanwhile.
+ * `controllers` becomes reactive once Alpine starts, so a page that renders from it re-renders when
+ * the refusal arrives.
+ */
+App.services.readRefusals = {
+  controllers: {},
+
+  // The generated controller a URL addresses, or null for any other URL.
+  controllerOf(url) {
+    const path = String(url || '').split(/[?#]/)[0];
+    const match = path.match(/^(.*\/services\/java\/.*?[^/]Controller)(\/.*)?$/);
+    return match ? { controller: match[1], rest: match[2] || '' } : null;
+  },
+
+  // The controller a request READS, or null when the request is not a tracked read.
+  readOf(method, url) {
+    const target = this.controllerOf(url);
+    if (!target || target.rest === '/access') return null;
+    const read = method === 'GET' || (method === 'POST' && /^\/(search|count)\/?$/.test(target.rest));
+    return read ? target.controller : null;
+  },
+
+  remember(method, url, err) {
+    const controller = this.readOf(method, url);
+    if (controller && err.httpStatus === 403) {
+      this.controllers[controller] = { errorType: err.errorType, errorMessage: err.errorMessage, requestId: err.requestId };
+    }
+  },
+
+  // The refusal a read of an already-refusing controller fails with, or null.
+  refusalFor(method, url) {
+    const controller = this.readOf(method, url);
+    const refusal = controller ? this.controllers[controller] : null;
+    return refusal ? new ApiError({ httpStatus: 403, ...refusal }) : null;
+  },
+
+  // Whether reads of the controller a URL addresses were refused on this page.
+  has(url) {
+    const target = this.controllerOf(url);
+    return !!(target && this.controllers[target.controller]);
+  },
+};
+
+document.addEventListener('alpine:init', () => {
+  App.services.readRefusals.controllers = Alpine.reactive(App.services.readRefusals.controllers);
+});
+
 App.services.api = {
   // Base URL for this application's generated REST controllers. Read from the
   // generated config (js/config.js) so this file stays model-independent; a shell
@@ -159,6 +216,10 @@ App.services.api = {
     const timeZone = this.timeZone();
     if (timeZone && !/^([a-z][a-z0-9+.-]*:)?\/\//i.test(`${baseUrl}${url}`)) headers['X-Time-Zone'] = timeZone;
 
+    // A read of a controller that already refused this page fails as it did, unsent (#8728).
+    const refusal = App.services.readRefusals.refusalFor(method, `${baseUrl}${url}`);
+    if (refusal) throw refusal;
+
     let r;
     try {
       r = await fetch(`${baseUrl}${url}`, {
@@ -235,6 +296,7 @@ App.services.api = {
 
     console.error('[api] %s %s -> %s %s:', method, `${baseUrl}${url}`, err.httpStatus, err.errorType, err.errorMessage, err.errorCauses);
     App.services.recentFailures.record(method, `${baseUrl}${url}`, err);
+    App.services.readRefusals.remember(method, `${baseUrl}${url}`, err);
     throw err;
   },
 
