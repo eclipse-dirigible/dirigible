@@ -195,6 +195,64 @@ class I18nKeyCoverageIT {
         assertNoneMissing("shell keys missing from a shipped language", missing);
     }
 
+    /**
+     * One home per word (#8783): the standalone report page used to carry its own copy of the generated
+     * pages' chrome under {@code shell.report.*}, translated twice and already disagreeing in
+     * Bulgarian. It now asks for the generated pages' keys, so the report catalog keeps only the words
+     * no generated page has. No word is shared on purpose, so the test allows no exception.
+     */
+    @Test
+    void aReportWordHasOneHome() {
+        Map<String, String> catalog = coreCatalog("en-US");
+        Map<String, String> generatedKeyOf = new TreeMap<>();
+        catalog.forEach((key, value) -> {
+            if (key.startsWith("generated.")) {
+                generatedKeyOf.putIfAbsent(value, key);
+            }
+        });
+        List<String> problems = new ArrayList<>();
+        catalog.forEach((key, value) -> {
+            if (key.startsWith("shell.report.") && generatedKeyOf.containsKey(value)) {
+                problems.add(key + " repeats " + generatedKeyOf.get(value) + " (\"" + value
+                        + "\") - the report page asks for the generated key");
+            }
+        });
+        assertNoneMissing("report words with a second home in the generated pages' catalog", problems);
+    }
+
+    /**
+     * The report page and a generated list read the same Bulgarian word for the controls they share
+     * (#8783): each page's own {@code T()} call for the word, as its template writes it, resolved over
+     * the shipped Bulgarian catalogs.
+     */
+    @Test
+    void theReportPageAndAGeneratedListReadTheSameWords() {
+        String reportPage = read(DIRIGIBLE + "template-application-ui-harmonia-java/ui/perspective/report-file/index.html.template");
+        String list = read(DIRIGIBLE + "template-application-ui-harmonia-java/ui/perspective/manage/list-view.html.template");
+        Map<String, String> words =
+                Map.of("Refresh", "Опресни", "Previous", "Предишна", "Next", "Следваща", "Choose date", "Избор на дата");
+        try (Context context = loadI18n("bg", JSON.createObjectNode(), STUB_I18NEXT)) {
+            words.forEach((english, bulgarian) -> {
+                assertEquals(bulgarian, t(context, keyFor(reportPage, english, "orders:SalesByMonth-report."), english),
+                        "the report page's " + english);
+                assertEquals(bulgarian, t(context, keyFor(list, english, "orders:orders-model."), english),
+                        "a generated list's " + english);
+            });
+        }
+    }
+
+    /**
+     * The key of a page's first {@code T()} call for the given English word, with a module's namespace
+     * and catalog prefix in place of the template's Velocity references.
+     */
+    private static String keyFor(String page, String english, String modulePrefix) {
+        Matcher matcher = Pattern.compile("\\bT\\(\\s*'([^']+)'\\s*,\\s*'" + Pattern.quote(english) + "'")
+                                 .matcher(page);
+        assertTrue(matcher.find(), "the page asks for no '" + english + "'");
+        return matcher.group(1)
+                      .replace("$projectName:${tprefix}.", modulePrefix);
+    }
+
     @Test
     void theShippedLanguagesAgreeKeyForKey() {
         List<String> locales = languages();
