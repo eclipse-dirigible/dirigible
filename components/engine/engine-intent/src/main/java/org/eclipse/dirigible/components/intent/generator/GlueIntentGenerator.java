@@ -3892,9 +3892,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * dated inside a closed period was refused there - asynchronously, after the source had already
      * committed its transition. The issuer saw a 200, the handler's listener logged the refusal, and
      * the document stayed unposted for good: reopening the period published nothing the posting listens
-     * to. The register is an entity of the TARGET's own model (the parser refuses any other), so the
-     * facts needed to ask it are all local and travel with the posting: the handler asks before it
-     * writes and says what it skipped, and the reopen sweep built from the same keys re-runs it.
+     * to. A register of the TARGET's own model has all its facts local, and they travel with the
+     * posting: the handler asks before it writes and says what it skipped, and the reopen sweep built
+     * from the same keys re-runs it. A register of ANOTHER model ({@code immutableInPeriod.model},
+     * #8687) travels as its model and name only ({@code periodRegisterModel}): the handler asks it at
+     * runtime through {@code PeriodRegisters.isClosed} (#8755), and no sweep is built.
      *
      * <p>
      * {@code periodSourceDateProperty} is the source column the locked date is copied FROM, emitted
@@ -3912,9 +3914,19 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     private static void putPostingPeriodLock(Map<String, Object> e, EntityIntent creates, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, IntentModel model, List<Map<String, Object>> headerAssignments) {
         PeriodLockIntent lock = creates == null ? null : creates.getImmutableInPeriod();
-        // A register of another model (#8687) is not readable from here; the target's repository still
-        // refuses a write into its closed period, but the posting neither pre-checks nor sweeps it.
-        EntityIntent register = lock == null || lock.getModel() != null ? null : byName.get(lock.getPeriod());
+        if (lock != null && lock.getModel() != null && lock.getPeriod() != null && lock.getDate() != null) {
+            // A register of another model (#8687, #8755): its facts are not readable from here, so the
+            // posting asks it at runtime by model and name (PeriodRegisters.isClosed), exactly as the
+            // target's own repository does. No reopen sweep: it would have to subscribe to the
+            // register's topic, which this model cannot name.
+            String dateProperty = IntentNaming.pascalCase(lock.getDate());
+            e.put("periodRegisterEntity", lock.getPeriod());
+            e.put("periodRegisterModel", lock.getModel());
+            e.put("periodDateProperty", dateProperty);
+            e.put("periodSourceDateProperty", sourceCopyOf(headerAssignments, dateProperty));
+            return;
+        }
+        EntityIntent register = lock == null ? null : byName.get(lock.getPeriod());
         PeriodIntent period = register == null ? null : register.getPeriod();
         RelationIntent status = register == null ? null : LifecycleStages.statusRelation(register);
         if (period == null || status == null) {
@@ -4017,7 +4029,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     private static List<Map<String, Object>> buildPostingReopens(List<Map<String, Object>> postings) {
         List<Map<String, Object>> reopens = new ArrayList<>();
         for (Map<String, Object> posting : postings) {
-            if (posting.get("periodRegisterEntity") == null || Boolean.TRUE.equals(posting.get("followsSource"))) {
+            if (posting.get("periodRegisterEntity") == null || posting.get("periodRegisterModel") != null
+                    || Boolean.TRUE.equals(posting.get("followsSource"))) {
+                // ...and no sweep for a register of another model (#8755): its status moves on that
+                // model's topic, which nothing here can name.
                 continue;
             }
             // BOTH channels a register's status moves on, because the two are disjoint: a
