@@ -241,6 +241,12 @@ public class ListenerClassConsumer
     /** The clock of {@link #CLIENT_ID_REFUSAL_REPORT_INTERVAL}; replaced by the tests only. */
     private Clock clock = Clock.systemUTC();
 
+    /**
+     * Runs a handler that lost a lock conflict again before its failure reaches the broker (#8745); its
+     * pause is replaced by the tests only.
+     */
+    private DeadlockVictimRetry deadlockVictimRetry = new DeadlockVictimRetry(Thread::sleep);
+
     @Autowired
     public ListenerClassConsumer(ComponentContainer componentContainer, ActiveMQConnectionArtifactsFactory connectionFactory,
             TenantContext tenantContext, TenantPropertyManager tenantPropertyManager, @DefaultTenant Tenant defaultTenant,
@@ -254,6 +260,11 @@ public class ListenerClassConsumer
         this.tenantConfigurationService = tenantConfigurationService;
         this.destinationNameManager = destinationNameManager;
         this.connectionMode = connectionMode;
+    }
+
+    /** For the tests of the in-process repeat of a lock-conflict victim: they should not sleep. */
+    void setDeadlockVictimPauser(DeadlockVictimRetry.Pauser pauser) {
+        this.deadlockVictimRetry = new DeadlockVictimRetry(pauser);
     }
 
     /** For the tests of the client-id refusal report. */
@@ -1112,7 +1123,12 @@ public class ListenerClassConsumer
                 // it so it never leaks onto the pooled broker thread.
                 Configuration.setThreadConfiguration(tenantConfigurationService.resolveInjectableForCurrentTenant());
                 try (OriginatingUser.Binding binding = OriginatingUser.bind(user)) {
-                    dispatcher.onMessage(text);
+                    // A deadlock or lock-wait victim is run again here rather than handed to the broker,
+                    // so lock contention does not spend the message's redelivery budget (#8745). Safe
+                    // because the dispatch is no transaction: each write the handler made committed or
+                    // rolled back on its own before its failure reached this line - see
+                    // DeadlockVictimRetry.
+                    deadlockVictimRetry.run(() -> dispatcher.onMessage(text), label);
                 } finally {
                     Configuration.removeThreadConfiguration();
                 }
