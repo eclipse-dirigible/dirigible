@@ -19,6 +19,7 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -315,7 +316,8 @@ class I18nKeyCoverageIT {
     private static String unescape(String fallback) {
         return JS_ESCAPE.matcher(fallback.replace("&amp;", "&"))
                         .replaceAll(escape -> Matcher.quoteReplacement(
-                                escape.group(1) != null ? String.valueOf((char) Integer.parseInt(escape.group(1), 16)) : escape.group(2)));
+                                escape.group(1) != null ? String.valueOf((char) HexFormat.fromHexDigits(escape.group(1)))
+                                        : escape.group(2)));
     }
 
     /**
