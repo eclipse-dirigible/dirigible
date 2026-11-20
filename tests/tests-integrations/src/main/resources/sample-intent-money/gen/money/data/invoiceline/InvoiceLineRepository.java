@@ -161,10 +161,10 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
      * roll-up whose own parent sits above this row - keep cascading exactly as they did when the handler
      * persisted the full row, carrying the written column names under {@code DerivedWrite.MARKER} so an
      * authored-change listener can skip a recompute that moved nothing it watches. Routed through
-     * {@link #updateProperties} so a labelled entity still refreshes its stored display Name, a
-     * lifecycle still guards a status move and a document line still resums the master it belongs to.
-     * The entity's {@code checks:} do not gate the recomputed columns: they are written after the
-     * child's change has committed, so a refusal could only leave a stale total behind (#8443).
+     * {@link #updateProperties} so a labelled entity still refreshes its stored display Name and a
+     * document line still resums the master it belongs to. Neither the entity's {@code checks:} nor its
+     * {@code lifecycle:} gate the recomputed columns: they are written after the child's change has
+     * committed, so a refusal could only leave a stale total behind (#8443, #8750).
      */
     public int updateDerived(Object id, java.util.Map<String, Object> values) {
         if (values == null || values.isEmpty()) {
