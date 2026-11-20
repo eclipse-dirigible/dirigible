@@ -97,6 +97,12 @@ Never `mvn install` while an IT run is in progress in any worktree (`pgrep -fl m
 1. `mvn formatter:format` on the changed modules, then **wipe the formatter cache and validate with
    CI's exact command**: `find . -name formatter-maven-cache.properties -path '*/target/*' -delete`,
    then `mvn -T 1C formatter:validate`. The cache can report success on files CI will reject.
+   Run them without a profile, exactly as CI does. Since #8746 the profiles that set
+   `skip.code.formatting` (`quick-build`, `tests`, `unit-tests`, `integration-tests`) skip only the
+   formatting bound to the build lifecycle, so a directly invoked `formatter:format` /
+   `formatter:validate` works under them too; before that fix they printed `Formatting is skipped`
+   and BUILD SUCCESS without looking at a single file. If a formatter goal prints that line, your
+   branch predates the fix - drop the profile.
 2. The changed modules' unit suites green (`mvn -pl <module> -am test`).
 3. The integration tests that cover the change green, by name - and for a template or generator change,
    an IT that COMPILES and RUNS the generated output (`IntentEmissionCoverageIT`, `IntentEngineIT`, a
