@@ -61,19 +61,18 @@ class IssueReportShellIT extends UserInterfaceIntegrationTest {
      * The framed shell told there is no engine: its store, the two entries, its Issues page and its
      * requests.
      */
-    private static final String WITHOUT_ENGINE =
-            """
-                    const w = document.getElementById('without-issues-engine').contentWindow;
-                    const d = w.document;
-                    const page = d.getElementById('issues-page-unavailable');
-                    if (!w.Alpine || !page || !d.getElementById('shell-nav-issues')) return 'loading';
-                    return [w.Alpine.store('issues').available,
-                        d.getElementById('shell-nav-issues').closest('li').style.display,
-                        d.getElementById('user-menu-report-issue') ? 'menu entry' : 'no menu entry',
-                        page.checkVisibility() ? page.querySelector('[x-h-info-page-title]').textContent.trim() : 'page hidden',
-                        w.Alpine.store('issues').dialogOpen ? 'dialog open' : 'dialog closed',
-                        w.performance.getEntriesByType('resource').filter(e => e.name.indexOf('/services/issues') >= 0).length + ' requests'].join('|');
-                    """;
+    private static final String WITHOUT_ENGINE = """
+            const w = document.getElementById('without-issues-engine').contentWindow;
+            const d = w.document;
+            const page = d.getElementById('issues-page-unavailable');
+            if (!w.Alpine || !w.__fetched || !page || !d.getElementById('shell-nav-issues')) return 'loading';
+            return [w.Alpine.store('issues').available,
+                d.getElementById('shell-nav-issues').closest('li').style.display,
+                d.getElementById('user-menu-report-issue') ? 'menu entry' : 'no menu entry',
+                page.checkVisibility() ? page.querySelector('[x-h-info-page-title]').textContent.trim() : 'page hidden',
+                w.Alpine.store('issues').dialogOpen ? 'dialog open' : 'dialog closed',
+                w.__fetched.filter(n => n.indexOf('/services/issues') >= 0).length + ' requests'].join('|');
+            """;
 
     @Test
     void aFailedRequestIsReportedFromTheUserMenuAndFollowedByReporterAndOperator() {
@@ -140,7 +139,9 @@ class IssueReportShellIT extends UserInterfaceIntegrationTest {
 
         // The same shell where the branding script states no engine: a frame of it, under a top whose flag
         // reads false whatever the frame's own branding script writes. Its Issues link, the Workbench's
-        // ?report=1, opens no dialog, and nothing asks /services/issues.
+        // ?report=1, opens no dialog, and nothing asks /services/issues - every request of the frame
+        // recorded from its first script on (RecordedRequests).
+        RecordedRequests.record();
         Selenide.executeJavaScript(
                 "Object.defineProperty(window, 'PlatformIssues', { get: () => false, set: () => {}, configurable: true });"
                         + " const frame = document.createElement('iframe'); frame.id = 'without-issues-engine';"
