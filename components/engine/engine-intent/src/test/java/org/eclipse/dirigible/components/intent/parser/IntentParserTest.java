@@ -2377,6 +2377,53 @@ class IntentParserTest {
                                  .get("month(issuedOn)"));
     }
 
+    /**
+     * The dashboard runs a tile's report with no parameter of its own, so every parameter of a widget
+     * report declares the initial the tile runs with (#8749).
+     */
+    @Test
+    void widgetOnAReportWithAParameterWithoutInitialIsRejected() {
+        String yaml = WIDGET_HEAD.replace("    widget:", "    parameters:\n      - { name: since, target: issuedOn, op: ge }\n    widget:");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains(
+                             "runs the report on the dashboard without its parameters, but parameter [since] has no initial")),
+                "expected a widget-without-parameter-values issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void widgetOnAReportWhoseParametersDeclareAnInitialParses() {
+        String yaml = WIDGET_HEAD.replace("    widget:",
+                "    parameters:\n      - { name: since, target: issuedOn, op: ge, initial: \"2020-01-01\" }\n    widget:");
+        assertEquals("2020-01-01", IntentParser.parse(yaml)
+                                               .getReports()
+                                               .get(0)
+                                               .getParameters()
+                                               .get(0)
+                                               .getInitial());
+    }
+
+    @Test
+    void widgetOnAPeriodReportWithACustomDefaultIsRejected() {
+        String yaml = WIDGET_HEAD.replace("    widget:", "    period: { target: issuedOn, default: custom }\n    widget:");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("parameter [fromDate] has no initial")),
+                "expected the custom window's bounds to be refused, got: " + ex.getIssues());
+    }
+
+    @Test
+    void widgetOnAPeriodReportWithAPresetDefaultParses() {
+        String yaml = WIDGET_HEAD.replace("    widget:", "    period: { target: issuedOn, default: last30Days }\n    widget:");
+        assertEquals(2, IntentParser.parse(yaml)
+                                    .getReports()
+                                    .get(0)
+                                    .getParameters()
+                                    .size());
+    }
+
     @Test
     void widgetValueMustNameADeclaredMeasure() {
         String yaml = WIDGET_HEAD.replace("value: \"sum(total)\"", "value: \"avg(total)\"");
