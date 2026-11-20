@@ -11,11 +11,7 @@ package org.eclipse.dirigible.integration.tests.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
-
+import org.eclipse.dirigible.tests.framework.util.ResourceUtil;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -132,23 +128,12 @@ class IdeLocaleServiceIT {
                 var $rootScope = { $applyAsync: function (callback) { callback(); } };
                 var __fired = [];
                 """.formatted(STORAGE_KEY, savedLanguage));
-        context.eval("js", read(LOCALE_SERVICE));
+        context.eval("js", ResourceUtil.loadResource(LOCALE_SERVICE));
         context.eval("js", """
                 var __providerInstance = new __provider();
                 var __factory = __providerInstance.$get;
                 var __service = __factory[__factory.length - 1].call(__providerInstance, $rootScope, Extensions);
                 """);
         return context;
-    }
-
-    private static String read(String resource) {
-        try (InputStream in = IdeLocaleServiceIT.class.getResourceAsStream(resource)) {
-            if (in == null) {
-                throw new IllegalStateException("Missing classpath resource: " + resource);
-            }
-            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
-        } catch (IOException ex) {
-            throw new UncheckedIOException("Failed to read " + resource, ex);
-        }
     }
 }
