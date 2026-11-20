@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -266,7 +267,7 @@ class I18nKeyCoverageIT {
         for (Resource resource : resources("classpath*:" + DIRIGIBLE + "monitoring/i18n/en-US/*.json")) {
             monitoring.putAll(flatten(json(resource)));
         }
-        assertTrue(!monitoring.isEmpty(), "the monitoring shell's en-US catalog was not found");
+        assertFalse(monitoring.isEmpty(), "the monitoring shell's en-US catalog was not found");
         problems.addAll(fallbackDrift("monitoring:", MONITORING_SOURCES, "monitoring:", monitoring));
         assertNoneMissing("keys whose fallback is not their en-US catalog text", problems);
     }
