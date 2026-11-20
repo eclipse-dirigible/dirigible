@@ -14,6 +14,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -190,7 +191,9 @@ class ShellBootstrapWithoutScriptsIT extends IntegrationTest {
         given().when()
                .get(IDE_EXTENSIONS + "views.js?extensionPoints=platform-settings&type=settings")
                .then()
-               .body("id", hasItems("generalSettings", "localeSettings"));
+               .body("id", hasItem("generalSettings"))
+               // The IDE is not translated (#8793): its settings offer no language.
+               .body("id", not(hasItem("localeSettings")));
         given().when()
                .get(IDE_EXTENSIONS + "editors.js")
                .then()
