@@ -98,6 +98,34 @@ class I18nKeyCoverageIT {
      */
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{\\{\\s*(\\w+)\\s*(?:,[^}]*)?\\}\\}");
 
+    /** The generated-application templates, whose {@code T(key, fallback)} pairs must agree. */
+    private static final String HARMONIA_TEMPLATES = "classpath*:" + DIRIGIBLE + "template-application-ui-harmonia-java/**/*.template";
+
+    /** The monitoring shell, whose {@code T(key, fallback)} pairs must agree. */
+    private static final List<String> MONITORING_SOURCES =
+            List.of("classpath*:" + DIRIGIBLE + "monitoring/**/*.html", "classpath*:" + DIRIGIBLE + "monitoring/**/*.js");
+
+    /**
+     * A {@code T()} call with a literal key after the given prefix and a literal single-quoted
+     * fallback: group 1 is the key path, group 2 the fallback as written.
+     */
+    private static final String KEYED_FALLBACK = "\\bT\\(\\s*'%s([A-Za-z0-9_.]+)'\\s*,\\s*'((?:[^'\\\\]|\\\\.)*)'";
+
+    /**
+     * A Velocity reference in a fallback ({@code ${entityLabel}}, {@code $label}) - a run-time value.
+     */
+    private static final Pattern VELOCITY_REFERENCE = Pattern.compile("\\$!?\\{[^}]*}|\\$!?[A-Za-z][\\w.]*");
+
+    /** A JavaScript string escape a fallback may carry: a unicode escape or an escaped character. */
+    private static final Pattern JS_ESCAPE = Pattern.compile("\\\\(?:u([0-9a-fA-F]{4})|(.))");
+
+    /**
+     * Keys whose fallbacks still disagree, each with the change that settles it. Remove an entry once
+     * that change is merged - the test then guards the key like every other.
+     */
+    private static final Map<String, String> KNOWN_DRIFT =
+            Map.of("generated:messages.deleteConfirm", "#8790: the my/partner delete dialogs pass the long sentence with {{name}}");
+
     /** The i18next build the shells load, from its webjar. */
     private static final String I18NEXT = "classpath*:META-INF/resources/webjars/i18next/*/dist/umd/i18next.min.js";
 
@@ -218,6 +246,85 @@ class I18nKeyCoverageIT {
             }
         }
         assertNoneMissing("application-core catalogs disagree across languages", problems);
+    }
+
+    /**
+     * One key, one meaning (#8779). The default language renders a {@code T()} call's baked fallback
+     * and every other language the catalog's text for the key, so a key used with two fallbacks - the
+     * Save button on {@code defaults.update}, whose catalog text is "Update" - reads one thing in
+     * English and another in Bulgarian, and the translator translates a text no English user sees.
+     * Every literal fallback must therefore equal the en-US catalog text of its key, placeholders
+     * aside: a Velocity reference and an i18next placeholder are both a value filled in at run time.
+     */
+    @Test
+    void everyKeyKeepsTheFallbackItsCatalogSays() {
+        List<String> problems = new ArrayList<>();
+        problems.addAll(fallbackDrift("generated:", List.of(HARMONIA_TEMPLATES), "\\$projectName:\\$\\{tprefix\\}\\.",
+                flatten(json(TEMPLATE_CATALOG))));
+        problems.addAll(fallbackDrift("application-core:", List.of(HARMONIA_TEMPLATES), "application-core:", coreCatalog("en-US")));
+        Map<String, String> monitoring = new TreeMap<>();
+        for (Resource resource : resources("classpath*:" + DIRIGIBLE + "monitoring/i18n/en-US/*.json")) {
+            monitoring.putAll(flatten(json(resource)));
+        }
+        assertTrue(!monitoring.isEmpty(), "the monitoring shell's en-US catalog was not found");
+        problems.addAll(fallbackDrift("monitoring:", MONITORING_SOURCES, "monitoring:", monitoring));
+        assertNoneMissing("keys whose fallback is not their en-US catalog text", problems);
+    }
+
+    /**
+     * The drift of one namespace: a key written with two different fallbacks, or with one that is not
+     * its catalog text. A key the catalog lacks is the coverage tests' business, not this one's.
+     */
+    private static List<String> fallbackDrift(String namespace, List<String> sources, String keyPrefix, Map<String, String> catalog) {
+        Pattern pattern = Pattern.compile(KEYED_FALLBACK.formatted(keyPrefix));
+        Map<String, Map<String, Set<String>>> fallbacks = new TreeMap<>();
+        for (String location : sources) {
+            for (Resource resource : resources(location)) {
+                String path = url(resource);
+                if (path.contains("/i18n/")) {
+                    continue;
+                }
+                Matcher matcher = pattern.matcher(read(resource));
+                while (matcher.find()) {
+                    fallbacks.computeIfAbsent(matcher.group(1), key -> new TreeMap<>())
+                             .computeIfAbsent(unescape(matcher.group(2)), fallback -> new TreeSet<>())
+                             .add(path.substring(path.indexOf(DIRIGIBLE) + DIRIGIBLE.length()));
+                }
+            }
+        }
+        assertTrue(fallbacks.size() > 10,
+                "only " + fallbacks.size() + " " + namespace + " keys with a fallback found - a source pattern stopped matching");
+        List<String> problems = new ArrayList<>();
+        fallbacks.forEach((key, written) -> {
+            String expected = catalog.get(key);
+            Set<String> normalized = new TreeSet<>();
+            written.keySet()
+                   .forEach(fallback -> normalized.add(withoutValues(fallback)));
+            if (expected != null && !KNOWN_DRIFT.containsKey(namespace + key) && !normalized.equals(Set.of(withoutValues(expected)))) {
+                problems.add(namespace + key + " is \"" + expected + "\" in the en-US catalog but written as " + written);
+            }
+        });
+        return problems;
+    }
+
+    /**
+     * A fallback as the page reads it: the JavaScript escapes and the HTML attribute's {@code &amp;}
+     * decoded.
+     */
+    private static String unescape(String fallback) {
+        return JS_ESCAPE.matcher(fallback.replace("&amp;", "&"))
+                        .replaceAll(escape -> Matcher.quoteReplacement(
+                                escape.group(1) != null ? String.valueOf((char) Integer.parseInt(escape.group(1), 16)) : escape.group(2)));
+    }
+
+    /**
+     * A text with every run-time value - a Velocity reference or an i18next placeholder - reduced to
+     * one token.
+     */
+    private static String withoutValues(String text) {
+        return PLACEHOLDER.matcher(VELOCITY_REFERENCE.matcher(text)
+                                                     .replaceAll("{{value}}"))
+                          .replaceAll("{{value}}");
     }
 
     /**

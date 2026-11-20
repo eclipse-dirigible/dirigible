@@ -18,8 +18,8 @@
         <span x-show="state.lastUpdated" x-cloak x-h-text.muted class="text-xs"
               x-text="T('monitoring:overview.updated', 'Updated {{time}}', { time: lastUpdatedText() })"></span>
         <button x-h-button data-variant="transparent" data-size="icon-sm" @click="state.togglePause()"
-                :title="state.paused ? T('monitoring:overview.resume', 'Resume auto-refresh') : T('monitoring:overview.pause', 'Pause auto-refresh')"
-                :aria-label="state.paused ? 'Resume auto-refresh' : 'Pause auto-refresh'">
+                :title="state.paused ? T('monitoring:overview.resumeAutoRefresh', 'Resume auto-refresh') : T('monitoring:overview.pauseAutoRefresh', 'Pause auto-refresh')"
+                :aria-label="state.paused ? T('monitoring:overview.resumeAutoRefresh', 'Resume auto-refresh') : T('monitoring:overview.pauseAutoRefresh', 'Pause auto-refresh')">
           <svg x-h-lucide x-show="!state.paused" role="presentation" data-lucide="pause"></svg>
           <svg x-h-lucide x-show="state.paused" role="presentation" data-lucide="play"></svg>
         </button>

@@ -316,7 +316,7 @@
       <div x-h-info-page-description x-show="canWrite()" x-text="T('$projectName:${tprefix}.messages.getStarted', 'Get started by creating the first record.')"></div>
     </div>
     <div x-h-info-page-content>
-      <button x-h-button data-variant="primary" x-show="canWrite()" @click="newEntity()" x-text="T('$projectName:${tprefix}.defaults.formHeadCreate', 'New ${entityLabel}', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></button>
+      <button x-h-button data-variant="primary" x-show="canWrite()" @click="newEntity()" x-text="T('$projectName:${tprefix}.defaults.newEntity', 'New {{name}}', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></button>
     </div>
   </div>
 
@@ -684,7 +684,7 @@
               <div class="vbox gap-4">
                 <div x-show="state === 'loading'"><div x-h-spinner></div></div>
                 <div x-show="state === 'error'" x-h-text.muted x-text="error"></div>
-                <div x-show="state === 'empty'" x-h-text.muted x-text="T('$projectName:${tprefix}.messages.noData', 'No records yet.')"></div>
+                <div x-show="state === 'empty'" x-h-text.muted x-text="T('$projectName:${tprefix}.messages.noRecordsYet', 'No records yet.')"></div>
                 <div x-show="state === 'default'" x-h-table-container.scroll style="max-height: 320px">
                   <table x-h-table data-borders="rows">
                     <thead x-h-table-header>
@@ -759,7 +759,7 @@
   <div x-h-dialog-overlay :data-open="deleteOpen">
     <div x-h-dialog>
       <div x-h-dialog-header>
-        <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.deleteTitle', 'Delete ${entityLabel}', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></h2>
+        <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.deleteTitle', 'Delete {{name}}?', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></h2>
         <p x-h-dialog-description></p>
         <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
       </div>

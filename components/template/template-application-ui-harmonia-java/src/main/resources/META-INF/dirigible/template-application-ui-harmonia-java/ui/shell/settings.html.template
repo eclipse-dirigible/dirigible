@@ -117,7 +117,7 @@
 
           <div class="vbox" x-show="languageOptions().length > 1" x-cloak>
             <h2 x-h-text.h5 x-text="T('application-core:shell.settings.regionLanguage', 'Region &amp; Language')"></h2>
-            <p x-h-text.muted x-text="T('application-core:shell.settings.rlDescription', 'One preference for the whole stack: the user interface, the data and document printing all follow the selected language.')"></p>
+            <p x-h-text.muted x-text="T('application-core:shell.settings.rlDescription', 'One preference for the whole stack: the user interface, the data and document printing all follow the selected language. Content a module has not translated yet falls back to the default language.')"></p>
             <div x-h-card class="mt-4 w-full overflow-hidden">
               <ul x-h-list>
                 <li x-h-list-item class="gap-3 px-4 py-3">
@@ -143,7 +143,7 @@
                every view re-formats at once. -->
           <div class="vbox" :class="languageOptions().length > 1 ? 'mt-8' : ''">
             <h2 x-h-text.h5 x-text="T('application-core:shell.settings.formats', 'Display formats')"></h2>
-            <p x-h-text.muted x-text="T('application-core:shell.settings.formatsHint', 'Patterns for dates, timestamps and numbers across all applications.')"></p>
+            <p x-h-text.muted x-text="T('application-core:shell.settings.formatsHint', 'Patterns for dates, timestamps and numbers across all applications. The number pattern sets the grouping and decimal separators; each field keeps its own number of decimals.')"></p>
             <div x-h-card class="mt-4 w-full overflow-hidden">
               <ul x-h-list>
                 <li x-h-list-item class="gap-3 px-4 py-3">

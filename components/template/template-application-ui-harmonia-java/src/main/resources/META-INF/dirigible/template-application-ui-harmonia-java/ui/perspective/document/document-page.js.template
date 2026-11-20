@@ -1777,8 +1777,8 @@ document.addEventListener('alpine:init', () => {
       const name = T('$projectName:${tprefix}.t.${dataName}', '${documentLabel}');
       if (this.isPreview) return name;
       return this.isEdit
-        ? T('$projectName:${tprefix}.defaults.formHeadUpdate', 'Edit {{name}}', { name: name })
-        : T('$projectName:${tprefix}.defaults.formHeadCreate', 'New {{name}}', { name: name });
+        ? T('$projectName:${tprefix}.defaults.editTitle', 'Edit {{name}}', { name: name })
+        : T('$projectName:${tprefix}.defaults.newTitle', 'New {{name}}', { name: name });
     },
 
     // One line of the document's own identity under the title, from the properties the model marks
