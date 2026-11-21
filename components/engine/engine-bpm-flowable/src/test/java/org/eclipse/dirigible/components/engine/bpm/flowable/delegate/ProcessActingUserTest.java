@@ -17,13 +17,14 @@ import static org.mockito.Mockito.when;
 import java.util.Optional;
 
 import org.eclipse.dirigible.components.base.context.OriginatingUser;
+import org.eclipse.dirigible.components.base.context.ThreadLanguage;
 import org.eclipse.dirigible.components.engine.bpm.flowable.config.BpmProviderFlowable;
 import org.flowable.engine.delegate.DelegateExecution;
 import org.junit.jupiter.api.Test;
 
 /**
  * A process step acts for the user who completed the instance's latest task (issue #8690), unless
- * the thread already acts for a user.
+ * the thread already acts for a user - and in that user's language (issue #8776).
  */
 class ProcessActingUserTest {
 
@@ -53,12 +54,38 @@ class ProcessActingUserTest {
         try (OriginatingUser.Binding binding = ProcessActingUser.bind(execution(null))) {
             assertTrue(OriginatingUser.get()
                                       .isEmpty());
+            assertTrue(ThreadLanguage.get()
+                                     .isEmpty());
+        }
+    }
+
+    @Test
+    void aStepRunsInTheLanguageOfTheUserWhoCompletedTheLatestTask() {
+        try (OriginatingUser.Binding binding = ProcessActingUser.bind(execution("approver", "bg"))) {
+            assertEquals(Optional.of("bg"), ThreadLanguage.get());
+        }
+        assertTrue(ThreadLanguage.get()
+                                 .isEmpty());
+    }
+
+    @Test
+    void aLanguageTheThreadAlreadyHasIsKept() {
+        try (OriginatingUser.Binding raisedBy = OriginatingUser.bind("requester", "en")) {
+            try (OriginatingUser.Binding binding = ProcessActingUser.bind(execution("approver", "bg"))) {
+                assertEquals(Optional.of("en"), ThreadLanguage.get());
+            }
+            assertEquals(Optional.of("en"), ThreadLanguage.get());
         }
     }
 
     private static DelegateExecution execution(String completedBy) {
+        return execution(completedBy, null);
+    }
+
+    private static DelegateExecution execution(String completedBy, String language) {
         DelegateExecution execution = mock(DelegateExecution.class);
         when(execution.getVariable(BpmProviderFlowable.LAST_COMPLETED_BY)).thenReturn(completedBy);
+        when(execution.getVariable(BpmProviderFlowable.LAST_COMPLETED_LANGUAGE)).thenReturn(language);
         return execution;
     }
 }

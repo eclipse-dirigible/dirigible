@@ -11,6 +11,7 @@ package org.eclipse.dirigible.engine.java.listener;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -31,6 +32,7 @@ import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.base.callable.CallableResultAndException;
 import org.eclipse.dirigible.components.base.context.OriginatingUser;
+import org.eclipse.dirigible.components.base.context.ThreadLanguage;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.configurations.tenant.TenantConfigurationService;
@@ -72,6 +74,7 @@ class ListenerClassConsumerTest {
 
         Map<String, String> observedDuringDispatch;
         String userDuringDispatch;
+        String languageDuringDispatch;
         RuntimeException failWith;
         /** Thrown one per run, before {@link #failWith} is considered. */
         final Deque<RuntimeException> failNextRuns = new ArrayDeque<>();
@@ -87,6 +90,8 @@ class ListenerClassConsumerTest {
         public void onMessage(String message) {
             observedDuringDispatch = Configuration.getThreadConfiguration();
             userDuringDispatch = UserFacade.getName();
+            languageDuringDispatch = UserFacade.findLanguage()
+                                               .orElse(null);
             runs++;
             if (!failNextRuns.isEmpty()) {
                 throw failNextRuns.poll();
@@ -301,6 +306,26 @@ class ListenerClassConsumerTest {
                 "the broker thread must not keep the previous message's user");
     }
 
+    /**
+     * The handler resolves its messages and reads multilingual rows in the language of the write that
+     * raised the event, and the pooled broker thread does not keep it (#8776).
+     */
+    @Test
+    void theHandlerRunsInTheLanguageOfTheWriteThatRaisedTheEvent() throws Exception {
+        when(tenantConfigurationService.resolveInjectableForCurrentTenant()).thenReturn(Map.of());
+        TextMessage message = mock(TextMessage.class);
+        when(message.getText()).thenReturn("{}");
+        when(message.getObjectProperty("dirigible_originating_user")).thenReturn("alice");
+        when(message.getObjectProperty("dirigible_originating_language")).thenReturn("bg");
+
+        capturedListener.onMessage(message);
+
+        assertEquals("bg", handler.languageDuringDispatch);
+        assertTrue(ThreadLanguage.get()
+                                 .isEmpty(),
+                "the broker thread must not keep the previous message's language");
+    }
+
     /** A message without one - a job's write, a foreign producer - is handled exactly as before. */
     @Test
     void aMessageWithoutAnOriginatingUserIsHandledAsBefore() throws Exception {
@@ -311,6 +336,7 @@ class ListenerClassConsumerTest {
         capturedListener.onMessage(message);
 
         assertEquals("guest", handler.userDuringDispatch);
+        assertNull(handler.languageDuringDispatch);
     }
 
     /**

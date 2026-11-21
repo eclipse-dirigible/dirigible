@@ -20,6 +20,7 @@ import static org.mockito.Mockito.when;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.eclipse.dirigible.components.base.context.OriginatingUser;
+import org.eclipse.dirigible.components.base.context.ThreadLanguage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -124,12 +125,16 @@ class AsynchronousMessageListenerTest {
     void theHandlerRunsWithTheOriginatingUser() throws JMSException {
         when(tenantPropertyManager.getCurrentTenantId(textMessage)).thenReturn(TENANT_ID);
         when(textMessage.getObjectProperty(OriginatingUserProperty.PROPERTY_NAME)).thenReturn("alice");
+        when(textMessage.getObjectProperty(OriginatingUserProperty.LANGUAGE_PROPERTY_NAME)).thenReturn("bg");
         when(listenerDescriptor.getHandlerPath()).thenReturn(HANDLER);
         when(textMessage.getText()).thenReturn(MESSAGE);
         AtomicReference<String> seen = new AtomicReference<>();
+        AtomicReference<String> seenLanguage = new AtomicReference<>();
         doAnswer(invocation -> {
             seen.set(OriginatingUser.get()
                                     .orElse(null));
+            seenLanguage.set(ThreadLanguage.get()
+                                           .orElse(null));
             return null;
         }).when(scriptExecutor)
           .onMessage(any(), any());
@@ -137,8 +142,12 @@ class AsynchronousMessageListenerTest {
         asyncMessageListener.onMessage(textMessage);
 
         assertEquals("alice", seen.get());
+        // ...in the language of the write that raised the event (#8776).
+        assertEquals("bg", seenLanguage.get());
         assertTrue(OriginatingUser.get()
                                   .isEmpty());
+        assertTrue(ThreadLanguage.get()
+                                 .isEmpty());
     }
 
 }
