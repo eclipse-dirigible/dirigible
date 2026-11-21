@@ -209,6 +209,8 @@ final class RollupAggregates {
      * back where the payment found it (CONFIRMED, or ISSUED if it was paid straight from there), not
      * left PAID with nothing paid (#7016). Only the two roll-up-owned statuses are ever relinquished: a
      * document somebody voided or cancelled while partially paid stays voided when its allocation goes.
+     * A parent that was already in {@code statusWhenPartial} when the sum first moved displaced
+     * nothing, so at a zero sum its FULL status falls back to the partial one (#8312).
      *
      * <p>
      * Either seed may be left out (#7941): the roll-up then owns only the band it names, and a sum in
@@ -278,13 +280,11 @@ final class RollupAggregates {
         out.append("                    if (parent.")
            .append(displacedField)
            .append(" == null) {\n");
-        out.append(
-                "                        LOG.warn(\"Roll-up: [{}] holds the roll-up-owned status [{}] with nothing summed, but records no"
-                        + " displaced status to restore - left as it is\", entity.")
-           .append(str(rollup, "fkProperty"))
-           .append(", parent.")
-           .append(statusField)
-           .append(");\n");
+        if (!whenFull.isEmpty() && !whenPartial.isEmpty()) {
+            appendFullFallsBackToPartial(out, statusField, whenFull, whenPartial);
+        } else {
+            appendNoDisplacedStatusWarning(out, rollup, statusField);
+        }
         out.append("                    } else {\n");
         out.append("                        parent.")
            .append(statusField)
@@ -304,6 +304,55 @@ final class RollupAggregates {
            .append("\", null);\n");
         out.append("                    }\n");
         out.append("                }\n");
+    }
+
+    /**
+     * A zero sum with no displaced status recorded means the parent was already in
+     * {@code statusWhenPartial} when the roll-up first summed something - the roll-up's own "not full"
+     * status, so taking it over displaced nothing (#8312). A FULL status must not outlive the sum that
+     * produced it, so it falls back to that partial status; a parent resting in the partial status at a
+     * zero sum is left alone.
+     *
+     * @param out the Java source being built
+     * @param statusField the parent status property
+     * @param whenFull the full-band seed id
+     * @param whenPartial the partial-band seed id
+     */
+    private static void appendFullFallsBackToPartial(StringBuilder out, String statusField, String whenFull, String whenPartial) {
+        out.append("                        if (java.util.Objects.equals(parent.")
+           .append(statusField)
+           .append(", ")
+           .append(whenFull)
+           .append(")) {\n");
+        out.append("                            parent.")
+           .append(statusField)
+           .append(" = ")
+           .append(whenPartial)
+           .append(";\n");
+        out.append("                            derived.put(\"")
+           .append(statusField)
+           .append("\", parent.")
+           .append(statusField)
+           .append(");\n");
+        out.append("                        }\n");
+    }
+
+    /**
+     * A single-seed roll-up that holds its status outside its band without a displaced status has no
+     * status of its own to fall back to, so it reports the state rather than guessing one.
+     *
+     * @param out the Java source being built
+     * @param rollup the roll-up descriptor
+     * @param statusField the parent status property
+     */
+    private static void appendNoDisplacedStatusWarning(StringBuilder out, Map<String, Object> rollup, String statusField) {
+        out.append(
+                "                        LOG.warn(\"Roll-up: [{}] holds the roll-up-owned status [{}] with nothing summed, but records no"
+                        + " displaced status to restore - left as it is\", entity.")
+           .append(str(rollup, "fkProperty"))
+           .append(", parent.")
+           .append(statusField)
+           .append(");\n");
     }
 
     /**

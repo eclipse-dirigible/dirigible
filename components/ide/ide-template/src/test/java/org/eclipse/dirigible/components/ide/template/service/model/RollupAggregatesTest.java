@@ -112,10 +112,13 @@ class RollupAggregatesTest {
                             .contains("parent.DisplacedStatus = null;")
                             .contains("derived.put(\"Status\", parent.Status);")
                             .contains("derived.put(\"DisplacedStatus\", null);");
-        assertThat(rendered).as("a roll-up-owned status with no recorded predecessor is reported, not guessed")
-                            .contains("if (parent.DisplacedStatus == null) {")
-                            .contains("LOG.warn(")
-                            .contains("entity.SalesOrder, parent.Status);");
+        assertThat(rendered).as("with nothing displaced, a FULL status falls back to the partial one (#8312)")
+                            .contains("if (parent.DisplacedStatus == null) {\n"
+                                    + "                        if (java.util.Objects.equals(parent.Status, 3)) {\n"
+                                    + "                            parent.Status = 2;\n"
+                                    + "                            derived.put(\"Status\", parent.Status);\n"
+                                    + "                        }\n" + "                    } else {")
+                            .doesNotContain("LOG.warn(");
     }
 
     @Test
@@ -153,6 +156,9 @@ class RollupAggregatesTest {
                             .contains("parent.Status = 3;")
                             .contains("} else if (java.util.Objects.equals(parent.Status, 3)) {")
                             .contains("parent.Status = parent.DisplacedStatus;");
+        assertThat(rendered).as("a single-seed roll-up has no status of its own to fall back to (#8312)")
+                            .contains("LOG.warn(")
+                            .doesNotContain("parent.Status = 2;");
     }
 
     /**
