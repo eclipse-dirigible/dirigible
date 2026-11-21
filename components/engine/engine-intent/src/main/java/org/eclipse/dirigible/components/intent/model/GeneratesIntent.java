@@ -218,6 +218,24 @@ public class GeneratesIntent {
      */
     private List<Integer> fromStatus;
 
+    /**
+     * Optional guard on the SOURCE's own values (issue #7992): the create-from is refused (409, with
+     * {@link #whenMessage}) unless this condition holds on the source record - one comparison or an
+     * ANDed list, the {@code forbidWhen} vocabulary over the source's own fields and to-ones
+     * ({@code "active == true"}). It is what {@link #fromStatus} is for a source whose eligibility is a
+     * plain field rather than a status: a paused template, a zero-value schedule. Both may be declared;
+     * the click then has to satisfy both.
+     *
+     * <p>
+     * Like {@link #fromStatus} it gates the CLICK - read under the source's row lock, atomic with the
+     * run it admits - and the contributed button stops offering itself on a record the condition
+     * refuses.
+     */
+    private Object when;
+
+    /** The refusal the caller receives when {@link #when} does not hold on the source. */
+    private String whenMessage;
+
     /** Target property -> source property (a field or to-one relation name of {@link #from}). */
     private Map<String, String> map = new LinkedHashMap<>();
 
@@ -497,6 +515,29 @@ public class GeneratesIntent {
     /** Whether an explicit list of allowed SOURCE statuses is declared (see {@link #fromStatus}). */
     public boolean hasFromStatus() {
         return fromStatus != null && !fromStatus.isEmpty();
+    }
+
+    public Object getWhen() {
+        return when;
+    }
+
+    public void setWhen(Object when) {
+        this.when = when;
+    }
+
+    public String getWhenMessage() {
+        return whenMessage;
+    }
+
+    public void setWhenMessage(String whenMessage) {
+        this.whenMessage = whenMessage;
+    }
+
+    /** Whether a guard on the source's own values is declared (see {@link #when}). */
+    public boolean hasWhen() {
+        return when instanceof List<?> list ? !list.isEmpty()
+                : when != null && !String.valueOf(when)
+                                         .isBlank();
     }
 
     public Integer getSourceStatusOnRetire() {

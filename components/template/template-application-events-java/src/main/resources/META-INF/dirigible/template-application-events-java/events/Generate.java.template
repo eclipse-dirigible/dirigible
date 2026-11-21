@@ -121,6 +121,13 @@ import org.eclipse.dirigible.sdk.http.Response;
  * The guard reads the source under a row lock held until the run commits (#7827), so concurrent
  * clicks take turns: one creates the ${toEntity}, the others find the flipped status and are refused.
 #end
+#if($hasWhenGuard)
+ *
+ * Source guard (intent `when:` - issue #7992): the endpoint refuses the run with 409 and the authored
+ * message unless the ${fromEntity} satisfies the authored condition, read under the same row lock the
+ * run holds until it commits, and the contributed button stops offering itself on a record that does
+ * not - the eligibility a plain field carries (a paused template), where `fromStatus:` reads a status.
+#end
 #if($hasRefusals || $hasBackLink)
  *
  * A declared reversal (intent `reversals:` - issue #7886): the ${toEntity} created is the original's
@@ -175,7 +182,7 @@ public class ${className}Generate {
 
     private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}Generate");
 #end
-#if($hasRefusals || $hasReportItems || $hasReportRows)
+#if($hasRefusals || $hasReportItems || $hasReportRows || $hasWhenGuard)
 
     /** A declared refusal held under the original's row lock - answered with 409 and its message. */
     static final class Refused extends RuntimeException {
@@ -246,8 +253,9 @@ public class ${className}Generate {
 #set($runCall = "create(req.id)")
 #end
 #end
-#set($catchesRefused = $hasRefusals || $hasReportItems || $hasReportRows)
-#if(!$hasStatusGuard)
+#set($catchesRefused = $hasRefusals || $hasReportItems || $hasReportRows || $hasWhenGuard)
+#set($lockedGuard = $hasStatusGuard || $hasWhenGuard)
+#if(!$lockedGuard)
         // The source must exist, whatever else the run requires (#8488): asked once, up front, for every
         // shape of create-from.
         if (new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().findById(req.id) == null) {
@@ -255,11 +263,11 @@ public class ${className}Generate {
         }
 #end
         ${runResultType} saved;
-#if($hasStatusGuard || $catchesRefused)
+#if($lockedGuard || $catchesRefused)
         try {
-#if($hasStatusGuard)
-            // The from-status guard, asked only on this path - the click - and atomic with the run it
-            // admits (#7827): the ${fromEntity} is locked BEFORE the guard reads it and stays locked until
+#if($lockedGuard)
+            // The from-status guard (and the source guard, #7992), asked only on this path - the click -
+            // and atomic with the run it admits (#7827): the ${fromEntity} is locked BEFORE the guard reads it and stays locked until
             // the run's unit commits, so concurrent clicks on one ${fromEntity} take turns. The first one
             // creates the ${toEntity} and flips the ${fromEntity}; each later one reads the flipped status
             // and is refused 409. Read apart from the run, every click read the status before any of them
@@ -272,17 +280,28 @@ public class ${className}Generate {
                     return null;
                 }
                 gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity source = sourceRepository.findById(req.id);
+#if($hasStatusGuard)
                 // Calc reads the status FK with the calculated-field semantics (null -> 0, never a seed id).
                 int currentStatus = org.eclipse.dirigible.sdk.utils.Calc.eval("${guardStatusProperty}", source, 0).intValue();
                 if (!(${guardStatusExpr})) {
                     throw new WrongStatus(currentStatus);
                 }
+#end
+#if($hasWhenGuard)
+                // The source guard (intent `when:`, #7992): the ${fromEntity}'s own values must admit the
+                // click - decided here, before anything is created or a number is spent.
+                if (!(${whenGuardCondition})) {
+                    throw new Refused("${whenMessage}");
+                }
+#end
                 return ${runCall};
             });
+#if($hasStatusGuard)
         } catch (WrongStatus refused) {
             // Thrown before the run wrote anything; the unit it ends holds only the lock.
             Response.setStatus(409);
             return "{\"error\": \"${name} ${guardStatusText} - current status is [" + refused.currentStatus + "]\"}";
+#end
 #else
             saved = ${runCall};
 #end

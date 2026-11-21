@@ -1333,6 +1333,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("guardStatusExpr", guard == null ? "" : guard.expression());
             e.put("guardStatusText", guard == null ? "" : guard.text(g.getFrom()));
             e.put("guardStatuses", guard == null ? "" : guard.statuses());
+            putWhenGuard(g, e, source, byName);
             e.put("sourceStatusProperty", sourceStatusProperty);
             e.put("sourceStatusValue",
                     g.getSourceStatus() == null || sourceStatusProperty.isEmpty() ? "" : String.valueOf(g.getSourceStatus()));
@@ -1547,6 +1548,25 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         }
         return model.getName() == null || model.getName()
                                                .isBlank() ? "intent" : model.getName();
+    }
+
+    /**
+     * The guard of a create-from on the source's own values (issue #7992), onto its glue entry: the
+     * {@code when:} terms re-owned onto the {@code source} local the click reads under its row lock,
+     * and the authored refusal. Emitted only where the parser admits the guard - a local source and a
+     * button to click - so a {@code .glue} written before the keys existed renders exactly the
+     * create-from it always had.
+     *
+     * @param g the create-from
+     * @param e the glue entry being built
+     * @param source the source entity, {@code null} for a cross-model one
+     * @param byName the local entities by name
+     */
+    private static void putWhenGuard(GeneratesIntent g, Map<String, Object> e, EntityIntent source, Map<String, EntityIntent> byName) {
+        List<Map<String, Object>> terms = g.hasWhen() && g.hasButton() ? GeneratesGuardSupport.whenTerms(g, source, byName) : null;
+        e.put("hasWhenGuard", terms != null);
+        e.put("whenGuardTerms", terms == null ? new ArrayList<>() : terms);
+        e.put("whenMessage", terms == null ? "" : g.getWhenMessage());
     }
 
     /**
