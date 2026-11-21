@@ -2586,10 +2586,29 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      * @param stored the row as stored before this write, {@code null} for a create
      */
     private void requireReferencesExist(${name}Entity entity, ${name}Entity stored) {
+#if($hierarchyProperty)
+        // A parent this write gives the row gains a child, which a leaf that leafOnly relations - of
+        // this model or another - reference must not (dirigible #7826). Asked FIRST, so the parent is
+        // locked for update before the reference check below share-locks it.
+        if (stored == null || !java.util.Objects.equals(stored.${hierarchyProperty}, entity.${hierarchyProperty})) {
+            requireMayGainChild(entity.${hierarchyProperty});
+        }
+#end
 #foreach($property in $properties)
 #if($property.targetEntityClass)
         if (stored == null || !java.util.Objects.equals(stored.${property.name}, entity.${property.name})) {
             requireReferenceExists("${property.name}", "${property.targetEntityClass}", entity.${property.name});
+#if($property.widgetLeafOnly && $property.leafOnlyRepositoryClass && $property.widgetHierarchyProperty)
+            // leafOnly (#7826): counted under the share lock the check above took on the referenced
+            // ${property.relationshipEntityName}, so a child being given to it either committed first and is
+            // counted here, or waits for this write and is then refused by the tree's own check.
+            if (entity.${property.name} != null && new ${property.leafOnlyRepositoryClass}().count(
+                    org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                            .eq("${property.widgetHierarchyProperty}", entity.${property.name})) > 0) {
+                throw new org.eclipse.dirigible.sdk.db.ValidationException(
+                        "The '${property.name}' must reference a leaf ${property.relationshipEntityName} - the selected one has children");
+            }
+#end
         }
 #end
 #end
@@ -2722,6 +2741,32 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
     }
 
+#set($hasLeafOnlyReferences = false)
+#foreach($property in $properties)
+#if($property.widgetLeafOnly && $property.widgetHierarchyProperty && $property.targetEntityClass)
+#set($hasLeafOnlyReferences = true)
+#end
+#end
+#if($hasLeafOnlyReferences)
+    /**
+     * How many ${name} rows reference a tree record through a leafOnly relation (dirigible #7826): the
+     * tree's repository asks before it gives that record a child, which would turn the referenced leaf
+     * into a group with these references still on it.
+     */
+    @Override
+    public int countLeafReferences(String targetEntity, Object targetId) {
+        long referencing = 0;
+#foreach($property in $properties)
+#if($property.widgetLeafOnly && $property.widgetHierarchyProperty && $property.targetEntityClass)
+        if ("${property.targetEntityClass}".equals(targetEntity)) {
+            referencing += count(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${property.name}", targetId));
+        }
+#end
+#end
+        return (int) Math.min(referencing, Integer.MAX_VALUE);
+    }
+
+#end
     @Override
     public String referencingLabel() {
         return "${entityLabel}";

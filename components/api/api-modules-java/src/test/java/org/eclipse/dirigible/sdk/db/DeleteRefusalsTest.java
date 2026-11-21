@@ -84,6 +84,19 @@ class DeleteRefusalsTest {
         assertEquals(CATALOG + ".checks.deleteReferencedByOthers", refusal.getMessageKey());
     }
 
+    /** dirigible #7826: a child under a referenced leaf is refused, naming every referencing kind. */
+    @Test
+    void aChildUnderAReferencedLeafIsRefusedNamingTheReferences() {
+        ValidationException refusal = DeleteRefusals.leafReferenced(null, CATALOGS, CATALOG, "Product", PRODUCT_LABEL_KEY, REFERENCES);
+
+        assertEquals(
+                "This Product is referenced as a leaf by 1 Product Cost record(s), 2 Stock Movement record(s) and cannot be given a child",
+                refusal.getMessage());
+        assertEquals(CATALOG + ".checks.leafReferenced", refusal.getMessageKey());
+        assertEquals(Map.of("entity", "Product", "references", "1 Product Cost record(s), 2 Stock Movement record(s)"),
+                refusal.getMessageParams());
+    }
+
     /**
      * dirigible #8635: a master that still has refusing children is refused in the reader's language.
      */
