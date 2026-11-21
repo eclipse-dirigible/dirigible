@@ -467,6 +467,17 @@ public class UserFacade {
         ThreadLanguage.clear();
     }
 
+    /**
+     * Binds a language for the scope of a try-with-resources block and restores the one bound before it
+     * when the block ends (#8776) - see {@link ThreadLanguage#bind(String)}.
+     *
+     * @param language the language to bind (a null or blank value binds none for the scope)
+     * @return the scope, whose {@code close} restores the previous language
+     */
+    public static ThreadLanguage.Scope bindLanguage(String language) {
+        return ThreadLanguage.bind(language);
+    }
+
     public static Collection<String> getUserRoles() {
         Authentication authentication = SecurityContextHolder.getContext()
                                                              .getAuthentication();

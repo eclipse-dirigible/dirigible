@@ -5952,7 +5952,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // #6947: there is no request here to carry Accept-Language, so the render binds the language to
         // the thread around the feeder call - otherwise the feeder's multilingual overlay resolves
         // nomenclature values in the default language while the template renders in the chosen one.
-        assertTrue(sendBill.contains("User.setLanguage(language)") && sendBill.contains("User.clearLanguage()"),
+        assertTrue(sendBill.contains("User.bindLanguage(language)"),
                 "the render must bind the render language to the thread so the overlay resolves values in it: " + sendBill);
         // The render language is never hardcoded: languageFrom: Person.locale loads the counterparty
         // and reads it off the record, falling back to the first entry of the tenant-resolved
@@ -6050,7 +6050,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the render must resolve the REPORT's print template by the report's name, got: " + billSend);
         // #6947: the report query's :language overlay reads the thread language, so the render binds it
         // around the report findAll + render (no request here to carry Accept-Language).
-        assertTrue(billSend.contains("User.setLanguage(language)") && billSend.contains("User.clearLanguage()"),
+        assertTrue(billSend.contains("User.bindLanguage(language)"),
                 "the report render must bind the render language to the thread so its :language overlay resolves in it: " + billSend);
         // The bound values double as the rendered header, so the PDF states which slice it is.
         assertTrue(billSend.contains("reportData.put(\"document\", reportFilter)"),
@@ -6086,7 +6086,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "one document for the whole fan-out means exactly one render call");
         // #6947: the once-before-the-loop render binds the language to the thread so the feeder overlay
         // resolves nomenclature values in the render language (no request here to carry Accept-Language).
-        assertTrue(shareBill.contains("User.setLanguage(language)") && shareBill.contains("User.clearLanguage()"),
+        assertTrue(shareBill.contains("User.bindLanguage(language)"),
                 "the fan-out's single render must bind the render language to the thread for the overlay: " + shareBill);
         assertTrue(shareBill.contains("private boolean send(BillEntity source, BillRecipientEntity entity, Map document)"),
                 "the per-row send must take the anchor (a placeholder quotes it) and the rendered document");

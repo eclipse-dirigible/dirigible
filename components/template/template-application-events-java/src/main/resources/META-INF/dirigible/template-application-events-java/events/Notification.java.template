@@ -134,14 +134,11 @@ public class ${className}Notification implements MessageHandler {
             document.put("fileName", ${attachFileNameExpression});
             // Bind the render language to the thread so the feeder's multilingual overlay resolves nomenclature
             // values in the SAME language as the template - there is no request here to carry Accept-Language
-            // (dirigible #6947). Cleared in the finally so the pooled worker thread never leaks it.
+            // (dirigible #6947). Bound for the block only: the language bound before it (an event handler's) comes back after.
             byte[] data;
-            org.eclipse.dirigible.sdk.security.User.setLanguage(language);
-            try {
+            try (org.eclipse.dirigible.sdk.security.User.LanguageBinding binding = org.eclipse.dirigible.sdk.security.User.bindLanguage(language)) {
                 data = org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", language,
                         new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty}));
-            } finally {
-                org.eclipse.dirigible.sdk.security.User.clearLanguage();
             }
             document.put("data", data);
             parts.add(document);
@@ -164,10 +161,9 @@ public class ${className}Notification implements MessageHandler {
             document.put("fileName", ${attachFileNameExpression});
             // Bind the render language to the thread so the report query's :language overlay resolves the
             // translatable dimensions in the SAME language as the template - there is no request here to carry
-            // Accept-Language (dirigible #6947). Cleared in the finally so the pooled worker thread never leaks it.
+            // Accept-Language (dirigible #6947). Bound for the block only: the language bound before it (an event handler's) comes back after.
             byte[] data;
-            org.eclipse.dirigible.sdk.security.User.setLanguage(language);
-            try {
+            try (org.eclipse.dirigible.sdk.security.User.LanguageBinding binding = org.eclipse.dirigible.sdk.security.User.bindLanguage(language)) {
                 Map<String, Object> reportData = new HashMap<>();
                 // The bound values double as the rendered header, so the PDF states which slice it is - a
                 // table of rows never does.
@@ -176,8 +172,6 @@ public class ${className}Notification implements MessageHandler {
                         .findAll(null, null, reportFilter));
                 data = org.eclipse.dirigible.sdk.print.Print.render("${attachReport}", language,
                         org.eclipse.dirigible.sdk.utils.Json.stringify(reportData));
-            } finally {
-                org.eclipse.dirigible.sdk.security.User.clearLanguage();
             }
             document.put("data", data);
             parts.add(document);

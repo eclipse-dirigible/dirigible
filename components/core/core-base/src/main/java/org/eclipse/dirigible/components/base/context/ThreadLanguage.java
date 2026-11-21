@@ -56,4 +56,34 @@ public final class ThreadLanguage {
     public static void clear() {
         CURRENT.remove();
     }
+
+    /**
+     * Binds a language for the scope of a try-with-resources block and, when the block ends, restores
+     * the language bound before it - not none: a render inside an event handler must leave the handler
+     * bound to the event's language (#8776).
+     *
+     * @param language the language; {@code null} or blank binds none for the scope
+     * @return the scope, whose {@code close} restores the previous language
+     */
+    public static Scope bind(String language) {
+        Scope scope = new Scope(CURRENT.get());
+        set(language);
+        return scope;
+    }
+
+    /** A language bound by {@link #bind(String)}; closing it restores the language bound before. */
+    public static final class Scope implements AutoCloseable {
+
+        private final String previous;
+
+        private Scope(String previous) {
+            this.previous = previous;
+        }
+
+        /** Restores the language bound before the scope. */
+        @Override
+        public void close() {
+            set(previous);
+        }
+    }
 }
