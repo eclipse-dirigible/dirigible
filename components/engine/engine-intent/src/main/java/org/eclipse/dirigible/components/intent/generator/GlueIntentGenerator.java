@@ -708,6 +708,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             boolean crossModelParent = via != null && via.getModel() != null && !via.getModel()
                                                                                     .isBlank();
             CrossModelSupport.TargetInfo parentTarget = null;
+            CrossModelSupport.TargetInfo childTarget = null;
             String childPerspective = null;
             String childProject = "";
             String parentEntity = null;
@@ -718,7 +719,6 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 if (uses == null || localParent == null) {
                     continue; // parser already reported the undeclared alias / non-local parent
                 }
-                CrossModelSupport.TargetInfo childTarget;
                 try {
                     childTarget = CrossModelSupport.resolve(context, uses, rollup.getEntity());
                 } catch (IntentValidationException ex) {
@@ -863,6 +863,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             boolean withStatus = withCapacity && rollup.getStatus() != null && !rollup.getStatus()
                                                                                       .isBlank();
             base.put("statusField", withStatus ? IntentNaming.pascalCase(rollup.getStatus()) : "");
+            if (sum) {
+                putIntegralRollupTypes(base, rollup, child, childTarget, crossModelChild ? byName.get(rollup.getParent()) : parent,
+                        parentTarget, withCapacity);
+            }
             base.put("statusWhenFull", withStatus && rollup.getStatusWhenFull() != null ? rollup.getStatusWhenFull()
                                                                                                 .toString()
                     : "");
@@ -921,6 +925,56 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             }
         }
         return rollups;
+    }
+
+    /**
+     * Names the Java class of every INTEGRAL column a sum roll-up reads or writes (#7944) - the summed
+     * child field ({@code sumFieldType}), the parent total ({@code countFieldType}), its capacity
+     * ({@code capacityFieldType}) and balance ({@code balanceFieldType}). The emitter computes in
+     * {@code BigDecimal}, converting an integral read on the way in and narrowing an integral write on
+     * the way out; a key is put only for an integral column, so a decimal roll-up's descriptor and
+     * emitted handler stay byte-identical. A cross-model column is typed from its owner's model, and
+     * one that model does not type is left as the {@code BigDecimal} it always was taken for.
+     *
+     * @param base the roll-up descriptor
+     * @param rollup the roll-up
+     * @param child the local child, or null for a cross-model one
+     * @param childTarget the resolved cross-model child, or null for a local one
+     * @param parent the local parent, or null for a cross-model one
+     * @param parentTarget the resolved cross-model parent, or null for a local one
+     * @param withCapacity whether the capacity and balance are emitted at all
+     */
+    private static void putIntegralRollupTypes(Map<String, Object> base, RollupIntent rollup, EntityIntent child,
+            CrossModelSupport.TargetInfo childTarget, EntityIntent parent, CrossModelSupport.TargetInfo parentTarget,
+            boolean withCapacity) {
+        putIntegralType(base, "sumFieldType", child, childTarget, rollup.getOf());
+        putIntegralType(base, "countFieldType", parent, parentTarget, rollup.getField());
+        if (withCapacity) {
+            putIntegralType(base, "capacityFieldType", parent, parentTarget, rollup.getCapacity());
+            putIntegralType(base, "balanceFieldType", parent, parentTarget, rollup.getBalance());
+        }
+    }
+
+    /**
+     * Puts {@code key} when the named column of the local entity or the cross-model target is integral.
+     */
+    private static void putIntegralType(Map<String, Object> base, String key, EntityIntent local, CrossModelSupport.TargetInfo foreign,
+            String field) {
+        if (field == null || field.isBlank()) {
+            return;
+        }
+        String sqlType = null;
+        if (local != null) {
+            FieldIntent resolved = fieldOf(local, field);
+            sqlType = resolved == null ? null : IntentEntities.sqlType(resolved.getType());
+        } else if (foreign != null && foreign.propertyTypes() != null) {
+            sqlType = foreign.propertyTypes()
+                             .get(IntentNaming.pascalCase(field));
+        }
+        String javaClass = IntentEntities.integralJavaClass(sqlType);
+        if (!javaClass.isEmpty()) {
+            base.put(key, javaClass);
+        }
     }
 
     /**
