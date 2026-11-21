@@ -481,6 +481,16 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   (an identification status beside the overall one), model it as a PLAIN to-one relation without
   `function:`.
 - `precision` / `scale` - override the DECIMAL default (16, 2): `{ name: rate, type: decimal, precision: 18, scale: 6 }`.
+- `roundTo` (on a `decimal` field, #8307 / #8327) - round a money amount to the minor units of the
+  currency the record is stated in: a path of to-one relations ending in the currency's integer
+  digits column, e.g. `roundTo: Currency.rounding` on a document header, `roundTo:
+  SalesInvoice.Currency.rounding` on its line. The stored value - typed, calculated
+  (`calculatedOnCreate` / `calculatedOnUpdate` evaluate straight to those digits) or a document total -
+  is rounded half up to them before checks and roll-ups read it, never to more than the column's
+  `scale`, and to the `scale` when the record reaches no currency. A yen line of 3 x 333.33 stores
+  1000, not 999.99. Give the money columns a `scale` at least the largest currency's digits (3 for
+  KWD/BHD). Use it instead of a literal precision in `round(x, 2)`: an expression cannot read the
+  currency.
 - `size` (on a field OR a to-one relation) - the form-control width as a 12-column grid span
   (3 = quarter, 4 = third, 6 = half, 12 = full). The generated form maps it to `grid-column: span N`;
   omitted, a control falls back to half width. Use a small span to pack several short controls onto one
@@ -6003,6 +6013,7 @@ or a seeded name.
 | relation `whenMasterDeleted` | `cascade` (default - a delete of the master deletes the children it owns), `refuse` (the master's delete is rejected while children exist); composition relations only |
 | relation `fixedAfterCreate` | `true` - a plain `manyToOne`/`oneToOne` (not an `EntityStatus`, not with `calculatedActionOnUpdate`): editable on create, read-only on edit, a changed value in an update answered 409. A `composition: true` relation is fixed this way by default (#8306) |
 | field `fixedAfterCreate` | `true` - a caller-written field (not the key, `generated`, `uuid`, `number:`, `stampOn:`, `readOnly`, derived, `aggregate`, `dependsOn`, a `timestamp`, nor a translatable string of a `multilingual` entity): editable on create, read-only on edit, a changed value in an update answered 409 |
+| field `roundTo` | a path of to-one relations off the record ending in an integer field (`Currency.rounding`, `SalesInvoice.Currency.rounding`; a cross-model relation only as the last hop), on a `decimal` field that is not the key: the value is rounded half up to that many decimals, at most the column's `scale`, the `scale` when the path reaches nothing |
 | field `fixedWhenReferenced` | `true` - a caller-written field (the same refusals as field `fixedAfterCreate`, and not beside it): editable while no record references the row, a changed value in an update answered 409 once one does |
 | relation `fixedWhenReferenced` | `true` - a plain `manyToOne`/`oneToOne` (the same refusals as relation `fixedAfterCreate`, and not beside it): re-pickable while no record references the row, a changed FK in an update answered 409 once one does |
 | relation `readOnly` | `true` - a plain `manyToOne`/`oneToOne` only the system sets (not an `EntityStatus`, a composition parent, the `personal`/`partner`/`owner` relation, nor beside a calculated action, `fixedAfterCreate` or `fixedWhenReferenced`): no picker on New or Edit, a set value shown in the read-only details, a user create carrying it stored without it, a user update keeps the stored value; repository writers (create-from, postings, delegates, workflow steps) set it |

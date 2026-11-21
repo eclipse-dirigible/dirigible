@@ -126,8 +126,12 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 ## Assign a calculated property. Numeric properties evaluate the neutral arithmetic expression via the
 ## shared Calc evaluator (the same expression the generated UI previews with); the BigDecimal result is
 ## narrowed to the field type. Non-numeric calculated properties keep their expression verbatim.
+## A money field rounded to its currency (intent roundTo:, #8307 / #8327) is evaluated straight to that
+## currency's minor units - rounding the column-scale result a second time would round 0.495 up to 1.
 #macro(calcAssign $property $expr)
-#if($property.dataTypeJavaClass == "java.math.BigDecimal")
+#if($property.dataTypeJavaClass == "java.math.BigDecimal" && $property.roundToIndex)
+        entity.${property.name} = Calc.eval("${expr}", entity, minorUnits(currencyDigits[${property.roundToIndex}], #calcScale($property)));
+#elseif($property.dataTypeJavaClass == "java.math.BigDecimal")
         entity.${property.name} = Calc.eval("${expr}", entity, #calcScale($property));
 #elseif($property.dataTypeJavaClass == "Double")
         entity.${property.name} = Calc.eval("${expr}", entity, #calcScale($property)).doubleValue();
@@ -332,6 +336,23 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #macro(roundDecimals)
 #if($haveScaledDecimals)
         roundDecimals(entity);
+#end
+#end
+## A money field is rounded to the minor units of the currency it is stated in (intent roundTo:, #8307 /
+## #8327) - a yen amount holds no fraction of a yen. The currency is read where the calculated fields are
+## about to be evaluated, once the record's references (and a header's resummed totals) are in place:
+## the inputs are rounded first, so an expression reads what the row will hold, and `currencyDigits`
+## stays in scope for #calcAssign, which evaluates each such calculated field straight to those digits.
+#macro(roundToMinorUnits)
+#if($haveRoundTo)
+        Integer[] currencyDigits = currencyDigits(entity);
+        roundToMinorUnits(entity, currencyDigits);
+#end
+#end
+## ...and once more after a calculated ACTION, whose hand-written result no expression rounded.
+#macro(roundToMinorUnitsAfterActions)
+#if($haveRoundTo && $haveCalculatedPropertyAction)
+        roundToMinorUnits(entity, currencyDigits);
 #end
 #end
 ## Required values: refuse a write that leaves a NOT NULL column empty, naming the property, instead of
@@ -608,6 +629,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($hasLabel)
         computeName(entity);
 #end
+#roundToMinorUnits()
 #if($haveCalculatedPropertyOnCreate)
 #foreach ($property in $properties)
 #if($property.isCalculatedProperty && $property.calculatedActionOnCreate)
@@ -616,6 +638,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #calcAssign($property $property.calculatedPropertyExpressionCreate)
 #end
 #end
+#roundToMinorUnitsAfterActions()
 #end
 ## The capacity guards run AFTER the create-time calculated fields (#7943): the summed field may be one
 ## of them (Amount = Quantity * Price, a signed cash outflow), and guarded before it was assigned it read
@@ -854,6 +877,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($documentMaster)
         recalculate(entity);
 #end
+#roundToMinorUnits()
 #if($haveCalculatedPropertyOnUpdate)
 ## The update-time recomputes run AFTER recalculate() and the preservation block above, so an
 ## expression like Balance = Total - Paid reads the freshly resummed Total and the preserved Paid -
@@ -866,6 +890,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #calcAssign($property $property.calculatedPropertyExpressionUpdate)
 #end
 #end
+#roundToMinorUnitsAfterActions()
 #end
 ## The capacity guards and the aggregate guard run after the update-time calculated fields, as on
 ## create (#7943, #8743).
@@ -990,6 +1015,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #normalizeSubsets()
 #normalizeInput()
 #keepDefaultedWhenOmitted()
+#roundToMinorUnits()
 #if($hasStatusStamps)
         // The status the record stands in BEFORE this write: a stamp records an arrival, and the
         // lifecycle (when declared) judges the same move - one read serves both.
@@ -2024,6 +2050,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($haveCalculatedExpressionOnCreate)
         ${name}Entity entity = copyOf(submitted);
 #applyDefaults()
+#roundToMinorUnits()
 #foreach ($property in $properties)
 #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate && !$property.calculatedActionOnCreate)
 #calcAssign($property $property.calculatedPropertyExpressionCreate)
@@ -2031,6 +2058,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
         return entity;
 #else
+#if($haveRoundTo)
+        roundToMinorUnits(submitted, currencyDigits(submitted));
+#end
         return submitted;
 #end
     }
@@ -2071,6 +2101,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($documentMaster)
         recalculate(entity);
 #end
+#roundToMinorUnits()
 #foreach ($property in $properties)
 #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionUpdate && !$property.calculatedActionOnUpdate)
 #calcAssign($property $property.calculatedPropertyExpressionUpdate)
@@ -2078,6 +2109,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
         return entity;
 #else
+#if($haveRoundTo)
+        roundToMinorUnits(submitted, currencyDigits(submitted));
+#end
         return submitted;
 #end
     }
@@ -2115,6 +2149,63 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if(!$property.dataPrimaryKey && $property.dataTypeJavaClass == "java.math.BigDecimal" && $property.dataScale && $property.dataScale != "")
         if (entity.${property.name} != null && entity.${property.name}.scale() > ${property.dataScale}) {
             entity.${property.name} = entity.${property.name}.setScale(${property.dataScale}, java.math.RoundingMode.HALF_UP);
+        }
+#end
+#end
+    }
+#end
+#if($haveRoundTo)
+
+    /**
+     * The minor units of the currency each money field of a ${name} is stated in (intent roundTo:,
+     * #8307 / #8327), one per such field in declaration order - null where the record reaches no
+     * currency. A related record is loaded once, however many fields read it.
+     *
+     * @param entity the record
+     * @return the decimal places per money field, by its roundToIndex
+     */
+    private static Integer[] currencyDigits(${name}Entity entity) {
+#foreach($load in $roundToLoads)
+        Object ${load.local}Fk = ${load.sourceExpression};
+        ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+#end
+        return new Integer[] {
+#foreach($read in $roundToDigits)
+                // ${read.property}
+                minorUnitsOf(${read.expression}),
+#end
+        };
+    }
+
+    /** A currency's rounding as read off its row - any integral column type - or null when unset. */
+    private static Integer minorUnitsOf(Object rounding) {
+        return rounding instanceof Number number ? number.intValue() : null;
+    }
+
+    /**
+     * The decimal places a money field is rounded to: its currency's minor units, never more than its
+     * column holds, and the column's scale when the record reaches no currency.
+     */
+    private static int minorUnits(Integer currencyDigits, int columnScale) {
+        return currencyDigits == null ? columnScale : Math.max(0, Math.min(currencyDigits, columnScale));
+    }
+
+    /**
+     * Rounds the money fields of a record about to be written to the minor units of the currency each is
+     * stated in, half up (intent roundTo:, #8307 / #8327) - 1199.99 yen is not an amount anyone can pay. A
+     * value already within them is left as it is.
+     *
+     * @param entity the record, changed in place
+     * @param currencyDigits the minor units per money field, from {@link #currencyDigits}
+     */
+    private static void roundToMinorUnits(${name}Entity entity, Integer[] currencyDigits) {
+#foreach($property in $properties)
+#if($property.roundToIndex)
+        if (entity.${property.name} != null) {
+            int ${property.name}Digits = minorUnits(currencyDigits[${property.roundToIndex}], ${property.dataScale});
+            if (entity.${property.name}.scale() > ${property.name}Digits) {
+                entity.${property.name} = entity.${property.name}.setScale(${property.name}Digits, java.math.RoundingMode.HALF_UP);
+            }
         }
 #end
 #end
@@ -2952,6 +3043,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             return null;
         }
         recalculate(entity);
+#roundToMinorUnits()
 #foreach ($property in $properties)
 #if($property.isCalculatedProperty && !$property.calculatedActionOnUpdate && $property.calculatedPropertyExpressionUpdate)
 #if($foreach.first)
