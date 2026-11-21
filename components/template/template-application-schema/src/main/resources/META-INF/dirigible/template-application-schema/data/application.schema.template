@@ -272,7 +272,24 @@
                         "length": 2,
                         "name": "Language"
                     }
-                ]
+                ],
+## One translation per record and language, its code in lower case (#8794): the rule every reader of
+## the table relies on - the entity repositories' Translator, the search, the report overlay join. Both
+## are needed: to the database `bg` and `BG` are different values, so the key alone lets both in.
+                "constraints": {
+                    "uniqueIndexes": [
+                        {
+                            "name": "${tablePrefix}${model.dataName}_LANG_UNIQUE",
+                            "columns": ["Id", "Language"]
+                        }
+                    ],
+                    "checks": [
+                        {
+                            "name": "${tablePrefix}${model.dataName}_LANG_LOWER",
+                            "expression": "\"Language\" = LOWER(\"Language\")"
+                        }
+                    ]
+                }
             },
 #end
 #end

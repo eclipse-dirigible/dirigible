@@ -229,4 +229,16 @@ public class SnowflakeSqlDialect extends
     public Map<String, List<String>> uniqueConstraints(Connection connection, String table) {
         return null;
     }
+
+    /**
+     * Snowflake has no CHECK constraints, so there is nothing to reconcile.
+     *
+     * @param connection the connection
+     * @param table the table
+     * @return {@code null} - no catalog
+     */
+    @Override
+    public Set<String> checkConstraints(Connection connection, String table) {
+        return null;
+    }
 }

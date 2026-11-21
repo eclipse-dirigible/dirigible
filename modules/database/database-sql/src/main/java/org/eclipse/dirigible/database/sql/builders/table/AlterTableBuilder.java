@@ -34,6 +34,9 @@ public class AlterTableBuilder extends AbstractTableBuilder<AlterTableBuilder> {
     /** The unique indices. */
     private final List<CreateTableUniqueIndexBuilder> uniqueIndices = new ArrayList<CreateTableUniqueIndexBuilder>();
 
+    /** The checks. */
+    private final List<CreateTableCheckBuilder> checks = new ArrayList<>();
+
     /**
      * Instantiates a new creates the table builder.
      *
@@ -102,6 +105,15 @@ public class AlterTableBuilder extends AbstractTableBuilder<AlterTableBuilder> {
     }
 
     /**
+     * Gets the checks.
+     *
+     * @return the checks
+     */
+    public List<CreateTableCheckBuilder> getChecks() {
+        return checks;
+    }
+
+    /**
      * Foreign Key.
      *
      * @param name the name of the foreign key
@@ -162,6 +174,24 @@ public class AlterTableBuilder extends AbstractTableBuilder<AlterTableBuilder> {
     }
 
     /**
+     * Check.
+     *
+     * @param name the name
+     * @param expression the expression
+     * @return the alter table builder
+     */
+    @Override
+    public AlterTableBuilder check(String name, String expression) {
+        if (logger.isTraceEnabled()) {
+            logger.trace("check: " + name + ", expression: " + expression);
+        }
+        CreateTableCheckBuilder check = new CreateTableCheckBuilder(this.getDialect(), name);
+        check.expression(expression);
+        this.checks.add(check);
+        return this;
+    }
+
+    /**
      * Generate.
      *
      * @return the string
@@ -191,6 +221,9 @@ public class AlterTableBuilder extends AbstractTableBuilder<AlterTableBuilder> {
             }
             if (!getUniqueIndices().isEmpty()) {
                 generateUniqueIndices(sql);
+            }
+            if (!getChecks().isEmpty()) {
+                generateChecks(sql);
             }
         } else if (KEYWORD_DROP.equals(this.action)) {
             if (!getColumns().isEmpty()) {
@@ -306,6 +339,27 @@ public class AlterTableBuilder extends AbstractTableBuilder<AlterTableBuilder> {
         for (CreateTableUniqueIndexBuilder uniqueIndex : this.uniqueIndices) {
             sql.append(SPACE);
             generateUniqueIndex(sql, uniqueIndex);
+        }
+    }
+
+    /**
+     * Generate checks - {@code CONSTRAINT "name" CHECK (expression)}, one clause per check, like the
+     * unique keys above.
+     *
+     * @param sql the sql
+     */
+    protected void generateChecks(StringBuilder sql) {
+        for (CreateTableCheckBuilder check : this.checks) {
+            sql.append(SPACE)
+               .append(KEYWORD_CONSTRAINT)
+               .append(SPACE)
+               .append(encapsulate(check.getName()))
+               .append(SPACE)
+               .append(KEYWORD_CHECK)
+               .append(SPACE)
+               .append(OPEN)
+               .append(check.getExpression())
+               .append(CLOSE);
         }
     }
 

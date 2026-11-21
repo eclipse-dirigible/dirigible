@@ -366,9 +366,9 @@ public class TablesSynchronizer extends MultitenantBaseSynchronizer<Table, Long>
                 // }
                 // }
                 case START:
-                    // a declared unique key the alter could not add is attempted again (#8317)
+                    // a declared unique key or check the alter could not add is attempted again (#8317, #8794)
                     if (ArtefactLifecycle.CREATED.equals(table.getLifecycle()) || ArtefactLifecycle.UPDATED.equals(table.getLifecycle())) {
-                        TableAlterProcessor.retryUniqueConstraints(connection, table);
+                        TableAlterProcessor.retryConstraints(connection, table);
                     }
                     break;
                 case STOP:

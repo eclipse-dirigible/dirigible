@@ -341,6 +341,19 @@ public class HanaSqlDialect extends
     }
 
     /**
+     * HANA has no INFORMATION_SCHEMA, and its alter builder writes no CHECK clause, so the table alter
+     * path leaves check constraints alone here: a table gets its checks when it is created.
+     *
+     * @param connection the connection
+     * @param table the table
+     * @return {@code null} - no catalog
+     */
+    @Override
+    public Set<String> checkConstraints(Connection connection, String table) {
+        return null;
+    }
+
+    /**
      * The catalog query behind {@link #uniqueConstraints}; the current schema when the driver reports
      * none.
      *
