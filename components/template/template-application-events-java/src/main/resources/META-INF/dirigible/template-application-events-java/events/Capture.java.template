@@ -87,8 +87,9 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  * A capture reads print, so a miss is not a failure: a value the model was not sure of or did not
  * find, a relation no single row matched#if($hasCompares), a printed total that differs from the calculated one#end#if($hasQr), a
  * value that differs from the document's QR code#end - each is a flag on the created record, never a
- * refusal. The record is saved in its initial status through the entity's own validation, so nothing
- * a capture creates skips a rule a person creating it would meet. A reading that lacks a value the
+ * refusal. The record is saved in its initial status through the entity's own validation, and each
+ * line through its own entity's, so nothing a capture creates skips a rule a person creating it would
+ * meet; a line that validation refuses is left out and flagged. A reading that lacks a value the
  * record cannot be inserted without, or one that validation refuses, creates nothing and is answered
  * as the refusal it is (400), with what was read; a provider that fails answers 412, 502 or 422. Every attempt is recorded in the ${table}_CAPTURES ledger with the provider,
  * the model, the tokens and the flags, and .../review/{id} answers the flags of a record's capture.
@@ -243,6 +244,7 @@ public class ${className}Capture {
 #end
 #if($hasItems)
         List<gen.${javaGenFolderName}.data.${javaItemPerspective}.${itemEntity}Entity> lines = new ArrayList<>();
+        List<String> lineLabels = new ArrayList<>();
         int skipped = 0;
         for (CaptureValues line : reading.items()) {
             String at = "items[" + (lines.size() + skipped + 1) + "]";
@@ -271,6 +273,7 @@ public class ${className}Capture {
                         + " confidence"));
             }
             lines.add(child);
+            lineLabels.add(at);
         }
 #end
 #if($hasAttachment)
@@ -286,9 +289,24 @@ public class ${className}Capture {
                 gen.${javaGenFolderName}.api.${javaPerspective}.${entity}Controller.validate(repository.calculatedForCreate(entity));
                 ${entity}Entity parent = repository.save(entity);
 #if($hasItems)
-                for (gen.${javaGenFolderName}.data.${javaItemPerspective}.${itemEntity}Entity child : lines) {
+                for (int index = 0; index < lines.size(); index++) {
+                    gen.${javaGenFolderName}.data.${javaItemPerspective}.${itemEntity}Entity child = lines.get(index);
                     child.${itemBackRef} = parent.${keyProperty};
-                    new gen.${javaGenFolderName}.data.${javaItemPerspective}.${itemEntity}Repository().save(child);
+                    gen.${javaGenFolderName}.data.${javaItemPerspective}.${itemEntity}Repository lineRepository =
+                            new gen.${javaGenFolderName}.data.${javaItemPerspective}.${itemEntity}Repository();
+                    // The rules a person adding the line would meet (#8630) - its checks, pattern, length
+                    // and required rules - read once it belongs to the saved header, as its calculations
+                    // complete it. A line they refuse is left out and flagged with the authored sentence:
+                    // one line the entity refuses must not cost the whole document. Nothing of it was
+                    // written yet, so the unit carries on with the next line.
+                    try {
+                        gen.${javaGenFolderName}.api.${javaItemPerspective}.${itemEntity}Controller.validate(lineRepository.calculatedForCreate(child));
+                    } catch (ValidationException refusal) {
+                        flags.add(CaptureFlag.of(lineLabels.get(index), CaptureFlag.Reason.LINE_SKIPPED, null,
+                                "the line was not created: " + refusal.getMessage()));
+                        continue;
+                    }
+                    lineRepository.save(child);
                 }
 #end
 #if($hasAttachment)
