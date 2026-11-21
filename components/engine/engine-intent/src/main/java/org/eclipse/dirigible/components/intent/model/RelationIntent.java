@@ -290,6 +290,19 @@ public class RelationIntent {
      * personal/partner/owner relation, nor beside a calculated action or the fixed keys.
      */
     private boolean readOnly;
+    /**
+     * Declares this self-reference a TREE edge ({@code tree: true}, dirigible #7988): the generated
+     * repository refuses a create or update whose value is the row itself or one of its own
+     * descendants, so every walk up the edge (a tree view, a roll-up, a breadcrumb) ends at a root.
+     * Valid on a plain same-entity {@code manyToOne} only. The edge an entity names in
+     * {@code hierarchy:} is a tree without declaring it.
+     */
+    private boolean tree;
+    /**
+     * What a write that would close a cycle on a {@link #tree} edge is refused with
+     * ({@code treeMessage:}), instead of the generated sentence. Valid only beside {@code tree: true}.
+     */
+    private String treeMessage;
 
     public String getName() {
         return name;
@@ -584,6 +597,22 @@ public class RelationIntent {
 
     public void setFixedAfterCreate(boolean fixedAfterCreate) {
         this.fixedAfterCreate = fixedAfterCreate;
+    }
+
+    public boolean isTree() {
+        return tree;
+    }
+
+    public void setTree(boolean tree) {
+        this.tree = tree;
+    }
+
+    public String getTreeMessage() {
+        return treeMessage;
+    }
+
+    public void setTreeMessage(String treeMessage) {
+        this.treeMessage = treeMessage;
     }
 
     public boolean isFixedWhenReferenced() {

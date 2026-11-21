@@ -240,6 +240,18 @@ final class ModelTranslations {
     }
 
     /**
+     * The catalog key of a tree edge's cycle refusal (intent {@code tree: true} or the
+     * {@code hierarchy:} edge, #7988): {@code <Entity>_tree_<Property>}.
+     *
+     * @param entity the entity
+     * @param property the tree edge's FK property
+     * @return the key, relative to the catalog's {@code checks} sub-object
+     */
+    static String treeMessageKey(Map<String, Object> entity, Map<String, Object> property) {
+        return str(entity, "name") + "_tree_" + str(property, "name");
+    }
+
+    /**
      * The catalog key of the message a value off a property's {@code pattern} is refused with (intent
      * {@code patternMessage:}, #7749).
      *
@@ -541,6 +553,10 @@ final class ModelTranslations {
                     if (fixedKey != null) {
                         messages.put(fixedKey, property.get(flag + "Message"));
                     }
+                }
+                String treeMessage = str(property, "treeEdgeMessage");
+                if (ModelValues.isTrue(property, "treeEdge") && treeMessage != null && !treeMessage.isBlank()) {
+                    messages.put(treeMessageKey(entity, property), treeMessage);
                 }
                 if ("IBAN".equals(str(property, "inputFormat"))) {
                     messages.put(IBAN_REFUSAL_MESSAGE.getKey(), IBAN_REFUSAL_MESSAGE.getValue());

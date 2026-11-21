@@ -27,11 +27,12 @@ import org.junit.jupiter.api.Test;
  * {@link VelocityGenerationEngine} (dirigible #7153).
  *
  * <p>
- * A {@code leafOnly:} relation must point at a leaf and a {@code hierarchy:} parent must not close
- * a cycle. Both rules lived only on the power controller, so a personal or partner POST/PUT that
- * broke either of them committed silently - and with referential integrity deliberately
- * business-layer-only, nothing downstream refused the row. #7110 aligned the two surfaces on VALUE
- * validation; this pins the reference half of the same alignment.
+ * A {@code leafOnly:} relation must point at a leaf. The rule lived only on the power controller,
+ * so a personal or partner POST/PUT that broke it committed silently - and with referential
+ * integrity deliberately business-layer-only, nothing downstream refused the row. #7110 aligned the
+ * two surfaces on VALUE validation; this pins the reference half of the same alignment. A
+ * {@code hierarchy:} parent's cycle guard was the other half until #7988 moved it into the
+ * generated repository, which every surface writes through.
  *
  * <p>
  * Rendering needs nothing from a running instance, so this boots no application context - the
@@ -48,36 +49,33 @@ class SelfServiceReferenceValidationTemplateIT {
 
     private static final String LEAF_REFUSAL = "The 'Account' must reference a leaf Account - the selected one has children";
 
-    private static final String CYCLE_REFUSAL = "The 'Parent' reference would create a cycle in the Booking hierarchy";
-
     private final VelocityGenerationEngine velocityGenerationEngine = new VelocityGenerationEngine();
 
     /** The refusals are the power surface's, verbatim: one rule, whichever door the caller used. */
     @Test
-    void aSelfServiceSurfaceRefusesANonLeafAndACycleExactlyAsThePowerSurfaceDoes() throws Exception {
+    void aSelfServiceSurfaceRefusesANonLeafExactlyAsThePowerSurfaceDoes() throws Exception {
         String power = render(POWER_SURFACE);
         assertTrue(power.contains(LEAF_REFUSAL), "the power surface's own leafOnly refusal changed: " + power);
-        assertTrue(power.contains(CYCLE_REFUSAL), "the power surface's own cycle refusal changed: " + power);
 
         for (String template : SELF_SERVICE_SURFACES) {
             String rendered = render(template);
 
             assertTrue(rendered.contains(LEAF_REFUSAL), template + " must refuse a non-leaf leafOnly reference: " + rendered);
-            assertTrue(rendered.contains(CYCLE_REFUSAL), template + " must refuse a hierarchy cycle: " + rendered);
         }
     }
 
     /**
-     * The walk up the tree is bounded - a hierarchy already broken by an older write must refuse the
-     * request, not spin.
+     * No surface walks the tree itself any more (#7988): the repository refuses a cycle inside the
+     * write's unit of work, under locks, for every writer - a controller-side walk would only be a
+     * second, racy copy of it.
      */
     @Test
-    void theCycleWalkIsBoundedOnTheSelfServiceSurfacesToo() throws Exception {
-        for (String template : SELF_SERVICE_SURFACES) {
+    void noSurfaceCarriesItsOwnCycleWalk() throws Exception {
+        for (String template : List.of(POWER_SURFACE, SELF_SERVICE_SURFACES.get(0), SELF_SERVICE_SURFACES.get(1))) {
             String rendered = render(template);
 
-            assertTrue(rendered.contains("The Booking hierarchy is implausibly deep - aborting"),
-                    template + " must bound the parent walk: " + rendered);
+            assertTrue(!rendered.contains("hierarchy is implausibly deep") && !rendered.contains("would create a cycle"),
+                    template + " must leave the cycle guard to the repository: " + rendered);
         }
     }
 

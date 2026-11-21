@@ -99,7 +99,7 @@ public class ConsumedAttributesAudit {
             "relationshipPartnerIdentityProperty", "relationshipPartner", "relationshipPersonal", "relationshipPersonalReadOnly",
             "widgetDependsOnHeaderEntity", "widgetDependsOnValueBy", "widgetDependsOnValueByHeaderEntity", "widgetLength",
             "widgetOptionsEntityPerspectiveName", "widgetOptionsFilterBy", "widgetOptionsFilterValue", "widgetOptionsFilterValueJs",
-            "visibleWhen", "fixedWhenReferencedMessage",
+            "visibleWhen", "fixedWhenReferencedMessage", "treeEdge", "treeEdgeMessage",
             // Read by the intent generator of ANOTHER model, off this one's .model (#8243).
             "statusStages");
 

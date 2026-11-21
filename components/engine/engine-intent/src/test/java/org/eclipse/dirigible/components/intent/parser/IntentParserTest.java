@@ -25,6 +25,7 @@ import org.eclipse.dirigible.components.intent.model.NumberIntent;
 import org.eclipse.dirigible.components.intent.model.OrderByIntent;
 import org.eclipse.dirigible.components.intent.model.PeriodIntent;
 import org.eclipse.dirigible.components.intent.model.PeriodLockIntent;
+import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.junit.jupiter.api.Test;
 
 class IntentParserTest {
@@ -1784,6 +1785,55 @@ class IntentParserTest {
                      .stream()
                      .anyMatch(i -> i.contains("must target the entity itself")),
                 "expected a self-relation issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void treeIsAcceptedOnAnOptionalSelfReference() {
+        String yaml = """
+                name: projects
+                entities:
+                  - name: ProjectTask
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Parent, kind: manyToOne, to: ProjectTask, tree: true, treeMessage: "A task cannot sit under itself" }
+                """;
+        RelationIntent parent = IntentParser.parse(yaml)
+                                            .getEntities()
+                                            .get(0)
+                                            .getRelations()
+                                            .get(0);
+        assertTrue(parent.isTree());
+        assertEquals("A task cannot sit under itself", parent.getTreeMessage());
+    }
+
+    @Test
+    void treeIsRefusedOnAnythingButAnOptionalManyToOneSelfReference() {
+        String yaml = """
+                name: projects
+                entities:
+                  - name: Project
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: ProjectTask
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Project, kind: manyToOne, to: Project, tree: true }
+                      - { name: Parent, kind: manyToOne, to: ProjectTask, required: true, tree: true }
+                      - { name: Previous, kind: manyToOne, to: ProjectTask, treeMessage: "no tree" }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        List<String> issues = ex.getIssues();
+        assertTrue(issues.stream()
+                         .anyMatch(i -> i.contains("relation [Project] declares `tree: true` but points to [Project]")),
+                issues.toString());
+        assertTrue(issues.stream()
+                         .anyMatch(i -> i.contains("relation [Parent] declares `tree: true` but is required")),
+                issues.toString());
+        assertTrue(issues.stream()
+                         .anyMatch(i -> i.contains("relation [Previous] declares `treeMessage` without `tree: true`")),
+                issues.toString());
     }
 
     @Test

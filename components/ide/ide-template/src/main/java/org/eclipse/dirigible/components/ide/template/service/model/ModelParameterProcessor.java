@@ -149,6 +149,7 @@ final class ModelParameterProcessor {
         splitChecks(entity, parameters);
         resolveUniqueConstraintLiterals(entity, parameters);
         resolveFixedProperties(entity, parameters);
+        resolveTreeEdges(entity, parameters);
         resolveRefusalCatalog(entity, parameters);
         for (Map<String, Object> flag : asMaps(entity.get("singleFlags"))) {
             resolveSingleFlagRefusals(entity, flag, parameters);
@@ -771,6 +772,42 @@ final class ModelParameterProcessor {
         for (String flag : ModelTranslations.FIXED_FLAGS) {
             entity.put(flag + "Properties", fixedProperties(entity, parameters, flag));
         }
+    }
+
+    /**
+     * Collects the entity's tree edges (#7988) into {@code treeEdges}: every self-reference the
+     * repository keeps acyclic, each with its name and the arguments its refusal hands
+     * {@code CheckMessages} - the catalog key and the default-language text. An edge is a property
+     * carrying {@code treeEdge} (intent {@code tree: true}, or the {@code hierarchy:} edge), and the
+     * entity's {@code hierarchyProperty} also when a model generated before the flag existed does not
+     * carry it, so its hierarchy keeps the cycle guard it had. Always present, empty when the entity
+     * has no tree; {@code hasTreeEdges} says which.
+     *
+     * @param entity the entity
+     * @param parameters the generation parameters (project name and model file path)
+     */
+    private static void resolveTreeEdges(Map<String, Object> entity, Map<String, Object> parameters) {
+        List<Map<String, Object>> edges = new ArrayList<>();
+        String hierarchyProperty = str(entity, "hierarchyProperty");
+        for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+            String name = str(property, "name");
+            if (!ModelValues.isTrue(property, "treeEdge") && (name == null || !name.equals(hierarchyProperty))) {
+                continue;
+            }
+            String messageKey = ModelTranslations.treeMessageKey(entity, property);
+            String catalogKey = ModelTranslations.catalogKey(parameters, ModelTranslations.CHECKS_CATALOG + "." + messageKey);
+            String message = str(property, "treeEdgeMessage");
+            if (message == null || message.isBlank()) {
+                message = "'" + name + "' cannot be this " + str(entity, "name") + " itself or one of its descendants - the "
+                        + str(entity, "name") + " hierarchy would become a cycle";
+            }
+            Map<String, Object> edge = new LinkedHashMap<>();
+            edge.put("name", name);
+            edge.put("messageArgsJava", "\"" + JavaLiterals.escape(catalogKey) + "\", \"" + JavaLiterals.escape(message) + "\"");
+            edges.add(edge);
+        }
+        entity.put("treeEdges", edges);
+        entity.put("hasTreeEdges", !edges.isEmpty());
     }
 
     private static List<Map<String, Object>> fixedProperties(Map<String, Object> entity, Map<String, Object> parameters, String flag) {
@@ -2701,10 +2738,6 @@ final class ModelParameterProcessor {
                 if (resolveNormalizeLiterals(property)) {
                     entity.put("hasNormalize", Boolean.TRUE);
                 }
-            }
-            // A hierarchical entity guards its own tree edge against a cycle.
-            if (entity.get("hierarchyProperty") != null) {
-                entity.put("hasReferenceValidations", Boolean.TRUE);
             }
         }
     }
