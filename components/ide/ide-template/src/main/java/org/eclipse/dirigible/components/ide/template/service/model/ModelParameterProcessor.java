@@ -452,6 +452,12 @@ final class ModelParameterProcessor {
         entity.put("rowChecks", rowChecks);
         entity.put("guardChecks", guardChecks);
         entity.put("documentChecks", documentChecks);
+        // A notExists check refuses a status move while a row of another entity matches (#8002, #8623):
+        // the repository runs every write that can carry that move in ONE unit, so the row lock its count
+        // takes holds until the move commits.
+        entity.put("hasNotExistsChecks", documentChecks.stream()
+                                                       .anyMatch(check -> check instanceof Map<?, ?> map
+                                                               && "notExists".equals(map.get("kind"))));
         entity.put("forbidWhenGuards", forbidWhenGuards);
         entity.put("deleteChecks", deleteChecks);
         entity.put("warningChecks", warningChecks);
@@ -918,9 +924,14 @@ final class ModelParameterProcessor {
      * @param parameters the generation parameters
      */
     private static void resolveCheckPathLoads(Map<String, Object> check, Map<String, Object> parameters) {
-        // An exists check's target (#8338) carries a hop's coordinates, so it resolves the same way.
+        // An exists check's target (#8338) carries a hop's coordinates, so it resolves the same way -
+        // unless
+        // it is a notExists target counted by name at runtime (#8623), which has no class to resolve.
         Map<String, Object> target = asMap(check.get("target"));
-        if (target != null) {
+        if (target != null && truthy(target, "lateBound")) {
+            check.put("targetGenFolder", NamingHelper.sanitizeJavaIdentifier(str(target, "targetModel")));
+            check.put("targetEntity", str(target, "entity"));
+        } else if (target != null) {
             check.put("targetRepositoryClass", generatedClass(target, parameters) + "Repository");
         }
         List<Map<String, Object>> hops = asMaps(check.get("pathLoads"));

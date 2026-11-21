@@ -7587,7 +7587,7 @@ public final class IntentParser {
             validateAgreeCheck(entity, check, byName, subject, issues);
             return;
         }
-        if ("exists".equals(kind)) {
+        if ("exists".equals(kind) || "notExists".equals(kind)) {
             validateExistsCheck(entity, check, byName, usesAliases, subject, issues);
             return;
         }
@@ -7630,9 +7630,8 @@ public final class IntentParser {
             }
             return;
         }
-        issues.add(
-                subject + " has unknown kind - expected exactlyOne, compare, agree, requiredWhen, forbidWhen, exists, guard, itemsSumEqual,"
-                        + " itemsMin, duplicate or itemsCompare");
+        issues.add(subject + " has unknown kind - expected exactlyOne, compare, agree, requiredWhen, forbidWhen, exists, notExists, guard,"
+                + " itemsSumEqual, itemsMin, duplicate or itemsCompare");
     }
 
     /** The verbs a {@code forbidWhen} scope may name (#7710). */
@@ -7905,16 +7904,28 @@ public final class IntentParser {
      */
     private static void validateExistsCheck(EntityIntent entity, CheckIntent check, java.util.Map<String, EntityIntent> byName,
             Set<String> usesAliases, String subject, List<String> issues) {
+        boolean inverse = "notExists".equals(check.getKind());
         if (isBlank(check.getMessage())) {
             issues.add(subject + " requires `message`: the reason the write is refused, shown to the user");
         }
+        if (inverse && check.getStatus() == null) {
+            issues.add(subject + " requires a `status` gate: a notExists check refuses the MOVE into that status while a matching"
+                    + " row exists - name the status it guards (status: CLOSED)");
+        }
+        if (!inverse && check.getWhere() != null) {
+            issues.add(subject + " carries `where` - only a notExists check filters the target's rows; an exists check names them"
+                    + " by `match`");
+        }
         if (isBlank(check.getEntity())) {
-            issues.add(subject + " requires `entity`: the entity a matching row must exist in");
+            issues.add(subject + " requires `entity`: the entity a matching row must " + (inverse ? "not " : "") + "exist in");
             return;
         }
         EntityIntent target = null;
         if (!isBlank(check.getModel())) {
-            if (!usesAliases.contains(check.getModel())) {
+            // A notExists may name a model this one does not use (#8623): the target's model usually uses
+            // THIS one - a quotation names its opportunity - so it cannot be used back; its rows are
+            // counted by name at runtime, and none are counted while it is not deployed.
+            if (!inverse && !usesAliases.contains(check.getModel())) {
                 issues.add(subject + " references undeclared model [" + check.getModel() + "] - add it to uses:");
             }
         } else {
@@ -7929,11 +7940,17 @@ public final class IntentParser {
                         + "] - an update always matches the row it writes; name another entity");
             }
         }
-        if (check.getMatch() == null || check.getMatch()
-                                             .isEmpty()) {
+        boolean noMatch = check.getMatch() == null || check.getMatch()
+                                                           .isEmpty();
+        List<String> whereTerms = CheckSupport.terms(check.getWhere());
+        if (inverse && noMatch && whereTerms.isEmpty()) {
+            issues.add(subject + " requires `match` and/or `where`: the rows of " + check.getEntity()
+                    + " that refuse the move - with neither, any row at all would");
+        } else if (!inverse && noMatch) {
             issues.add(subject + " requires `match`: { <property of " + check.getEntity() + ">: <path on this record> }");
-        } else {
-            ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, java.util.Map.of(), null);
+        }
+        ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, java.util.Map.of(), null);
+        if (!noMatch) {
             for (Map.Entry<String, String> pair : check.getMatch()
                                                        .entrySet()) {
                 ResolvePathSupport.Path path = walker.resolve(pair.getValue());
@@ -7945,9 +7962,15 @@ public final class IntentParser {
                     continue; // a cross-model target is read from its owner's .model at generation
                 }
                 FieldIntent field = CheckSupport.field(target, pair.getKey());
-                if (field == null && CheckSupport.toOne(target, pair.getKey()) == null) {
+                RelationIntent toOne = field == null ? CheckSupport.toOne(target, pair.getKey()) : null;
+                if (field == null && toOne == null) {
                     issues.add(subject + " match [" + pair.getKey() + "] is not a field or to-one relation of [" + target.getName() + "]");
                     continue;
+                }
+                if (toOne != null && entity.getName()
+                                           .equals(toOne.getTo())
+                        && isOwnPrimaryKey(entity, pair.getValue())) {
+                    continue; // the target's reference to THIS record, matched by the record's own key (#8623)
                 }
                 String keyType = field == null ? ResolvePathSupport.RELATION_TERMINAL : CheckSupport.guardType(field.getType());
                 String valueType = path.terminalType() == null || ResolvePathSupport.RELATION_TERMINAL.equals(path.terminalType())
@@ -7957,6 +7980,14 @@ public final class IntentParser {
                     issues.add(subject + " match [" + pair.getKey() + "] compares a [" + keyType + "] with [" + pair.getValue() + "], a ["
                             + valueType + "] - both sides must be the same kind of value, or no row ever matches");
                 }
+            }
+        }
+        if (check.getWhere() != null && whereTerms.isEmpty()) {
+            issues.add(subject + " where must not be an empty list");
+        }
+        if (inverse) {
+            for (String term : whereTerms) {
+                validateNotExistsWhereTerm(target, walker, term, subject, issues);
             }
         }
         List<String> terms = CheckSupport.terms(check.getWhen());
@@ -7969,6 +8000,102 @@ public final class IntentParser {
         if (check.getStatus() != null && entityStatusRelationOf(entity) == null) {
             issues.add(subject + " carries a `status` gate but [" + entity.getName()
                     + "] declares no `function: EntityStatus` relation to read it from");
+        }
+    }
+
+    /** Whether a match path names the record's own primary key ({@code id}). */
+    private static boolean isOwnPrimaryKey(EntityIntent entity, String path) {
+        FieldIntent field = path == null || path.contains(".") ? null : CheckSupport.field(entity, path);
+        return field != null && field.isPrimaryKey();
+    }
+
+    /**
+     * One {@code where:} term of a {@code notExists} check (dirigible #8002, #8623): a property of the
+     * TARGET compared with a literal or with a path on the record ({@code date >= fromDate}), or an
+     * {@code in [..]} list of literals. A local target's property is checked here: an ordering needs a
+     * date, a timestamp or a number on both sides, and a literal must read as the property's type; a
+     * cross-model target's properties are its owner's, checked at generation when that model is read.
+     */
+    private static void validateNotExistsWhereTerm(EntityIntent target, ResolvePathSupport.Walker walker, String term, String subject,
+            List<String> issues) {
+        CheckSupport.TargetTerm parsed = CheckSupport.targetTerm(term);
+        if (parsed == null) {
+            issues.add(subject + " where [" + term + "] is not `<property of the target> <op> <value or path on this record>` (op one of"
+                    + " == != >= <= > <) nor `<property> in [<value>, ...]`");
+            return;
+        }
+        boolean ordering = !"==".equals(parsed.op()) && !"!=".equals(parsed.op()) && !CheckSupport.IN.equals(parsed.op());
+        FieldIntent field = target == null ? null : CheckSupport.field(target, parsed.property());
+        if (target != null && field == null && CheckSupport.toOne(target, parsed.property()) == null) {
+            issues.add(subject + " where [" + term + "] names [" + parsed.property() + "], which is not a field or to-one relation of ["
+                    + target.getName() + "]");
+            return;
+        }
+        String family = field == null ? null : CheckSupport.compareFamily(CheckSupport.guardType(field.getType()));
+        if (target != null && ordering && family == null) {
+            issues.add(subject + " where [" + term + "] orders [" + parsed.property()
+                    + "], which is not a date, a timestamp or a number - compare it with == or !=");
+            return;
+        }
+        for (String operand : parsed.operands()) {
+            if (CheckSupport.isLiteral(operand)) {
+                validateNotExistsLiteral(target != null, field, parsed, operand, ordering, family, term, subject, issues);
+                continue;
+            }
+            if (CheckSupport.IN.equals(parsed.op())) {
+                issues.add(subject + " where [" + term + "] lists [" + operand + "], which is not a value - an `in` list holds numbers,"
+                        + " quoted strings or booleans");
+                continue;
+            }
+            ResolvePathSupport.Path path = walker.resolve(operand);
+            if (!path.resolved()) {
+                issues.add(subject + " where [" + term + "] " + path.failure()
+                        + (target == null ? " (a status of another model is named by its numeric seed id)" : ""));
+                continue;
+            }
+            if (field == null || path.terminalType() == null || ResolvePathSupport.RELATION_TERMINAL.equals(path.terminalType())) {
+                continue;
+            }
+            String valueType = CheckSupport.guardType(path.terminalType());
+            boolean comparable = ordering ? family.equals(CheckSupport.compareFamily(valueType))
+                    : CheckSupport.guardType(field.getType())
+                                  .equals(valueType);
+            if (!comparable) {
+                issues.add(subject + " where [" + term + "] compares a [" + CheckSupport.guardType(field.getType()) + "] with [" + operand
+                        + "], a [" + valueType + "] - both sides must be the same kind of value, or no row ever matches");
+            }
+        }
+    }
+
+    /**
+     * A literal operand of a {@code notExists} {@code where:} term, read against the target property.
+     */
+    private static void validateNotExistsLiteral(boolean localTarget, FieldIntent field, CheckSupport.TargetTerm parsed, String operand,
+            boolean ordering, String family, String term, String subject, List<String> issues) {
+        if ("null".equals(operand)) {
+            if (!"==".equals(parsed.op()) && !"!=".equals(parsed.op())) {
+                issues.add(subject + " where [" + term + "] uses null with [" + parsed.op() + "] - only == null and != null test for"
+                        + " an empty value");
+            }
+            return;
+        }
+        if (ordering) {
+            if (field != null && !"number".equals(family)) {
+                issues.add(subject + " where [" + term + "] orders a [" + CheckSupport.guardType(field.getType())
+                        + "] against a literal - compare it with a path on this record (date >= fromDate)");
+            } else if (!operand.matches("-?\\d+(\\.\\d+)?")) {
+                issues.add(subject + " where [" + term + "] orders against [" + operand + "], which is not a number");
+            }
+            return;
+        }
+        if (field != null && CheckSupport.javaLiteral(CheckSupport.guardType(field.getType()), operand) == null) {
+            issues.add(subject + " where [" + term + "] compares a [" + CheckSupport.guardType(field.getType()) + "] with [" + operand
+                    + "], which is not a value of that type");
+        } else if (localTarget && field == null && !operand.matches("-?\\d+")) {
+            // A to-one is compared by its key - a status by its seed id, resolved from its name when the
+            // nomenclature is this model's.
+            issues.add(subject + " where [" + term + "] compares the relation [" + parsed.property() + "] with [" + operand
+                    + "] - a relation is compared by its numeric key");
         }
     }
 

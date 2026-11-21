@@ -1223,6 +1223,100 @@ class IntentParserTest {
     }
 
     /**
+     * {@code checks: notExists} (#8002, #8623): a move into the gated status refused while a row of
+     * another entity matches - a period closed with a draft entry dated inside it, here - with the
+     * target's status names resolved against the TARGET's nomenclature and a model this one does not
+     * use accepted as a target counted by name.
+     */
+    @Test
+    void notExistsChecksParseAndValidate() {
+        String yaml = """
+                name: journal
+                uses:
+                  - { model: partners }
+                entities:
+                  - name: PeriodStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: EntryStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: FiscalPeriod
+                    checks:
+                      - kind: notExists
+                        entity: JournalEntry
+                        where: ["Status in [DRAFT, HELD]", "date >= fromDate", "date <= toDate"]
+                        status: CLOSED
+                        message: "{count} draft entries are dated in this period"
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                      - { name: fromDate, type: date }
+                      - { name: toDate, type: date }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: PeriodStatus, function: EntityStatus }
+                  - name: JournalEntry
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: date, type: date }
+                      - { name: memo, type: string }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus }
+                      - { name: period, kind: manyToOne, to: FiscalPeriod }
+                seeds:
+                  - name: period-statuses
+                    entity: PeriodStatus
+                    rows:
+                      - { id: 1, name: OPEN }
+                      - { id: 2, name: CLOSED }
+                  - name: entry-statuses
+                    entity: EntryStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: POSTED }
+                      - { id: 3, name: HELD }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        CheckIntent check = model.getEntities()
+                                 .get(2)
+                                 .getChecks()
+                                 .get(0);
+        assertEquals(2, check.getStatus(), "the gate is the period's own CLOSED");
+        assertEquals(List.of("Status in [1, 3]", "date >= fromDate", "date <= toDate"), check.getWhere(),
+                "the status names resolve against the ENTRY's nomenclature");
+
+        // match: alone, a literal compare, a null test, and a model this one does not use (#8623).
+        IntentParser.parse(
+                yaml.replace("where: [\"Status in [DRAFT, HELD]\", \"date >= fromDate\", \"date <= toDate\"]", "match: { period: id }"));
+        IntentParser.parse(yaml.replace("\"date <= toDate\"", "\"amount > 0\", \"memo == null\""));
+        IntentParser.parse(yaml.replace("entity: JournalEntry", "entity: Quotation\n        model: quotations")
+                               .replace("[\"Status in [DRAFT, HELD]\", ", "[\"Status in [3, 4]\", "));
+
+        assertCompareIssue(yaml.replace("status: CLOSED", ""), "requires a `status` gate");
+        assertCompareIssue(yaml.replace("where: [\"Status in [DRAFT, HELD]\", \"date >= fromDate\", \"date <= toDate\"]", ""),
+                "requires `match` and/or `where`");
+        assertCompareIssue(yaml.replace("\"date <= toDate\"", "\"dat <= toDate\""),
+                "names [dat], which is not a field or to-one relation of [JournalEntry]");
+        assertCompareIssue(yaml.replace("\"date <= toDate\"", "\"memo <= toDate\""), "orders [memo], which is not a date");
+        assertCompareIssue(yaml.replace("\"date <= toDate\"", "\"date <= name\""), "both sides must be the same kind of value");
+        assertCompareIssue(yaml.replace("\"date <= toDate\"", "\"date <= toDat\""), "has no field or to-one relation [toDat]");
+        assertCompareIssue(yaml.replace("\"date <= toDate\"", "\"date <= '2026-01-01'\""), "orders a [date] against a literal");
+        assertCompareIssue(yaml.replace("\"date <= toDate\"", "\"date ~ toDate\""), "is not `<property of the target> <op>");
+        assertCompareIssue(yaml.replace("\"date <= toDate\"", "\"amount == 'x'\""), "which is not a value of that type");
+        assertCompareIssue(yaml.replace("DRAFT, HELD", "DRAFT, LOST"), "names [LOST], which is not a seeded status of [EntryStatus]");
+        assertCompareIssue(yaml.replace("status: CLOSED", "status: CLOSED\n        verbs: [create, update]"), "carries `verbs`");
+        assertCompareIssue(yaml.replace("entity: JournalEntry", "entity: FiscalPeriod")
+                               .replace("where: [\"Status in [DRAFT, HELD]\", \"date >= fromDate\", \"date <= toDate\"]",
+                                       "match: { name: name }"),
+                "reads its own entity [FiscalPeriod]");
+    }
+
+    /**
      * The soft tier (#7466): the three cases the billing review asked for - a second customer with the
      * same name, a second product with the same name, a document line at price zero - are warnings the
      * person saving confirms, never refusals. A warning lives where a person writes, so only the
