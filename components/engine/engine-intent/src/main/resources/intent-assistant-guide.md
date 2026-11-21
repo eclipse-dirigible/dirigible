@@ -843,6 +843,13 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   filter; a Tree / Table toggle on the toolbar is remembered per user. Each record offers **Add
   child** (#7724), the create form with the parent preset and locked. The server rejects cycles. A
   self-FK alone does NOT imply a hierarchy - declare it.
+- `tree: true` (on a same-entity `manyToOne`, #7988) - declares a self-reference a **tree edge**
+  WITHOUT the tree-table UI of `hierarchy:` (a task's parent task, a cost centre's parent): the
+  generated repository refuses (400, naming the relation) a create or update whose parent is the row
+  itself or one of its descendants, under row locks, so two concurrent moves cannot close a cycle
+  together. Optional `treeMessage: "..."` replaces the generated refusal. Refused on anything but an
+  optional, non-composition `manyToOne` onto its own entity. The `hierarchy:` edge is a tree already -
+  do not add `tree:` to it.
 - `leafOnly: true` (on a to-one relation) - restricts the picker to LEAF nodes of its hierarchical
   target (childless nodes), depth-indents the options, and the generated REST validation rejects an
   FK to a node with children (e.g. a journal line references an analytical account, never a

@@ -1267,9 +1267,9 @@ public class ${name}MyController {
 #if($hasReferenceValidations && !$personalReadOnly)
     /**
      * The same hierarchy reference checks the power surface applies
-     * (${name}Controller.validateReferences): a {@code leafOnly:} relation must point at a leaf, and a
-     * {@code hierarchy:} parent must not close a cycle. The pickers mirror both rules client-side, but
-     * a hand-crafted request must not bypass them on THIS door either - referential integrity is
+     * (${name}Controller.validateReferences): a {@code leafOnly:} relation must point at a leaf (a
+     * {@code hierarchy:} parent's cycle guard is the repository's, #7988). The pickers mirror the rule
+     * client-side, but a hand-crafted request must not bypass it on THIS door either - referential integrity is
      * deliberately business-layer-only, so nothing downstream would refuse the row (#7153).
      */
     private void validateReferences(${name}Entity entity) {
@@ -1283,29 +1283,6 @@ public class ${name}MyController {
                     "The '${property.name}' must reference a leaf ${property.relationshipEntityName} - the selected one has children");
         }
 #end
-#end
-#if($hierarchyProperty)
-        // The tree edge must not form a cycle: walk up from the assigned parent; hitting the entity
-        // itself (or an implausible depth) rejects the write.
-        if (entity.${hierarchyProperty} != null) {
-            Object self = entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end;
-            Object cursor = entity.${hierarchyProperty};
-            int depth = 0;
-            while (cursor != null && depth++ < 100) {
-                if (cursor.equals(self)) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "The '${hierarchyProperty}' reference would create a cycle in the ${name} hierarchy");
-                }
-                ${name}Entity parent = repository.findOne(cursor).orElse(null);
-                if (parent == null) {
-                    break;
-                }
-                cursor = parent.${hierarchyProperty};
-            }
-            if (depth >= 100) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The ${name} hierarchy is implausibly deep - aborting");
-            }
-        }
 #end
     }
 #end

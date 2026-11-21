@@ -1625,13 +1625,60 @@ class ModelParameterProcessorTest {
         assertNull(entity.get("hasNormalize"));
     }
 
+    /**
+     * A tree edge (#7988) hands the repository its refusal through the catalog, the authored message as
+     * the default-language text; the en-US catalog carries it under {@code <Entity>_tree_<Edge>}.
+     */
     @Test
-    void marksAHierarchicalEntityAsNeedingReferenceValidation() {
-        Map<String, Object> entity = entity("Category", "Categories", property("Name", "VARCHAR"));
+    @SuppressWarnings("unchecked")
+    void collectsATreeEdgeWithItsRefusal() {
+        Map<String, Object> parent = property("Parent", "INTEGER");
+        parent.put("treeEdge", "true");
+        parent.put("treeEdgeMessage", "A task cannot sit under itself");
+        Map<String, Object> task = entity("Task", "Tasks", property("Id", "INTEGER"), property("Name", "VARCHAR"), parent);
+        Map<String, Object> model = model(task);
+        Map<String, Object> parameters = parameters();
+        parameters.put("filePath", "projects.model");
+
+        ModelParameterProcessor.process(model, parameters);
+
+        assertEquals(Boolean.TRUE, task.get("hasTreeEdges"));
+        List<Map<String, Object>> edges = (List<Map<String, Object>>) task.get("treeEdges");
+        assertEquals(1, edges.size());
+        assertEquals("Parent", edges.get(0)
+                                    .get("name"));
+        assertEquals("\"bookstore:projects-model.checks.Task_tree_Parent\", \"A task cannot sit under itself\"", edges.get(0)
+                                                                                                                      .get("messageArgsJava"));
+        assertEquals("A task cannot sit under itself", ModelTranslations.checkMessages(model)
+                                                                        .get("Task_tree_Parent"));
+    }
+
+    /**
+     * A {@code hierarchy:} edge is a tree edge even in a model generated before the flag existed: it
+     * keeps the cycle guard its controllers used to carry, now in the repository - and it no longer
+     * needs the controllers' reference validator for it.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aHierarchyEdgeIsATreeEdgeWithoutTheFlag() {
+        Map<String, Object> entity = entity("Category", "Categories", property("Id", "INTEGER"), property("Parent", "INTEGER"));
         entity.put("hierarchyProperty", "Parent");
         ModelParameterProcessor.process(model(entity), parameters());
 
-        assertTrue(Boolean.TRUE.equals(entity.get("hasReferenceValidations")));
+        List<Map<String, Object>> edges = (List<Map<String, Object>>) entity.get("treeEdges");
+        assertEquals(1, edges.size());
+        assertTrue(((String) edges.get(0)
+                                  .get("messageArgsJava")).contains("'Parent' cannot be this Category itself or one of its descendants"));
+        assertNull(entity.get("hasReferenceValidations"));
+    }
+
+    @Test
+    void anEntityWithoutATreeHasNoTreeEdges() {
+        Map<String, Object> entity = entity("Book", "Books", property("Id", "INTEGER"), property("Name", "VARCHAR"));
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        assertEquals(List.of(), entity.get("treeEdges"));
+        assertEquals(Boolean.FALSE, entity.get("hasTreeEdges"));
     }
 
     /**

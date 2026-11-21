@@ -5562,6 +5562,9 @@ public final class IntentParser {
                 if (relation.isLeafOnly()) {
                     validateLeafOnly(entity, relation, byName, issues);
                 }
+                if (relation.isTree() || relation.getTreeMessage() != null) {
+                    validateTree(entity, relation, issues);
+                }
                 if (relation.isCalculated()) {
                     validateRelationCalculatedAction(entity, relation, issues);
                 }
@@ -5834,6 +5837,9 @@ public final class IntentParser {
         }
         if (relation.isLeafOnly()) {
             unsupported.add("leafOnly");
+        }
+        if (relation.isTree()) {
+            unsupported.add("tree");
         }
         if (!isBlank(relation.getWhenMasterDeleted())) {
             unsupported.add("whenMasterDeleted");
@@ -7031,6 +7037,37 @@ public final class IntentParser {
         if (!hasPersonalSurface(byName, byName.get(relation.getTo()), new HashSet<>())) {
             issues.add(subject + " declares personalReadOnly but its master [" + relation.getTo()
                     + "] has no personal surface to inherit - there is no personal surface here to make see-only");
+        }
+    }
+
+    /**
+     * {@code tree: true} declares a self-reference a tree edge (#7988): the generated repository walks
+     * the submitted value's ancestors and refuses the row itself among them. Only a plain, optional
+     * {@code manyToOne} onto the declaring entity is such an edge - another target has no ancestors of
+     * this row to walk, a composition parent is preset rather than picked, and a required edge leaves
+     * no way to create the first row, a root. {@code treeMessage} is checked beside it.
+     */
+    private static void validateTree(EntityIntent entity, RelationIntent relation, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
+        if (relation.getTreeMessage() != null && !relation.isTree()) {
+            issues.add(subject
+                    + " declares `treeMessage` without `tree: true` - the message is what a cycle on the tree edge is refused with");
+            return;
+        }
+        if (relation.getTreeMessage() != null && relation.getTreeMessage()
+                                                         .isBlank()) {
+            issues.add(subject + " `treeMessage` is blank - remove it to keep the generated cycle message");
+        }
+        if (!"manyToOne".equals(relation.getKind())) {
+            issues.add(subject + " declares `tree: true` but only a manyToOne self-reference is a tree edge");
+        } else if (relation.isCrossModel() || !entity.getName()
+                                                     .equals(relation.getTo())) {
+            issues.add(subject + " declares `tree: true` but points to [" + relation.getTo() + "] - a tree edge points to its own entity ["
+                    + entity.getName() + "]");
+        } else if (relation.isComposition()) {
+            issues.add(subject + " declares `tree: true` but is a composition parent - a tree edge is an ordinary, picked reference");
+        } else if (relation.isRequired()) {
+            issues.add(subject + " declares `tree: true` but is required - a tree needs roots, rows without a parent");
         }
     }
 

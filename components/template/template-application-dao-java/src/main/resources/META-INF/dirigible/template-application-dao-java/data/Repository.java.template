@@ -657,7 +657,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($hasUniqueIgnoringCase)
         requireUniqueIgnoringCase(entity);
 #end
-#if($hasReferenceChecks)
+#if($hasReferenceChecks || $hasTreeEdges)
         // The reference check and the insert are ONE transaction, and the check share-locks every row
         // this create names until it commits (#8252): a delete of one of them either waits for the
         // insert and then counts it, or has deleted the row the check waits for and refuses this create
@@ -667,7 +667,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         // a derived write naming the same rows in another order deadlock although neither changed
         // anything the other read.
         ${name}Entity saved = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
+#if($hasTreeEdges)
+            requireAcyclic(entity);
+#end
+#if($hasReferenceChecks)
             requireReferencesExist(entity, null);
+#end
             return insert(entity);
         });
 #elseif($numbersOnCreate)
@@ -924,11 +929,16 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             // two separate publishes.
             rekeyEvents.add(new DomainEvent("${projectName}-${perspectiveName}-${name}-rekeyed", Json.stringify(groupingPrevious)));
         }
-#if($hasReferenceChecks)
+#if($hasReferenceChecks || $hasTreeEdges)
         // The reference check and the update are ONE transaction, the rows it names share-locked until
         // it commits - see save() (#8252).
         ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
+#if($hasTreeEdges)
+            requireAcyclic(entity);
+#end
+#if($hasReferenceChecks)
             requireReferencesExist(entity, referencesStored);
+#end
             return super.update(entity, "${projectName}-${perspectiveName}-${name}-updated", rekeyEvents);
         });
 #else
@@ -937,11 +947,16 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #else
         // The update event is recorded in the event outbox inside this write's own transaction - see
         // save() - so the intent reactions under gen/events see exactly the changes that committed.
-#if($hasReferenceChecks)
+#if($hasReferenceChecks || $hasTreeEdges)
         // The reference check and the update are ONE transaction, the rows it names share-locked until
         // it commits - see save() (#8252).
         ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
+#if($hasTreeEdges)
+            requireAcyclic(entity);
+#end
+#if($hasReferenceChecks)
             requireReferencesExist(entity, referencesStored);
+#end
             return super.update(entity, "${projectName}-${perspectiveName}-${name}-updated");
         });
 #else
@@ -1044,10 +1059,15 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
 #if($history == "true")
         ${name}Entity historyBefore = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
-#if($hasReferenceChecks)
+#if($hasReferenceChecks || $hasTreeEdges)
         // The reference check and the write are ONE transaction - see save() (#8252).
         ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
+#if($hasTreeEdges)
+            requireAcyclic(entity);
+#end
+#if($hasReferenceChecks)
             requireReferencesExist(entity, referencesStored);
+#end
             return super.update(entity);
         });
 #else
@@ -1057,10 +1077,15 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         // did from what a person did.
         History.recordUpdate(HISTORY_TABLE, updated.${pkPropertyName}, History.SYSTEM, historyBefore, updated, HISTORY_PROPERTIES);
 #else
-#if($hasReferenceChecks)
+#if($hasReferenceChecks || $hasTreeEdges)
         // The reference check and the write are ONE transaction - see save() (#8252).
         ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
+#if($hasTreeEdges)
+            requireAcyclic(entity);
+#end
+#if($hasReferenceChecks)
             requireReferencesExist(entity, referencesStored);
+#end
             return super.update(entity);
         });
 #else
@@ -2562,6 +2587,49 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         }
 #end
 #end
+    }
+#end
+#if($hasTreeEdges)
+
+    /**
+     * Keeps every tree edge of ${name} a tree (intent `tree: true` / `hierarchy:`, dirigible #7988 -
+     * the treeEdge attribute): a write whose edge names the row itself, or one of the row's own
+     * descendants, would close a cycle on which every walk up the tree (a tree view, a roll-up, a
+     * breadcrumb) loops, and is refused with a 400 naming the edge. Runs inside the write's unit of
+     * work, and every ancestor it reads is locked until that unit commits: two moves that would close a
+     * cycle together - A under B and B under A, at once - each lock the row the other writes, so they
+     * cannot both pass; the database breaks the wait by rolling one back, which is run again and then
+     * sees the other's committed parent (or, inside a caller's wider unit, answered 409 to be retried).
+     * A cycle already in the stored data does not loop the walk -
+     * it ends at the first ancestor seen twice.
+     */
+    private void requireAcyclic(${name}Entity entity) {
+        Object self = entity.${pkPropertyName};
+        if (self == null) {
+            // A row whose key is still to be generated has no descendants and cannot be its own parent.
+            return;
+        }
+#foreach($edge in $treeEdges)
+        requireNotOwnAncestor(self, entity.${edge.name}, ancestor -> ancestor.${edge.name}, "${edge.name}", ${edge.messageArgsJava});
+#end
+    }
+
+    private void requireNotOwnAncestor(Object self, Object parent, java.util.function.Function<${name}Entity, Object> edge, String property,
+            String catalogKey, String text) {
+        String selfKey = String.valueOf(self);
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        Object cursor = parent;
+        while (cursor != null && seen.add(String.valueOf(cursor))) {
+            if (selfKey.equals(String.valueOf(cursor))) {
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.fieldRefusal(property, catalogKey, text);
+            }
+            if (!lockForUpdate(cursor)) {
+                // A parent that does not exist is the reference check's to report, not a cycle.
+                return;
+            }
+            ${name}Entity ancestor = super.findById(cursor);
+            cursor = ancestor == null ? null : edge.apply(ancestor);
+        }
     }
 #end
 #if($hasReferenceChecks)

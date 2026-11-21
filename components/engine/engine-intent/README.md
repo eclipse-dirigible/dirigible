@@ -455,6 +455,22 @@ user picks Table on the toolbar toggle. Each record's row menu and its sheet off
 which opens the create form with the parent preset and locked; the edit form's picker re-parents.
 The server rejects cycles and leaf-only references to a node with children.
 
+A self-reference that is a tree but wants no tree-table - a task's parent task - declares the edge
+alone with `tree: true` (#7988):
+
+```yaml
+- name: ProjectTask
+  relations:
+    - { name: Parent, kind: manyToOne, to: ProjectTask, tree: true, treeMessage: "A task cannot sit under itself" }
+```
+
+The generated repository refuses (400) a create or update whose parent is the row itself or one of
+its descendants, and locks every ancestor it walks until the write commits, so two concurrent moves
+(A under B, B under A) cannot both pass. A cycle already in the data ends the walk instead of looping
+it. `treeMessage:` replaces the generated refusal (catalog key `checks.<Entity>_tree_<Relation>`).
+`tree:` is refused on anything but an optional, non-composition `manyToOne` onto its own entity; the
+`hierarchy:` edge is a tree without it.
+
 ## label - the stored display name
 
 ```yaml

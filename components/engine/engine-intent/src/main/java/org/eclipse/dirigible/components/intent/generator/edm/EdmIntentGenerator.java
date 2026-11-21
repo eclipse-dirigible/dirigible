@@ -772,6 +772,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 putStatusStages(fkProperty, model, relation);
                 putLeafOnly(fkProperty, relation,
                         target == null || target.getHierarchy() == null ? null : IntentNaming.pascalCase(target.getHierarchy()), true);
+                putTree(fkProperty, entity, relation);
                 putPersonal(fkProperty, relation,
                         target == null || target.getIdentity() == null ? null : IntentNaming.pascalCase(target.getIdentity()),
                         target == null ? null : labelFieldName(target), true);
@@ -2916,6 +2917,28 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         }
         p.put("widgetLeafOnly", "true");
         p.put("widgetHierarchyProperty", targetHierarchyProperty);
+    }
+
+    /**
+     * Emit a tree edge (#7988) as two scalars: {@code treeEdge}, which makes the generated repository
+     * refuse a value that is the row itself or one of its descendants, and {@code treeEdgeMessage}, the
+     * default-language text of that refusal - the authored {@code treeMessage}, else a generated
+     * sentence - which the model's en-US catalog carries under {@code checks.<Entity>_tree_<Relation>}.
+     * A relation is a tree edge when it declares {@code tree: true} or is the edge the entity names in
+     * {@code hierarchy:} (a hierarchy is a tree by definition). Nothing is emitted for any other
+     * relation.
+     */
+    private static void putTree(Map<String, Object> p, EntityIntent entity, RelationIntent relation) {
+        String name = IntentNaming.pascalCase(relation.getName());
+        boolean hierarchyEdge = entity.getHierarchy() != null && name.equals(IntentNaming.pascalCase(entity.getHierarchy()));
+        if (!relation.isTree() && !hierarchyEdge) {
+            return;
+        }
+        p.put("treeEdge", "true");
+        p.put("treeEdgeMessage", notBlank(relation.getTreeMessage()) ? relation.getTreeMessage()
+                                                                               .trim()
+                : "'" + name + "' cannot be this " + entity.getName() + " itself or one of its descendants - the " + entity.getName()
+                        + " hierarchy would become a cycle");
     }
 
     /**

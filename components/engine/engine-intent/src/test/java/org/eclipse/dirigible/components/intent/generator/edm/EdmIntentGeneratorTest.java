@@ -1613,6 +1613,43 @@ class EdmIntentGeneratorTest {
         assertNull(propertyByName(entityByName(entities, "Account"), "Parent").get("widgetLeafOnly"));
     }
 
+    /**
+     * A tree edge (#7988) - declared with {@code tree: true}, or the {@code hierarchy:} edge - carries
+     * {@code treeEdge} and the refusal's default text; any other relation carries neither, so a model
+     * without a tree is emitted as before.
+     */
+    @Test
+    void treeEdgesCarryTheFlagAndTheirRefusal() {
+        String yaml = """
+                name: projects
+                entities:
+                  - name: Account
+                    hierarchy: Parent
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Parent, kind: manyToOne, to: Account }
+                  - name: ProjectTask
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Parent, kind: manyToOne, to: ProjectTask, tree: true, treeMessage: "A task cannot sit under itself" }
+                      - { name: Previous, kind: manyToOne, to: ProjectTask }
+                """;
+        List<Map<String, Object>> entities = entities(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "projects"));
+
+        Map<String, Object> taskParent = propertyByName(entityByName(entities, "ProjectTask"), "Parent");
+        assertEquals("true", taskParent.get("treeEdge"));
+        assertEquals("A task cannot sit under itself", taskParent.get("treeEdgeMessage"));
+        Map<String, Object> accountParent = propertyByName(entityByName(entities, "Account"), "Parent");
+        assertEquals("true", accountParent.get("treeEdge"));
+        assertEquals("'Parent' cannot be this Account itself or one of its descendants - the Account hierarchy would become a cycle",
+                accountParent.get("treeEdgeMessage"));
+        Map<String, Object> previous = propertyByName(entityByName(entities, "ProjectTask"), "Previous");
+        assertNull(previous.get("treeEdge"));
+        assertNull(previous.get("treeEdgeMessage"));
+    }
+
     @Test
     @SuppressWarnings("unchecked")
     void checksEmitTemplateReadyMaps() {
