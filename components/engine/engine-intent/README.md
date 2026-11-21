@@ -837,6 +837,10 @@ it, so a paid invoice returns to CONFIRMED (or to ISSUED, if it was paid straigh
 than staying PAID with nothing paid. A status the roll-up did not set (a manual void of a partially
 paid document) is never touched.
 
+Either seed may be left out: a roll-up naming only `statusWhenFull` (an asset fully depreciated) owns
+only the full band, and one naming only `statusWhenPartial` only the partial one - a sum outside the
+named band gives the status back exactly as a zero sum does. A `status:` naming neither seed is refused.
+
 Roll-ups compose transitively across a multi-level composition (leaf edit -> mid total -> top
 total); recomputation stops when values stop changing.
 
