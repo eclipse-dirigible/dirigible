@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -18,9 +19,11 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -97,6 +100,34 @@ class I18nKeyCoverageIT {
      * ({@code name, lowercase}) - the format is the translation's business, the name is the contract.
      */
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{\\{\\s*(\\w+)\\s*(?:,[^}]*)?\\}\\}");
+
+    /** The generated-application templates, whose {@code T(key, fallback)} pairs must agree. */
+    private static final String HARMONIA_TEMPLATES = "classpath*:" + DIRIGIBLE + "template-application-ui-harmonia-java/**/*.template";
+
+    /** The monitoring shell, whose {@code T(key, fallback)} pairs must agree. */
+    private static final List<String> MONITORING_SOURCES =
+            List.of("classpath*:" + DIRIGIBLE + "monitoring/**/*.html", "classpath*:" + DIRIGIBLE + "monitoring/**/*.js");
+
+    /**
+     * A {@code T()} call with a literal key after the given prefix and a literal single-quoted
+     * fallback: group 1 is the key path, group 2 the fallback as written.
+     */
+    private static final String KEYED_FALLBACK = "\\bT\\(\\s*'%s([A-Za-z0-9_.]+)'\\s*,\\s*'((?:[^'\\\\]|\\\\.)*)'";
+
+    /**
+     * A Velocity reference in a fallback ({@code ${entityLabel}}, {@code $label}) - a run-time value.
+     */
+    private static final Pattern VELOCITY_REFERENCE = Pattern.compile("\\$!?\\{[^}]*}|\\$!?[A-Za-z][\\w.]*");
+
+    /** A JavaScript string escape a fallback may carry: a unicode escape or an escaped character. */
+    private static final Pattern JS_ESCAPE = Pattern.compile("\\\\(?:u([0-9a-fA-F]{4})|(.))");
+
+    /**
+     * Keys whose fallbacks still disagree, each with the change that settles it. Remove an entry once
+     * that change is merged - the test then guards the key like every other.
+     */
+    private static final Map<String, String> KNOWN_DRIFT =
+            Map.of("generated:messages.deleteConfirm", "#8790: the my/partner delete dialogs pass the long sentence with {{name}}");
 
     /** The i18next build the shells load, from its webjar. */
     private static final String I18NEXT = "classpath*:META-INF/resources/webjars/i18next/*/dist/umd/i18next.min.js";
@@ -195,6 +226,88 @@ class I18nKeyCoverageIT {
         assertNoneMissing("shell keys missing from a shipped language", missing);
     }
 
+    /**
+     * One home per word (#8783): the standalone report page used to carry its own copy of the generated
+     * pages' chrome under {@code shell.report.*}, translated twice and already disagreeing in
+     * Bulgarian. It now asks for the generated pages' keys, and no current template or shell file asks
+     * for a {@code shell.report} word the generated catalog also has. Those keys stay in the catalog
+     * only as aliases for report pages generated before the change - a project's page is rewritten by
+     * an explicit Generate alone, so dropping them would turn an older application's report page back
+     * to English - and an alias must read, in every language, exactly what its generated key reads.
+     */
+    @Test
+    void aReportWordHasOneHome() {
+        Map<String, String> english = coreCatalog("en-US");
+        Map<String, String> bulgarian = coreCatalog("bg-BG");
+        Map<String, String> generatedKeyOf = new TreeMap<>();
+        english.forEach((key, value) -> {
+            if (key.startsWith("generated.")) {
+                generatedKeyOf.putIfAbsent(value, key);
+            }
+        });
+        Map<String, String> aliases = new TreeMap<>();
+        english.forEach((key, value) -> {
+            if (key.startsWith("shell.report.") && generatedKeyOf.containsKey(value)) {
+                aliases.put(key, generatedKeyOf.get(value));
+            }
+        });
+        List<String> problems = new ArrayList<>();
+        aliases.forEach((alias, generated) -> {
+            if (!Objects.equals(bulgarian.get(alias), bulgarian.get(generated))) {
+                problems.add(alias + " reads \"" + bulgarian.get(alias) + "\" in bg-BG, " + generated + " \"" + bulgarian.get(generated)
+                        + "\" - an alias must read what its generated key reads");
+            }
+        });
+        Pattern aliasUse = Pattern.compile("shell\\.report\\.([A-Za-z]+)\\b");
+        for (String location : List.of("classpath*:" + DIRIGIBLE + "template-application-ui-harmonia-java/**/*.template",
+                "classpath*:" + DIRIGIBLE + "application-core/shell/**/*.js",
+                "classpath*:" + DIRIGIBLE + "application-core/shell/**/*.html")) {
+            for (Resource resource : resources(location)) {
+                Matcher matcher = aliasUse.matcher(read(resource));
+                while (matcher.find()) {
+                    if (aliases.containsKey("shell.report." + matcher.group(1))) {
+                        problems.add(url(resource) + " asks for shell.report." + matcher.group(1) + " - ask for "
+                                + aliases.get("shell.report." + matcher.group(1)) + " instead");
+                    }
+                }
+            }
+        }
+        assertNoneMissing("report words with a second home in the generated pages' catalog", problems);
+    }
+
+    /**
+     * The report page and a generated list read the same Bulgarian word for the controls they share
+     * (#8783): each page's own {@code T()} call for the word, as its template writes it, resolved over
+     * the shipped Bulgarian catalogs.
+     */
+    @Test
+    void theReportPageAndAGeneratedListReadTheSameWords() {
+        String reportPage = read(DIRIGIBLE + "template-application-ui-harmonia-java/ui/perspective/report-file/index.html.template");
+        String list = read(DIRIGIBLE + "template-application-ui-harmonia-java/ui/perspective/manage/list-view.html.template");
+        Map<String, String> words =
+                Map.of("Refresh", "Опресни", "Previous", "Предишна", "Next", "Следваща", "Choose date", "Избор на дата");
+        try (Context context = loadI18n("bg", JSON.createObjectNode(), STUB_I18NEXT)) {
+            words.forEach((english, bulgarian) -> {
+                assertEquals(bulgarian, t(context, keyFor(reportPage, english, "orders:SalesByMonth-report."), english),
+                        "the report page's " + english);
+                assertEquals(bulgarian, t(context, keyFor(list, english, "orders:orders-model."), english),
+                        "a generated list's " + english);
+            });
+        }
+    }
+
+    /**
+     * The key of a page's first {@code T()} call for the given English word, with a module's namespace
+     * and catalog prefix in place of the template's Velocity references.
+     */
+    private static String keyFor(String page, String english, String modulePrefix) {
+        Matcher matcher = Pattern.compile("\\bT\\(\\s*'([^']+)'\\s*,\\s*'" + Pattern.quote(english) + "'")
+                                 .matcher(page);
+        assertTrue(matcher.find(), "the page asks for no '" + english + "'");
+        return matcher.group(1)
+                      .replace("$projectName:${tprefix}.", modulePrefix);
+    }
+
     @Test
     void theShippedLanguagesAgreeKeyForKey() {
         List<String> locales = languages();
@@ -218,6 +331,86 @@ class I18nKeyCoverageIT {
             }
         }
         assertNoneMissing("application-core catalogs disagree across languages", problems);
+    }
+
+    /**
+     * One key, one meaning (#8779). The default language renders a {@code T()} call's baked fallback
+     * and every other language the catalog's text for the key, so a key used with two fallbacks - the
+     * Save button on {@code defaults.update}, whose catalog text is "Update" - reads one thing in
+     * English and another in Bulgarian, and the translator translates a text no English user sees.
+     * Every literal fallback must therefore equal the en-US catalog text of its key, placeholders
+     * aside: a Velocity reference and an i18next placeholder are both a value filled in at run time.
+     */
+    @Test
+    void everyKeyKeepsTheFallbackItsCatalogSays() {
+        List<String> problems = new ArrayList<>();
+        problems.addAll(fallbackDrift("generated:", List.of(HARMONIA_TEMPLATES), "\\$projectName:\\$\\{tprefix\\}\\.",
+                flatten(json(TEMPLATE_CATALOG))));
+        problems.addAll(fallbackDrift("application-core:", List.of(HARMONIA_TEMPLATES), "application-core:", coreCatalog("en-US")));
+        Map<String, String> monitoring = new TreeMap<>();
+        for (Resource resource : resources("classpath*:" + DIRIGIBLE + "monitoring/i18n/en-US/*.json")) {
+            monitoring.putAll(flatten(json(resource)));
+        }
+        assertFalse(monitoring.isEmpty(), "the monitoring shell's en-US catalog was not found");
+        problems.addAll(fallbackDrift("monitoring:", MONITORING_SOURCES, "monitoring:", monitoring));
+        assertNoneMissing("keys whose fallback is not their en-US catalog text", problems);
+    }
+
+    /**
+     * The drift of one namespace: a key written with two different fallbacks, or with one that is not
+     * its catalog text. A key the catalog lacks is the coverage tests' business, not this one's.
+     */
+    private static List<String> fallbackDrift(String namespace, List<String> sources, String keyPrefix, Map<String, String> catalog) {
+        Pattern pattern = Pattern.compile(KEYED_FALLBACK.formatted(keyPrefix));
+        Map<String, Map<String, Set<String>>> fallbacks = new TreeMap<>();
+        for (String location : sources) {
+            for (Resource resource : resources(location)) {
+                String path = url(resource);
+                if (path.contains("/i18n/")) {
+                    continue;
+                }
+                Matcher matcher = pattern.matcher(read(resource));
+                while (matcher.find()) {
+                    fallbacks.computeIfAbsent(matcher.group(1), key -> new TreeMap<>())
+                             .computeIfAbsent(unescape(matcher.group(2)), fallback -> new TreeSet<>())
+                             .add(path.substring(path.indexOf(DIRIGIBLE) + DIRIGIBLE.length()));
+                }
+            }
+        }
+        assertTrue(fallbacks.size() > 10,
+                "only " + fallbacks.size() + " " + namespace + " keys with a fallback found - a source pattern stopped matching");
+        List<String> problems = new ArrayList<>();
+        fallbacks.forEach((key, written) -> {
+            String expected = catalog.get(key);
+            Set<String> normalized = new TreeSet<>();
+            written.keySet()
+                   .forEach(fallback -> normalized.add(withoutValues(fallback)));
+            if (expected != null && !KNOWN_DRIFT.containsKey(namespace + key) && !normalized.equals(Set.of(withoutValues(expected)))) {
+                problems.add(namespace + key + " is \"" + expected + "\" in the en-US catalog but written as " + written);
+            }
+        });
+        return problems;
+    }
+
+    /**
+     * A fallback as the page reads it: the JavaScript escapes and the HTML attribute's {@code &amp;}
+     * decoded.
+     */
+    private static String unescape(String fallback) {
+        return JS_ESCAPE.matcher(fallback.replace("&amp;", "&"))
+                        .replaceAll(escape -> Matcher.quoteReplacement(
+                                escape.group(1) != null ? String.valueOf((char) HexFormat.fromHexDigits(escape.group(1)))
+                                        : escape.group(2)));
+    }
+
+    /**
+     * A text with every run-time value - a Velocity reference or an i18next placeholder - reduced to
+     * one token.
+     */
+    private static String withoutValues(String text) {
+        return PLACEHOLDER.matcher(VELOCITY_REFERENCE.matcher(text)
+                                                     .replaceAll("{{value}}"))
+                          .replaceAll("{{value}}");
     }
 
     /**

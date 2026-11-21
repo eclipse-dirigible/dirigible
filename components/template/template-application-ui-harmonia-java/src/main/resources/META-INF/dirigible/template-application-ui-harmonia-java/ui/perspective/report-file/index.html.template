@@ -26,7 +26,7 @@
                   <span class="text-xs text-muted-foreground" x-text="T('application-core:shell.list.dateFrom', 'From')"></span>
                   <div x-h-date-picker>
                     <input type="text" :placeholder="HarmoniaFormat.dateHint()" :aria-label="T('application-core:shell.list.dateFrom', 'From')" />
-                    <button x-h-date-picker-trigger :aria-label="T('application-core:shell.report.chooseDate', 'Choose date')"></button>
+                    <button x-h-date-picker-trigger :aria-label="T('$projectName:${tprefix}.defaults.chooseDate', 'Choose date')"></button>
                     <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="filterDraft.from"></div>
                   </div>
                 </div>
@@ -34,7 +34,7 @@
                   <span class="text-xs text-muted-foreground" x-text="T('application-core:shell.list.dateTo', 'To')"></span>
                   <div x-h-date-picker>
                     <input type="text" :placeholder="HarmoniaFormat.dateHint()" :aria-label="T('application-core:shell.list.dateTo', 'To')" />
-                    <button x-h-date-picker-trigger :aria-label="T('application-core:shell.report.chooseDate', 'Choose date')"></button>
+                    <button x-h-date-picker-trigger :aria-label="T('$projectName:${tprefix}.defaults.chooseDate', 'Choose date')"></button>
                     <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="filterDraft.to"></div>
                   </div>
                 </div>
@@ -58,9 +58,9 @@
             <template x-if="editedFilterColumn && editedFilterColumn.kind === 'boolean'">
               <select x-model="filterDraft.equals" class="w-full text-sm rounded-md border border-border px-2 py-1"
                       :aria-label="columnLabel(editedFilterColumn.key)">
-                <option value="" x-text="T('application-core:shell.report.all', 'All')"></option>
-                <option value="true" x-text="T('application-core:shell.report.true', 'Yes')"></option>
-                <option value="false" x-text="T('application-core:shell.report.false', 'No')"></option>
+                <option value="" x-text="T('$projectName:${tprefix}.defaults.all', 'All')"></option>
+                <option value="true" x-text="T('$projectName:${tprefix}.defaults.yes', 'Yes')"></option>
+                <option value="false" x-text="T('$projectName:${tprefix}.defaults.no', 'No')"></option>
               </select>
             </template>
             <template x-if="editedFilterColumn && editedFilterColumn.kind === 'text'">
@@ -110,14 +110,14 @@
         <div class="relative inline-flex">
           <button x-h-button data-variant="outline" x-h-popover-trigger.chevron="filterOpen" :data-toggled="filterOpen">
             <svg role="presentation" x-h-lucide data-lucide="list-filter"></svg>
-            <span x-text="T('application-core:shell.report.filter', 'Filter')"></span>
+            <span x-text="T('$projectName:${tprefix}.defaults.filter', 'Filter')"></span>
             <svg role="presentation" x-h-lucide data-lucide="chevron-down"></svg>
           </button>
           <div x-h-popover.no-scroll data-align="bottom-start" data-innerclicks="true" class="overflow-visible" style="min-width: 18rem">
             <!-- Step one: which column to filter by. A column already filtered shows its value, so the
                  same entry is how that filter is changed. -->
             <div class="vbox p-1" x-show="!filterMenuEditing">
-              <span x-h-text.muted class="px-2 pt-1 pb-2 text-sm" x-text="T('application-core:shell.report.addFilter', 'Add filter')"></span>
+              <span x-h-text.muted class="px-2 pt-1 pb-2 text-sm" x-text="T('$projectName:${tprefix}.defaults.addFilter', 'Add filter')"></span>
               <template x-for="col in reportColumns" :key="col.key">
                 <button x-h-button data-variant="transparent" class="h-auto justify-start py-2" @click="filterMenuEditing = true; openFilterEditor(col.key)">
                   <span class="vbox min-w-0 flex-1 items-start">
@@ -131,7 +131,7 @@
             <div class="vbox" x-show="filterMenuEditing" x-cloak>
               <div x-h-toolbar data-variant="transparent" data-size="sm">
                 <button x-h-button data-variant="transparent" data-size="icon-sm" @click="backToFilterMenu()"
-                        :aria-label="T('application-core:shell.report.back', 'Back')">
+                        :aria-label="T('$projectName:${tprefix}.defaults.back', 'Back')">
                   <svg role="presentation" x-h-lucide data-lucide="chevron-left"></svg>
                 </button>
                 <span x-h-toolbar-title class="truncate" x-text="editedFilterColumn ? columnLabel(editedFilterColumn.key) : ''"></span>
@@ -142,9 +142,9 @@
               <div x-h-toolbar.footer data-size="sm">
                 <div x-h-toolbar-spacer></div>
                 <button x-h-button data-variant="outline" data-size="sm" @click="closeFilterMenu()"
-                        x-text="T('application-core:shell.report.cancel', 'Cancel')"></button>
+                        x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
                 <button x-h-button data-variant="primary" data-size="sm" @click="applyFilterDraft()"
-                        x-text="T('application-core:shell.report.apply', 'Apply')"></button>
+                        x-text="T('$projectName:${tprefix}.defaults.apply', 'Apply')"></button>
               </div>
             </div>
           </div>
@@ -156,24 +156,24 @@
              and the stamp says how old the rows on screen are. -->
         <span x-show="lastUpdated" x-h-text.muted x-text="T('application-core:shell.inbox.updated', 'Updated {{time}}', { time: updatedTime() })"></span>
         <button x-h-button data-variant="outline" @click="refresh()">
-          <svg role="presentation" x-h-lucide data-lucide="refresh-cw"></svg><span x-text="T('application-core:shell.report.refresh', 'Refresh')"></span>
+          <svg role="presentation" x-h-lucide data-lucide="refresh-cw"></svg><span x-text="T('$projectName:${tprefix}.defaults.refresh', 'Refresh')"></span>
         </button>
 #if($chart)
         <!-- The view switch (#7837): one icon-only single-choice group, the same shape every browse
              page carries. Both views draw the same fetched rows. -->
-        <div x-h-button-group x-model="view" :aria-label="T('application-core:shell.report.view', 'View')">
+        <div x-h-button-group x-model="view" :aria-label="T('$projectName:${tprefix}.defaults.listView', 'View')">
           <button type="button" x-h-button data-variant="outline" data-size="icon" x-h-button-group-radio="'chart'"
                   :aria-label="T('application-core:shell.report.chart', 'Chart')" :title="T('application-core:shell.report.chart', 'Chart')">
             <svg role="presentation" x-h-lucide data-lucide="chart-column"></svg>
           </button>
           <button type="button" x-h-button data-variant="outline" data-size="icon" x-h-button-group-radio="'table'"
-                  :aria-label="T('application-core:shell.report.table', 'Table')" :title="T('application-core:shell.report.table', 'Table')">
+                  :aria-label="T('$projectName:${tprefix}.defaults.table', 'Table')" :title="T('$projectName:${tprefix}.defaults.table', 'Table')">
             <svg role="presentation" x-h-lucide data-lucide="table"></svg>
           </button>
         </div>
 #end
         <button x-h-button data-variant="outline" data-size="icon" x-h-menu-trigger.dropdown
-                :aria-label="T('application-core:shell.report.moreActions', 'More actions')">
+                :aria-label="T('$projectName:${tprefix}.defaults.moreActions', 'More actions')">
           <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
         </button>
         <ul x-h-menu data-align="bottom-end">
@@ -181,18 +181,18 @@
                page of rows on screen. -->
           <li x-h-menu-sub :aria-disabled="state !== 'default'">
             <svg role="presentation" x-h-lucide data-lucide="download"></svg>
-            <span x-text="T('application-core:shell.report.export', 'Export')"></span>
+            <span x-text="T('$projectName:${tprefix}.defaults.export', 'Export')"></span>
             <ul x-h-menu.sub>
-              <li x-h-menu-item @click="exportCsv('all')" x-text="T('application-core:shell.report.allRecords', 'All records')"></li>
-              <li x-h-menu-item @click="exportCsv('page')" x-text="T('application-core:shell.report.currentPage', 'Current page')"></li>
+              <li x-h-menu-item @click="exportCsv('all')" x-text="T('$projectName:${tprefix}.defaults.allRecords', 'All records')"></li>
+              <li x-h-menu-item @click="exportCsv('page')" x-text="T('$projectName:${tprefix}.defaults.currentPage', 'Current page')"></li>
             </ul>
           </li>
           <li x-h-menu-sub :aria-disabled="state !== 'default'">
             <svg role="presentation" x-h-lucide data-lucide="printer"></svg>
-            <span x-text="T('application-core:shell.report.print', 'Print')"></span>
+            <span x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></span>
             <ul x-h-menu.sub>
-              <li x-h-menu-item @click="printReport('all')" x-text="T('application-core:shell.report.allRecords', 'All records')"></li>
-              <li x-h-menu-item @click="printReport('page')" x-text="T('application-core:shell.report.currentPage', 'Current page')"></li>
+              <li x-h-menu-item @click="printReport('all')" x-text="T('$projectName:${tprefix}.defaults.allRecords', 'All records')"></li>
+              <li x-h-menu-item @click="printReport('page')" x-text="T('$projectName:${tprefix}.defaults.currentPage', 'Current page')"></li>
             </ul>
           </li>
         </ul>
@@ -229,7 +229,7 @@
                 <!-- No Enter here: Enter would run the report before the picker has taken the typed day.
                      A date is applied with Apply, as in the Filter menu. -->
                 <input type="text" :id="'report-param-' + pi" :placeholder="HarmoniaFormat.dateHint()" />
-                <button x-h-date-picker-trigger :aria-label="T('application-core:shell.report.chooseDate', 'Choose date')"></button>
+                <button x-h-date-picker-trigger :aria-label="T('$projectName:${tprefix}.defaults.chooseDate', 'Choose date')"></button>
                 <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="params[p.name]"></div>
               </div>
             </template>
@@ -241,7 +241,7 @@
             </template>
           </div>
         </template>
-        <button x-h-button data-variant="primary" @click="applyFilters()"><svg role="presentation" x-h-lucide data-lucide="check"></svg><span x-text="T('application-core:shell.report.apply', 'Apply')"></span></button>
+        <button x-h-button data-variant="primary" @click="applyFilters()"><svg role="presentation" x-h-lucide data-lucide="check"></svg><span x-text="T('$projectName:${tprefix}.defaults.apply', 'Apply')"></span></button>
       </div>
 
       <!-- The filters in force, the manage list's chips (#7390). A chip names its column and prints
@@ -253,14 +253,14 @@
            dismissal. relative z-20: x-h-chip carries transform-gpu, a stacking context the popover
            cannot escape, and the table's sticky header would otherwise paint over the open panel. -->
       <div x-show="!preview && activeFilterChips.length" class="hbox items-center gap-2 flex-wrap">
-        <span class="text-xs font-medium text-muted-foreground" x-text="T('application-core:shell.report.activeFilters', 'Active filters')"></span>
+        <span class="text-xs font-medium text-muted-foreground" x-text="T('$projectName:${tprefix}.defaults.activeFilters', 'Active filters')"></span>
         <template x-for="chip in activeFilterChips" :key="chip.key">
           <div x-h-chip data-variant="information" class="relative z-20" x-data="{ open: false }" @click.outside="open = false">
             <button x-h-chip-button x-h-popover-trigger="open" @click="open = !open; open && openFilterEditor(chip.key)">
               <span class="text-muted-foreground" x-text="columnLabel(chip.key) + ':'"></span>
               <span class="truncate" style="max-width: 14rem" x-text="chip.text"></span>
             </button>
-            <button x-h-chip-close :aria-label="T('application-core:shell.report.removeFilter', 'Remove {{name}} filter', { name: columnLabel(chip.key) })"
+            <button x-h-chip-close :aria-label="T('$projectName:${tprefix}.defaults.removeFilter', 'Remove {{name}} filter', { name: columnLabel(chip.key) })"
                     @click="removeFilter(chip.key)"></button>
             <div x-h-popover.no-scroll data-align="bottom-start" data-innerclicks="true" class="overflow-visible" style="min-width: 18rem">
               <div class="p-3">
@@ -268,18 +268,18 @@
               </div>
               <div x-h-toolbar.footer data-size="sm">
                 <button x-h-button data-variant="transparent" data-size="sm" @click="open = false; removeFilter(chip.key)"
-                        x-text="T('application-core:shell.report.remove', 'Remove')"></button>
+                        x-text="T('$projectName:${tprefix}.defaults.remove', 'Remove')"></button>
                 <div x-h-toolbar-spacer></div>
                 <button x-h-button data-variant="outline" data-size="sm" @click="open = false; backToFilterMenu()"
-                        x-text="T('application-core:shell.report.cancel', 'Cancel')"></button>
+                        x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
                 <button x-h-button data-variant="primary" data-size="sm" @click="open = false; applyFilterDraft()"
-                        x-text="T('application-core:shell.report.apply', 'Apply')"></button>
+                        x-text="T('$projectName:${tprefix}.defaults.apply', 'Apply')"></button>
               </div>
             </div>
           </div>
         </template>
         <button x-h-button data-variant="transparent" data-size="sm" @click="clearFilters()"
-                x-text="T('application-core:shell.report.clearFilters', 'Clear filters')"></button>
+                x-text="T('$projectName:${tprefix}.defaults.clearFilters', 'Clear filters')"></button>
       </div>
 
       <!-- An Export or Print that failed: the rows on screen are still good, so the failure is said
@@ -302,14 +302,14 @@
           <div x-h-info-page-description x-text="error"></div>
         </div>
         <div x-h-info-page-content x-show="!preview">
-          <button x-h-button data-variant="primary" @click="load()" x-text="T('application-core:shell.report.retry', 'Retry')"></button>
+          <button x-h-button data-variant="primary" @click="load()" x-text="T('$projectName:${tprefix}.defaults.retry', 'Retry')"></button>
         </div>
       </div>
       <div x-show="state === 'empty'" x-h-info-page>
         <div x-h-info-page-header>
           <div x-h-info-page-media.icon><svg role="presentation" x-h-lucide data-lucide="inbox"></svg></div>
-          <div x-h-info-page-title x-text="T('application-core:shell.report.noData', 'No data')"></div>
-          <div x-h-info-page-description x-text="T('application-core:shell.report.noRows', 'The ${name} report returned no rows.', { name: '${name}' })"></div>
+          <div x-h-info-page-title x-text="T('$projectName:${tprefix}.messages.noDataTitle', 'No data')"></div>
+          <div x-h-info-page-description x-text="T('$projectName:${tprefix}.messages.reportNoRows', 'The ${name} report returned no rows.', { name: '${name}' })"></div>
         </div>
       </div>
       <!-- The column filters match nothing: an answer, not an empty report, so it says so and offers
@@ -321,7 +321,7 @@
           <div x-h-info-page-description x-text="T('application-core:shell.report.noMatchHint', 'Try adjusting the filters.')"></div>
         </div>
         <div x-h-info-page-content x-show="!preview">
-          <button x-h-button data-variant="outline" @click="clearFilters()" x-text="T('application-core:shell.report.clearFilters', 'Clear filters')"></button>
+          <button x-h-button data-variant="outline" @click="clearFilters()" x-text="T('$projectName:${tprefix}.defaults.clearFilters', 'Clear filters')"></button>
         </div>
       </div>
 
@@ -386,9 +386,9 @@
         <nav x-h-pagination class="w-fit!" x-show="!preview && totalPages > 1">
           <ul x-h-pagination-content>
             <li x-h-pagination-item>
-              <a x-h-pagination-link.previous href="#" :aria-label="T('application-core:shell.report.prev', 'Previous')" :aria-disabled="page <= 1" :tabindex="page <= 1 ? -1 : 0" @click.prevent="if (page > 1) goPage(page - 1)">
+              <a x-h-pagination-link.previous href="#" :aria-label="T('$projectName:${tprefix}.defaults.previous', 'Previous')" :aria-disabled="page <= 1" :tabindex="page <= 1 ? -1 : 0" @click.prevent="if (page > 1) goPage(page - 1)">
                 <svg x-h-lucide role="presentation" data-lucide="chevron-left"></svg>
-                <span x-h-pagination-link-label x-text="T('application-core:shell.report.prev', 'Previous')"></span>
+                <span x-h-pagination-link-label x-text="T('$projectName:${tprefix}.defaults.previous', 'Previous')"></span>
               </a>
             </li>
             <template x-for="(p, i) in pageWindow()" :key="i">
@@ -398,8 +398,8 @@
               </li>
             </template>
             <li x-h-pagination-item>
-              <a x-h-pagination-link.next href="#" :aria-label="T('application-core:shell.report.next', 'Next')" :aria-disabled="page >= totalPages" :tabindex="page >= totalPages ? -1 : 0" @click.prevent="if (page < totalPages) goPage(page + 1)">
-                <span x-h-pagination-link-label x-text="T('application-core:shell.report.next', 'Next')"></span>
+              <a x-h-pagination-link.next href="#" :aria-label="T('$projectName:${tprefix}.defaults.next', 'Next')" :aria-disabled="page >= totalPages" :tabindex="page >= totalPages ? -1 : 0" @click.prevent="if (page < totalPages) goPage(page + 1)">
+                <span x-h-pagination-link-label x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></span>
                 <svg x-h-lucide role="presentation" data-lucide="chevron-right"></svg>
               </a>
             </li>

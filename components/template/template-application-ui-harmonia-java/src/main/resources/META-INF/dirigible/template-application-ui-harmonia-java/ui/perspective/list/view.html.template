@@ -105,7 +105,7 @@
     <div x-h-info-page-header>
       <div x-h-info-page-media.icon><svg role="presentation" x-h-lucide data-lucide="inbox"></svg></div>
       <div x-h-info-page-title x-text="T('$projectName:${tprefix}.messages.noDataYet', 'No ${menuLabel} yet', { name: T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}') })"></div>
-      <div x-h-info-page-description x-text="T('$projectName:${tprefix}.messages.noData', 'There is nothing to show here.')"></div>
+      <div x-h-info-page-description x-text="T('$projectName:${tprefix}.messages.nothingToShow', 'There is nothing to show here.')"></div>
     </div>
   </div>
 
@@ -144,7 +144,7 @@
             </thead>
             <tbody x-h-table-body>
               <tr x-show="displayState === 'no-results'" x-h-table-row>
-                <td x-h-table-cell data-col-free x-text="T('$projectName:${tprefix}.messages.noData', 'No matching ${name}.')"></td>
+                <td x-h-table-cell data-col-free x-text="T('$projectName:${tprefix}.messages.noMatch', 'No matching {{name}}', { name: T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}') })"></td>
               </tr>
               <template x-for="row in paginatedItems" :key="row.${primaryKeysString}">
                 <tr x-h-table-row data-hoverable="true" :data-state="isSelected(row) ? 'selected' : ''" @click="selectRow(row)" style="cursor:pointer;">
@@ -211,7 +211,7 @@
         <div x-h-info-page-header>
           <div x-h-info-page-media.icon><svg x-h-icon data-icon="circle-info" role="img" aria-label="info"></svg></div>
           <div x-h-info-page-title x-text="T('$projectName:${tprefix}.defaults.selectTitle', 'Select a ${name}', { name: T('$projectName:${tprefix}.t.${dataName}', '${name}') })"></div>
-          <div x-h-info-page-description x-text="T('$projectName:${tprefix}.messages.detailSelectRecord', 'Choose a row to see all its details#if($hasProcess) and pending tasks#end.')"></div>
+          <div x-h-info-page-description x-text="#if($hasProcess)T('$projectName:${tprefix}.messages.detailSelectRecordTasks', 'Choose a row to see all its details and pending tasks.')#{else}T('$projectName:${tprefix}.messages.detailSelectRecord', 'Choose a row to see all its details.')#end"></div>
         </div>
       </div>
 

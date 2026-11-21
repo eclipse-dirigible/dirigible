@@ -1,5 +1,0 @@
-{
-    "module": "perspective-settings/configs/general.json",
-    "extensionPoint": "application-settings",
-    "description": "Dashboard general settings view"
-}

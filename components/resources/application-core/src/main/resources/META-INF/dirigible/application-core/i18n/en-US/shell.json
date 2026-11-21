@@ -65,7 +65,7 @@
     "notifications": {
       "title": "Notifications",
       "unread": "{{count}} unread",
-      "caughtUp": "You're all caught up.",
+      "caughtUp": "You’re all caught up.",
       "newTask": "New task: {{name}}"
     },
     "dashboard": {

@@ -2278,8 +2278,28 @@ class IntentParserTest {
                 "expected a languages-entry issue, got: " + ex.getIssues());
         assertTrue(ex.getIssues()
                      .stream()
-                     .anyMatch(i -> i.contains("language [BG] must be a short lowercase language code")),
+                     .anyMatch(i -> i.contains("language [BG] must be a two-letter lowercase language code")),
                 "expected a seed-language issue, got: " + ex.getIssues());
+    }
+
+    /**
+     * #8795: a data-language code is two letters, as long as the language table's column - a
+     * three-letter code or a locale tag used to pass the parser and fail only when the seed was
+     * imported.
+     */
+    @Test
+    void aLanguageCodeIsTwoLetters() {
+        for (String code : java.util.List.of("fil", "bg-BG", "b")) {
+            String yaml = MULTILINGUAL_HEAD.replace("languages: [en, bg]", "languages: [en, " + code + "]")
+                                           .replace("language: bg", "language: " + code);
+            IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+            assertTrue(ex.getIssues()
+                         .contains("seed [uoms-bg] language [" + code + "] must be a two-letter lowercase language code (e.g. bg)"),
+                    "expected the seed's code refused, got: " + ex.getIssues());
+            assertTrue(ex.getIssues()
+                         .contains("languages entry [" + code + "] must be a two-letter lowercase language code (e.g. en, bg)"),
+                    "expected the languages entry refused, got: " + ex.getIssues());
+        }
     }
 
     @Test

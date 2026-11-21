@@ -38,7 +38,7 @@
   <div x-show="state === 'loading'" class="p-4"><div x-h-spinner></div></div>
   <div x-show="state === 'error'" class="p-4" x-h-text.muted x-text="error"></div>
   <div x-show="state === 'empty'" class="p-4" x-h-text.muted
-       x-text="T('$projectName:${tprefix}.messages.noData', 'No records yet.')"></div>
+       x-text="T('$projectName:${tprefix}.messages.noRecordsYet', 'No records yet.')"></div>
 
   <div x-show="state === 'default'" x-h-table-container.scroll>
     <table x-h-table x-list-columns data-borders="rows">

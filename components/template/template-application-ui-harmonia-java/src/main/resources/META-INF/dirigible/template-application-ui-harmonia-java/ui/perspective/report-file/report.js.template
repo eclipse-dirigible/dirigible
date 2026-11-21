@@ -324,7 +324,7 @@ document.addEventListener('alpine:init', () => {
                    : T('application-core:shell.report.atMost', 'At most {{value}}', { value: max });
       }
       if (col.kind === 'boolean') {
-        return f.equals === 'true' ? T('application-core:shell.report.true', 'Yes') : T('application-core:shell.report.false', 'No');
+        return f.equals === 'true' ? T('$projectName:${tprefix}.defaults.yes', 'Yes') : T('$projectName:${tprefix}.defaults.no', 'No');
       }
       return f.contains;
     },
@@ -545,7 +545,7 @@ document.addEventListener('alpine:init', () => {
     // or a legend entry. Some databases answer a boolean column as 1 / 0.
     yesNo(v) {
       const yes = v === true || v === 'true' || v === 1 || v === '1';
-      return yes ? T('application-core:shell.report.true', 'Yes') : T('application-core:shell.report.false', 'No');
+      return yes ? T('$projectName:${tprefix}.defaults.yes', 'Yes') : T('$projectName:${tprefix}.defaults.no', 'No');
     },
 
     // The stamp's time, in the instance's date-time format - the Inbox's and the lists' stamp.

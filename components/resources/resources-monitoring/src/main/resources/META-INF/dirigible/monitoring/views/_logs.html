@@ -25,7 +25,7 @@
         </div>
         <button x-h-button data-variant="transparent" data-size="icon-sm" @click="state.togglePause()"
                 :title="state.paused ? T('monitoring:overview.resume', 'Resume') : T('monitoring:overview.pause', 'Pause')"
-                :aria-label="state.paused ? 'Resume' : 'Pause'">
+                :aria-label="state.paused ? T('monitoring:overview.resume', 'Resume') : T('monitoring:overview.pause', 'Pause')">
           <svg x-h-lucide x-show="!state.paused" role="presentation" data-lucide="pause"></svg>
           <svg x-h-lucide x-show="state.paused" role="presentation" data-lucide="play"></svg>
         </button>
