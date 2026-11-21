@@ -164,6 +164,9 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 ## A gate moves the check to the moment the row is persisted carrying that status, which is what makes
 ## it usable on a row whose amount is a DOCUMENT TOTAL: that is recomputed from the lines after the
 ## header is written, so an ungated guard would only ever see the 0 the header was created with.
+## A roll-up column read as the BigDecimal the guards compute in (#7944): an integral one (its Java class
+## named by the guard's type key) is converted, a decimal one is read as it is.
+#macro(rollupDecimal $type $expr)#if($type && $type != "")java.math.BigDecimal.valueOf(${expr})#{else}${expr}#end#end
 #macro(rollupGuardBody $rollupGuard)
 #if($rollupGuard.parentGenFolder && $rollupGuard.parentGenFolder != "")
 #set($guardParentType = "gen.${rollupGuard.parentGenFolder}.data.${rollupGuard.parentPerspective}.${rollupGuard.parentEntity}")
@@ -179,11 +182,11 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
                         continue;
                     }
                     if (guardRow.${rollupGuard.ofField} != null) {
-                        guardConsumed = guardConsumed.add(guardRow.${rollupGuard.ofField});
+                        guardConsumed = guardConsumed.add(#rollupDecimal($rollupGuard.ofFieldType "guardRow.${rollupGuard.ofField}"));
                     }
                 }
-                java.math.BigDecimal guardIncoming = entity.${rollupGuard.ofField} == null ? java.math.BigDecimal.ZERO : entity.${rollupGuard.ofField};
-                if (guardConsumed.add(guardIncoming).compareTo(guardParent.${rollupGuard.capacityField}) > 0) {
+                java.math.BigDecimal guardIncoming = entity.${rollupGuard.ofField} == null ? java.math.BigDecimal.ZERO : #rollupDecimal($rollupGuard.ofFieldType "entity.${rollupGuard.ofField}");
+                if (guardConsumed.add(guardIncoming).compareTo(#rollupDecimal($rollupGuard.capacityFieldType "guardParent.${rollupGuard.capacityField}")) > 0) {
 #if($rollupGuard.messageExpression && $rollupGuard.messageExpression != "")
                     throw new ValidationException(${rollupGuard.messageExpression});
 #else
@@ -210,7 +213,7 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #foreach($property in $properties)
 #if($property.balanceCapacity)
         entity.${property.name} = entity.${property.balanceCapacity} == null ? null
-                : entity.${property.balanceCapacity}.subtract(entity.${property.balanceSum} == null ? java.math.BigDecimal.ZERO : entity.${property.balanceSum});
+                : #rollupDecimal($property.balanceCapacityType "entity.${property.balanceCapacity}").subtract(entity.${property.balanceSum} == null ? java.math.BigDecimal.ZERO : #rollupDecimal($property.balanceSumType "entity.${property.balanceSum}"))#if($property.dataTypeJavaClass == "Integer").intValue()#elseif($property.dataTypeJavaClass == "Long").longValue()#end;
 #end
 #end
 #end
@@ -224,10 +227,10 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #foreach($rollupGuard in $rollupGuards)
 #if($rollupGuard.fitField && $rollupGuard.fitField != "")
         if (entity.${rollupGuard.fkProperty} != null#if($rollupGuard.incomingMatch && $rollupGuard.incomingMatch != "") && ${rollupGuard.incomingMatch}#end) {
-            java.math.BigDecimal fitSum = entity.${rollupGuard.ofField} == null ? java.math.BigDecimal.ZERO : entity.${rollupGuard.ofField};
+            java.math.BigDecimal fitSum = entity.${rollupGuard.ofField} == null ? java.math.BigDecimal.ZERO : #rollupDecimal($rollupGuard.ofFieldType "entity.${rollupGuard.ofField}");
             for (${name}Entity fitRow : findAll(Criteria.create().eq("${rollupGuard.fkProperty}", entity.${rollupGuard.fkProperty})#if($rollupGuard.filterChain)${rollupGuard.filterChain}#end)) {
                 if (fitRow.${rollupGuard.ofField} != null && !fitRow.${rollupGuard.childIdField}.equals(entity.${rollupGuard.childIdField})) {
-                    fitSum = fitSum.add(fitRow.${rollupGuard.ofField});
+                    fitSum = fitSum.add(#rollupDecimal($rollupGuard.ofFieldType "fitRow.${rollupGuard.ofField}"));
                 }
             }
             ${rollupGuard.parentEntity}Repository.requireFits("${rollupGuard.fitField}", fitSum);

@@ -146,19 +146,37 @@ final class RollupAggregates {
         out.append("                if (row.")
            .append(sumField)
            .append(" != null) {\n");
-        out.append("                    sum = sum.add(row.")
-           .append(sumField)
+        out.append("                    sum = sum.add(")
+           .append(decimal(rollup, "sumFieldType", "row." + sumField))
            .append(");\n");
         out.append("                }\n");
         out.append("            }\n");
-        out.append("            if (parent.")
-           .append(countField)
-           .append(" == null || parent.")
-           .append(countField)
-           .append(".compareTo(sum) != 0) {\n");
-        out.append("                parent.")
-           .append(countField)
-           .append(" = sum;\n");
+        String countType = strOrEmpty(rollup, "countFieldType");
+        if (countType.isEmpty()) {
+            out.append("            if (parent.")
+               .append(countField)
+               .append(" == null || parent.")
+               .append(countField)
+               .append(".compareTo(sum) != 0) {\n");
+            out.append("                parent.")
+               .append(countField)
+               .append(" = sum;\n");
+        } else {
+            // An integral total is compared AFTER narrowing: compared as a decimal, a fractional sum
+            // would differ from the stored integer on every recompute, and every write raises the
+            // parent's update event - a cascade that never settles.
+            out.append("            ")
+               .append(countType)
+               .append(" total = ")
+               .append(narrow(countType, "sum"))
+               .append(";\n");
+            out.append("            if (!total.equals(parent.")
+               .append(countField)
+               .append(")) {\n");
+            out.append("                parent.")
+               .append(countField)
+               .append(" = total;\n");
+        }
         out.append("                derived.put(\"")
            .append(countField)
            .append("\", parent.")
@@ -167,8 +185,8 @@ final class RollupAggregates {
         if (!capacityField.isEmpty()) {
             out.append("                java.math.BigDecimal capacity = parent.")
                .append(capacityField)
-               .append(" == null ? java.math.BigDecimal.ZERO : parent.")
-               .append(capacityField)
+               .append(" == null ? java.math.BigDecimal.ZERO : ")
+               .append(decimal(rollup, "capacityFieldType", "parent." + capacityField))
                .append(";\n");
             if (!balanceField.isEmpty()) {
                 // An unenforced capacity is a measurement (#7904): a parent with none has no balance,
@@ -181,7 +199,8 @@ final class RollupAggregates {
                        .append(capacityField)
                        .append(" == null ? null : ");
                 }
-                out.append("capacity.subtract(sum);\n");
+                out.append(narrow(strOrEmpty(rollup, "balanceFieldType"), "capacity.subtract(sum)"))
+                   .append(";\n");
                 out.append("                derived.put(\"")
                    .append(balanceField)
                    .append("\", parent.")
@@ -312,6 +331,37 @@ final class RollupAggregates {
         out.append("            }\n");
         out.append("        }\n");
         return out.toString();
+    }
+
+    /**
+     * A numeric column read as the {@code BigDecimal} a roll-up computes in (#7944): an integral one
+     * ({@code Integer} / {@code Long}, named by the descriptor's type key) is converted, any other is
+     * already one and is read as it is.
+     *
+     * @param rollup the roll-up descriptor
+     * @param typeKey the descriptor key naming the column's integral Java class, if it has one
+     * @param expression the non-null column expression
+     * @return the Java expression of the decimal value
+     */
+    private static String decimal(Map<String, Object> rollup, String typeKey, String expression) {
+        return strOrEmpty(rollup, typeKey).isEmpty() ? expression : "java.math.BigDecimal.valueOf(" + expression + ")";
+    }
+
+    /**
+     * A computed decimal narrowed to the column it is written into (#7944) - {@code intValue()} for an
+     * {@code Integer} column, {@code longValue()} for a {@code Long} one, as the generated repository
+     * narrows a calculated field; unchanged for a decimal column (an empty type).
+     *
+     * @param javaClass the column's integral Java class, or empty
+     * @param expression the decimal expression
+     * @return the Java expression of the value to write
+     */
+    private static String narrow(String javaClass, String expression) {
+        return switch (javaClass) {
+            case "Integer" -> expression + ".intValue()";
+            case "Long" -> expression + ".longValue()";
+            default -> expression;
+        };
     }
 
     /**

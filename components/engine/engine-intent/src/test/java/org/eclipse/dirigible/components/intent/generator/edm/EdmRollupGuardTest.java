@@ -124,6 +124,43 @@ class EdmRollupGuardTest {
         assertNotNull(guardOf(LOCAL, "SalesInvoicePayment"));
     }
 
+    /**
+     * Integral columns (#7944): the guard and the fit guard compute in BigDecimal, so they are told
+     * which columns to convert - and a decimal roll-up's guard carries no such key, so it renders as
+     * before.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void integralColumnsAreNamedForConversionAndDecimalOnesAreNot() {
+        String integral = LOCAL.replace("{ name: total,   type: decimal }", "{ name: total,   type: long }")
+                               .replace("{ name: amount, type: decimal }", "{ name: amount, type: integer }")
+                               .replace("{ name: paid,    type: decimal }", "{ name: paid,    type: long }")
+                               .replace("{ name: balance, type: decimal }", "{ name: balance, type: long }");
+        Map<String, Object> guard = guardOf(integral, "SalesInvoicePayment");
+        assertEquals("Integer", guard.get("ofFieldType"));
+        assertEquals("Long", guard.get("capacityFieldType"));
+        Map<String, Object> fit = allGuardsOf(integral, "SalesInvoicePayment").get(0);
+        assertEquals("Integer", fit.get("ofFieldType"));
+
+        Map<String, Object> decimal = guardOf(LOCAL, "SalesInvoicePayment");
+        assertNull(decimal.get("ofFieldType"));
+        assertNull(decimal.get("capacityFieldType"));
+
+        Map<String, Object> json = EdmIntentGenerator.buildModelJsonForTest(
+                IntentParser.parse(integral.replace("balance: balance }", "balance: balance, enforce: false }")), "test");
+        Map<String, Object> balance = null;
+        for (Map<String, Object> entity : (List<Map<String, Object>>) ((Map<String, Object>) json.get("model")).get("entities")) {
+            for (Map<String, Object> property : (List<Map<String, Object>>) entity.get("properties")) {
+                if ("SalesInvoice".equals(entity.get("name")) && "Balance".equals(property.get("name"))) {
+                    balance = property;
+                }
+            }
+        }
+        assertNotNull(balance);
+        assertEquals("Long", balance.get("balanceCapacityType"));
+        assertEquals("Long", balance.get("balanceSumType"));
+    }
+
     private static final String CROSS_MODEL_PARENT = """
             name: sales-invoices
             uses:

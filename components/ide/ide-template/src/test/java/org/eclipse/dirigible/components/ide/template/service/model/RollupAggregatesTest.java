@@ -131,4 +131,41 @@ class RollupAggregatesTest {
         assertThat(rendered).doesNotContain("capacity")
                             .doesNotContain("parent. ");
     }
+
+    /**
+     * Integral columns (#7944): the roll-up computes in BigDecimal, so an Integer / Long read is
+     * converted and an Integer / Long write narrowed. Assigned as they were, {@code sum.add(row.Seats)}
+     * and {@code parent.Booked = sum} did not compile and took the whole client-Java batch down.
+     */
+    @Test
+    void integralColumnsAreConvertedInAndNarrowedOut() {
+        Map<String, Object> rollup = sumRollup("Capacity", "Available", "");
+        rollup.put("sumFieldType", "Integer");
+        rollup.put("countFieldType", "Integer");
+        rollup.put("capacityFieldType", "Long");
+        rollup.put("balanceFieldType", "Long");
+
+        String rendered = RollupAggregates.render(rollup, "rows");
+
+        assertThat(rendered).contains("sum = sum.add(java.math.BigDecimal.valueOf(row.Amount));")
+                            .contains("Integer total = sum.intValue();")
+                            .as("an integral total is compared narrowed, or a fractional sum would rewrite it for ever")
+                            .contains("if (!total.equals(parent.Total)) {")
+                            .contains("parent.Total = total;")
+                            .contains("java.math.BigDecimal capacity = parent.Capacity == null ? java.math.BigDecimal.ZERO"
+                                    + " : java.math.BigDecimal.valueOf(parent.Capacity);")
+                            .contains("parent.Available = capacity.subtract(sum).longValue();")
+                            .doesNotContain("parent.Total = sum;");
+    }
+
+    /** A decimal roll-up carries no type key and renders exactly as before. */
+    @Test
+    void decimalColumnsAreReadAndWrittenAsTheyAre() {
+        String rendered = RollupAggregates.render(sumRollup("Capacity", "Available", ""), "rows");
+
+        assertThat(rendered).contains("sum = sum.add(row.Amount);")
+                            .contains("parent.Total = sum;")
+                            .contains("parent.Available = capacity.subtract(sum);")
+                            .doesNotContain("valueOf");
+    }
 }
