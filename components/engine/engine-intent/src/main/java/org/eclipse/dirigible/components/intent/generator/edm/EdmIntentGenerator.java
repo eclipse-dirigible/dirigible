@@ -924,6 +924,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (!uniqueMaps.isEmpty()) {
                 entityMap.put("uniqueConstraints", uniqueMaps);
             }
+            // Money fields rounded to the minor units of the currency they are stated in (#8307 / #8327).
+            buildRoundTo(entity, entityMap, properties, byName, compositionParents, crossModelLookup(context, usesByAlias));
             entityMap.put("properties", properties);
             entityList.add(entityMap);
             builtByName.put(name, entityMap);
@@ -3788,6 +3790,43 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * The currency a money field is rounded to ({@code roundTo: Invoice.Currency.rounding}, #8307 /
+     * #8327). Each such property carries the authored path ({@code roundTo}) and the null-guarded Java
+     * read of the minor units off the last loaded hop ({@code roundToExpression}); the entity carries
+     * the hops every path needs, resolved by ONE walker, so the lines' Net, Vat and Total reading the
+     * same header's currency load the header and the currency once ({@code roundToLoads}, coordinates
+     * only - the generation pass knows the generated classes). A model without the key emits nothing.
+     */
+    private static void buildRoundTo(EntityIntent entity, Map<String, Object> entityMap, List<Map<String, Object>> properties,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel) {
+        ResolvePathSupport.Walker walker = null;
+        for (FieldIntent field : entity.getFields()) {
+            if (!notBlank(field.getRoundTo())) {
+                continue;
+            }
+            if (walker == null) {
+                walker = ResolvePathSupport.walker(entity, byName, compositionParents, crossModel);
+            }
+            ResolvePathSupport.Path path = walker.resolve(field.getRoundTo()
+                                                               .trim());
+            if (!path.resolved()) {
+                continue; // the parser already reported it
+            }
+            String propertyName = IntentNaming.pascalCase(field.getName());
+            for (Map<String, Object> property : properties) {
+                if (propertyName.equals(property.get("name"))) {
+                    property.put("roundTo", path.label());
+                    property.put("roundToExpression", path.expression());
+                }
+            }
+        }
+        if (walker != null && !walker.hops()
+                                     .isEmpty()) {
+            entityMap.put("roundToLoads", pathLoadsOf(walker));
+        }
+    }
+
+    /**
      * The generated loads a check's resolved paths need, in load order - a prefix always precedes what
      * hangs off it. Shared by {@code requiredWhen} (its value path and its condition's one-hop terms)
      * and {@code forbidWhen} (its condition's), which all read a {@code Relation.field} the reader must
@@ -6033,7 +6072,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     private static final Set<String> STRUCTURED_ATTRIBUTES = Set.of("rollupGuards", "rollupGuard", "checks", "labelParts", "aggregateKeys",
             "groupingKeys", "relatedEntities", "scopedCalendars", "agreeGuards", "lifecycleStatusNameList", "duplicateReset",
             "duplicateDefaults", "lookupColumns", "languages", "widgets", "customActionLabels", "generateRefusals", "processTaskLabels",
-            "singleFlags", "reports", "collectionColumns");
+            "singleFlags", "reports", "collectionColumns", "roundToLoads");
 
     /**
      * Compact, non-HTML-escaping JSON for the structured {@code .edm} attributes. Compact so the value

@@ -5231,6 +5231,37 @@ public final class IntentParser {
     }
 
     /** The declared entity with that exact name, or {@code null}. */
+    /**
+     * A money field rounded to its currency's minor units ({@code roundTo: Invoice.Currency.rounding},
+     * #8307 / #8327): a decimal, not the key, and the path a walk of to-one relations off the record to
+     * an integer field. A terminal on a cross-model target is not known here and is trusted, as for
+     * every other path; the generator reads it as a number either way.
+     */
+    private static void validateRoundTo(EntityIntent entity, FieldIntent field, java.util.Map<String, EntityIntent> byName, String subject,
+            List<String> issues) {
+        if (!"decimal".equalsIgnoreCase(field.getType())) {
+            issues.add(subject + " roundTo applies to a decimal field - got type [" + field.getType() + "]");
+            return;
+        }
+        if (field.isPrimaryKey()) {
+            issues.add(subject + " is the primary key so it cannot declare roundTo");
+            return;
+        }
+        ResolvePathSupport.Path path = ResolvePathSupport.walker(entity, byName, java.util.Map.of(), null)
+                                                         .resolve(field.getRoundTo()
+                                                                       .trim());
+        if (!path.resolved()) {
+            issues.add(subject + " roundTo " + path.failure());
+        } else if (path.terminalType() != null && !Set.of("integer", "int", "long")
+                                                      .contains(path.terminalType()
+                                                                    .toLowerCase(java.util.Locale.ROOT))) {
+            issues.add(subject + " roundTo [" + field.getRoundTo() + "] must end in an integer field - the currency's minor units"
+                    + " (e.g. `Currency.rounding`) - got "
+                    + (ResolvePathSupport.RELATION_TERMINAL.equals(path.terminalType()) ? "a to-one relation"
+                            : "type [" + path.terminalType() + "]"));
+        }
+    }
+
     private static EntityIntent entityByName(IntentModel model, String name) {
         for (EntityIntent entity : model.getEntities()) {
             if (name.equals(entity.getName())) {
@@ -5421,6 +5452,9 @@ public final class IntentParser {
                 }
                 if (field.isFixedAfterCreate()) {
                     validateFixedField(entity, field, "fixedAfterCreate", issues);
+                }
+                if (field.getRoundTo() != null) {
+                    validateRoundTo(entity, field, byName, "entity [" + name + "] field [" + field.getName() + "]", issues);
                 }
                 if (field.isFixedWhenReferenced()) {
                     validateFixedField(entity, field, "fixedWhenReferenced", issues);
