@@ -14,14 +14,18 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Predicate;
 
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -149,6 +153,66 @@ public final class Translator {
             }
         }
         return ids;
+    }
+
+    /**
+     * How completely a multilingual entity is translated: the number of its base rows and, for every
+     * language of the application language set ({@code DIRIGIBLE_APPLICATION_LANGUAGES},
+     * tenant-overridable) except the first, how many of them have no row of that language in the
+     * language table. The first language is the default one, which the base rows themselves hold.
+     * Unlike the read overlay, a database failure is not tolerated: an answer that cannot be read is
+     * not an answer of "nothing translated".
+     *
+     * @param table the BASE table name (the language table is {@code <table>_LANG})
+     * @param idColumn the base table's primary key column, which the language table's {@code Id}
+     *        references
+     * @return the coverage, one {@code COUNT} per language
+     * @throws IllegalStateException when either table cannot be read
+     */
+    public static TranslationCoverage coverage(String table, String idColumn) {
+        String countAll = "SELECT COUNT(*) FROM \"" + table + "\"";
+        String countUntranslated = countAll + " b WHERE NOT EXISTS (SELECT 1 FROM \"" + table + LANGUAGE_TABLE_SUFFIX + "\" l WHERE l.\""
+                + ID_COLUMN + "\" = b.\"" + idColumn + "\" AND l.\"" + LANGUAGE_COLUMN + "\" = ?)";
+        Map<String, Long> untranslated = new LinkedHashMap<>();
+        try (Connection connection = Database.getDefaultDataSource()
+                                             .getConnection()) {
+            long total;
+            try (PreparedStatement statement = connection.prepareStatement(countAll)) {
+                total = count(statement);
+            }
+            try (PreparedStatement statement = connection.prepareStatement(countUntranslated)) {
+                for (String language : translatedLanguages()) {
+                    statement.setString(1, language);
+                    untranslated.put(language, count(statement));
+                }
+            }
+            return new TranslationCoverage(total, untranslated);
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to read the translation coverage of [" + table + "]", e);
+        }
+    }
+
+    private static long count(PreparedStatement statement) throws SQLException {
+        try (ResultSet resultSet = statement.executeQuery()) {
+            return resultSet.next() ? resultSet.getLong(1) : 0;
+        }
+    }
+
+    /**
+     * The languages of the application language set a translation can be missing in: every configured
+     * code but the first (the default), normalized and without repetitions.
+     */
+    private static List<String> translatedLanguages() {
+        String configured = DirigibleConfig.APPLICATION_LANGUAGES.getStringValue();
+        if (configured == null) {
+            return List.of();
+        }
+        return Arrays.stream(configured.split(","))
+                     .map(Translator::normalize)
+                     .filter(Objects::nonNull)
+                     .distinct()
+                     .skip(1)
+                     .toList();
     }
 
     /**

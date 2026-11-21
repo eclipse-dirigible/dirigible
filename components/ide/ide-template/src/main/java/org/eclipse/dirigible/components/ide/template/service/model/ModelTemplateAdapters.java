@@ -45,6 +45,11 @@ final class ModelTemplateAdapters {
     private static final String DEFAULT_APP_LANGUAGE = "en";
 
     /**
+     * The entity types the schema gives no language table, as {@code application.schema.template} says.
+     */
+    private static final Set<String> UNTRANSLATABLE_TYPES = Set.of("REPORT", "FILTER", "PROJECTION");
+
+    /**
      * Not instantiable.
      */
     private ModelTemplateAdapters() {}
@@ -201,6 +206,7 @@ final class ModelTemplateAdapters {
         parameters.put("appTranslatableData", ModelValues.asMaps(model.get("entities"))
                                                          .stream()
                                                          .anyMatch(entity -> ModelValues.isTrue(entity, "multilingual")));
+        parameters.put("appTranslatableEntities", JavaScriptJson.compact(translatableEntities(model, parameters)));
         parameters.put("customWidgets", model.get("widgets") == null ? new ArrayList<>() : model.get("widgets"));
         // Country-scoped field labels, rendered into the application's configuration as a JSON object
         // the shared i18n runtime prefers over the language catalogs (see countryLabelOverlay).
@@ -212,6 +218,35 @@ final class ModelTemplateAdapters {
         Object reports = model.get("reports");
         parameters.put("appReports", reports instanceof List ? JavaScriptJson.compact(reports) : "null");
         return new PreparedModel(model, true);
+    }
+
+    /**
+     * The application's multilingual entities, as the shells' Settings page asks each how completely
+     * its data is translated (dirigible #8789): the catalog key and default-language text of its plural
+     * label, and the URL of its controller's translation coverage. A cross-model projection, a report
+     * and a filter have neither a language table nor a controller of their own here.
+     *
+     * @param model the entity model
+     * @param parameters the generation parameters, for the project, the Java gen folder and the catalog
+     *        prefix
+     * @return one entry per multilingual entity, in model order
+     */
+    private static List<Map<String, Object>> translatableEntities(Map<String, Object> model, Map<String, Object> parameters) {
+        String project = str(parameters, "projectName");
+        String namespace = project + ":" + ModelTranslations.catalogPrefix(str(parameters, "filePath")) + ".t.";
+        String restBase = "/services/java/" + project + "/gen/" + str(parameters, "javaGenFolderName") + "/api/";
+        List<Map<String, Object>> translatable = new ArrayList<>();
+        for (Map<String, Object> entity : asMaps(model.get("entities"))) {
+            if (!ModelValues.isTrue(entity, "multilingual") || UNTRANSLATABLE_TYPES.contains(strOr(entity, "type", ""))) {
+                continue;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("key", namespace + str(entity, "dataName") + "_plural");
+            entry.put("label", ModelTranslations.entityPluralLabel(entity));
+            entry.put("url", restBase + str(entity, "javaPerspectiveName") + "/" + str(entity, "name") + "Controller/translations");
+            translatable.add(entry);
+        }
+        return translatable;
     }
 
     /**

@@ -4694,12 +4694,24 @@ class IntentEngineIT extends IntegrationTest {
                 "the multilingual repository should overlay translations on findById");
         assertTrue(repository.contains("public java.util.Optional<CountryEntity> findOne(Object id)"),
                 "the multilingual repository must also override findOne - the generated controller reads single records through it");
+        // The Settings report of untranslated records reads the language table, through the controller
+        // (#8789).
+        assertTrue(repository.contains("return Translator.coverage(\"ORDERS_COUNTRY\", \""),
+                "the multilingual repository should count its untranslated rows");
+        assertTrue(codeOf("gen/orders/api/settings/CountryController.java").contains("@Get(\"/translations\")"),
+                "the multilingual controller should answer its translation coverage");
         String customerRepository = codeOf("gen/orders/data/customer/CustomerRepository.java");
         assertFalse(customerRepository.contains("Translator."), "a non-multilingual repository must stay untouched");
+        assertFalse(codeOf("gen/orders/api/customer/CustomerController.java").contains("/translations"),
+                "a non-multilingual controller has no translation coverage");
 
-        // Shell config: the offered data languages feed the Region & Language setting.
+        // Shell config: the offered data languages feed the Region & Language setting, and the
+        // multilingual entities the report of their untranslated records.
         String config = contentOf("gen/orders/js/config.js");
         assertTrue(config.contains("languages: [\"en\",\"bg\"]"), "config.js should carry the app's data languages");
+        assertTrue(config.contains("translatableEntities: [{\"key\":\"" + PROJECT + ":orders-model.t.ORDERS_COUNTRY_plural\",\"label\":\"")
+                && config.contains("\"url\":\"/services/java/" + PROJECT + "/gen/orders/api/settings/CountryController/translations\"}]"),
+                "config.js should list the multilingual entity, and only it: " + config);
     }
 
     @Test

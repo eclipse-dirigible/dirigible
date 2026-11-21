@@ -10,6 +10,8 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -17,25 +19,27 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 
 import org.graalvm.polyglot.Context;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * The Settings translation check reports what an application really leaves untranslated (dirigible
- * #8137).
+ * #8137, #8789).
  *
  * <p>
- * It read only the {@code languages:} declaration of each app's {@code js/config.js} - the intent's
- * DATA languages - so every module whose screens are fully in Bulgarian, but which declares no
- * Bulgarian data, was listed under "Missing translations" and reported by testers as untranslated.
- * The check now tells the two apart: an app with no label catalog in a platform language has
- * untranslated SCREENS; an app with labels whose translatable (multilingual) data is not provided
- * in it has untranslated DATA; an app with labels and no translatable data is not reported at all.
+ * An app with no label catalog in a platform language has untranslated SCREENS. Its DATA is judged
+ * by what its language tables hold: each multilingual entity's controller counts the records with
+ * no translation per language, and the check reports those counts - not the {@code languages:} the
+ * app declares, which hid an empty language table behind a declaration and reported a complete one
+ * that declared nothing. The declaration is the judge only for an app whose coverage cannot be
+ * read.
  *
  * <p>
- * Each shell's shipped {@code appShell.js} is evaluated in a polyglot context over stubs of what
- * the check touches - the component registry, the locale store, the apps' configs and the locales
- * service - and the component it registers is asked to classify a set of apps.
+ * The shared {@code languageCoverage} store is evaluated in a polyglot context over stubs of what
+ * it touches - the store registry, the locale store, {@code T()} in the default language, the apps'
+ * configs, their entities' coverage answers and the locales service. The four shells hand it their
+ * perspectives and show its warnings.
  */
 class ShellLanguageCoverageIT {
 
@@ -43,41 +47,49 @@ class ShellLanguageCoverageIT {
     private static final String PERSPECTIVES = """
             [{ id: 'g', items: [
               { path: '/services/web/full/gen/full/index.html#/A' },
-              { path: '/services/web/datamissing/gen/datamissing/index.html#/B' },
-              { path: '/services/web/legacy/gen/legacy/index.html#/C' },
-              { path: '/services/web/noscreens/gen/noscreens/index.html#/D' },
-              { path: '/services/web/complete/gen/complete/index.html#/E' },
-              { path: '/services/web/inbox/index.html#/F' }
+              { path: '/services/web/legacy/gen/legacy/index.html#/B' },
+              { path: '/services/web/noscreens/gen/noscreens/index.html#/C' },
+              { path: '/services/web/counted/gen/counted/index.html#/D' },
+              { path: '/services/web/declared/gen/declared/index.html#/E' },
+              { path: '/services/web/translated/gen/translated/index.html#/F' },
+              { path: '/services/web/unreadable/gen/unreadable/index.html#/G' },
+              { path: '/services/web/inbox/index.html#/H' }
             ]}]
             """;
 
-    @ParameterizedTest
-    @ValueSource(strings = {"application", "admin", "partner", "personal"})
-    void an_app_is_reported_for_what_it_does_not_translate(String shell) {
-        try (Context context = load(shell)) {
-            context.eval("js", "var shell = __factory(); var __result = 'pending'; shell.loadLanguageCoverage(" + PERSPECTIVES
-                    + ").then(() => { __result = JSON.stringify(shell.languageWarnings()); });");
+    private static final String DECLARE_HINT =
+            " does not provide bg data - its lists and documents show the default-language values (for example statuses and types)."
+                    + " Declare languages: in its intent once the data is translated.";
 
-            assertEquals("[{\"app\":\"datamissing\",\"screens\":[],\"data\":[\"bg\"]}," //
-                    + "{\"app\":\"legacy\",\"screens\":[],\"data\":[\"bg\"]}," //
-                    + "{\"app\":\"noscreens\",\"screens\":[\"bg\"],\"data\":[]}]", //
+    @Test
+    void an_app_is_reported_for_what_its_screens_and_its_data_leave_untranslated() {
+        try (Context context = load()) {
+            context.eval("js", "var __result = 'pending'; Alpine.store('languageCoverage').load(" + PERSPECTIVES
+                    + ").then(() => { __result = JSON.stringify(Alpine.store('languageCoverage').warnings()); });");
+
+            assertEquals("[{\"app\":\"legacy\",\"lines\":[\"legacy" + DECLARE_HINT + "\"]},"
+                    + "{\"app\":\"noscreens\",\"lines\":[\"noscreens has no bg translation of its screens - its labels show in the default language.\"]},"
+                    + "{\"app\":\"counted\",\"lines\":[\"Currencies: 3 of 160 records have no Bulgarian translation.\","
+                    + "\"Units: 1 of 5 records has no Bulgarian translation.\"]},"
+                    + "{\"app\":\"declared\",\"lines\":[\"Countries: 4 of 4 records have no Bulgarian translation.\"]},"
+                    + "{\"app\":\"unreadable\",\"lines\":[\"unreadable" + DECLARE_HINT + "\"]}]", //
                     context.eval("js", "__result")
                            .asString(),
-                    "full (labels, no translatable data), complete (labels and data) and the platform surface must not be reported");
+                    "full (no translatable data), translated (every record translated, nothing declared), the entity the user may not"
+                            + " read and the platform surface must not be reported; declared (bg declared, an empty language table) must");
         }
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"application", "admin", "partner", "personal"})
-    void the_scan_waits_for_settings_and_runs_once(String shell) {
-        try (Context context = load(shell)) {
+    @Test
+    void the_scan_waits_for_settings_and_runs_once() {
+        try (Context context = load()) {
             // The perspectives arrive at boot; the scan is the Settings page's, so boot asks nothing (#8346).
-            context.eval("js", "var shell = __factory(); shell.coveragePerspectives = " + PERSPECTIVES + ";");
+            context.eval("js", "Alpine.store('languageCoverage').remember(" + PERSPECTIVES + ");");
             assertEquals(0, context.eval("js", "__requests.length")
                                    .asInt(),
                     "the coverage scan must not run before Settings is shown");
 
-            context.eval("js", "shell.scanLanguageCoverage(); shell.scanLanguageCoverage();");
+            context.eval("js", "Alpine.store('languageCoverage').scan(); Alpine.store('languageCoverage').scan();");
             assertEquals(1,
                     context.eval("js",
                             "__requests.filter(function (u) { return u.indexOf('/services/platform/extensions/locales?') === 0; }).length")
@@ -86,7 +98,24 @@ class ShellLanguageCoverageIT {
         }
     }
 
-    private static Context load(String shell) {
+    /**
+     * Each shell hands the store its perspectives at boot, starts the scan when Settings opens, loads
+     * the store and shows its warnings - and keeps no copy of the check of its own.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"application", "admin", "partner", "personal"})
+    void every_shell_shows_the_shared_check(String shell) {
+        String appShell = read("/META-INF/dirigible/" + shell + "/js/appShell.js");
+        assertTrue(appShell.contains("Alpine.store('languageCoverage').remember(all);"), shell + " must hand the store its perspectives");
+        assertTrue(appShell.contains("Alpine.store('languageCoverage').scan();"), shell + " must start the scan when Settings opens");
+        assertFalse(appShell.contains("translatableData"), shell + " must not judge the apps' configs itself");
+        assertTrue(read("/META-INF/dirigible/" + shell + "/index.html").contains(
+                "/services/web/application-core/shell/js/stores/languageCoverage.js"), shell + " must load the store");
+        assertTrue(read("/META-INF/dirigible/" + shell + "/views/_settings.html").contains("$store.languageCoverage.warnings()"),
+                shell + " must show the store's warnings");
+    }
+
+    private static Context load() {
         Context context = Context.newBuilder("js")
                                  .allowAllAccess(true)
                                  // See HarmoniaDateFormatIT: the interpreter-only notice corrupts the forked JVM's channel.
@@ -98,49 +127,70 @@ class ShellLanguageCoverageIT {
                 var document = {
                   addEventListener: function (type, listener) { if (type === 'alpine:init') __listeners.push(listener); }
                 };
-                var localStorage = { getItem: function () { return null; }, setItem: function () {} };
-                var App = { config: {} };
-                window.PineconeRouter = { settings: function () {} };
-                var __factory;
-                var __locale = { languages: function () { return ['en', 'bg']; } };
+                var __stores = { locale: { value: 'en', languages: function () { return ['en', 'bg']; } } };
                 var Alpine = {
-                  data: function (name, factory) { if (name === 'app') __factory = factory; },
-                  store: function (name) { return name === 'locale' ? __locale : {}; }
+                  store: function (name, value) {
+                    if (value === undefined) return __stores[name];
+                    __stores[name] = value;
+                  }
                 };
-                // Each app's js/config.js: its declared data languages and whether it has translatable data.
+                // T() in the default language: the baked fallback, interpolated.
+                var T = function (key, fallback, options) {
+                  return String(fallback).replace(/\\{\\{\\s*(\\w+)\\s*\\}\\}/g, function (match, name) {
+                    return options && options[name] !== undefined ? options[name] : match;
+                  });
+                };
+                function entities(list) { return 'translatableEntities: ' + JSON.stringify(list) + ','; }
+                // Each app's js/config.js as the generator renders it: its declared data languages, whether
+                // it has translatable data and its multilingual entities (one line).
                 var __configs = {
-                  full:        "export default { languages: ['en'], translatableData: false };",
-                  datamissing: "export default { languages: ['en'], translatableData: true };",
-                  legacy:      "export default { languages: ['en'] };",
-                  noscreens:   "export default { languages: ['en'], translatableData: false };",
-                  complete:    "export default { languages: ['en', 'bg'], translatableData: true };"
+                  full:       "App.config = { languages: ['en'], translatableData: false,\\n" + entities([]) + "\\n};",
+                  legacy:     "App.config = { languages: ['en'] };",
+                  noscreens:  "App.config = { languages: ['en'], translatableData: false,\\n" + entities([]) + "\\n};",
+                  counted:    "App.config = { languages: ['en'], translatableData: true,\\n" + entities([
+                                { key: 'counted:m.t.CURRENCY_plural', label: 'Currencies', url: '/cov/currency' },
+                                { key: 'counted:m.t.UNIT_plural', label: 'Units', url: '/cov/unit' },
+                                { key: 'counted:m.t.SECRET_plural', label: 'Secrets', url: '/cov/secret' }]) + "\\n};",
+                  declared:   "App.config = { languages: ['en', 'bg'], translatableData: true,\\n" + entities([
+                                { key: 'declared:m.t.COUNTRY_plural', label: 'Countries', url: '/cov/country' }]) + "\\n};",
+                  translated: "App.config = { languages: ['en'], translatableData: true,\\n" + entities([
+                                { key: 'translated:m.t.STATUS_plural', label: 'Statuses', url: '/cov/status' }]) + "\\n};",
+                  unreadable: "App.config = { languages: ['en'], translatableData: true,\\n" + entities([
+                                { key: 'unreadable:m.t.TYPE_plural', label: 'Types', url: '/cov/broken' }]) + "\\n};"
+                };
+                // The entities' controllers: how many records have no translation, per language.
+                var __coverage = {
+                  '/cov/currency': { total: 160, untranslated: { bg: 3 } },
+                  '/cov/unit':     { total: 5,   untranslated: { bg: 1 } },
+                  '/cov/country':  { total: 4,   untranslated: { bg: 4 } },
+                  '/cov/status':   { total: 7,   untranslated: { bg: 0 } }
                 };
                 // The locales service: every app ships an en-US catalog; all but noscreens a bg-BG one.
                 var __catalog = { t: { Label: 'x' } };
+                var __bg = {};
+                Object.keys(__configs).forEach(function (app) { if (app !== 'noscreens') __bg[app] = __catalog; });
                 var __locales = {
                   locales: [{ id: 'en-US' }, { id: 'bg-BG' }],
-                  translations: {
-                    'en-US': { full: __catalog, datamissing: __catalog, legacy: __catalog, noscreens: __catalog, complete: __catalog },
-                    'bg-BG': { full: __catalog, datamissing: __catalog, legacy: __catalog, complete: __catalog }
-                  }
+                  translations: { 'en-US': Object.assign({ noscreens: __catalog }, __bg), 'bg-BG': __bg }
                 };
                 var __requests = [];
+                function answer(status, body) {
+                  return Promise.resolve({ ok: status === 200, status: status,
+                    text: function () { return Promise.resolve(String(body)); },
+                    json: function () { return Promise.resolve(body); } });
+                }
+                // The secret entity is not the user's to read (403); the broken one fails (500).
                 var fetch = function (url) {
                   __requests.push(url);
                   var config = /^\\/services\\/web\\/([^\\/]+)\\/.*js\\/config\\.js$/.exec(url);
-                  if (config) {
-                    var text = __configs[config[1]];
-                    return Promise.resolve(text
-                        ? { ok: true, text: function () { return Promise.resolve(text); } }
-                        : { ok: false, text: function () { return Promise.resolve(''); } });
-                  }
-                  if (url.indexOf('/services/platform/extensions/locales?') === 0) {
-                    return Promise.resolve({ ok: true, json: function () { return Promise.resolve(__locales); } });
-                  }
-                  return Promise.resolve({ ok: false, json: function () { return Promise.resolve({}); } });
+                  if (config) return __configs[config[1]] ? answer(200, __configs[config[1]]) : answer(404, '');
+                  if (url === '/cov/secret') return answer(403, {});
+                  if (__coverage[url]) return answer(200, __coverage[url]);
+                  if (url.indexOf('/services/platform/extensions/locales?') === 0) return answer(200, __locales);
+                  return answer(500, {});
                 };
                 """);
-        context.eval("js", read("/META-INF/dirigible/" + shell + "/js/appShell.js"));
+        context.eval("js", read("/META-INF/dirigible/application-core/shell/js/stores/languageCoverage.js"));
         context.eval("js", "__listeners.forEach(function (listener) { listener(); });");
         return context;
     }
