@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -112,12 +113,54 @@ public final class Translator {
         if (entity == null || id == null || lang == null) {
             return entity;
         }
-        for (Map<String, Object> row : readLanguageRows(table, lang)) {
-            Object rowId = valueIgnoreCase(row, ID_COLUMN);
-            if (rowId != null && String.valueOf(rowId)
-                                       .equals(String.valueOf(id))) {
-                overlay(entity, row);
-                break;
+        Map<String, Object> row = languageRow(table, lang, id);
+        if (row != null) {
+            overlay(entity, row);
+        }
+        return entity;
+    }
+
+    /**
+     * Put back, onto an entity about to be written to the base table, the stored base value of every
+     * property the read overlay replaces in the given language - the write-side counterpart of
+     * {@link #translateEntity(Object, Object, String, String)}. A record read in a translated language
+     * and saved whole carries the translations; without this they would overwrite the base values.
+     * Exactly the properties the overlay would set are kept: the language row's non-null columns that
+     * match an entity field. A language with no row for the entity, or a null/blank language, keeps
+     * nothing and leaves the stored row unread.
+     *
+     * @param <T> the entity type (public fields named after the model properties)
+     * @param entity the entity about to be updated; may be null
+     * @param id the entity's identifier (matched against the language table's {@code Id})
+     * @param language the language code or locale tag the write is made in; null/blank keeps nothing
+     * @param table the BASE table name (the language table is {@code <table>_LANG})
+     * @param stored reads the stored row, untranslated; asked only when a translation applies
+     * @return the same entity, its translated properties carrying the stored base values
+     */
+    public static <T> T keepBaseValues(T entity, Object id, String language, String table, Supplier<T> stored) {
+        String lang = normalize(language);
+        if (entity == null || id == null || lang == null) {
+            return entity;
+        }
+        Map<String, Object> row = languageRow(table, lang, id);
+        if (row == null) {
+            return entity;
+        }
+        T base = stored.get();
+        if (base == null) {
+            return entity;
+        }
+        for (Map.Entry<String, Object> column : row.entrySet()) {
+            Field field = overlaidField(entity, column.getKey(), column.getValue());
+            if (field == null) {
+                continue;
+            }
+            try {
+                field.set(entity, field.get(base));
+            } catch (IllegalAccessException e) {
+                LOGGER.warn("Cannot keep the base value of field [{}] of [{}]", field.getName(), entity.getClass()
+                                                                                                       .getName(),
+                        e);
             }
         }
         return entity;
@@ -203,29 +246,51 @@ public final class Translator {
      */
     private static void overlay(Object entity, Map<String, Object> row) {
         for (Map.Entry<String, Object> column : row.entrySet()) {
-            String name = column.getKey();
             Object value = column.getValue();
-            if (value == null || GUID_COLUMN.equalsIgnoreCase(name) || ID_COLUMN.equalsIgnoreCase(name)
-                    || LANGUAGE_COLUMN.equalsIgnoreCase(name)) {
-                continue;
-            }
-            Field field = fieldIgnoreCase(entity.getClass(), name);
+            Field field = overlaidField(entity, column.getKey(), value);
             if (field == null) {
                 continue;
             }
             try {
-                if (field.getType()
-                         .isAssignableFrom(value.getClass())) {
-                    field.set(entity, value);
-                } else if (field.getType() == String.class) {
-                    field.set(entity, String.valueOf(value));
-                }
+                field.set(entity, field.getType()
+                                       .isAssignableFrom(value.getClass()) ? value : String.valueOf(value));
             } catch (IllegalAccessException e) {
                 LOGGER.warn("Cannot overlay translated value onto field [{}] of [{}]", field.getName(), entity.getClass()
                                                                                                               .getName(),
                         e);
             }
         }
+    }
+
+    /**
+     * The entity field a language-row column overlays, or null when the column overlays nothing: a
+     * bookkeeping column, a null value, a column without a matching field, or a value the field can
+     * take neither as it is nor as a string.
+     */
+    private static Field overlaidField(Object entity, String column, Object value) {
+        if (value == null || GUID_COLUMN.equalsIgnoreCase(column) || ID_COLUMN.equalsIgnoreCase(column)
+                || LANGUAGE_COLUMN.equalsIgnoreCase(column)) {
+            return null;
+        }
+        Field field = fieldIgnoreCase(entity.getClass(), column);
+        if (field == null || !(field.getType()
+                                    .isAssignableFrom(value.getClass())
+                || field.getType() == String.class)) {
+            return null;
+        }
+        return field;
+    }
+
+    /** The language row of the given entity id, or null when the language has none. */
+    private static Map<String, Object> languageRow(String table, String language, Object id) {
+        for (Map<String, Object> row : readLanguageRows(table, language)) {
+            Object rowId = valueIgnoreCase(row, ID_COLUMN);
+            if (rowId != null && String.valueOf(rowId)
+                                       .equals(String.valueOf(id))) {
+                return row;
+            }
+        }
+        return null;
     }
 
     private static Object readField(Object entity, String name) {

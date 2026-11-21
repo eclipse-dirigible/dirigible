@@ -872,6 +872,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             lockForUpdate(entity.${pkPropertyName});
         }
 #end
+#if($multilingual == "true")
+        keepBaseValues(entity);
+#end
 #trimText()
 #roundDecimals()
 #normalizeSubsets()
@@ -894,7 +897,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         // user-update edition: read the stored row once and take the system-owned values from THERE,
         // never from the payload. System writers stay on the targeted primitives (updateProperty /
         // updateProperties / updateDerived), so this preservation cannot fight a workflow write.
-        ${name}Entity existingRow = entity.${pkPropertyName} == null ? null : findById(entity.${pkPropertyName});
+        // Read through the BASE find: on a multilingual entity the overridden read overlays the caller's
+        // language, and a translation carried over from it would be written into the base row (#8735).
+        ${name}Entity existingRow = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
         if (existingRow != null) {
 #if($reportedOnUpdate.size() > 0)
             // ...but a caller that computed a DIFFERENT value for one of them is not sending a partial
@@ -931,7 +936,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         // it LEAVES has no event of its own, so capture the previous row here and publish it on the
         // dedicated "-rekeyed" topic after the write (below). Only the aggregate / roll-up handlers listen
         // there, so no other reaction sees a second event.
-        ${name}Entity groupingPrevious = findById(entity.${groupingSourcePk});
+        // The stored row, untranslated (#8735): the move is judged against the keys as stored, and the
+        // "-rekeyed" notice names the group the row leaves by those keys.
+        ${name}Entity groupingPrevious = super.findById(entity.${groupingSourcePk});
         boolean groupingMoved = groupingPrevious != null && (false#foreach($k in $groupingKeys)
                 || !java.util.Objects.equals(groupingPrevious.${k.key}, entity.${k.key})#end);
 #end
@@ -1073,6 +1080,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     }
 
     private ${name}Entity updateWithoutEventInUnit(${name}Entity entity) {
+#end
+#if($multilingual == "true")
+        keepBaseValues(entity);
 #end
 #trimText()
 #roundDecimals()
@@ -3095,6 +3105,20 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     @Override
     public ${name}Entity findById(Object id) {
         return Translator.translateEntity(super.findById(id), id, User.getLanguage(), "${tablePrefix}${dataName}");
+    }
+
+    /**
+     * The write-side counterpart of the overlay (#8735): every property the read overlays for the
+     * caller's language keeps its STORED base value on an update. A record read translated and saved
+     * whole - the generated forms send back everything they read, and the property-security merge
+     * starts from the translated findOne - would otherwise write the translation into the base row and
+     * lose the default-language value. Exactly the overlaid properties are kept, so a write in a
+     * language the record has no translation for (the default language, or no Accept-Language at all)
+     * stores the payload as sent. Translations themselves are seeded, never edited through this write.
+     */
+    private void keepBaseValues(${name}Entity entity) {
+        Translator.keepBaseValues(entity, entity.${pkPropertyName}, User.getLanguage(), "${tablePrefix}${dataName}",
+                () -> super.findById(entity.${pkPropertyName}));
     }
 
     @Override
