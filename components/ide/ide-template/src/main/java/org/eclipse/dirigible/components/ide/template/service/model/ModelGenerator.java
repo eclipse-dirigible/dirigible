@@ -432,9 +432,9 @@ class ModelGenerator {
         } else {
             Map<String, Object> metadata = asMap(model.get("metadata"));
             if (isForm && metadata != null && metadata.get("successMsg") != null) {
-                Map<String, Object> dialogs = asMap(catalog.get("dialogs"));
-                if (dialogs != null) {
-                    dialogs.put("successMsg", metadata.get("successMsg"));
+                Map<String, Object> messages = asMap(catalog.get("messages"));
+                if (messages != null) {
+                    messages.put("submitted", metadata.get("successMsg"));
                 }
             }
             catalog.put("t", ModelTranslations.formTranslations(model));

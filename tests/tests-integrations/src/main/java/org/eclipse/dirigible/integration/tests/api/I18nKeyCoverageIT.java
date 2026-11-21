@@ -69,6 +69,12 @@ class I18nKeyCoverageIT {
 
     private static final String TEMPLATE_CATALOG = DIRIGIBLE + "template-application-ui-harmonia-java/ui/translations.json.template";
 
+    /** The chrome catalog the form builder mints into each module beside its form's labels. */
+    private static final String FORM_CATALOG = DIRIGIBLE + "template-form-builder-harmonia/ui/translations.json.template";
+
+    /** Where the form builder asks for its chrome keys. */
+    private static final String FORM_TEMPLATES = "classpath*:" + DIRIGIBLE + "template-form-builder-harmonia/**/*.template";
+
     /** The template catalog's sections every module carries unchanged - the platform ships these. */
     private static final Set<String> CHROME_SECTIONS = Set.of("aria", "state", "messages", "defaults");
 
@@ -104,6 +110,11 @@ class I18nKeyCoverageIT {
     /** The generated-application templates, whose {@code T(key, fallback)} pairs must agree. */
     private static final String HARMONIA_TEMPLATES = "classpath*:" + DIRIGIBLE + "template-application-ui-harmonia-java/**/*.template";
 
+    /**
+     * The fewest keys with a fallback the generated pages, the shared chrome and monitoring each have.
+     */
+    private static final int MANY_KEYS = 11;
+
     /** The monitoring shell, whose {@code T(key, fallback)} pairs must agree. */
     private static final List<String> MONITORING_SOURCES =
             List.of("classpath*:" + DIRIGIBLE + "monitoring/**/*.html", "classpath*:" + DIRIGIBLE + "monitoring/**/*.js");
@@ -126,8 +137,7 @@ class I18nKeyCoverageIT {
      * Keys whose fallbacks still disagree, each with the change that settles it. Remove an entry once
      * that change is merged - the test then guards the key like every other.
      */
-    private static final Map<String, String> KNOWN_DRIFT =
-            Map.of("generated:messages.deleteConfirm", "#8790: the my/partner delete dialogs pass the long sentence with {{name}}");
+    private static final Map<String, String> KNOWN_DRIFT = Map.of();
 
     /** The i18next build the shells load, from its webjar. */
     private static final String I18NEXT = "classpath*:META-INF/resources/webjars/i18next/*/dist/umd/i18next.min.js";
@@ -176,15 +186,25 @@ class I18nKeyCoverageIT {
         assertNoneMissing("keys a generated page asks for that " + TEMPLATE_CATALOG + " does not mint", missing);
     }
 
+    /**
+     * The chrome of both template catalogs - the generated pages' and the form builder's (#8785) -
+     * ships in every language, and a key both mint means one thing.
+     */
     @Test
     void theTemplateChromeShipsInEveryLanguage() {
         Map<String, String> chrome = new TreeMap<>();
-        flatten(json(TEMPLATE_CATALOG)).forEach((key, value) -> {
-            if (key.indexOf('.') > 0 && CHROME_SECTIONS.contains(key.substring(0, key.indexOf('.')))) {
-                chrome.put("generated." + key, value);
-            }
-        });
         List<String> problems = new ArrayList<>();
+        for (String template : List.of(TEMPLATE_CATALOG, FORM_CATALOG)) {
+            flatten(json(template)).forEach((key, value) -> {
+                if (key.indexOf('.') > 0 && CHROME_SECTIONS.contains(key.substring(0, key.indexOf('.')))) {
+                    String minted = chrome.putIfAbsent("generated." + key, value);
+                    if (minted != null && !minted.equals(value)) {
+                        problems.add(
+                                key + " is \"" + value + "\" in " + template + " but \"" + minted + "\" in the other template catalog");
+                    }
+                }
+            });
+        }
         for (String locale : languages()) {
             Map<String, String> catalog = coreCatalog(locale);
             for (Map.Entry<String, String> entry : chrome.entrySet()) {
@@ -198,7 +218,7 @@ class I18nKeyCoverageIT {
             }
             for (String key : catalog.keySet()) {
                 if (key.startsWith("generated.") && !chrome.containsKey(key)) {
-                    problems.add(locale + ": " + key + " is not in the template catalog any more");
+                    problems.add(locale + ": " + key + " is in no template catalog any more");
                 }
             }
         }
@@ -345,22 +365,28 @@ class I18nKeyCoverageIT {
     void everyKeyKeepsTheFallbackItsCatalogSays() {
         List<String> problems = new ArrayList<>();
         problems.addAll(fallbackDrift("generated:", List.of(HARMONIA_TEMPLATES), "\\$projectName:\\$\\{tprefix\\}\\.",
-                flatten(json(TEMPLATE_CATALOG))));
-        problems.addAll(fallbackDrift("application-core:", List.of(HARMONIA_TEMPLATES), "application-core:", coreCatalog("en-US")));
+                flatten(json(TEMPLATE_CATALOG)), MANY_KEYS));
+        problems.addAll(
+                fallbackDrift("application-core:", List.of(HARMONIA_TEMPLATES), "application-core:", coreCatalog("en-US"), MANY_KEYS));
         Map<String, String> monitoring = new TreeMap<>();
         for (Resource resource : resources("classpath*:" + DIRIGIBLE + "monitoring/i18n/en-US/*.json")) {
             monitoring.putAll(flatten(json(resource)));
         }
         assertFalse(monitoring.isEmpty(), "the monitoring shell's en-US catalog was not found");
-        problems.addAll(fallbackDrift("monitoring:", MONITORING_SOURCES, "monitoring:", monitoring));
+        problems.addAll(fallbackDrift("monitoring:", MONITORING_SOURCES, "monitoring:", monitoring, MANY_KEYS));
+        // the form builder's chrome (#8785) - a handful of keys, so a smaller floor
+        problems.addAll(
+                fallbackDrift("form:", List.of(FORM_TEMPLATES), "\\$projectName:\\$\\{tprefix\\}\\.", flatten(json(FORM_CATALOG)), 5));
         assertNoneMissing("keys whose fallback is not their en-US catalog text", problems);
     }
 
     /**
      * The drift of one namespace: a key written with two different fallbacks, or with one that is not
-     * its catalog text. A key the catalog lacks is the coverage tests' business, not this one's.
+     * its catalog text. A key the catalog lacks is the coverage tests' business, not this one's. Fewer
+     * keys with a fallback than {@code minimumKeys} means a source pattern stopped matching.
      */
-    private static List<String> fallbackDrift(String namespace, List<String> sources, String keyPrefix, Map<String, String> catalog) {
+    private static List<String> fallbackDrift(String namespace, List<String> sources, String keyPrefix, Map<String, String> catalog,
+            int minimumKeys) {
         Pattern pattern = Pattern.compile(KEYED_FALLBACK.formatted(keyPrefix));
         Map<String, Map<String, Set<String>>> fallbacks = new TreeMap<>();
         for (String location : sources) {
@@ -377,7 +403,7 @@ class I18nKeyCoverageIT {
                 }
             }
         }
-        assertTrue(fallbacks.size() > 10,
+        assertTrue(fallbacks.size() >= minimumKeys,
                 "only " + fallbacks.size() + " " + namespace + " keys with a fallback found - a source pattern stopped matching");
         List<String> problems = new ArrayList<>();
         fallbacks.forEach((key, written) -> {
@@ -411,6 +437,19 @@ class I18nKeyCoverageIT {
         return PLACEHOLDER.matcher(VELOCITY_REFERENCE.matcher(text)
                                                      .replaceAll("{{value}}"))
                           .replaceAll("{{value}}");
+    }
+
+    /**
+     * A form-builder form whose module has no Bulgarian catalog reports its outcome in Bulgarian, from
+     * the platform's copy of the chrome (#8785).
+     */
+    @Test
+    void aFormInBulgarianFallsBackToThePlatformChrome() {
+        try (Context context = loadI18n("bg", JSON.createObjectNode(), STUB_I18NEXT)) {
+            assertEquals("Изпратено успешно.", t(context, "orders:ApproveOrder-form.messages.submitted", "Submitted successfully."));
+            assertEquals("Изпращането е неуспешно.", t(context, "orders:ApproveOrder-form.messages.submitFailed", "Submit failed."));
+            assertEquals("Избор на седмица", t(context, "orders:ApproveOrder-form.defaults.chooseWeek", "Choose week"));
+        }
     }
 
     /**

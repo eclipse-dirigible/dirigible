@@ -15,6 +15,9 @@
  *   ctx.task     - { id, processInstanceId, complete(variables?) } for BPM task forms; complete()
  *                  posts to /services/inbox/tasks/{id} and the host dialog refreshes on close
  *   ctx.notify(message)  - surface a status message on the form
+ *   ctx.messages         - the form's own outcome sentences in the user's language (submitted(),
+ *                          submitFailed(), notOpenedFromTask()), so the code reports through them
+ *                          rather than through English literals of its own
  *   ctx.close()          - ask a hosting SPA dialog to close (no-op standalone)
  *
  * This page is STANDALONE — a BPM task form is opened directly (an iframe/dialog with
@@ -141,6 +144,13 @@ document.addEventListener('alpine:init', () => {
           },
         },
         notify(message) { self.message = message; },
+        // Resolved from this form's catalog, and through the platform's copy of the generated pages'
+        // chrome when the module never translated it (i18n.js generatedKey, #8785).
+        messages: {
+          submitted: () => T('$projectName:${tprefix}.messages.submitted', 'Submitted successfully.'),
+          submitFailed: () => T('$projectName:${tprefix}.messages.submitFailed', 'Submit failed.'),
+          notOpenedFromTask: () => T('$projectName:${tprefix}.messages.notOpenedFromTask', 'This form was not opened from a task.'),
+        },
         // The host ANNOUNCES the outcome a closing action page reports (issue #7073). `close()` says
         // nothing about it, so the host applies its default "<label> completed"; `close(outcome)` may
         // say so itself with { status: 'ok' | 'error', message }; and `cancel()` says the work was
@@ -197,9 +207,8 @@ document.addEventListener('alpine:init', () => {
       console.warn('[form] no handler for callback', callback);
     },
 
-    // Generic submit for forms declaring a metadata URL and no explicit handler. The two outcome
-    // messages come from this form's own catalog (the `dialogs` section the translate action emits,
-    // where successMsg carries the form's authored success text), falling back to the literals.
+    // Generic submit for forms declaring a metadata URL and no explicit handler. The success message
+    // is the form's authored one where it has it (the translate action writes it into its catalog).
     async submit() {
       const url = '${metadata.url}';
       if (!url) return;
@@ -207,11 +216,10 @@ document.addEventListener('alpine:init', () => {
       try {
         await harmoniaHttp.post(url, this.model);
         this.state = 'success';
-        this.message = window.T ? T('$projectName:${tprefix}.dialogs.successMsg', 'Submitted.') : 'Submitted.';
+        this.message = this._ctx.messages.submitted();
       } catch (e) {
-        const failed = window.T ? T('$projectName:${tprefix}.dialogs.errorTitle', 'Submit failed.') : 'Submit failed.';
         this.state = 'error';
-        this.message = App.services.apiErrors.refusalMessageFor(e, failed);
+        this.message = App.services.apiErrors.refusalMessageFor(e, this._ctx.messages.submitFailed());
       }
     },
 
