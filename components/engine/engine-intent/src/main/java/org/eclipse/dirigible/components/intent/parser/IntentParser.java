@@ -4132,8 +4132,12 @@ public final class IntentParser {
             return;
         }
         if (attach == null || attach.isBlank()) {
-            if (hasLanguage || hasLanguageFrom) {
-                issues.add(subject + " declares language/languageFrom without attach: print - they select the attached render's language");
+            // Without an attachment the language is the message's own (#8787): its subject and body are
+            // resolved in it, read off the record the message is about.
+            if (hasLanguage && hasLanguageFrom) {
+                issues.add(subject + " declares both language and languageFrom - they are mutually exclusive");
+            } else if (hasLanguageFrom && aboutEntity != null) {
+                validateLanguageFromPath(notify.getLanguageFrom(), aboutEntity, subject + " languageFrom", model, issues);
             }
             if (hasFileName) {
                 issues.add(subject + " declares fileName without attach: print - it names the attached render, and a plain-text"

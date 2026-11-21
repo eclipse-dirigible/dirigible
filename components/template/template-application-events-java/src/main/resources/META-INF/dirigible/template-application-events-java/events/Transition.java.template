@@ -279,9 +279,18 @@ public class ${controllerClass} {
         // can be given what the message promises, so nothing is mailed (a mail claiming an attachment
         // it lacks is worse than none) and the transition itself still stands.
         java.util.Map document = null;
+        String language = null;
         if (!rows.isEmpty()) {
             try {
-                document = renderDocument(source);
+#if($attachLanguageFkProperty != "")
+                gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Entity attachLanguageSource =
+                        source.${attachLanguageFkProperty} == null ? null
+                                : new gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Repository().findById(source.${attachLanguageFkProperty});
+#end
+                // The record's document decides the language every row's mail is delivered in (#8787): the
+                // subject and the body of each are resolved in the language the document renders in.
+                language = ${attachLanguageExpression};
+                document = renderDocument(source, language);
             } catch (Exception ex) {
                 LOG.error("Transition ${name}: the ${attachEntity} document could not be rendered - no mail was sent", ex);
                 return outcome("failed", "the document could not be rendered: " + notifyFailureReason(ex));
@@ -293,7 +302,7 @@ public class ${controllerClass} {
         int failed = 0;
         String firstFailure = null;
         for (gen.${javaGenFolderName}.data.${javaForEachPerspective}.${forEach}Entity entity : rows) {
-            String result = sendOne(${recordArgument}entity#if($attach == "recordPrint"), document#end);
+            String result = sendOne(${recordArgument}entity#if($attach == "recordPrint"), document, language#end);
             if (SENT.equals(result)) {
                 sent++;
             } else if (SKIPPED.equals(result)) {
@@ -320,13 +329,7 @@ public class ${controllerClass} {
     /**
      * The transitioned ${attachEntity}'s own document, rendered once for the whole fan-out.
      */
-    private static java.util.Map renderDocument(gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity source) {
-#if($attachLanguageFkProperty != "")
-        gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Entity attachLanguageSource =
-                source.${attachLanguageFkProperty} == null ? null
-                        : new gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Repository().findById(source.${attachLanguageFkProperty});
-#end
-        String language = ${attachLanguageExpression};
+    private static java.util.Map renderDocument(gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity source, String language) {
         java.util.Map document = new java.util.HashMap();
         document.put("type", "attachment");
         document.put("contentType", "application/pdf");
@@ -349,7 +352,7 @@ public class ${controllerClass} {
      * failure reason. Three outcomes rather than a boolean, because "nobody to mail" and "the mail
      * could not be sent" are different facts and only the second one is a problem to report.
      */
-    private static String sendOne(${recordParameter}gen.${javaGenFolderName}.data.${javaForEachPerspective}.${forEach}Entity entity#if($attach == "recordPrint"), java.util.Map document#end) {
+    private static String sendOne(${recordParameter}gen.${javaGenFolderName}.data.${javaForEachPerspective}.${forEach}Entity entity#if($attach == "recordPrint"), java.util.Map document, String language#end) {
         try {
 #else
     private static java.util.Map<String, Object> sendNotification(gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity entity) {
@@ -399,6 +402,17 @@ public class ${controllerClass} {
                 return outcome(SKIPPED, "no recipient on the record");
 #end
             }
+#if($attachLanguageExpression != "" && $attach != "recordPrint")
+#if($attachLanguageFkProperty != "")
+            gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Entity attachLanguageSource =
+                    entity.${attachLanguageFkProperty} == null ? null
+                            : new gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
+#end
+            // The language the mail is delivered in (#8787) - the recipient's, as language: / languageFrom:
+            // declare it, else the application's: the subject and the body are resolved in it, and an
+            // attachment renders in it.
+            String language = ${attachLanguageExpression};
+#end
             java.util.Map part = new java.util.HashMap();
             part.put("type", "text");
             part.put("contentType", "text/plain");
@@ -424,12 +438,6 @@ public class ${controllerClass} {
 #if($attach == "print")
             // attach: print - the record's own print template rendered to PDF server-side, so the
             // counterparty receives the document (the voided invoice itself), not just a notice.
-#if($attachLanguageFkProperty != "")
-            gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Entity attachLanguageSource =
-                    entity.${attachLanguageFkProperty} == null ? null
-                            : new gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
-#end
-            String language = ${attachLanguageExpression};
             java.util.Map document = new java.util.HashMap();
             document.put("type", "attachment");
             document.put("contentType", "application/pdf");
@@ -452,12 +460,6 @@ public class ${controllerClass} {
             // attach: { report, bind } - run the declared report scoped to THIS recipient and attach the
             // rendered PDF. The bindings ARE the report's parameters, which is what makes the rows this
             // recipient's own: a customer statement is a period of rows, not one record's document.
-#if($attachLanguageFkProperty != "")
-            gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Entity attachLanguageSource =
-                    entity.${attachLanguageFkProperty} == null ? null
-                            : new gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
-#end
-            String language = ${attachLanguageExpression};
             java.util.Map<String, Object> reportFilter = new java.util.HashMap<>();
 #foreach($binding in $attachReportBindings)
             reportFilter.put("${binding.parameter}", reportValue(${binding.expression}));

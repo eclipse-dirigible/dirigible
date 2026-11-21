@@ -241,6 +241,16 @@ public class ${className}Job implements JobHandler {
                 // over an effectively final local; `to` is assigned here, so the frozen copy is what the
                 // message is addressed with. `to` itself stays the one the row's failure line names.
                 final String recipient = to;
+#if($attachLanguageExpression != "")
+#if($attachLanguageFkProperty != "")
+                ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
+                        : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
+#end
+                // The language the mail is delivered in (#8787) - the recipient's, as language: / languageFrom:
+                // declare it, else the application's: the subject and the body are resolved in it, and an
+                // attachment renders in it.
+                String language = ${attachLanguageExpression};
+#end
                 String subject = ${subjectExpression};
 #if($usesShareUrl == "true")
                 // {shareUrl} (#8616) - a share link to the issued copy of the record this message is about, minted
@@ -268,25 +278,17 @@ public class ${className}Job implements JobHandler {
                 // attach: print - render THIS row's own print template to PDF server-side (the generated
                 // feeder assembles the { document, items } payload) and attach it, so a periodic notice
                 // carries the document itself (a reminder with the invoice, not just about it).
-#if($attachLanguageFkProperty != "")
-                ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
-                        : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
-#end
                 Map document = new HashMap();
                 document.put("type", "attachment");
                 document.put("contentType", "application/pdf");
                 document.put("fileName", ${attachFileNameExpression});
-                document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", ${attachLanguageExpression},
+                document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", language,
                         new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty})));
                 parts.add(document);
 #elseif($attach == "report")
                 // attach: { report, bind } - run the declared report scoped to THIS recipient and attach the
                 // rendered PDF. The bindings ARE the report's parameters, which is what makes the rows this
                 // recipient's own: a customer statement is a period of rows, not one record's document.
-#if($attachLanguageFkProperty != "")
-                ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
-                        : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
-#end
                 Map<String, Object> reportFilter = new HashMap<>();
 #foreach($binding in $attachReportBindings)
                 reportFilter.put("${binding.parameter}", reportValue(${binding.expression}));
@@ -301,7 +303,7 @@ public class ${className}Job implements JobHandler {
                 document.put("type", "attachment");
                 document.put("contentType", "application/pdf");
                 document.put("fileName", ${attachFileNameExpression});
-                document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachReport}", ${attachLanguageExpression},
+                document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachReport}", language,
                         org.eclipse.dirigible.sdk.utils.Json.stringify(reportData)));
                 parts.add(document);
 #end

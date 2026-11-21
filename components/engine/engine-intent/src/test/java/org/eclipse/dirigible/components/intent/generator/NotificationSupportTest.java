@@ -355,6 +355,35 @@ class NotificationSupportTest {
         assertNull(NotificationSupport.plan(notification("partner.ceo", "s"), byName.get("Order"), byName, Map.of(), lookup));
     }
 
+    /**
+     * With a catalog key the texts are catalog messages (#8787): the authored text is the default, each
+     * resolvable placeholder is passed once as a named parameter - a relation path through its load -
+     * and an unresolvable one is passed none, so it stays the literal text it always degraded to.
+     */
+    @Test
+    void aKeyedPlanResolvesItsTextsThroughTheCatalog() {
+        Map<String, EntityIntent> byName = libraryModel();
+        NotificationIntent n = notification("customer.email", "Order {id} for {customer.name} ({id}) {nobody.name}");
+        n.setBody("Total {total}");
+        NotificationSupport.Plan plan =
+                NotificationSupport.plan(n, byName.get("Order"), null, byName, Map.of(), null, "shop:shop-model.mail.x");
+        assertEquals(GlueRendering.message("shop:shop-model.mail.x.subject", "Order {id} for {customer.name} ({id}) {nobody.name}", "id",
+                "entity.Id", "customer.name", "(customer == null ? null : customer.Name)"), plan.subjectExpression());
+        assertEquals(GlueRendering.message("shop:shop-model.mail.x.body", "Total {total}", "total", "entity.Total"), plan.bodyExpression());
+        assertEquals(1, plan.loads()
+                            .size());
+    }
+
+    /** An absent text stays the empty string, keyed or not - there is nothing to translate. */
+    @Test
+    void aKeyedPlanKeepsAnAbsentTextEmpty() {
+        Map<String, EntityIntent> byName = libraryModel();
+        NotificationSupport.Plan plan = NotificationSupport.plan(notification("ops@x.com", "s"), byName.get("Order"), null, byName,
+                Map.of(), null, "shop:shop-model.mail.x");
+        assertEquals("\"\"", plan.bodyExpression());
+        assertNull(plan.htmlExpression());
+    }
+
     @Test
     void crossModelRecipientWithoutLookupYieldsNoPlan() {
         Map<String, EntityIntent> byName = crossModelEventModel();

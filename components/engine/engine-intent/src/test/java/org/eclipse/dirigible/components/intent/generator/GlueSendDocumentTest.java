@@ -120,7 +120,8 @@ class GlueSendDocumentTest {
         assertEquals("true", send.get("notify"));
         // The recipient is a one-hop relation.field, so the delegate loads the Customer by FK first.
         assertEquals("(Customer == null ? null : Customer.Email)", send.get("notifyToExpression"));
-        assertEquals("\"Invoice \" + entity.Number", send.get("notifySubjectExpression"));
+        assertEquals(GlueRendering.message("billing:billing-model.mail.steps.InvoiceIssue.mailIt.subject", "Invoice {number}", "number",
+                "entity.Number"), send.get("notifySubjectExpression"));
         assertTrue(String.valueOf(send.get("notifyBodyExpression"))
                          .contains("(Customer == null ? null : Customer.Name)"),
                 "a body placeholder must resolve through the same one-hop load");
@@ -135,11 +136,15 @@ class GlueSendDocumentTest {
 
         assertEquals("true", transition.get("notify"));
         assertEquals("(Customer == null ? null : Customer.Email)", transition.get("notifyToExpression"));
-        assertEquals("\"Invoice \" + entity.Number + \" was voided\"", transition.get("notifySubjectExpression"));
+        assertEquals(GlueRendering.message("billing:billing-model.mail.transitions.VoidInvoice.subject", "Invoice {number} was voided",
+                "number", "entity.Number"), transition.get("notifySubjectExpression"));
         // No attach on this one: a plain-text notice. The attachment keys - including the PK the print
         // feeder would be fed with - are all empty together, so the template renders no attachment block.
         assertEquals("", transition.get("attach"));
         assertEquals("", transition.get("attachKeyProperty"));
+        // ...but the notice is still delivered in a language (#8787): the application's, none being
+        // declared.
+        assertEquals("org.eclipse.dirigible.sdk.print.Print.defaultLanguage()", GlueRendering.attachLanguage(transition));
     }
 
     @Test
@@ -485,8 +490,10 @@ class GlueSendDocumentTest {
         Map<String, Object> transition = GlueIntentGenerator.buildTransitionsForTest(IntentParser.parse(RECORD_PRINT_YAML))
                                                             .get(0);
 
-        assertEquals("\"RFQ \" + source.Number", transition.get("notifySubjectExpression"),
-                "{record.x} must resolve against the anchor record, not the row");
+        assertEquals(
+                GlueRendering.message("sourcing:sourcing-model.mail.transitions.IssueRfq.subject", "RFQ {record.number}", "record.number",
+                        "source.Number"),
+                transition.get("notifySubjectExpression"), "{record.x} must resolve against the anchor record, not the row");
         assertTrue(String.valueOf(transition.get("notifyBodyExpression"))
                          .contains("(Supplier == null ? null : Supplier.Name)"),
                 "a bare path keeps resolving against the ROW: " + transition.get("notifyBodyExpression"));

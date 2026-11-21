@@ -170,6 +170,31 @@ final class GlueRendering {
     }
 
     /**
+     * The Java a notify block's translated text renders to (#8787): the catalog message under
+     * {@code key}, resolved in the delivery language with the authored text as its default.
+     *
+     * @param key the fully qualified catalog key
+     * @param text the authored text
+     * @param params the placeholders and the Java each reads, as alternating name and expression
+     * @return the expression
+     */
+    static String message(String key, String text, String... params) {
+        StringBuilder call = new StringBuilder("org.eclipse.dirigible.sdk.db.CheckMessages.messageIn(language, \"").append(key)
+                                                                                                                   .append("\", \"")
+                                                                                                                   .append(JavaLiterals.escape(
+                                                                                                                           text))
+                                                                                                                   .append("\"");
+        for (int i = 0; i + 1 < params.length; i += 2) {
+            call.append(", \"")
+                .append(params[i])
+                .append("\", ")
+                .append(params[i + 1]);
+        }
+        return call.append(")")
+                   .toString();
+    }
+
+    /**
      * A snapshot's render language.
      *
      * @param snapshot the snapshot descriptor

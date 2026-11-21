@@ -115,9 +115,16 @@ public class ${className} implements JavaDelegate {
         List<${forEach}Entity> rows = new ${forEach}Repository().findAll(Criteria.create()
                                                                                 .eq("${forEachFkProperty}", id));
 #if($attach == "recordPrint")
+#if($attachLanguageFkProperty != "")
+        ${attachLanguageTargetEntity}Entity attachLanguageSource = source.${attachLanguageFkProperty} == null ? null
+                : new ${attachLanguageTargetEntity}Repository().findById(source.${attachLanguageFkProperty});
+#end
+        // The record's document decides the language every row's mail is delivered in (#8787): the
+        // subject and the body of each are resolved in the language the document renders in.
+        String language = ${attachLanguageExpression};
         // Rendered once, outside the loop: the document belongs to the record, not to the row - and
         // not at all when there is nobody to mail it to.
-        Map document = rows.isEmpty() ? null : renderDocument(source);
+        Map document = rows.isEmpty() ? null : renderDocument(source, language);
 #end
         int sent = 0;
         int skipped = 0;
@@ -126,7 +133,7 @@ public class ${className} implements JavaDelegate {
         // against the ROW, exactly as the non-fan-out shape renders against the record.
         for (${forEach}Entity entity : rows) {
             try {
-                if (send(${recordArgument}entity#if($attach == "recordPrint"), document#end#if($notifyReadsVariables == "true"), execution#end)) {
+                if (send(${recordArgument}entity#if($attach == "recordPrint"), document, language#end#if($notifyReadsVariables == "true"), execution#end)) {
                     sent++;
                 } else {
                     skipped++;
@@ -143,12 +150,7 @@ public class ${className} implements JavaDelegate {
     /**
      * The ${attachEntity}'s own document, rendered once for the whole fan-out.
      */
-    private Map renderDocument(${entity}Entity source) {
-#if($attachLanguageFkProperty != "")
-        ${attachLanguageTargetEntity}Entity attachLanguageSource = source.${attachLanguageFkProperty} == null ? null
-                : new ${attachLanguageTargetEntity}Repository().findById(source.${attachLanguageFkProperty});
-#end
-        String language = ${attachLanguageExpression};
+    private Map renderDocument(${entity}Entity source, String language) {
         Map document = new HashMap();
         document.put("type", "attachment");
         document.put("contentType", "application/pdf");
@@ -169,7 +171,7 @@ public class ${className} implements JavaDelegate {
     /**
      * Send about one ${forEach}. Returns false when the row has nobody to mail.
      */
-    private boolean send(${recordParameter}${forEach}Entity entity#if($attach == "recordPrint"), Map document#end#if($notifyReadsVariables == "true"), DelegateExecution execution#end) {
+    private boolean send(${recordParameter}${forEach}Entity entity#if($attach == "recordPrint"), Map document, String language#end#if($notifyReadsVariables == "true"), DelegateExecution execution#end) {
 #else
         ${entity}Entity entity = new ${entity}Repository().findById(id);
         if (entity == null) {
@@ -216,6 +218,16 @@ public class ${className} implements JavaDelegate {
             return;
 #end
         }
+#if($attachLanguageExpression != "" && $attach != "recordPrint")
+#if($attachLanguageFkProperty != "")
+        ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
+                : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
+#end
+        // The language the mail is delivered in (#8787) - the recipient's, as language: / languageFrom:
+        // declare it, else the application's: the subject and the body are resolved in it, and an
+        // attachment renders in it.
+        String language = ${attachLanguageExpression};
+#end
         Map part = new HashMap();
         part.put("type", "text");
         part.put("contentType", "text/plain");
@@ -246,11 +258,6 @@ public class ${className} implements JavaDelegate {
         parts.add(htmlPart);
 #end
 #if($attach == "print")
-#if($attachLanguageFkProperty != "")
-        ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
-                : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
-#end
-        String language = ${attachLanguageExpression};
         Map document = new HashMap();
         document.put("type", "attachment");
         document.put("contentType", "application/pdf");
@@ -272,11 +279,6 @@ public class ${className} implements JavaDelegate {
         // attach: { report, bind } - run the declared report scoped to THIS recipient and attach the
         // rendered PDF. The bindings ARE the report's parameters, which is what makes the rows this
         // recipient's own: a customer statement is a period of rows, not one record's document.
-#if($attachLanguageFkProperty != "")
-        ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
-                : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
-#end
-        String language = ${attachLanguageExpression};
         Map<String, Object> reportFilter = new HashMap<>();
 #foreach($binding in $attachReportBindings)
         reportFilter.put("${binding.parameter}", reportValue(${binding.expression}));

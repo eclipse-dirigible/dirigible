@@ -97,6 +97,43 @@ public final class NotifySupport {
     /** The local the generated code holds the record a message is about in (a fan-out's ROW). */
     static final String ENTITY_LOCAL = "entity";
 
+    /**
+     * The model catalog's section a notify block's subject, body and marked-up alternative are written
+     * under (#8787), so a language catalog translates a mail exactly as it translates a label. One
+     * sub-object per call site, named after the block it is authored in:
+     * {@code mail.notifications.<name>}, {@code mail.transitions.<name>}, {@code mail.schedules.<name>}
+     * and {@code mail.steps.<process>.<step>} - each holding {@code subject}, {@code body} and
+     * {@code html}. Not {@code processes.<process>.<step>}: that section holds the processes' and
+     * tasks' labels as plain strings, so a step's texts cannot nest under a process's label.
+     */
+    public static final String MAIL_CATALOG = "mail";
+
+    /** The {@link #MAIL_CATALOG} sub-object of the {@code notifications:} blocks. */
+    public static final String MAIL_NOTIFICATIONS = "notifications";
+
+    /** The {@link #MAIL_CATALOG} sub-object of the {@code transitions[].notify} blocks. */
+    public static final String MAIL_TRANSITIONS = "transitions";
+
+    /** The {@link #MAIL_CATALOG} sub-object of the {@code schedules[].notify} blocks. */
+    public static final String MAIL_SCHEDULES = "schedules";
+
+    /** The {@link #MAIL_CATALOG} sub-object of the process steps' {@code args.notify} blocks. */
+    public static final String MAIL_STEPS = "steps";
+
+    /**
+     * The path, inside the model catalog, of one notify block's texts: {@code mail.<site>.<names>}. One
+     * rule for the {@code .model} that writes the texts into the catalog and the {@code .glue} whose
+     * generated code resolves them.
+     *
+     * @param site the call site's sub-object, one of the {@code MAIL_*} constants
+     * @param names the block's names under it - the notification's, transition's or schedule's name, or
+     *        a step's process and step names
+     * @return the path, without the catalog itself
+     */
+    public static String mailTextsPath(String site, String... names) {
+        return MAIL_CATALOG + "." + site + "." + String.join(".", names);
+    }
+
     private NotifySupport() {}
 
     /**
@@ -598,7 +635,30 @@ public final class NotifySupport {
     }
 
     /** A resolved render language: its reading, plus the relation load it reads (if any). */
-    private record Language(Map<String, Object> reading, LanguageLoad load) {
+    record Language(Map<String, Object> reading, LanguageLoad load) {
+    }
+
+    /**
+     * The language a notify block is delivered in (#8787). Without an attachment it is the block's
+     * {@code language:} or {@code languageFrom:} resolved against the record the message is about, else
+     * the application language - the same shapes an attachment's render language takes, read off the
+     * same local. With one it is the attachment's own, which the attachment resolves (against the
+     * anchor for a {@code recordPrint}), so nothing is resolved here and the empty reading answers.
+     *
+     * @param notify the notify block
+     * @param entity the entity the message is about (a fan-out's ROW)
+     * @param byName all LOCAL entities by name (to resolve a same-model {@code languageFrom} target)
+     * @param compositionParents composition-parent map (to resolve a target's perspective)
+     * @param crossModel resolver for a cross-model {@code languageFrom} relation, or {@code null}
+     * @return the language
+     * @throws IllegalArgumentException when a declared {@code languageFrom} path does not resolve
+     */
+    static Language messageLanguage(NotificationIntent notify, EntityIntent entity, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel) {
+        if (attachesPrint(notify) || attachesReport(notify)) {
+            return new Language(Map.of(), null);
+        }
+        return language(notify, entity, byName, compositionParents, crossModel);
     }
 
     /**
@@ -729,6 +789,21 @@ public final class NotifySupport {
      *         {@code attachFileName} keys, plus {@code attachReport} and {@code attachReportBindings}
      */
     public static Map<String, Object> attachmentFields(PrintAttachment attachment, ReportAttachment report) {
+        return attachmentFields(attachment, report, null);
+    }
+
+    /**
+     * The same keys, with the language a block without an attachment is delivered in (#8787): the
+     * {@code attachLanguage*} keys then carry it, so the generated code declares the one delivery
+     * language its subject and body are resolved in whether or not a document rides along.
+     *
+     * @param attachment the resolved document attachment, or {@code null}
+     * @param report the resolved report attachment, or {@code null}
+     * @param message the language of a message without an attachment, or {@code null} for none
+     * @return the {@code attach} / {@code attachEntity} / {@code attachLanguage*} /
+     *         {@code attachFileName} keys, plus {@code attachReport} and {@code attachReportBindings}
+     */
+    static Map<String, Object> attachmentFields(PrintAttachment attachment, ReportAttachment report, Language message) {
         Map<String, Object> fields = new LinkedHashMap<>();
         // The authored kind, not a constant: the fan-out templates branch on it to render the anchor
         // record's document once, outside the per-row loop, and a report is rendered through its own
@@ -737,9 +812,13 @@ public final class NotifySupport {
         fields.put("attachEntity", attachment == null ? "" : attachment.entity());
         // The render language and the file name as NEUTRAL readings (issue #7425), the template layer
         // rendering the Java; an empty reading is the "no attachment" the templates read as "".
-        fields.put("attachLanguage", attachment != null ? attachment.language() : report == null ? Map.of() : report.language());
+        // Without an attachment the language is the message's own, when the caller resolved one.
+        Language plain = attachment == null && report == null ? message : null;
+        fields.put("attachLanguage", attachment != null ? attachment.language()
+                : report != null ? report.language() : plain != null ? plain.reading() : Map.of());
         fields.put("attachFileName", attachment != null ? attachment.fileName() : report == null ? Map.of() : report.fileName());
-        LanguageLoad load = attachment != null ? attachment.languageLoad() : report == null ? null : report.languageLoad();
+        LanguageLoad load = attachment != null ? attachment.languageLoad()
+                : report != null ? report.languageLoad() : plain != null ? plain.load() : null;
         fields.put("attachLanguageFkProperty", load == null ? "" : load.fkProperty());
         fields.put("attachLanguageTargetEntity", load == null ? "" : load.targetEntity());
         fields.put("attachLanguageTargetPerspective", load == null ? "" : load.targetPerspective());

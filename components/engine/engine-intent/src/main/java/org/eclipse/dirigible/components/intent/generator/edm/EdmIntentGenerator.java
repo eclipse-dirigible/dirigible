@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.intent.generator.edm;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
@@ -43,6 +44,7 @@ import org.eclipse.dirigible.components.intent.generator.CheckSupport;
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.NotificationSupport;
+import org.eclipse.dirigible.components.intent.generator.NotifySupport;
 import org.eclipse.dirigible.components.intent.generator.ResolvePathSupport;
 import org.eclipse.dirigible.components.intent.generator.ScheduleSupport;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
@@ -72,6 +74,8 @@ import org.eclipse.dirigible.components.intent.model.OrderByIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.NotificationIntent;
+import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.eclipse.dirigible.components.intent.model.LifecycleEdgeIntent;
 import org.eclipse.dirigible.components.intent.model.LifecycleIntent;
 import org.eclipse.dirigible.components.intent.model.LifecycleStages;
@@ -1024,6 +1028,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (!processTaskLabels.isEmpty()) {
             body.put("processTaskLabels", processTaskLabels);
         }
+        // Every notify block's subject, body and marked-up alternative (#8787), by the path the
+        // generated sender resolves them under: the translate action folds them into the en catalog's
+        // mail section, so a mail is translated per recipient like any other message.
+        Map<String, Object> mailTexts = buildMailTexts(model);
+        if (!mailTexts.isEmpty()) {
+            body.put("mailTexts", mailTexts);
+        }
         // The application's reports, for the Harmonia shell to bake into config.js: its Reports
         // section and dashboard tiles then need no runtime discovery through the core repository API,
         // which only ADMINISTRATOR and OPERATOR may call (#8277). A model without the key keeps the
@@ -1098,6 +1109,56 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
         }
         return refusals;
+    }
+
+    /**
+     * The authored texts of every notify block, nested as the catalog's {@code mail} section holds them
+     * ({@link NotifySupport#MAIL_CATALOG}): {@code notifications} / {@code transitions} /
+     * {@code schedules} by the block's name, {@code steps} by process and step - each with its
+     * {@code subject}, {@code body} and {@code html} where authored.
+     */
+    private static Map<String, Object> buildMailTexts(IntentModel model) {
+        Map<String, Object> mail = new LinkedHashMap<>();
+        for (NotificationIntent notification : model.getNotifications()) {
+            putMailTexts(mail, notification, NotifySupport.MAIL_NOTIFICATIONS, notification.getName());
+        }
+        for (TransitionIntent transition : model.getTransitions()) {
+            putMailTexts(mail, transition.getNotify(), NotifySupport.MAIL_TRANSITIONS, transition.getName());
+        }
+        for (ScheduleIntent schedule : model.getSchedules()) {
+            putMailTexts(mail, schedule.getNotify(), NotifySupport.MAIL_SCHEDULES, schedule.getName());
+        }
+        for (NotifySupport.Sender sender : NotifySupport.senders(model)) {
+            putMailTexts(mail, sender.block(), NotifySupport.MAIL_STEPS, sender.process(), sender.step());
+        }
+        return mail;
+    }
+
+    /** One block's authored texts under {@code <site>.<names>} of the mail section. */
+    @SuppressWarnings("unchecked")
+    private static void putMailTexts(Map<String, Object> mail, NotificationIntent notify, String site, String... names) {
+        if (notify == null || Arrays.stream(names)
+                                    .anyMatch(name -> name == null || name.isBlank())) {
+            return;
+        }
+        Map<String, Object> texts = new LinkedHashMap<>();
+        putText(texts, "subject", notify.getSubject());
+        putText(texts, "body", notify.getBody());
+        putText(texts, "html", notify.getHtml());
+        if (texts.isEmpty()) {
+            return;
+        }
+        Map<String, Object> node = (Map<String, Object>) mail.computeIfAbsent(site, key -> new LinkedHashMap<String, Object>());
+        for (int i = 0; i < names.length - 1; i++) {
+            node = (Map<String, Object>) node.computeIfAbsent(names[i], key -> new LinkedHashMap<String, Object>());
+        }
+        node.put(names[names.length - 1], texts);
+    }
+
+    private static void putText(Map<String, Object> texts, String part, String text) {
+        if (text != null && !text.isEmpty()) {
+            texts.put(part, text);
+        }
     }
 
     /**
@@ -6221,7 +6282,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     private static final Set<String> STRUCTURED_ATTRIBUTES = Set.of("rollupGuards", "rollupGuard", "checks", "labelParts", "aggregateKeys",
             "groupingKeys", "relatedEntities", "scopedCalendars", "agreeGuards", "lifecycleStatusNameList", "duplicateReset",
             "duplicateDefaults", "lookupColumns", "languages", "widgets", "customActionLabels", "generateRefusals", "processTaskLabels",
-            "singleFlags", "reports", "collectionColumns", "roundToLoads");
+            "mailTexts", "singleFlags", "reports", "collectionColumns", "roundToLoads");
 
     /**
      * Compact, non-HTML-escaping JSON for the structured {@code .edm} attributes. Compact so the value

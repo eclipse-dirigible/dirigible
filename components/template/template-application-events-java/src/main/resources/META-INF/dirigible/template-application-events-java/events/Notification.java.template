@@ -104,6 +104,16 @@ public class ${className}Notification implements MessageHandler {
 #end
                 return;
             }
+#if($attachLanguageExpression != "")
+#if($attachLanguageFkProperty != "")
+            ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
+                    : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
+#end
+            // The language the mail is delivered in (#8787) - the recipient's, as language: / languageFrom:
+            // declare it, else the application's: the subject and the body are resolved in it, and an
+            // attachment renders in it.
+            String language = ${attachLanguageExpression};
+#end
             String subject = ${subjectExpression};
 #if($usesShareUrl == "true")
             // {shareUrl} (#8616) - a share link to the issued copy of the record this message is about, minted
@@ -132,11 +142,6 @@ public class ${className}Notification implements MessageHandler {
             // attach: print - render the record's own print template to PDF server-side (the generated
             // feeder assembles the { document, items } payload the template binds) and attach it, so the
             // recipient receives the document itself and not just a notice about it.
-#if($attachLanguageFkProperty != "")
-            ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
-                    : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
-#end
-            String language = ${attachLanguageExpression};
             Map document = new HashMap();
             document.put("type", "attachment");
             document.put("contentType", "application/pdf");
@@ -155,11 +160,6 @@ public class ${className}Notification implements MessageHandler {
             // attach: { report, bind } - run the declared report scoped to THIS recipient and attach the
             // rendered PDF. The bindings ARE the report's parameters, which is what makes the rows this
             // recipient's own: a customer statement is a period of rows, not one record's document.
-#if($attachLanguageFkProperty != "")
-            ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
-                    : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
-#end
-            String language = ${attachLanguageExpression};
             Map<String, Object> reportFilter = new HashMap<>();
 #foreach($binding in $attachReportBindings)
             reportFilter.put("${binding.parameter}", reportValue(${binding.expression}));
