@@ -570,7 +570,7 @@ Per-perspective top-bar menus: `menu-bpm`, `menu-camel`, `menu-csv`, `menu-datab
 - `shell-ide` — top-level frame composing the perspectives and the global toolbar (default entrypoint, configurable via `DIRIGIBLE_HOME_URL`).
 - `platform-branding` — logos, titles, prefixes.
 - `resources-theme-blimpkit` / `-classic` / `-high-contrast` / `-mystic` — themes.
-- `settings-locale`, `resources-locale` — i18n.
+- `resources-locale` — i18n.
 
 ### 7.7 BlimpKit UI component library
 The IDE chrome (sidebars, dialogs, tabs, menus, toolbars, forms) is built on [BlimpKit](https://blimpkit.dev/) — a SAP-Fundamental-derived Angular component library. Custom perspectives / views should consume BlimpKit components for consistent look and feel; the catalogue is the canonical reference (do not invent ad-hoc styling).
