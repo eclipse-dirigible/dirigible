@@ -142,7 +142,9 @@ matches both. An unknown customer, an unknown plan, or a pair nobody subscribes 
    constraint would refuse the save, and the message would be redelivered and dead-lettered next to
    the unknown tenant above. The webhook answers a repeated post **202**, and the drop folder
    `target/inbox-assignments` (the `assignmentDrop` arrival) skips a repeated record while the file
-   still moves to `processed/`.
+   still moves to `processed/`. That folder is the default tenant's: every other tenant reads its own,
+   `target/inbox-assignments/tenants/<tenant id>`, so a dropped file lands in one tenant only
+   ([eclipse-dirigible/dirigible#8157](https://github.com/eclipse-dirigible/dirigible/issues/8157)).
 
    Mark the destination `global:` when the queue is a contract with another deployment (the platform's
    external-contract marker; the name is passed to the broker verbatim).
