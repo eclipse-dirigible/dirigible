@@ -165,7 +165,6 @@
         <module>ui/perspective-security</module>
         <module>ui/perspective-processes</module>
         <module>ui/perspective-tracing</module>
-        <module>ui/settings-locale</module>
         <module>ui/settings-print-templates</module>
         <module>ui/view-welcome</module>
         <module>ui/view-search</module>
@@ -931,12 +930,6 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-perspective-processes</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-ui-settings-locale</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

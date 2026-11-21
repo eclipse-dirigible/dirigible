@@ -141,7 +141,7 @@
         </template>
         <template x-if="!readRefused('${property.widgetDropdownControllerUrl}')">
         <div x-h-select#if($property.isRequiredProperty != "true") data-clearable="true"#end>
-          <input x-h-select-input x-model="form.${property.name}"#if($property.fixedAfterCreate == "true") :disabled="mode === 'edit'"#end :aria-invalid="fieldError === '${property.name}'" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select #if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end') })" />
+          <input x-h-select-input x-model="form.${property.name}"#if($property.fixedAfterCreate == "true") :disabled="mode === 'edit'"#end :aria-invalid="fieldError === '${property.name}'" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select {{name}}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end') })" />
           <div x-h-select-content>
             <div x-h-select-search data-filter="contains"></div>
             <div x-h-select-list>
@@ -156,7 +156,7 @@
         <!-- Subset (intent `kind: subset`): the bound ARRAY model puts the select in
              multiple mode - the csv is split on load and joined back on save. -->
         <div x-h-select>
-          <input x-h-select-input x-model="form.${property.name}" :aria-invalid="fieldError === '${property.name}'" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select #if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end') })" />
+          <input x-h-select-input x-model="form.${property.name}" :aria-invalid="fieldError === '${property.name}'" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select {{name}}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end') })" />
           <div x-h-select-content>
             <div x-h-select-search data-filter="contains"></div>
             <div x-h-select-list>
@@ -312,7 +312,7 @@
         <span x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete') + '?'"></span>
         <button type="button" x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
       </div>
-      <div x-h-dialog-content><p x-h-text.muted x-text="T('$projectName:${tprefix}.messages.deleteConfirm', 'Are you sure? This cannot be undone.')"></p></div>
+      <div x-h-dialog-content><p x-h-text.muted x-text="T('$projectName:${tprefix}.messages.deleteConfirm', 'Are you sure you want to delete {{name}}? This action cannot be undone.', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></p></div>
       <div x-h-dialog-footer>
         <button x-h-button data-variant="transparent" @click="deleteOpen = false" :disabled="deleteBusy"
                 x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>

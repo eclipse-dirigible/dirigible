@@ -1,5 +1,0 @@
-{
-    "module": "settings-locale/configs/locale.json",
-    "extensionPoint": "application-settings",
-    "description": "Region and language settings view"
-}

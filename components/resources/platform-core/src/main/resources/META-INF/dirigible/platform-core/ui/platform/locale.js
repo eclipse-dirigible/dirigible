@@ -15,50 +15,43 @@ angular.module('platformLocale', []).provider('LocaleService', function LocaleSe
     this.defaultLanguage = 'en-US';
     this.namespaces = [];
     const callbacksListeners = [];
-    const storageKey = `${getBrandingInfo().prefix}.${top.getConfigData().id}.locale.language`;
     this.$get = ['$rootScope', 'Extensions', function localeFactory($rootScope, Extensions) {
-        let savedLanguage = localStorage.getItem(storageKey);
-        if (!savedLanguage) {
-            localStorage.setItem(storageKey, this.defaultLanguage);
-            savedLanguage = this.defaultLanguage;
-        }
+        const language = this.defaultLanguage;
+        const initialize = (locales, resources) => {
+            i18next['locales'] = locales;
+            i18next.init({
+                lng: language,
+                fallbackLng: language,
+                load: 'currentOnly',
+                debug: false,
+                defaultNS: 'common',
+                interpolation: {
+                    skipOnVariables: false
+                },
+                resources: resources
+            }).then((_, err) => {
+                if (err) console.error(err);
+                $rootScope.$applyAsync(() => {
+                    for (let l = 0; l < callbacksListeners.length; l++) {
+                        callbacksListeners[l]();
+                    }
+                    callbacksListeners.length = 0;
+                });
+            });
+        };
         if (window === top) {
             Extensions.getTranslations({
-                langs: savedLanguage !== this.defaultLanguage ? [savedLanguage, this.defaultLanguage] : savedLanguage,
+                langs: language,
                 namespaces: this.namespaces
             }).then((response) => {
-                i18next['locales'] = response.data.locales;
-                i18next.init({
-                    lng: savedLanguage,
-                    fallbackLng: this.defaultLanguage,
-                    load: 'currentOnly',
-                    debug: false,
-                    defaultNS: 'common',
-                    interpolation: {
-                        skipOnVariables: false
-                    },
-                    resources: response.data.translations
-                }).then((_, err) => {
-                    if (err) console.error(err);
-                    $rootScope.$applyAsync(() => {
-                        for (let l = 0; l < callbacksListeners.length; l++) {
-                            callbacksListeners[l]();
-                        }
-                        callbacksListeners.length = 0;
-                    });
-                });
+                initialize(response.data.locales, response.data.translations);
             }, (error) => {
                 console.error(error);
+                initialize([], {});
             });
         }
         return {
-            changeLanguage: (lang) => {
-                if (savedLanguage !== lang && top.i18next.locales.find((locale) => locale.id === lang)) {
-                    localStorage.setItem(storageKey, lang);
-                    savedLanguage = lang;
-                } else throw { notRegistered: true };
-            },
-            getLanguage: () => savedLanguage,
+            getLanguage: () => language,
             getLanguages: () => top.i18next.locales ?? [],
             t: (key, options, fallback) => {
                 const keyOptions = angular.isDefined(options) ? options : fallback;

@@ -228,7 +228,7 @@
              offerable to every caller the controller's GET /access says may write (#8089). -->
         <button type="button" x-h-button data-variant="primary" class="shrink-0" x-show="!isPreview &amp;&amp; canWrite()" :disabled="state === 'saving' || (isEdit &amp;&amp; !isDirty())" @click="save()">
           <span x-show="state === 'saving'" x-h-spinner></span>
-          <svg x-h-lucide role="presentation" data-lucide="save" x-show="state !== 'saving'"></svg><span x-text="isEdit ? T('$projectName:${tprefix}.defaults.update', 'Save') : T('$projectName:${tprefix}.defaults.create', 'Create')"></span>
+          <svg x-h-lucide role="presentation" data-lucide="save" x-show="state !== 'saving'"></svg><span x-text="isEdit ? T('$projectName:${tprefix}.defaults.save', 'Save') : T('$projectName:${tprefix}.defaults.create', 'Create')"></span>
         </button>
       </div>
     </div>
@@ -585,7 +585,7 @@
           <div class="vbox gap-4">
             <div x-show="state === 'loading'"><div x-h-spinner></div></div>
             <div x-show="state === 'error'" x-h-text.muted x-text="error"></div>
-            <div x-show="state === 'empty'" x-h-text.muted x-text="T('$projectName:${tprefix}.messages.noData', 'No records yet.')"></div>
+            <div x-show="state === 'empty'" x-h-text.muted x-text="T('$projectName:${tprefix}.messages.noRecordsYet', 'No records yet.')"></div>
             <!-- A calendar detail (intent view: calendar on the composition child): the same
                  master-filtered rows as events - event-click edits, empty-day click adds with the
                  master FK + the clicked date preset. -->
@@ -748,7 +748,7 @@
           <div class="vbox gap-4">
             <div x-show="state === 'loading'"><div x-h-spinner></div></div>
             <div x-show="state === 'error'" x-h-text.muted x-text="error"></div>
-            <div x-show="state === 'empty'" x-h-text.muted x-text="T('$projectName:${tprefix}.messages.noData', 'No records yet.')"></div>
+            <div x-show="state === 'empty'" x-h-text.muted x-text="T('$projectName:${tprefix}.messages.noRecordsYet', 'No records yet.')"></div>
             <div x-show="state === 'default'" x-h-table-container.scroll style="max-height: 320px">
               <table x-h-table data-borders="rows">
                 <thead x-h-table-header>
@@ -819,7 +819,7 @@
       <!-- Nothing to save on an unchanged record; a create is offerable to a caller who may write. -->
       <button type="button" x-h-button data-variant="primary" x-show="!isPreview &amp;&amp; canWrite()" :disabled="state === 'saving' || (isEdit &amp;&amp; !isDirty())" @click="save()">
         <span x-show="state === 'saving'" x-h-spinner></span>
-        <svg x-h-lucide role="presentation" data-lucide="save" x-show="state !== 'saving'"></svg><span x-text="isEdit ? T('$projectName:${tprefix}.defaults.update', 'Save') : T('$projectName:${tprefix}.defaults.create', 'Create')"></span>
+        <svg x-h-lucide role="presentation" data-lucide="save" x-show="state !== 'saving'"></svg><span x-text="isEdit ? T('$projectName:${tprefix}.defaults.save', 'Save') : T('$projectName:${tprefix}.defaults.create', 'Create')"></span>
       </button>
     </div>
     </div>
@@ -1007,7 +1007,7 @@
   <div x-h-dialog-overlay :data-open="deleteOpen">
     <div x-h-dialog>
       <div x-h-dialog-header>
-        <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.deleteTitle', 'Delete ${entityLabel}', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></h2>
+        <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.deleteTitle', 'Delete {{name}}?', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></h2>
         <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
       </div>
       <div x-h-dialog-content>

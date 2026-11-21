@@ -4784,7 +4784,7 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(page.contains("legend: true") && page.contains("dataLabels: false"),
                 "a doughnut should keep its legend and drop the raw-value-as-percentage slice label");
         assertTrue(page.contains("shareLabels(labels, data[0])"), "doughnut legend entries should carry the slice share");
-        assertTrue(page.contains("shell.report.true"), "a boolean dimension should read Yes/No in the chart, not true/false");
+        assertTrue(page.contains(".defaults.yes'"), "a boolean dimension should read Yes/No in the chart, not true/false");
 
         // A project generated before #7889 holds the statement's page in the case-preserved folder;
         // the regeneration removes it, and the folders it leaves empty, rather than keep a duplicate.

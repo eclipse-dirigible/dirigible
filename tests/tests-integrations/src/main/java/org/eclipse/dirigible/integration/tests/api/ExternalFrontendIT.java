@@ -442,6 +442,69 @@ class ExternalFrontendIT extends IntegrationTest {
              .body("reader", equalTo(true));
     }
 
+    /**
+     * A sign-in the provider refused shows the provider's {@code error_description} on the generated
+     * login page, once and escaped, instead of {@code Invalid credentials} (#8801) - and only for the
+     * callback that matched this session's authorization request.
+     */
+    @Test
+    void aSignInTheProviderRefusedSaysWhy() throws Exception {
+        String refusal = "You need an invitation <to> sign in this way";
+        Response start = api().redirects()
+                              .follow(false)
+                              .when()
+                              .get("/oauth2/authorization/keycloak");
+        String session = start.getCookie("JSESSIONID");
+        String authorizeUrl = start.getHeader("Location");
+        // kept as the provider would echo it back - already encoded in the authorization URL
+        String state = authorizeUrl.replaceFirst(".*[?&]state=([^&]*).*", "$1");
+
+        Response forged = callback(session, "made-up-state", refusal);
+        assertTrue(forged.getHeader("Location")
+                         .endsWith("/login?error"),
+                forged.getHeader("Location"));
+        assertTrue(loginErrorPage(session).contains("Invalid credentials"), "a callback that matched no request shows nothing it carries");
+
+        int tokenRequests = identityProvider.tokenRequests();
+        Response refused = callback(session, state, refusal);
+        assertTrue(refused.getHeader("Location")
+                          .endsWith("/login?error"),
+                refused.getHeader("Location"));
+        assertEquals(0, identityProvider.tokenRequests() - tokenRequests, "a refusal exchanges no code");
+        String page = loginErrorPage(session);
+        assertTrue(page.contains("You need an invitation &lt;to&gt; sign in this way"), page);
+        assertFalse(page.contains("Invalid credentials"), page);
+        assertTrue(loginErrorPage(session).contains("Invalid credentials"), "the description is shown once");
+    }
+
+    private Response callback(String session, String state, String description) {
+        String callbackUrl = "/login/oauth2/code/keycloak?error=access_denied&error_description="
+                + URLEncoder.encode(description, StandardCharsets.UTF_8) + "&state=" + state;
+        Response callback = api().urlEncodingEnabled(false)
+                                 .redirects()
+                                 .follow(false)
+                                 .cookie("JSESSIONID", session)
+                                 .when()
+                                 .get(callbackUrl);
+        callback.then()
+                .statusCode(302);
+        return callback;
+    }
+
+    /**
+     * The generated page answers only the exact {@code /login?error}, which a client must not rewrite.
+     */
+    private String loginErrorPage(String session) throws IOException, InterruptedException {
+        HttpResponse<String> page = HttpClient.newHttpClient()
+                                              .send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/login?error"))
+                                                               .header("Cookie", "JSESSIONID=" + session)
+                                                               .GET()
+                                                               .build(),
+                                                      HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, page.statusCode(), page.body());
+        return page.body();
+    }
+
     // --- the hosted web app keeps working next to the external one -----------------------------
 
     /**

@@ -1,5 +1,0 @@
-{
-    "module": "documents/configs/documents-window.json",
-    "extensionPoint": "application-windows",
-    "description": "Documents Window"
-}

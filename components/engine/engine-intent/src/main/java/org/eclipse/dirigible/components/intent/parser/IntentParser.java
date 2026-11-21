@@ -16055,15 +16055,23 @@ public final class IntentParser {
     }
 
     /**
+     * A data-language code - a translation seed's {@code language:} and a {@code languages:} entry: two
+     * lower-case letters (ISO 639-1), the code the language table's {@code VARCHAR(2)} column stores
+     * and a reader's {@code Accept-Language} is reduced to. A three-letter code passed the parser and
+     * failed only when the seed was imported (#8795).
+     */
+    private static final java.util.regex.Pattern LANGUAGE_CODE = java.util.regex.Pattern.compile("[a-z]{2}");
+
+    /**
      * A translation seed ({@code language: bg}) targets a multilingual entity's language table: the
-     * code is a short lowercase language code, and its rows carry only the base row's {@code id} plus
+     * code is a {@link #LANGUAGE_CODE}, and its rows carry only the base row's {@code id} plus
      * translatable (string/text, non-PK) fields of the entity.
      */
     private static void validateLanguageSeed(SeedIntent seed, EntityIntent entity, List<String> issues) {
-        if (!seed.getLanguage()
-                 .matches("[a-z]{2,3}")) {
+        if (!LANGUAGE_CODE.matcher(seed.getLanguage())
+                          .matches()) {
             issues.add("seed [" + seed.getName() + "] language [" + seed.getLanguage()
-                    + "] must be a short lowercase language code (e.g. bg)");
+                    + "] must be a two-letter lowercase language code (e.g. bg)");
         }
         if (entity == null) {
             return; // the unknown entity is reported separately
@@ -16119,8 +16127,9 @@ public final class IntentParser {
 
     private static void validateLanguages(IntentModel model, List<String> issues) {
         for (String language : model.getLanguages()) {
-            if (language == null || !language.matches("[a-z]{2,3}")) {
-                issues.add("languages entry [" + language + "] must be a short lowercase language code (e.g. en, bg)");
+            if (language == null || !LANGUAGE_CODE.matcher(language)
+                                                  .matches()) {
+                issues.add("languages entry [" + language + "] must be a two-letter lowercase language code (e.g. en, bg)");
             }
         }
     }
