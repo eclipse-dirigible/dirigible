@@ -1304,6 +1304,80 @@ class IntentParserTest {
     }
 
     /**
+     * #7750: a {@code duplicate} with a {@code status} gate is the refusing twin of the warning - the
+     * move into the gate is refused while another row with the same values holds one of {@code among}.
+     * The statuses resolve by name, {@code among} is required with the gate and refused without it, and
+     * a warning cannot be gated.
+     */
+    @Test
+    void gatedDuplicateChecksParseAndValidate() {
+        String yaml = """
+                name: purchases
+                entities:
+                  - name: BillStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Supplier
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Bill
+                    checks:
+                      - { kind: duplicate, fields: [Supplier, supplierNumber], message: "Already entered: {match}" }
+                      - { kind: duplicate, fields: [Supplier, supplierNumber], status: APPROVED, among: [APPROVED, PAID],
+                          severity: error, message: "Already approved: {match}" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: supplierNumber, type: string }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: BillStatus, function: EntityStatus, init: 1 }
+                      - { name: Supplier, kind: manyToOne, to: Supplier }
+                seeds:
+                  - name: bill-statuses
+                    entity: BillStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: APPROVED }
+                      - { id: 3, name: PAID }
+                      - { id: 4, name: CANCELLED }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        List<CheckIntent> checks = model.getEntities()
+                                        .get(2)
+                                        .getChecks();
+        assertTrue(checks.get(0)
+                         .isWarning(),
+                "an ungated duplicate stays a warning");
+        CheckIntent gated = checks.get(1);
+        assertFalse(gated.isWarning(), "a gated duplicate refuses");
+        assertEquals(2, gated.getStatus());
+        assertEquals(List.of(2, 3), gated.getAmong());
+
+        // severity is optional on the gated one - it refuses either way.
+        IntentParser.parse(yaml.replace("severity: error, message: \"Already approved", "message: \"Already approved"));
+
+        assertCompareIssue(yaml.replace(", among: [APPROVED, PAID]", ""), "with a `status` gate requires `among`");
+        assertCompareIssue(yaml.replace("among: [APPROVED, PAID]", "among: [APPROVED, ARCHIVED]"), "ARCHIVED");
+        assertCompareIssue(yaml.replace("severity: error, message: \"Already approved", "severity: warn, message: \"Already approved"),
+                "there is nobody to confirm a warning");
+        assertCompareIssue(
+                yaml.replace("supplierNumber], message: \"Already entered", "supplierNumber], among: [PAID], message: \"Already entered"),
+                "carries `among` without a `status` gate");
+        assertCompareIssue(yaml.replace("{ kind: duplicate, fields: [Supplier, supplierNumber], message",
+                "{ kind: compare, field: supplierNumber, op: ne, value: x, among: [PAID], message"), "only a duplicate check");
+        // The ungated hard refusal still points at unique: - and now at the gate too.
+        assertCompareIssue(
+                yaml.replace("supplierNumber], message: \"Already entered", "supplierNumber], severity: error, message: \"Already entered"),
+                "a duplicate with a `status` gate and `among`");
+        // The gate is read off the record's own status.
+        assertCompareIssue(yaml.replace("function: EntityStatus, ", "")
+                               .replace("status: APPROVED, among: [APPROVED, PAID]", "status: 2, among: [2, 3]"),
+                "requires a `function: EntityStatus` relation");
+    }
+
+    /**
      * #7611: a check's {@code message} is ONE text in the module's default language - a per-language
      * map is refused, pointing at the catalogs - and an optional {@code id} names it in them.
      */

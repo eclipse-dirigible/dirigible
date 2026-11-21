@@ -209,7 +209,8 @@ zero. Those are **warnings** (#7466):
 - `duplicate` - another record already carries the same `fields` (own fields or to-one relations).
   A `string`/`text` field is compared ignoring case and surrounding spaces, so "ACME Ltd" is asked
   about when "Acme Ltd " exists; `{match}` in the message is the existing record's label (its `name`,
-  else its id). Always a warning; the hard version is `unique:`.
+  else its id). Ungated it is always a warning; the hard version is `unique:`. With a `status:` gate
+  and `among:` it refuses the move into that status instead (#7750) - see below.
 - `itemsCompare` - on the document: every item's `field` compared with `op` to the `value` literal.
   `{count}` in the message is the number of lines that break it. Always a warning; the hard version is
   a `compare` on the items entity.
@@ -229,6 +230,28 @@ the repeat is asked about again. The generated UI does this for every form and l
 shared API service: one confirm dialog listing all the warnings, then the repeat. A write with no HTTP
 caller (a process step, a job) is never stopped, and each confirmation is logged with the user who
 gave it.
+
+**A duplicate refused at a status gate (#7750).** Two draft bills from one supplier with the same
+supplier invoice number may coexist (a recurring schedule drafts with a placeholder, a clerk re-keys a
+bill), but the second may not be approved while the first is approved or paid. A `duplicate` with a
+`status:` gate is that refusal:
+
+```yaml
+- name: Bill
+  checks:
+    - { kind: duplicate, fields: [Supplier, supplierNumber], message: "Already entered: {match}" }   # the warning, at drafting
+    - { kind: duplicate, fields: [Supplier, supplierNumber], status: APPROVED, among: [APPROVED, PARTIAL, PAID],
+        message: "This supplier invoice number is already approved for this supplier: {match}" }
+```
+
+The generated repository runs it with the other gated checks, when the record is persisted carrying
+the gate status (a transition, a workflow setter, an update): it is refused with `400` and the message
+while ANOTHER row with the same values (compared as the warning compares them) holds one of `among`.
+`among` is required - every default would read a status nobody named - and a row in a status it leaves
+out (a cancelled bill) never counts. Every write of such an entity runs in a unit of work, and the check
+locks the oldest row carrying the values before it counts, so two approvals of twins at once take turns
+and only one passes. A create directly in the gate status with no earlier row carrying the values has
+nothing to lock (#8815).
 
 ### Translating check messages (#7611)
 

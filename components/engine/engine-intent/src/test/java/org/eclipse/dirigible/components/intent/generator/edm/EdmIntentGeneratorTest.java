@@ -2239,6 +2239,43 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * #7750: a gated {@code duplicate} is no warning - it carries no severity or confirmation code, but
+     * the gate status, the status property it is read from and the {@code among} seed ids the
+     * repository counts.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aGatedDuplicateCarriesItsGateAndAmongInsteadOfAWarningCode() {
+        String yaml = """
+                name: purchases
+                entities:
+                  - name: BillStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Bill
+                    checks:
+                      - { kind: duplicate, fields: [supplierNumber], status: 2, among: [2, 3], message: "Already approved: {match}" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: supplierNumber, type: string }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: BillStatus, function: EntityStatus, init: 1 }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "purchases");
+
+        Map<String, Object> duplicate = ((List<Map<String, Object>>) entityByName(entities(model), "Bill").get("checks")).get(0);
+        assertEquals("duplicate", duplicate.get("kind"));
+        assertNull(duplicate.get("severity"));
+        assertNull(duplicate.get("code"));
+        assertEquals("2", duplicate.get("status"));
+        assertEquals("Status", duplicate.get("statusProperty"));
+        assertEquals(List.of("2", "3"), duplicate.get("among"));
+        assertEquals(List.of("SupplierNumber"), duplicate.get("normalizedFields"));
+    }
+
+    /**
      * A guard on a TO-ONE is compared numerically, not with a boxed equality (#7237). The foreign-key
      * column is typed from the target's key, and for a cross-model target that key is only readable
      * from the owner's {@code .model}, where a {@code long} is as legal as an {@code integer} - an

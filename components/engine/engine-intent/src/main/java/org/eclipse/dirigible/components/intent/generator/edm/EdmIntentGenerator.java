@@ -3234,9 +3234,25 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if ("duplicate".equals(check.getKind())) {
                 // Another record already carrying the same values (#7466) - a warning, never a
                 // refusal: that is `unique:`. Each field is an own field or a to-one (compared by FK).
+                // With a status gate it is the refusal of the move into that status while another row
+                // with the same values holds one of `among` (#7750) - the repository's, like every
+                // other gated check.
                 if (check.getFields() == null || check.getFields()
                                                       .isEmpty()) {
                     continue; // the parser already reported it
+                }
+                if (check.getStatus() != null) {
+                    RelationIntent gate = entityStatusRelation(entity);
+                    if (gate == null || check.getAmong() == null || check.getAmong()
+                                                                         .isEmpty()) {
+                        continue; // the parser already reported it
+                    }
+                    checkMap.put("status", String.valueOf(check.getStatus()));
+                    checkMap.put("statusProperty", IntentNaming.pascalCase(gate.getName()));
+                    checkMap.put("among", check.getAmong()
+                                               .stream()
+                                               .map(String::valueOf)
+                                               .toList());
                 }
                 checkMap.put("fields", check.getFields()
                                             .stream()

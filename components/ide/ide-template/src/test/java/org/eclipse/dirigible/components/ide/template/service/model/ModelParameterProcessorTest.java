@@ -1372,6 +1372,36 @@ class ModelParameterProcessorTest {
                                    .size());
     }
 
+    /**
+     * A gated duplicate (#7750) refuses the move into its status, so it is the repository's document
+     * check, beside the ungated warning on the same values - never a warning itself.
+     */
+    @Test
+    void aGatedDuplicateIsADocumentCheckNotAWarning() {
+        Map<String, Object> warning = new LinkedHashMap<>();
+        warning.put("kind", "duplicate");
+        warning.put("severity", "warn");
+        warning.put("code", "Bill.duplicate.0");
+        Map<String, Object> gated = new LinkedHashMap<>();
+        gated.put("kind", "duplicate");
+        gated.put("status", "2");
+        gated.put("statusProperty", "Status");
+        gated.put("among", List.of("2", "3"));
+        Map<String, Object> entity = entity("Bill", "Bills", property("Total", "DECIMAL"));
+        entity.put("checks", List.of(warning, gated));
+
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        assertEquals(1, ModelValues.asList(entity.get("warningChecks"))
+                                   .size());
+        List<Map<String, Object>> documentChecks = ModelValues.asMaps(entity.get("documentChecks"));
+        assertEquals(1, documentChecks.size());
+        assertEquals(List.of("2", "3"), documentChecks.get(0)
+                                                      .get("among"));
+        assertEquals(0, ModelValues.asList(entity.get("rowChecks"))
+                                   .size());
+    }
+
     @Test
     void resolvesTheHopsAConditionalRequirementReadsItsValueThrough() {
         Map<String, Object> hop = new LinkedHashMap<>();
