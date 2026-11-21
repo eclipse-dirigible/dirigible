@@ -834,8 +834,14 @@ A status the roll-up sets, it also lets go of: the first move into `statusWhenFu
 `statusWhenPartial` remembers the status it displaced in a hidden parent column (`Displaced<Status>`),
 and a sum back at zero - the only allocation deleted, amended to 0 or re-parented away - restores
 it, so a paid invoice returns to CONFIRMED (or to ISSUED, if it was paid straight from there) rather
-than staying PAID with nothing paid. A status the roll-up did not set (a manual void of a partially
-paid document) is never touched.
+than staying PAID with nothing paid. A parent that was already in `statusWhenPartial` when the sum
+first moved (an asset whose default is ACTIVE) displaced nothing, so at a zero sum its `statusWhenFull`
+falls back to `statusWhenPartial`: a full status never outlives the sum that produced it. A status the
+roll-up did not set (a manual void of a partially paid document) is never touched.
+
+Either seed may be left out: a roll-up naming only `statusWhenFull` (an asset fully depreciated) owns
+only the full band, and one naming only `statusWhenPartial` only the partial one - a sum outside the
+named band gives the status back exactly as a zero sum does. A `status:` naming neither seed is refused.
 
 Roll-ups compose transitively across a multi-level composition (leaf edit -> mid total -> top
 total); recomputation stops when values stop changing.

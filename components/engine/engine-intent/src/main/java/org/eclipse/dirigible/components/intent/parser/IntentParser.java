@@ -2587,6 +2587,7 @@ public final class IntentParser {
                     issues.add(
                             "rollup [" + name + "] status [" + rollup.getStatus() + "] is not a to-one relation of [" + via.getTo() + "]");
                 }
+                requireRollupStatusSeed(rollup, name, issues);
             }
         }
     }
@@ -2664,6 +2665,7 @@ public final class IntentParser {
                 issues.add("rollup [" + name + "] status [" + rollup.getStatus() + "] is not a to-one relation of [" + rollup.getParent()
                         + "]");
             }
+            requireRollupStatusSeed(rollup, name, issues);
         }
     }
 
@@ -2970,6 +2972,20 @@ public final class IntentParser {
         FieldIntent resolved = fieldByName(entity, field);
         if (resolved == null || !NUMERIC_TYPES.contains(resolved.getType())) {
             issues.add(subject + " " + role + " [" + field + "] is not a numeric field of [" + entityName + "]");
+        }
+    }
+
+    /**
+     * A roll-up {@code status:} moves the parent to the seed of the band its sum is in, so it needs at
+     * least one: {@code statusWhenFull} (the sum reached the capacity) and/or {@code statusWhenPartial}
+     * (the sum is positive but below it). Naming only one is valid - the roll-up then owns only that
+     * band (#7941) - but naming neither leaves it nothing to set.
+     */
+    private static void requireRollupStatusSeed(RollupIntent rollup, String name, List<String> issues) {
+        if (!isBlank(rollup.getStatus()) && rollup.getStatusWhenFull() == null && rollup.getStatusWhenPartial() == null) {
+            issues.add("rollup [" + name + "] declares status [" + rollup.getStatus()
+                    + "] but neither statusWhenFull nor statusWhenPartial - name the status seed the roll-up sets when the sum"
+                    + " reaches the capacity, the one it sets while the sum is below it, or both");
         }
     }
 
