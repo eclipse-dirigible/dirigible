@@ -118,6 +118,8 @@ import org.eclipse.dirigible.sdk.http.Response;
  * with a completion hook flips its source and then went on offering the same button on the flipped
  * record, so a second click minted a second document - another invoice for a proforma already invoiced.
  * The guard is on the CLICK: an event-driven run carries its own at-most-once back-reference guard.
+ * The guard reads the source under a row lock held until the run commits (#7827), so concurrent
+ * clicks take turns: one creates the ${toEntity}, the others find the flipped status and are refused.
 #end
 #if($hasRefusals || $hasBackLink)
  *
@@ -183,6 +185,19 @@ public class ${className}Generate {
         }
     }
 #end
+#if($hasStatusGuard && !$eventOnly)
+
+    /** A click the from-status guard refuses, thrown under the source's row lock - answered with 409. */
+    static final class WrongStatus extends RuntimeException {
+
+        final int currentStatus;
+
+        WrongStatus(int currentStatus) {
+            super("current status is [" + currentStatus + "]");
+            this.currentStatus = currentStatus;
+        }
+    }
+#end
 #if(!$eventOnly)
 
     public static class Request {
@@ -220,53 +235,71 @@ public class ${className}Generate {
         }
 #end
 #end
+#if($hasReportRows)
+#set($runResultType = "java.util.List<gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity>")
+#set($runCall = "generateRows(req.id)")
+#else
+#set($runResultType = "gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity")
+#if($hasPrompt)
+#set($runCall = "create(req.id, req.values)")
+#else
+#set($runCall = "create(req.id)")
+#end
+#end
+#set($catchesRefused = $hasRefusals || $hasReportItems || $hasReportRows)
+#if(!$hasStatusGuard)
         // The source must exist, whatever else the run requires (#8488): asked once, up front, for every
-        // shape of create-from, and the from-status guard below reads the same row. It used to be asked
-        // only by that guard, while every other shape answered from what create() returned.
-        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity source =
-                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().findById(req.id);
-        if (source == null) {
+        // shape of create-from.
+        if (new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().findById(req.id) == null) {
             return sourceNotFound(req.id);
         }
-#if($hasStatusGuard)
-        // The from-status guard, asked BEFORE anything is created and only on this path: the click.
-        // Calc reads the status FK with the calculated-field semantics (null -> 0, never a seed id).
-        int currentStatus = org.eclipse.dirigible.sdk.utils.Calc.eval("${guardStatusProperty}", source, 0).intValue();
-        if (!(${guardStatusExpr})) {
-            Response.setStatus(409);
-            return "{\"error\": \"${name} ${guardStatusText} - current status is [" + currentStatus + "]\"}";
-        }
 #end
-#if($hasReportRows)
-        java.util.List<gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity> rows;
+        ${runResultType} saved;
+#if($hasStatusGuard || $catchesRefused)
         try {
-            rows = generateRows(req.id);
-        } catch (Refused refused) {
+#if($hasStatusGuard)
+            // The from-status guard, asked only on this path - the click - and atomic with the run it
+            // admits (#7827): the ${fromEntity} is locked BEFORE the guard reads it and stays locked until
+            // the run's unit commits, so concurrent clicks on one ${fromEntity} take turns. The first one
+            // creates the ${toEntity} and flips the ${fromEntity}; each later one reads the flipped status
+            // and is refused 409. Read apart from the run, every click read the status before any of them
+            // wrote it, and each created a ${toEntity} - several invoices for one proforma. The lock is
+            // also where a missing source is found (#8488).
+            saved = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
+                gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository sourceRepository =
+                        new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository();
+                if (!sourceRepository.lockForUpdate(req.id)) {
+                    return null;
+                }
+                gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity source = sourceRepository.findById(req.id);
+                // Calc reads the status FK with the calculated-field semantics (null -> 0, never a seed id).
+                int currentStatus = org.eclipse.dirigible.sdk.utils.Calc.eval("${guardStatusProperty}", source, 0).intValue();
+                if (!(${guardStatusExpr})) {
+                    throw new WrongStatus(currentStatus);
+                }
+                return ${runCall};
+            });
+        } catch (WrongStatus refused) {
+            // Thrown before the run wrote anything; the unit it ends holds only the lock.
             Response.setStatus(409);
-            return Json.stringify(java.util.Map.of("error", refused.getMessage()));
-        }
-        if (rows == null) {
-            return sourceNotFound(req.id); // deleted since the check above
-        }
-        return Json.stringify(rows);
+            return "{\"error\": \"${name} ${guardStatusText} - current status is [" + refused.currentStatus + "]\"}";
 #else
-#if($hasRefusals || $hasReportItems)
-        gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity saved;
-        try {
-            saved = create(req.id#if($hasPrompt), req.values#end);
+            saved = ${runCall};
+#end
+#if($catchesRefused)
         } catch (Refused refused) {
             // Thrown inside the unit, so nothing it wrote survives; the message is the authored one.
             Response.setStatus(409);
             return Json.stringify(java.util.Map.of("error", refused.getMessage()));
+#end
         }
 #else
-        gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity saved = create(req.id#if($hasPrompt), req.values#end);
+        saved = ${runCall};
 #end
         if (saved == null) {
-            return sourceNotFound(req.id); // deleted since the check above
+            return sourceNotFound(req.id); // no such ${fromEntity}, or deleted since it was asked for
         }
         return Json.stringify(saved);
-#end
     }
 #if($hasUndo)
 
