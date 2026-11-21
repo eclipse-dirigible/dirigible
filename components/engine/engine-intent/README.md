@@ -449,6 +449,11 @@ A cross-model source declares its phases in its own model, so the name cannot be
 - { name: Account, kind: manyToOne, to: Account, model: accounts, leafOnly: true }
 ```
 
+A node that leaf-only references already point at cannot gain a child (#7826): the child would turn
+the referenced leaf into a group with the references still on it, so a create or re-parent under it
+is refused with a 400 naming the referencing records (catalog key `checks.leafReferenced`). The
+referencing side contributes the count, so a leaf-only relation of another model counts too.
+
 The list renders as a tree-table - the list's own columns, the first one indented under an expand
 chevron - and as the flat table while no record has a parent, for a search or a filter, or when the
 user picks Table on the toolbar toggle. Each record's row menu and its sheet offer **Add child**,

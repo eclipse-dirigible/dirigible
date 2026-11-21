@@ -72,6 +72,19 @@ public final class DeleteRefusals {
      */
     public static final String HAS_CHILDREN_TEXT = "This {entity} still has {children} records - delete those first";
 
+    /**
+     * The key, under a catalog's {@code checks}, of the sentence refusing a child under a tree record
+     * that leaf-only relations reference (dirigible #7826).
+     */
+    public static final String LEAF_REFERENCED_KEY = "leafReferenced";
+
+    /**
+     * The default-language sentence refusing a child under a referenced leaf: {@code {entity}} is the
+     * tree entity's label, {@code {references}} the referencing kinds, each written as
+     * {@link #REFERENCE_TEXT}.
+     */
+    public static final String LEAF_REFERENCED_TEXT = "This {entity} is referenced as a leaf by {references} and cannot be given a child";
+
     /** How the kinds of reference are joined inside the sentence. */
     private static final String SEPARATOR = ", ";
 
@@ -134,17 +147,37 @@ public final class DeleteRefusals {
                 childLabelKey);
     }
 
+    /**
+     * The refusal of a child under a tree record that the given records reference through a leaf-only
+     * relation (intent {@code leafOnly: true}, dirigible #7826), resolved for the request's language:
+     * the child would turn the referenced leaf into a group, with the references still on it.
+     *
+     * @param catalog the tree entity's model catalog ({@code <project>:<catalog prefix>}), or
+     *        {@code null} for the default-language text
+     * @param entityLabel the tree entity's default-language label
+     * @param entityLabelKey the fully qualified catalog key of that label, or {@code null}
+     * @param references every kind of record referencing it as a leaf, in the order the refusal lists
+     *        them
+     * @return the exception to throw - mapped to HTTP 400 carrying the key and the parameters
+     */
+    public static ValidationException leafReferenced(String catalog, String entityLabel, String entityLabelKey,
+            List<Reference> references) {
+        return leafReferenced(CheckMessages.language(), CheckMessages::readCatalog, catalog, entityLabel, entityLabelKey, references);
+    }
+
+    static ValidationException leafReferenced(String language, CheckMessages.CatalogReader catalogs, String catalog, String entityLabel,
+            String entityLabelKey, List<Reference> references) {
+        Map<String, Object> params = CheckMessages.params("entity", label(language, catalogs, entityLabelKey, entityLabel), "references",
+                listReferences(language, catalogs, catalog, references));
+        String messageKey = checkKey(catalog, LEAF_REFERENCED_KEY);
+        return new ValidationException(CheckMessages.resolve(language, catalogs, messageKey, LEAF_REFERENCED_TEXT, params), messageKey,
+                params);
+    }
+
     static DeleteRestrictionException referenced(String language, CheckMessages.CatalogReader catalogs, String catalog, String entityLabel,
             String entityLabelKey, List<Reference> references) {
-        String referenceKey = checkKey(catalog, REFERENCE_KEY);
-        List<String> listed = new ArrayList<>(references.size());
-        for (Reference reference : references) {
-            String label = CheckMessages.resolve(language, catalogs, reference.labelKey(), reference.label(), Map.of());
-            listed.add(CheckMessages.resolve(language, catalogs, referenceKey, REFERENCE_TEXT,
-                    CheckMessages.params("count", reference.count(), "label", label)));
-        }
         Map<String, Object> params = CheckMessages.params("entity", label(language, catalogs, entityLabelKey, entityLabel), "references",
-                String.join(SEPARATOR, listed));
+                listReferences(language, catalogs, catalog, references));
         return refusal(language, catalogs, checkKey(catalog, REFERENCED_KEY), REFERENCED_TEXT, params);
     }
 
@@ -166,6 +199,19 @@ public final class DeleteRefusals {
     private static DeleteRestrictionException refusal(String language, CheckMessages.CatalogReader catalogs, String messageKey, String text,
             Map<String, Object> params) {
         return new DeleteRestrictionException(CheckMessages.resolve(language, catalogs, messageKey, text, params), messageKey, params);
+    }
+
+    /** The referencing kinds, each written as {@link #REFERENCE_TEXT}, joined for the sentence. */
+    private static String listReferences(String language, CheckMessages.CatalogReader catalogs, String catalog,
+            List<Reference> references) {
+        String referenceKey = checkKey(catalog, REFERENCE_KEY);
+        List<String> listed = new ArrayList<>(references.size());
+        for (Reference reference : references) {
+            String label = CheckMessages.resolve(language, catalogs, reference.labelKey(), reference.label(), Map.of());
+            listed.add(CheckMessages.resolve(language, catalogs, referenceKey, REFERENCE_TEXT,
+                    CheckMessages.params("count", reference.count(), "label", label)));
+        }
+        return String.join(SEPARATOR, listed);
     }
 
     private static String label(String language, CheckMessages.CatalogReader catalogs, String labelKey, String label) {
