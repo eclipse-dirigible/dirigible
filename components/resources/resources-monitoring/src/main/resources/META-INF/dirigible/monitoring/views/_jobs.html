@@ -39,7 +39,7 @@
             <tr x-h-table-row>
               <th x-h-table-head scope="col" x-text="T('monitoring:jobs.colName', 'Job')"></th>
               <th x-h-table-head scope="col" x-text="T('monitoring:jobs.colSchedule', 'Schedule')"></th>
-              <th x-h-table-head scope="col" x-text="T('monitoring:jobs.colStatus', 'Last run')"></th>
+              <th x-h-table-head scope="col" x-text="T('monitoring:jobs.colLastRun', 'Last run')"></th>
               <th x-h-table-head scope="col"></th>
             </tr>
           </thead>
@@ -69,7 +69,7 @@
                     </button>
                     <button x-h-button data-variant="transparent" data-size="icon-sm"
                             @click="state.setEnabled(job, !job.enabled)"
-                            :aria-label="job.enabled ? 'Disable' : 'Enable'"
+                            :aria-label="job.enabled ? T('monitoring:jobs.disable', 'Disable') : T('monitoring:jobs.enable', 'Enable')"
                             :title="job.enabled ? T('monitoring:jobs.disable', 'Disable') : T('monitoring:jobs.enable', 'Enable')">
                       <svg x-h-lucide x-show="job.enabled" role="presentation" data-lucide="pause"></svg>
                       <svg x-h-lucide x-show="!job.enabled" role="presentation" data-lucide="power"></svg>

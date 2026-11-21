@@ -119,7 +119,7 @@
         </template>
         <template x-if="!readRefused('${property.widgetDropdownControllerUrl}')">
         <div x-h-select#if($property.isRequiredProperty != "true") data-clearable="true"#end>
-          <input x-h-select-input x-model="form.${property.name}"#if($property.fixedAfterCreate == "true") :disabled="mode === 'edit'"#end :aria-invalid="fieldError === '${property.name}'" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select #if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end') })" />
+          <input x-h-select-input x-model="form.${property.name}"#if($property.fixedAfterCreate == "true") :disabled="mode === 'edit'"#end :aria-invalid="fieldError === '${property.name}'" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select {{name}}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end') })" />
           <div x-h-select-content>
             <div x-h-select-search data-filter="contains"></div>
             <div x-h-select-list>
@@ -134,7 +134,7 @@
         <!-- Subset (intent `kind: subset`): the bound ARRAY model puts the select in
              multiple mode - the csv is split on load and joined back on save. -->
         <div x-h-select>
-          <input x-h-select-input x-model="form.${property.name}" :aria-invalid="fieldError === '${property.name}'" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select #if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end') })" />
+          <input x-h-select-input x-model="form.${property.name}" :aria-invalid="fieldError === '${property.name}'" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select {{name}}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end') })" />
           <div x-h-select-content>
             <div x-h-select-search data-filter="contains"></div>
             <div x-h-select-list>
