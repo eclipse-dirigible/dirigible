@@ -11,6 +11,7 @@ import java.nio.file.StandardCopyOption;
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 #end
 import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.core.Tenant;
 import org.eclipse.dirigible.sdk.job.JobHandler;
 import org.eclipse.dirigible.sdk.log.Logger;
 import org.eclipse.dirigible.sdk.log.Logging;
@@ -30,6 +31,10 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  * translations and the create event all fire as they do for any other write. Every file is then
  * moved out of the drop folder, into "processed" or into "failed", so the same records are never
  * ingested twice and a rejected file stays inspectable.
+ *
+ * The job runs once per tenant, and each tenant reads only its OWN drop folder: the default tenant
+ * reads ${folder} itself, every other tenant ${folder}/tenants/&lt;tenant id&gt;. A file therefore lands in
+ * exactly one tenant's database - the one whose folder it was dropped into - and never in all of them.
 #if($hasAccept)
  *
  * The declared accept gate (${acceptSummary}) is applied per record. A record that does not match is
@@ -59,9 +64,11 @@ public class ${className}FileImport implements JobHandler {
     /** How long a file must have been untouched before it is read - a file still being copied in is not complete. */
     private static final long STABLE_MILLIS = 5000L;
 
+    /** The declared drop folder - the default tenant's own. */
     private static final Path FOLDER = Paths.get("${folder}");
-    private static final Path PROCESSED = FOLDER.resolve("processed");
-    private static final Path FAILED = FOLDER.resolve("failed");
+
+    /** Where every other tenant's drop folder lives, one per tenant id. */
+    private static final Path TENANTS = FOLDER.resolve("tenants");
 
     @Override
     public String cron() {
@@ -70,19 +77,44 @@ public class ${className}FileImport implements JobHandler {
 
     @Override
     public void run() {
-        if (!Files.isDirectory(FOLDER)) {
-            LOG.debug("Inbound ${name}: the drop folder [{}] does not exist - nothing to ingest", FOLDER);
+        Path folder = tenantFolder();
+        if (folder == null) {
             return;
         }
-        try (DirectoryStream<Path> dropped = Files.newDirectoryStream(FOLDER)) {
+        if (!Files.isDirectory(folder)) {
+            LOG.debug("Inbound ${name}: the drop folder [{}] does not exist - nothing to ingest", folder);
+            return;
+        }
+        try (DirectoryStream<Path> dropped = Files.newDirectoryStream(folder)) {
             for (Path file : dropped) {
                 if (readable(file)) {
-                    ingest(file);
+                    ingest(file, folder);
                 }
             }
         } catch (IOException ex) {
-            LOG.error("Inbound ${name}: the drop folder [{}] could not be read", FOLDER, ex);
+            LOG.error("Inbound ${name}: the drop folder [{}] could not be read", folder, ex);
         }
+    }
+
+    /**
+     * The drop folder of the tenant this run is for. The job is scheduled in every tenant, so a folder
+     * shared by all of them would hand one tenant's file to every tenant's database. Null - nothing to
+     * read - for a tenant id that is not a single folder name, which would otherwise reach outside
+     * the tenants folder.
+     */
+    private static Path tenantFolder() {
+        if (Tenant.isDefault()) {
+            return FOLDER;
+        }
+        String tenantId = Tenant.getId();
+        Path folder = TENANTS.resolve(tenantId)
+                             .normalize();
+        if (!TENANTS.normalize()
+                    .equals(folder.getParent())) {
+            LOG.error("Inbound ${name}: the tenant id [{}] is not a folder name - its drop folder cannot be resolved", tenantId);
+            return null;
+        }
+        return folder;
     }
 
     private boolean readable(Path file) {
@@ -95,14 +127,15 @@ public class ${className}FileImport implements JobHandler {
         }
     }
 
-    private void ingest(Path file) {
+    private void ingest(Path file, Path folder) {
         try {
             int saved = save(Files.readString(file));
-            move(file, PROCESSED);
+            move(file, folder.resolve("processed"));
             LOG.info("Inbound ${name}: ingested [{}] ${entity} record(s) from [{}]", saved, file.getFileName());
         } catch (Exception ex) {
-            LOG.error("Inbound ${name}: [{}] could not be ingested - moved to [{}]", file.getFileName(), FAILED, ex);
-            move(file, FAILED);
+            Path failed = folder.resolve("failed");
+            LOG.error("Inbound ${name}: [{}] could not be ingested - moved to [{}]", file.getFileName(), failed, ex);
+            move(file, failed);
         }
     }
 

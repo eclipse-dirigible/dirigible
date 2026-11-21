@@ -10,11 +10,14 @@
 package org.eclipse.dirigible.components.intent.generator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.ide.template.service.model.GlueTemplateRendering;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
 import org.junit.jupiter.api.Test;
@@ -77,5 +80,24 @@ class GlueInboundSourcesTest {
                             .startsWith("Lead"),
                     "the handler class name is derived from the ingest name");
         }
+    }
+
+    /**
+     * The folder job runs in every tenant, so it must read the running tenant's own folder (#8157): the
+     * declared one for the default tenant, {@code tenants/<id>} under it for every other.
+     */
+    @Test
+    void theFolderJobReadsTheRunningTenantsOwnFolder() throws IOException {
+        IntentModel model = IntentParser.parse(YAML);
+        String job = GlueTemplateRendering.renderInboundFile(GlueIntentGenerator.buildInboundFilesForTest(model)
+                                                                                .get(0),
+                "crm")
+                                          .replace("\r\n", "\n");
+
+        assertTrue(job.contains("private static final Path FOLDER = Paths.get(\"/data/inbox/leads\");"), job);
+        assertTrue(job.contains("private static final Path TENANTS = FOLDER.resolve(\"tenants\");"), job);
+        assertTrue(job.contains("if (Tenant.isDefault()) {\n            return FOLDER;"), job);
+        assertTrue(job.contains("Path folder = tenantFolder();"), job);
+        assertFalse(job.contains("Files.newDirectoryStream(FOLDER)"), "no tenant may list the shared folder directly: " + job);
     }
 }
