@@ -134,6 +134,9 @@ import org.eclipse.dirigible.components.intent.model.WidgetIntent;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
+import org.yaml.snakeyaml.error.Mark;
+import org.yaml.snakeyaml.error.MarkedYAMLException;
+import org.yaml.snakeyaml.error.YAMLException;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -368,8 +371,7 @@ public final class IntentParser {
         if (yaml == null || yaml.isBlank()) {
             return new IntentModel();
         }
-        Yaml loader = new Yaml(new SafeConstructor(new LoaderOptions()));
-        Object tree = loader.load(yaml);
+        Object tree = load(yaml);
         if (tree == null) {
             return new IntentModel();
         }
@@ -477,6 +479,60 @@ public final class IntentParser {
                 }
             }
         }
+    }
+
+    /**
+     * Load the raw YAML tree. A syntax error is the author's (the editor parses every half-typed
+     * bracket), so it is reported as a validation issue naming the line and column rather than escaping
+     * as the parser's multi-line exception (dirigible #8185).
+     */
+    private static Object load(String yaml) {
+        Yaml loader = new Yaml(new SafeConstructor(new LoaderOptions()));
+        try {
+            return loader.load(yaml);
+        } catch (MarkedYAMLException ex) {
+            throw new IntentValidationException(List.of(yamlSyntaxIssue(ex)));
+        } catch (YAMLException ex) {
+            throw new IntentValidationException(List.of("YAML syntax error: " + singleLine(ex.getMessage())));
+        }
+    }
+
+    /**
+     * The parser's problem and context on one line with 1-based positions, e.g. "YAML syntax error at
+     * line 4, column 15: expected ',' or a closing brace, but got &lt;stream end&gt; (while parsing a
+     * flow mapping that started at line 4, column 15)" - without the source snippet the parser's own
+     * message embeds.
+     */
+    private static String yamlSyntaxIssue(MarkedYAMLException ex) {
+        Mark problemMark = ex.getProblemMark() != null ? ex.getProblemMark() : ex.getContextMark();
+        StringBuilder issue = new StringBuilder("YAML syntax error");
+        if (problemMark != null) {
+            issue.append(" at ")
+                 .append(position(problemMark));
+        }
+        issue.append(": ")
+             .append(ex.getProblem() != null ? singleLine(ex.getProblem()) : "malformed document");
+        if (ex.getContext() != null) {
+            issue.append(" (")
+                 .append(singleLine(ex.getContext()));
+            Mark contextMark = ex.getContextMark();
+            if (contextMark != null && contextMark != problemMark) {
+                issue.append(" that started at ")
+                     .append(position(contextMark));
+            }
+            issue.append(')');
+        }
+        return issue.toString();
+    }
+
+    private static String position(Mark mark) {
+        return "line " + (mark.getLine() + 1) + ", column " + (mark.getColumn() + 1);
+    }
+
+    private static String singleLine(String text) {
+        return text == null ? ""
+                : text.strip()
+                      .replaceAll("\\s+", " ");
     }
 
     /**
