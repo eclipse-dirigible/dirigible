@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.intent.generator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -17,6 +18,7 @@ import java.util.Map;
 
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
+import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -75,5 +77,33 @@ class GlueRollupStatusTest {
         assertTrue(lines.stream()
                         .allMatch(r -> "".equals(r.get("statusField")) && "".equals(r.get("statusDisplacedField"))),
                 "a roll-up without a status carries no displaced-status column: " + lines);
+    }
+
+    /**
+     * Naming only one of the two seeds is valid (#7941): the roll-up owns that band alone, and the
+     * other key reaches the emitter empty, which the emitter leaves out instead of splicing it in.
+     */
+    @Test
+    void aStatusRollupMayNameOnlyTheFullSeed() {
+        IntentModel model = IntentParser.parse(YAML.replace("statusWhenFull: 2, statusWhenPartial: 1", "statusWhenFull: 2"));
+        Map<String, Object> paid = GlueIntentGenerator.buildRollupsForTest(model)
+                                                      .stream()
+                                                      .filter(r -> "Paid".equals(r.get("countField")))
+                                                      .findFirst()
+                                                      .orElseThrow();
+        assertEquals("2", paid.get("statusWhenFull"));
+        assertEquals("", paid.get("statusWhenPartial"));
+    }
+
+    /** A status with no seed at all has nothing to set, so the parser refuses it by name. */
+    @Test
+    void aStatusRollupWithNoSeedIsRefused() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(YAML.replace(", statusWhenFull: 2, statusWhenPartial: 1", "")));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains(
+                             "rollup [billPaid] declares status [Status] but neither statusWhenFull nor statusWhenPartial")),
+                "got: " + ex.getIssues());
     }
 }

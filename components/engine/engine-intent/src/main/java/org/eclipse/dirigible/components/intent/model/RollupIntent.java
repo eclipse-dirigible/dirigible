@@ -86,7 +86,9 @@ public class RollupIntent {
      * accumulate. The status the first such move displaces is remembered in a hidden parent column
      * ({@code Displaced<Status>}) and put back when the sum returns to zero, so an invoice whose only
      * allocation is deleted is CONFIRMED (or ISSUED) again rather than PAID with nothing paid; a status
-     * the roll-up did not set itself (a manual void) is never touched.
+     * the roll-up did not set itself (a manual void) is never touched. Either seed may be left out
+     * (#7941): the roll-up then owns only the band it names, and a sum outside it gives the status back
+     * as a zero sum does; naming neither is refused.
      */
     private String status;
     /** Seed id set on {@link #status} when the sum reaches the capacity (fully consumed). */
