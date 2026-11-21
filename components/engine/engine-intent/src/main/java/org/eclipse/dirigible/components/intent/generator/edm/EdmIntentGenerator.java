@@ -77,6 +77,8 @@ import org.eclipse.dirigible.components.intent.model.LifecycleIntent;
 import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.PeriodIntent;
 import org.eclipse.dirigible.components.intent.model.PeriodLockIntent;
+import org.eclipse.dirigible.components.intent.model.PostIntent;
+import org.eclipse.dirigible.components.intent.model.PostingIntent;
 import org.eclipse.dirigible.components.intent.model.RelatedIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.ShareIntent;
@@ -224,6 +226,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         Set<String> normalisingLedgers = ExportSupport.normalisingLedgers(model);
         Map<String, List<String>> displacedStatuses = displacedStatusProperties(model, byName);
         Map<String, Set<String>> rollupTargets = rollupTargetProperties(model, byName);
+        Map<String, Set<String>> systemBackReferences = systemBackReferences(model, byName);
         Map<String, Map<String, RollupIntent>> measuredBalances = measuredBalanceProperties(model, byName);
         // The status ids a button or a workflow step moves each entity to - what an ungated, status-
         // conditioned requiredWhen takes its gate from (#7595), read through the same rule the BPMN
@@ -739,6 +742,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     }
                     CrossModelSupport.TargetInfo info = CrossModelSupport.resolve(context, uses, relation.getTo());
                     Map<String, Object> fkProperty = crossModelRelationProperty(name, relation, info);
+                    putSystemBackReference(fkProperty, relation, systemBackReferences.getOrDefault(name, Set.of()));
                     putDependsOn(fkProperty, entity, relation.getDependsOn(), info.keyField(), info.propertyNames(), byName, usesByAlias,
                             context);
                     putOptionsFilter(fkProperty, relation, info.propertyNames());
@@ -762,6 +766,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 EntityIntent target = byName.get(relation.getTo());
                 String targetPerspective = perspectiveFor(relation.getTo(), compositionParents, settingEntities);
                 Map<String, Object> fkProperty = relationProperty(name, relation, target, composition, targetPerspective);
+                putSystemBackReference(fkProperty, relation, systemBackReferences.getOrDefault(name, Set.of()));
                 putDependsOn(fkProperty, entity, relation.getDependsOn(), target == null ? "Id" : keyFieldName(target), null, byName,
                         usesByAlias, context);
                 putOptionsFilter(fkProperty, relation, null);
@@ -2206,6 +2211,52 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
         }
         return byParent;
+    }
+
+    /**
+     * The back-references the generated handlers find their own rows by, per LOCAL target entity (by
+     * entity name, then relation name in PascalCase): a posting's {@code backReference} (the post it
+     * rewrites while DRAFT) and a {@code posts:} rule's {@code idempotentBy} (the rows that make it
+     * skip). Each is the system's to write (#7825): a user who could set one on a hand-written row
+     * would hand that row to the handler, which adopts and rewrites it, or skips the post because of
+     * it. A report-rows create-from's {@code backReference} is deliberately not one of them: it is a
+     * dimension of the row (the year an opening balance belongs to) that a hand-entered row carries
+     * too. A target in another model is that model's to emit.
+     */
+    private static Map<String, Set<String>> systemBackReferences(IntentModel model, Map<String, EntityIntent> byName) {
+        Map<String, Set<String>> byTarget = new LinkedHashMap<>();
+        for (PostingIntent posting : model.getPostings()) {
+            addSystemBackReference(byTarget, byName, posting.getCreates(), posting.getBackReference());
+        }
+        for (PostIntent post : model.getPosts()) {
+            addSystemBackReference(byTarget, byName, post.getInto(), post.getIdempotentBy());
+        }
+        return byTarget;
+    }
+
+    private static void addSystemBackReference(Map<String, Set<String>> byTarget, Map<String, EntityIntent> byName, String target,
+            String backReference) {
+        if (notBlank(target) && notBlank(backReference) && byName.containsKey(target)) {
+            byTarget.computeIfAbsent(target, ignored -> new LinkedHashSet<>())
+                    .add(IntentNaming.pascalCase(backReference));
+        }
+    }
+
+    /**
+     * Mark a to-one a generated handler finds its own rows by (see {@link #systemBackReferences}) as
+     * system-owned, the {@code isReadOnlyProperty} flag a {@code readOnly: true} relation carries
+     * (#8662): the controllers drop it from a user create, {@code update()} keeps the stored value, the
+     * forms show it read-only - and the handler's own {@code save()} still writes it, so only a row the
+     * handler created carries it (#7825). Left as written where readOnly would contradict what the
+     * author declared: a {@code required} FK no user create could fill any more (#8751), and the
+     * relations whose value the platform or the user chooses ({@code validateReadOnlyRelation}).
+     */
+    private static void putSystemBackReference(Map<String, Object> p, RelationIntent relation, Set<String> backReferences) {
+        if (backReferences.contains(IntentNaming.pascalCase(relation.getName())) && !relation.isRequired() && !relation.isComposition()
+                && !relation.isEntityStatus() && !relation.isPersonal() && !relation.isPersonalReadOnly() && !relation.isPartner()
+                && !relation.isOwner() && !relation.isCalculated()) {
+            p.put("isReadOnlyProperty", "true");
+        }
     }
 
     /**
