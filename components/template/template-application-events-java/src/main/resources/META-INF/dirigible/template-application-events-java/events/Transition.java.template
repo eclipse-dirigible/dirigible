@@ -43,6 +43,8 @@ import org.eclipse.dirigible.sdk.utils.Json;
  * pre-check snapshot and revert concurrent writes) - and the "-transitioned" notice rides that write
  * into the outbox, so the flip and its announcement commit together and posting glue / integrations
  * can never miss a transition whose row is durable.
+ * The record is read under a row lock held until the flip commits (#7827), so the same transition
+ * fired at once moves it once: every later request reads the moved status and is refused 409.
  *
  * Generated from the intent transitions block - do not edit; it is re-generated with the application.
  * Entity access goes ONLY through the generated repositories.
@@ -112,68 +114,84 @@ public class ${controllerClass} {
         }
         gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository repository =
                 new gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository();
-        gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity source = repository.findById(req.id);
+        // The guards and the write they admit are ONE unit (#7827): the ${entity} is locked BEFORE the
+        // guards read it and stays locked until the status write commits, so the same transition fired
+        // at once takes turns - the first moves the record, each later one reads the moved status and is
+        // refused 409. Read apart from the write, every concurrent click read the record in its
+        // from-status and each one moved it. A refusal is answered from inside the unit, which has
+        // written nothing by then.
+        String refusal = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
+            if (!repository.lockForUpdate(req.id)) {
+                Response.setStatus(404);
+                return "{\"error\": \"${entity} not found\"}";
+            }
+            gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity source = repository.findById(req.id);
 #if($personal)
-        // A colleague's record is the same 404 as a missing one - before any guard, so the answer never
-        // says which status someone else's record is in.
-        if (source == null || !me.equals(source.${personalFkProperty})) {
+            // A colleague's record is the same 404 as a missing one - before any guard, so the answer never
+            // says which status someone else's record is in.
+            if (source == null || !me.equals(source.${personalFkProperty})) {
 #else
-        if (source == null) {
+            if (source == null) {
 #end
-            Response.setStatus(404);
-            return "{\"error\": \"${entity} not found\"}";
-        }
-        // The status FK read with the Calc semantics (null reads as 0 - never an allowed seed id).
-        int currentStatus = org.eclipse.dirigible.sdk.utils.Calc.eval("${statusProperty}", source, 0).intValue();
-        if (!(${allowedExpr})) {
-            Response.setStatus(409);
-            return "{\"error\": \"${name} is allowed only from status [${fromStatuses}] - current status is [" + currentStatus + "]\"}";
-        }
+                Response.setStatus(404);
+                return "{\"error\": \"${entity} not found\"}";
+            }
+            // The status FK read with the Calc semantics (null reads as 0 - never an allowed seed id).
+            int currentStatus = org.eclipse.dirigible.sdk.utils.Calc.eval("${statusProperty}", source, 0).intValue();
+            if (!(${allowedExpr})) {
+                Response.setStatus(409);
+                return "{\"error\": \"${name} is allowed only from status [${fromStatuses}] - current status is [" + currentStatus + "]\"}";
+            }
 #if($guardExpr != "")
-        if (!(${guardExpr})) {
-            Response.setStatus(409);
-            return "{\"error\": \"${name} requires ${guardText}\"}";
-        }
-#end
-        // The status write and its "-transitioned" notice commit together: the topic rides the
-        // targeted write into the outbox, so a broker outage delays the announcement instead of losing
-        // it, and the event payload is the row exactly as the statement left it - never a re-read a
-        // concurrent write could have moved on.
-#if($stampNumbers && $stampNumbers.size() > 0)
-        // This move ISSUES the ${entity} (issue #8493): its stampOn: issue number is drawn here, as the
-        // NumberStamp delegate draws it at a process's issue step, and written in the SAME statement as
-        // the status. The move is asked first, so a refused one spends no value of the series (#7577):
-        // the lifecycle edge, the gated capacity guards and the gated checks the write applies. The
-        // draw joins the write's unit of work (#8113), so a write refused after it takes the number
-        // back. A ${entity} already numbered keeps its number.
-        repository.checkFor(source, ${setStatus});
-        gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity issued = source;
-        org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
-            java.util.Map<String, Object> values = new java.util.LinkedHashMap<>();
-            values.put("${statusProperty}", ${setStatus});
-#foreach($number in $stampNumbers)
-            if (unnumbered(issued.${number.field})) {
-#if($number.per && $number.per != "")
-#if($number.perDefault && $number.perDefault != "")
-                values.put("${number.field}", org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${number.seriesJavaLiteral}",
-                        issued.${number.per} == null ? "${number.perDefaultJavaLiteral}" : String.valueOf(issued.${number.per})));
-#else
-                values.put("${number.field}", org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${number.seriesJavaLiteral}",
-                        issued.${number.per} == null ? null : String.valueOf(issued.${number.per})));
-#end
-#else
-                values.put("${number.field}", org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${number.seriesJavaLiteral}"));
-#end
+            if (!(${guardExpr})) {
+                Response.setStatus(409);
+                return "{\"error\": \"${name} requires ${guardText}\"}";
             }
 #end
-            return repository.updateAuthored(req.id, values, "${projectName}-${perspective}-${entity}-transitioned");
-        });
+            // The status write and its "-transitioned" notice commit together: the topic rides the
+            // targeted write into the outbox, so a broker outage delays the announcement instead of losing
+            // it, and the event payload is the row exactly as the statement left it - never a re-read a
+            // concurrent write could have moved on.
+#if($stampNumbers && $stampNumbers.size() > 0)
+            // This move ISSUES the ${entity} (issue #8493): its stampOn: issue number is drawn here, as the
+            // NumberStamp delegate draws it at a process's issue step, and written in the SAME statement as
+            // the status. The move is asked first, so a refused one spends no value of the series (#7577):
+            // the lifecycle edge, the gated capacity guards and the gated checks the write applies. The
+            // draw joins the write's unit of work (#8113), so a write refused after it takes the number
+            // back. A ${entity} already numbered keeps its number.
+            repository.checkFor(source, ${setStatus});
+            gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity issued = source;
+            org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+                java.util.Map<String, Object> values = new java.util.LinkedHashMap<>();
+                values.put("${statusProperty}", ${setStatus});
+#foreach($number in $stampNumbers)
+                if (unnumbered(issued.${number.field})) {
+#if($number.per && $number.per != "")
+#if($number.perDefault && $number.perDefault != "")
+                    values.put("${number.field}", org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${number.seriesJavaLiteral}",
+                            issued.${number.per} == null ? "${number.perDefaultJavaLiteral}" : String.valueOf(issued.${number.per})));
 #else
-        repository.updateAuthored(req.id, java.util.Map.of("${statusProperty}", ${setStatus}),
-                "${projectName}-${perspective}-${entity}-transitioned");
+                    values.put("${number.field}", org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${number.seriesJavaLiteral}",
+                            issued.${number.per} == null ? null : String.valueOf(issued.${number.per})));
 #end
+#else
+                    values.put("${number.field}", org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${number.seriesJavaLiteral}"));
+#end
+                }
+#end
+                return repository.updateAuthored(req.id, values, "${projectName}-${perspective}-${entity}-transitioned");
+            });
+#else
+            repository.updateAuthored(req.id, java.util.Map.of("${statusProperty}", ${setStatus}),
+                    "${projectName}-${perspective}-${entity}-transitioned");
+#end
+            return null;
+        });
+        if (refusal != null) {
+            return refusal;
+        }
         // Reload so the response (and the notify block) carries the committed row, not the pre-check snapshot.
-        source = repository.findById(req.id);
+        gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity source = repository.findById(req.id);
 #if($notify == "true")
         // The mail is fail-soft - the flip is this endpoint's contract and has already committed - but
         // its outcome RIDES THE RESPONSE, so the person who pressed the button is told when nothing
