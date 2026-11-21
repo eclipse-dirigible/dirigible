@@ -139,7 +139,10 @@ document.addEventListener('alpine:init', () => {
         if (!jobs || !jobs.length) return null;
         return {
           id: instance.id,
-          definition: instance.processDefinitionName || instance.processDefinitionKey || '',
+          // A getter, so the name re-renders in the user's language once its catalog lands.
+          get definition() {
+            return ops.processName(instance);
+          },
           businessKey: instance.businessKey || '',
           jobCount: jobs.length,
           message: jobs[0].exceptionMessage || '',

@@ -635,13 +635,24 @@ public class BpmProviderFlowable implements BpmProvider {
      * Names are keyed within it by BPMN id, so the whole mapping is declared at generation time and
      * nothing is derived at runtime. Read off the deployment-cached BPMN model, so it costs no query
      * once the definition has been touched.
+     * <p>
+     * A definition whose deployment is gone declares nothing: the history outlives a retired deployment
+     * (#7597), and its finished instances still name their definition - one such row must not fail a
+     * whole history listing (#8788).
      *
      * @param processDefinitionId the process definition id
-     * @return the declared keys, empty for a process (e.g. a hand-authored one) that declares none
+     * @return the declared keys, empty for a process (e.g. a hand-authored one) that declares none or
+     *         whose definition is no longer deployed
      */
     public Optional<ProcessLabelKeys> getProcessLabelKeys(String processDefinitionId) {
-        BpmnModel bpmnModel = processEngine.getRepositoryService()
-                                           .getBpmnModel(processDefinitionId);
+        BpmnModel bpmnModel;
+        try {
+            bpmnModel = processEngine.getRepositoryService()
+                                     .getBpmnModel(processDefinitionId);
+        } catch (FlowableObjectNotFoundException ex) {
+            LOGGER.debug("Process definition [{}] is no longer deployed - it declares no label keys", processDefinitionId, ex);
+            return Optional.empty();
+        }
         Process process = bpmnModel == null ? null : bpmnModel.getMainProcess();
         if (process == null) {
             return Optional.empty();

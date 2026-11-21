@@ -414,16 +414,7 @@ document.addEventListener('alpine:init', () => {
     // namespaces the tasks actually reference are added to the translator on arrival; already
     // rendered T() bindings re-evaluate when they land.
     loadTaskLabelCatalogs(tasks) {
-      if (!window.AppI18nAddNamespaces) return;
-      const namespaces = [];
-      tasks.forEach((t) => {
-        const separator = t.nameKey ? t.nameKey.indexOf(':') : -1;
-        if (separator > 0) {
-          const namespace = t.nameKey.substring(0, separator);
-          if (namespaces.indexOf(namespace) < 0) namespaces.push(namespace);
-        }
-      });
-      if (namespaces.length) AppI18nAddNamespaces(namespaces);
+      if (window.AppI18nAddNamespacesOf) AppI18nAddNamespacesOf(tasks.map((t) => t.nameKey));
     },
 
     // The display names, in the user's language. A generated process carries the i18n key of every

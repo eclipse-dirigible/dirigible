@@ -1,0 +1,21 @@
+name: monprocnames
+description: monitoring fixture - a generated process the Monitoring shell names in the user's language
+
+entities:
+  - name: Ticket
+    fields:
+      - { name: id,    type: integer, primaryKey: true, generated: true }
+      - { name: title, type: string, length: 100 }
+
+processes:
+  - name: TicketApproval
+    trigger: { onCreate: Ticket }
+    steps:
+      - { name: approve, kind: userTask, args: { assignee: approver, form: ApproveTicket } }
+      - { name: done, kind: end }
+
+forms:
+  - { name: ApproveTicket, forEntity: Ticket, fields: [title], actions: [approve] }
+
+permissions:
+  - { role: Approver, description: Approver, can: [Ticket:read] }

@@ -55,9 +55,9 @@ document.addEventListener('alpine:init', () => {
     zoomOut() { window.MonitoringProcessDiagram.zoomOut(); },
     fit() { window.MonitoringProcessDiagram.fit(); },
 
-    /** The instance's title: the definition's name, falling back to its key. */
+    /** The instance's title: the definition's name in the user's language, falling back to its key. */
     titleOf(instance) {
-      return instance.processDefinitionName || instance.processDefinitionKey || instance.id;
+      return window.MonitoringOps.processName(instance) || instance.id;
     },
 
     startedText(instance) {

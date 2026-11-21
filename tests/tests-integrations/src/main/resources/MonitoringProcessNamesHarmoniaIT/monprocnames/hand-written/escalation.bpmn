@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Declares the module's label catalog exactly as a generated process does, and gets stuck: its one
+  asynchronous step names a bean that does not exist, so the job dead-letters and the Overview lists
+  the instance as an incident.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://www.flowable.org/processdef">
+  <process id="TicketEscalation" name="Ticket Escalation" isExecutable="true">
+    <extensionElements>
+      <flowable:property name="taskLabelCatalog" value="monprocnames:monprocnames-model.processes"></flowable:property>
+    </extensionElements>
+    <startEvent id="start"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="escalate"/>
+    <serviceTask id="escalate" name="Escalate" flowable:async="true" flowable:expression="${monitoringMissingBean.escalate()}"/>
+    <sequenceFlow id="f2" sourceRef="escalate" targetRef="end"/>
+    <endEvent id="end"/>
+  </process>
+</definitions>
