@@ -212,6 +212,12 @@ class JavaEntityStoreUnitOfWorkTest {
         assertThrows(IllegalStateException.class, () -> store.lockForUpdate(Object.class, 1));
     }
 
+    /** So is the whole-table lock a period register's overlap check takes (#7829). */
+    @Test
+    void refusesATableLockOutsideAUnit() {
+        assertThrows(IllegalStateException.class, () -> store.lockAllForUpdate(Object.class));
+    }
+
     /** The share lock of a reference check (#8252) is refused outside a unit, as the update lock is. */
     @Test
     void refusesAShareLockOutsideAUnit() {

@@ -336,6 +336,17 @@ public abstract class JavaRepository<T> {
     }
 
     /**
+     * Locks every row of this entity until the current unit of work ends - the serialization point of a
+     * rule that compares a row with all the others; see
+     * {@link JavaEntityStore#lockAllForUpdate(Class)}. Call it inside {@link UnitOfWork#run}.
+     *
+     * @return how many rows are now locked
+     */
+    public int lockAllForUpdate() {
+        return store().lockAllForUpdate(entityClass);
+    }
+
+    /**
      * Look up an entity by primary key. An absent id is an ordinary outcome — a dangling foreign key an
      * event handler should skip, a path parameter a controller should answer {@code 404} for — so it
      * reads back as {@code null} rather than as a thrown exception. Callers that require the row to
