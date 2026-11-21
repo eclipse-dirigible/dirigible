@@ -362,6 +362,31 @@ public class JavaEntityStore implements WriteTransaction {
     }
 
     /**
+     * Locks every row of an entity against every other writer until the current unit of work ends - a
+     * {@code SELECT ... FOR UPDATE} over the whole table, in primary-key order so two lockers queue
+     * rather than deadlock. It is the serialization point of a rule that compares a row with ALL the
+     * others (a period register whose windows must not overlap, dirigible #7829): a writer holding it
+     * makes the next writer wait for its commit, and that writer's own read then sees the row. A table
+     * with no rows locks nothing, so two writers of its very first rows are not serialized by it.
+     *
+     * @param <T> the entity type
+     * @param type the entity class
+     * @return how many rows are now locked
+     * @throws IllegalStateException when no unit of work is open on this thread
+     */
+    public <T> int lockAllForUpdate(Class<T> type) {
+        UnitOfWork unit = requireUnitForLock(type.getName());
+        RegisteredEntity meta = resolve(type);
+        unit.session.flush();
+        return unit.session.createQuery("from " + meta.entityName() + " order by " + meta.idField()
+                                                                                         .getName(),
+                Map.class)
+                           .setLockMode(LockModeType.PESSIMISTIC_WRITE)
+                           .getResultList()
+                           .size();
+    }
+
+    /**
      * Locks one row against its delete and its update until the current unit of work ends, while other
      * share-lockers proceed - a {@code SELECT ... FOR SHARE} where the database has one (PostgreSQL),
      * an exclusive lock where it does not (H2). It is what makes a to-one reference check hold until
