@@ -77,7 +77,7 @@
       <div x-h-toolbar data-variant="transparent">
         <div x-h-button-group>
           <button x-h-button data-variant="outline" data-size="icon" x-h-slot-picker-previous
-                  :aria-label="T('$projectName:${tprefix}.defaults.previous', 'Previous')">
+                  :aria-label="T('$projectName:${tprefix}.defaults.previousPeriod', 'Previous period')">
             <svg x-h-icon data-icon="chevron-left" role="presentation"></svg>
           </button>
           <button x-h-button data-variant="outline" data-size="icon" x-h-slot-picker-calendar
@@ -85,7 +85,7 @@
             <svg x-h-icon data-icon="calendar" role="presentation"></svg>
           </button>
           <button x-h-button data-variant="outline" data-size="icon" x-h-slot-picker-next
-                  :aria-label="T('$projectName:${tprefix}.defaults.next', 'Next')">
+                  :aria-label="T('$projectName:${tprefix}.defaults.nextPeriod', 'Next period')">
             <svg x-h-icon data-icon="chevron-right" role="presentation"></svg>
           </button>
         </div>

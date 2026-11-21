@@ -98,6 +98,8 @@
         "addChild": "Add child",
         "previous": "Previous",
         "next": "Next",
+        "previousPeriod": "Previous period",
+        "nextPeriod": "Next period",
         "today": "Today",
         "chooseDate": "Choose date",
         "day": "Day",

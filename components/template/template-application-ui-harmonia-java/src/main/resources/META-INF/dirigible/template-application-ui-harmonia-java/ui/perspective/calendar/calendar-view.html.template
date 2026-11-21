@@ -84,8 +84,8 @@
          :data-week-label="T('$projectName:${tprefix}.defaults.week', 'Week')"
          :data-month-label="T('$projectName:${tprefix}.defaults.month', 'Month')"
          :data-year-label="T('$projectName:${tprefix}.defaults.year', 'Year')"
-         :data-aria-prev="T('$projectName:${tprefix}.defaults.previous', 'Previous')"
-         :data-aria-next="T('$projectName:${tprefix}.defaults.next', 'Next')"
+         :data-aria-prev="T('$projectName:${tprefix}.defaults.previousPeriod', 'Previous period')"
+         :data-aria-next="T('$projectName:${tprefix}.defaults.nextPeriod', 'Next period')"
          :data-aria-views="T('$projectName:${tprefix}.defaults.changeView', 'Change view')"
          :data-more-label="T('$projectName:${tprefix}.defaults.moreEvents', '+{count} more')"
          @event-click="onEventClick" @date-click="onDateClick"></div>
