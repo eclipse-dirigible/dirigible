@@ -422,6 +422,26 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: wallet, kind: manyToOne, to: Wallet }
                   - { name: coupon, kind: manyToOne, to: Coupon }
 
+              # ...one side may be the record's OWN to-one (#7631), on a self-reference too: a sub-task's
+              # parent is in the same venture. The own side relies on no property of Venture, so it
+              # guards nothing there - a guard keyed on the agreed property read VentureEntity.Venture,
+              # which does not exist, and the whole module failed to compile (#7989). The parent side
+              # keeps its guard, on the task's own repository.
+              - name: Venture
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, length: 100 }
+              - name: VentureTask
+                checks:
+                  - { kind: agree, relations: [Parent, Venture], onProperty: Venture,
+                      message: "The parent task belongs to a different venture" }
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, length: 100 }
+                relations:
+                  - { name: Venture, kind: manyToOne, to: Venture, composition: true, required: true }
+                  - { name: Parent,  kind: manyToOne, to: VentureTask }
+
               - name: EntryLine
                 checks:
                   - { kind: exactlyOne, fields: [debit, credit], message: "Exactly one of debit/credit" }
@@ -2805,6 +2825,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertRuntimeEnforcement();
         assertNowDefaultRuntime();
         assertAgreeGuardsTheParentsRuntime();
+        assertOwnSideAgreeOnASelfReferenceRuntime();
         assertRelationDimensionGroupsByKeyRuntime();
         assertSystemWrittenRefusedOnEverySurface();
         assertStatusStampsRuntime();
@@ -3652,6 +3673,49 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("Party", equalTo(party)));
+    }
+
+    /**
+     * An own-side {@code agree} on a self-reference (#7989), compiled and running: a sub-task whose
+     * parent is in another venture is refused with the check's message - on create, and on an update
+     * re-pointing its parent - while one in its parent's venture is stored. That it runs at all is the
+     * point: the reverse guard used to be emitted into the venture's repository as
+     * {@code VentureEntity.Venture}, and the module did not compile. The parent side keeps its guard,
+     * in the task's own repository.
+     */
+    private void assertOwnSideAgreeOnASelfReferenceRuntime() {
+        assertFalse(contentOf("gen/emission/data/venture/VentureRepository.java").contains("agreedValues"),
+                "the own side of the agree relies on no property of Venture, so its repository guards nothing");
+        assertTrue(contentOf("gen/emission/data/venture/VentureTaskRepository.java").contains("agreedValues"),
+                "the parent side guards the parent task's venture in the task's own repository");
+        int venture = createRecord("/venture/VentureController", "{\"Name\":\"Venture A\"}");
+        int otherVenture = createRecord("/venture/VentureController", "{\"Name\":\"Venture B\"}");
+        int root = createRecord("/venture/VentureTaskController", "{\"Name\":\"Root\",\"Venture\":" + venture + "}");
+        int otherRoot = createRecord("/venture/VentureTaskController", "{\"Name\":\"Other root\",\"Venture\":" + otherVenture + "}");
+        int sub = createRecord("/venture/VentureTaskController", "{\"Name\":\"Sub\",\"Venture\":" + venture + ",\"Parent\":" + root + "}");
+
+        String refusal = "The parent task belongs to a different venture";
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Name\":\"Stray\",\"Venture\":" + otherVenture + ",\"Parent\":" + root + "}")
+                                                 .when()
+                                                 .post(API + "/venture/VentureTaskController")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString(refusal)));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + sub + ",\"Name\":\"Sub\",\"Venture\":" + venture + ",\"Parent\":"
+                                                         + otherRoot + "}")
+                                                 .when()
+                                                 .put(API + "/venture/VentureTaskController/" + sub)
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString(refusal)));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/venture/VentureTaskController/" + sub)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Venture", equalTo(venture))
+                                                 .body("Parent", equalTo(root)));
     }
 
     /**
