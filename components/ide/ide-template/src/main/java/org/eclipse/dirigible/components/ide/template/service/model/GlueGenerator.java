@@ -55,7 +55,7 @@ class GlueGenerator {
             "inboundMessages", "inboundFiles", "imports", "captures", "outbound", "exports", "stepEvents", "rollups", "expansions",
             "expansionCleanups", "settlements", "settlementListeners", "settlementCleanups", "generates", "generateEvents",
             "generateReopens", "transitions", "personalTransitions", "sends", "posts", "aggregates", "postings", "postingReopens",
-            "printFeeders", "snapshots", "numbering", "resolves");
+            "postReopens", "periodReopenNotices", "printFeeders", "snapshots", "numbering", "resolves");
 
     /** The renderer. */
     private final ModelTemplateRenderer renderer;
@@ -133,6 +133,10 @@ class GlueGenerator {
             case "personalTransitions" -> each(collection, source, content, model, parameters, GlueGenerator::bindPersonalTransition);
             case "sends" -> each(collection, source, content, model, parameters, GlueGenerator::bindSend);
             case "posts" -> each(collection, source, content, model, parameters, GlueGenerator::bindPost);
+            // A posts: row's reopen sweep (#8772) renders the posting's sweep template, bound from the
+            // row's descriptor in the posting's vocabulary.
+            case "postReopens" -> each(collection, source, content, model, parameters, GlueGenerator::bindPostReopen);
+            case "periodReopenNotices" -> each(collection, source, content, model, parameters, GlueGenerator::bindPeriodReopenNotice);
             // The reopen sweep renders from the posting it re-runs (#7703), so the two cannot
             // disagree about which documents qualify.
             case "postings", "postingReopens" -> each(collection, source, content, model, parameters, GlueGenerator::bindPosting);
@@ -1407,6 +1411,61 @@ class GlueGenerator {
         context.put("sourceJavaPerspective", sanitize(item, "sourcePerspective"));
         context.put("itemsJavaPerspective", sanitize(item, "itemsPerspective"));
         context.put("targetJavaPerspective", sanitize(item, "targetPerspective"));
+        // The target's period lock (#8772), as a posting carries it - empty for a row that writes
+        // nothing locked, and for a .glue written before the key existed.
+        bindPeriodLock(item, context);
+        context.put("heldStatusValues", strOr(item, "heldStatusValues", strOr(item, "statusValue", "")));
+        context.put("sweeps", !str(context, "periodRegisterEntity").isEmpty() && !str(context, "backRef").isEmpty());
+    }
+
+    /**
+     * Binds the period-reopen sweep of a {@code posts:} row (#8772) onto the posting's sweep template:
+     * the row's source, target and status guard under the names that template reads, and the post
+     * handler as the one it re-runs.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindPostReopen(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        bindPost(item, context, parameters);
+        context.put("handlerClassName", str(item, "className") + "Post");
+        context.put("targetEntity", item.get("into"));
+        context.put("guardProperty", strOr(item, "statusProperty", ""));
+        context.put("guardValue", strOr(item, "statusValue", ""));
+        context.put("sourceJavaGenFolder", str(parameters, "javaGenFolderName"));
+    }
+
+    /**
+     * Binds the reopening relay of a period register (#8755): the handler that re-announces a period
+     * standing open again on the model-agnostic topic a posting of another model listens to.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindPeriodReopenNotice(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        copy(context, item, "name", "className", "perspective", "keyField", "startProperty", "endProperty", "statusProperty",
+                "closedValues", "topicSuffix");
+        context.put("javaPerspective", sanitize(item, "perspective"));
+    }
+
+    /**
+     * Binds the period lock a posting or a {@code posts:} row carries from its target (#7703, #8772).
+     * Every key defaults to the EMPTY STRING rather than being left out, because the templates gate on
+     * it - an absent reference renders as its own literal and would read as "there is a lock" for every
+     * entry of a .glue written before the key existed.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     */
+    private static void bindPeriodLock(Map<String, Object> item, Map<String, Object> context) {
+        for (String key : new String[] {"periodRegisterEntity", "periodRegisterPerspective", "periodRegisterKeyField",
+                "periodStartProperty", "periodEndProperty", "periodStatusProperty", "periodClosedValues", "periodDateProperty",
+                "periodSourceDateProperty", "reopenClassName", "reopenTopicSuffix", "periodRegisterModel"}) {
+            context.put(key, strOr(item, key, ""));
+        }
+        context.put("periodRegisterJavaPerspective", sanitize(item, "periodRegisterPerspective"));
     }
 
     /**
@@ -1422,16 +1481,9 @@ class GlueGenerator {
                 "guardValue", "targetEntity", "targetPk", "itemsEntity", "itemsFk", "backRefProperty", "stornoProperty",
                 "stornoFilterProperty", "hasRule", "ruleEntity", "ruleMatchProperty", "ruleMatchValueJava", "usedRuleColumns");
         // The target's period lock (#7703): the handler asks the register before it writes, and the
-        // sweep re-runs what a closed period refused. Every key defaults to the EMPTY STRING rather
-        // than being left out, because the templates gate on it - an absent reference renders as its
-        // own literal and would read as "there is a lock" for every posting in a .glue written before
-        // the key existed.
-        for (String key : new String[] {"periodRegisterEntity", "periodRegisterPerspective", "periodRegisterKeyField",
-                "periodStartProperty", "periodEndProperty", "periodStatusProperty", "periodClosedValues", "periodDateProperty",
-                "periodSourceDateProperty", "reopenClassName", "reopenTopicSuffix", "periodRegisterModel"}) {
-            context.put(key, strOr(item, key, ""));
-        }
-        context.put("periodRegisterJavaPerspective", sanitize(item, "periodRegisterPerspective"));
+        // sweep re-runs what a closed period refused.
+        bindPeriodLock(item, context);
+        context.put("handlerClassName", str(item, "className") + "Posting");
         // The statuses the posting holds in (#8243). A .glue written before it holds the guard status
         // alone - exactly what that shape's handler and sweep tested.
         context.put("heldStatusValues", strOr(item, "heldStatusValues", strOr(item, "guardValue", "")));

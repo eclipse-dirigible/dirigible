@@ -740,7 +740,9 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   `immutableInPeriod: { period: FiscalPeriod, model: journal, date: date }` - for a source document
   whose module the ledger's model uses (so it cannot `uses:` the ledger back). That register is asked
   at runtime by model + name; while its model is not deployed nothing is locked, and a POSTING into
-  such a record is pre-checked the same way (it waits instead of failing) but gets no reopen re-run.
+  such a record is pre-checked the same way (it waits instead of failing) and is re-run when that
+  period reopens, exactly as for a local register. A `posts:` row into a period-locked target gets
+  the same pre-check and re-run.
 - `lifecycle: { edges: [ { from: <status>, to: [<status>, ...] }, ... ] }` (entity-level) - **the
   declarative state machine**: the WHOLE set of legal status moves, declared once and enforced on
   EVERY status write. Without it the status machinery is a set of point constructs - `init:` names
