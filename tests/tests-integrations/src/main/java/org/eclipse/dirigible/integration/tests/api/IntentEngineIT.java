@@ -6024,7 +6024,7 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(index.contains("x-text=\"step.title\""), "the step indicator should render the translated title");
 
         String formJs = contentOf("gen/ApproveInvoice/forms/ApproveInvoice/form.js");
-        assertTrue(formJs.contains("T('" + PROJECT + ":ApproveInvoice-form.dialogs.successMsg'"),
+        assertTrue(formJs.contains("T('" + PROJECT + ":ApproveInvoice-form.messages.submitted'"),
                 "the submit outcome messages should resolve through the catalog");
     }
 

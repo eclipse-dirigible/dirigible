@@ -68,7 +68,10 @@
       "noCopiesHint": "A copy is stored automatically when the document is issued.",
       "unsavedChanges": "Unsaved changes",
       "unsavedChangesConfirm": "This form has changes that have not been saved yet.",
-      "saved": "Saved"
+      "saved": "Saved",
+      "submitted": "Submitted successfully.",
+      "submitFailed": "Submit failed.",
+      "notOpenedFromTask": "This form was not opened from a task."
     },
     "defaults": {
       "yes": "Yes",
@@ -101,6 +104,9 @@
       "next": "Next",
       "today": "Today",
       "chooseDate": "Choose date",
+      "chooseDateTime": "Choose date and time",
+      "chooseMonth": "Choose month",
+      "chooseWeek": "Choose week",
       "day": "Day",
       "week": "Week",
       "month": "Month",

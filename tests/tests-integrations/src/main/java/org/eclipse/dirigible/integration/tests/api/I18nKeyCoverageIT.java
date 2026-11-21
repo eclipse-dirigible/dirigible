@@ -66,6 +66,12 @@ class I18nKeyCoverageIT {
 
     private static final String TEMPLATE_CATALOG = DIRIGIBLE + "template-application-ui-harmonia-java/ui/translations.json.template";
 
+    /** The chrome catalog the form builder mints into each module beside its form's labels. */
+    private static final String FORM_CATALOG = DIRIGIBLE + "template-form-builder-harmonia/ui/translations.json.template";
+
+    /** Where the form builder asks for its chrome keys. */
+    private static final String FORM_TEMPLATES = "classpath*:" + DIRIGIBLE + "template-form-builder-harmonia/**/*.template";
+
     /** The template catalog's sections every module carries unchanged - the platform ships these. */
     private static final Set<String> CHROME_SECTIONS = Set.of("aria", "state", "messages", "defaults");
 
@@ -82,6 +88,10 @@ class I18nKeyCoverageIT {
      * A generated page's own key: {@code T('$projectName:${tprefix}.<path>', ...)} with a literal path.
      */
     private static final Pattern GENERATED_KEY = Pattern.compile("\\bT\\(\\s*'\\$projectName:\\$\\{tprefix\\}\\.([A-Za-z0-9_.]+)'");
+
+    /** A generated page's own key with its literal fallback: group 1 the key, group 2 the fallback. */
+    private static final Pattern GENERATED_KEY_FALLBACK =
+            Pattern.compile("\\bT\\(\\s*'\\$projectName:\\$\\{tprefix\\}\\.([A-Za-z0-9_.]+)'\\s*,\\s*'([^']*)'");
 
     /** A shell key, wherever it is written: {@code 'application-core:<path>'}. */
     private static final Pattern CORE_KEY = Pattern.compile("['\"]application-core:([A-Za-z0-9_.]+)['\"]");
@@ -145,15 +155,25 @@ class I18nKeyCoverageIT {
         assertNoneMissing("keys a generated page asks for that " + TEMPLATE_CATALOG + " does not mint", missing);
     }
 
+    /**
+     * The chrome of both template catalogs - the generated pages' and the form builder's (#8785) -
+     * ships in every language, and a key both mint means one thing.
+     */
     @Test
     void theTemplateChromeShipsInEveryLanguage() {
         Map<String, String> chrome = new TreeMap<>();
-        flatten(json(TEMPLATE_CATALOG)).forEach((key, value) -> {
-            if (key.indexOf('.') > 0 && CHROME_SECTIONS.contains(key.substring(0, key.indexOf('.')))) {
-                chrome.put("generated." + key, value);
-            }
-        });
         List<String> problems = new ArrayList<>();
+        for (String template : List.of(TEMPLATE_CATALOG, FORM_CATALOG)) {
+            flatten(json(template)).forEach((key, value) -> {
+                if (key.indexOf('.') > 0 && CHROME_SECTIONS.contains(key.substring(0, key.indexOf('.')))) {
+                    String minted = chrome.putIfAbsent("generated." + key, value);
+                    if (minted != null && !minted.equals(value)) {
+                        problems.add(
+                                key + " is \"" + value + "\" in " + template + " but \"" + minted + "\" in the other template catalog");
+                    }
+                }
+            });
+        }
         for (String locale : languages()) {
             Map<String, String> catalog = coreCatalog(locale);
             for (Map.Entry<String, String> entry : chrome.entrySet()) {
@@ -167,7 +187,7 @@ class I18nKeyCoverageIT {
             }
             for (String key : catalog.keySet()) {
                 if (key.startsWith("generated.") && !chrome.containsKey(key)) {
-                    problems.add(locale + ": " + key + " is not in the template catalog any more");
+                    problems.add(locale + ": " + key + " is in no template catalog any more");
                 }
             }
         }
@@ -218,6 +238,44 @@ class I18nKeyCoverageIT {
             }
         }
         assertNoneMissing("application-core catalogs disagree across languages", problems);
+    }
+
+    /**
+     * The form builder's chrome reads the same in English whether its module catalog has loaded or not
+     * (#8785): every {@code T()} fallback in its templates is the en-US text its catalog mints for the
+     * key, and a key it asks for is one the catalog mints.
+     */
+    @Test
+    void theFormBuilderFallbacksAreItsCatalogText() {
+        Map<String, String> catalog = flatten(json(FORM_CATALOG));
+        List<String> problems = new ArrayList<>();
+        int checked = 0;
+        for (Resource resource : resources(FORM_TEMPLATES)) {
+            Matcher matcher = GENERATED_KEY_FALLBACK.matcher(read(resource));
+            while (matcher.find()) {
+                checked++;
+                if (!matcher.group(2)
+                            .equals(catalog.get(matcher.group(1)))) {
+                    problems.add(matcher.group(1) + " falls back to \"" + matcher.group(2) + "\" in " + resource.getFilename()
+                            + ", the catalog says \"" + catalog.get(matcher.group(1)) + "\"");
+                }
+            }
+        }
+        assertTrue(checked >= 7, "only " + checked + " form builder fallbacks found - the pattern stopped matching");
+        assertNoneMissing("form builder fallbacks that are not their en-US catalog text", problems);
+    }
+
+    /**
+     * A form-builder form whose module has no Bulgarian catalog reports its outcome in Bulgarian, from
+     * the platform's copy of the chrome (#8785).
+     */
+    @Test
+    void aFormInBulgarianFallsBackToThePlatformChrome() {
+        try (Context context = loadI18n("bg", JSON.createObjectNode(), STUB_I18NEXT)) {
+            assertEquals("Изпратено успешно.", t(context, "orders:ApproveOrder-form.messages.submitted", "Submitted successfully."));
+            assertEquals("Изпращането е неуспешно.", t(context, "orders:ApproveOrder-form.messages.submitFailed", "Submit failed."));
+            assertEquals("Избор на седмица", t(context, "orders:ApproveOrder-form.defaults.chooseWeek", "Choose week"));
+        }
     }
 
     /**
