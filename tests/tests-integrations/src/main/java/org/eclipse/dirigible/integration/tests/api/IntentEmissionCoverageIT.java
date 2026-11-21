@@ -8468,6 +8468,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("$", hasSize(1)));
+        // A parent id that is not a number is the caller's mistake (#8099): a 400 naming the parameter
+        // and the shape it must have, on the personal and the power list of the child alike - never a
+        // 500, and never the JDK's NumberFormatException text.
+        for (String list : List.of("/claim/ClaimLineMyController?Claim=abc", "/claim/ClaimLineController?Claim=abc")) {
+            restAssuredExecutor.execute(() -> given().when()
+                                                     .get(API + list)
+                                                     .then()
+                                                     .statusCode(400)
+                                                     .body("message", equalTo(
+                                                             "Invalid value for query parameter [Claim]: abc (expected a whole number)"))
+                                                     .body(not(containsString("For input string")))
+                                                     .body(not(containsString("Exception"))));
+        }
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/claim/ClaimLineController?Claim=1")
+                                                 .then()
+                                                 .statusCode(200));
 
         // ---- A status roll-up lets go (#7016): a pledge paid in full is SETTLED, and when its only
         // payment is deleted it is OPEN again - the status the payment found, not a declared one - with
@@ -8771,6 +8788,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("$", hasSize(1)));
+        // The partner list of a child refuses a non-numeric parent id the same way (#8099), and still
+        // serves the partner's own ticket.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/partnerticket/PartnerTicketStampPartnerController?PartnerTicket=abc")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("message", equalTo(
+                                                         "Invalid value for query parameter [PartnerTicket]: abc (expected a whole number)"))
+                                                 .body(not(containsString("For input string"))));
+        AtomicReference<Integer> partnerTicket = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> partnerTicket.set(given().when()
+                                                                   .get(API + "/partnerticket/PartnerTicketPartnerController")
+                                                                   .then()
+                                                                   .statusCode(200)
+                                                                   .extract()
+                                                                   .path("[0].Id")));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/partnerticket/PartnerTicketStampPartnerController?PartnerTicket="
+                                                         + partnerTicket.get())
+                                                 .then()
+                                                 .statusCode(200));
         // ADMINISTRATION shell: the shell page is served, aggregates this module's admin perspective
         // through its own disjoint extension point, and the generated admin page itself serves.
         restAssuredExecutor.execute(() -> given().when()
