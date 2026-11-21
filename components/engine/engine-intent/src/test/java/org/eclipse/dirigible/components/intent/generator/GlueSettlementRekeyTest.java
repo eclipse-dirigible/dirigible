@@ -77,6 +77,19 @@ class GlueSettlementRekeyTest {
     }
 
     /**
+     * A total that grows after the invoice became payable is settled from the money already on account
+     * (#8489): the settlement binds the invoice's own "-updated" topic, which the repository publishes
+     * under the raw perspective.
+     */
+    @Test
+    void theSettlementCarriesTheInvoicesOwnTopic() {
+        List<Map<String, Object>> listeners = GlueIntentGenerator.buildSettlementListenersForTest(IntentParser.parse(YAML));
+
+        assertEquals("settle-Invoice-Invoice", listeners.get(0)
+                                                        .get("invoiceTopic"));
+    }
+
+    /**
      * The payment's DELETE moment (issue #7061). The junction FK to the payment never becomes a
      * database constraint on this platform, so a deleted payment left its allocation rows behind and
      * the invoice stayed settled forever. The cleanup handler needs only the key off the delete payload

@@ -1031,6 +1031,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("invoiceTotal", IntentNaming.pascalCase(s.getTotal()));
             e.put("invoiceStatus", s.getStatus() == null ? "" : IntentNaming.pascalCase(s.getStatus()));
             e.put("payableCondition", payableCondition(s.getPayableStatuses()));
+            // The invoice's own "-updated" topic, which the repository publishes under the RAW
+            // perspective: a total raised by a derived write after the invoice became payable is
+            // settled from the money already on account (#8489).
+            e.put("invoiceTopic", context.getProjectName() + "-" + e.get("invoicePerspective") + "-" + s.getInvoice());
             // junction (this project)
             e.put("junctionEntity", s.getJunction());
             e.put("junctionPerspective", IntentEntities.resolvePerspective(s.getJunction(), compositionParents, model));
