@@ -155,7 +155,10 @@ carries a message of your own wording and not just a stack trace.
 
 The model can compute a field with neutral arithmetic; when the rule is too custom for that, it
 names a Java class instead (`calculatedActionOnCreate` / `calculatedActionOnUpdate`). The generated
-repository calls it just before persisting, as `Beans.get(X.class).calculate(entity)`.
+repository calls it just before persisting, as `Beans.get(X.class).calculate(entity)`, and also on a
+copy of the record when the controller's checks judge what the write would store - so it may run more
+than once per write, or for a write that is then refused. It computes a value from the record and
+writes nothing: no save, no message, no number drawn from a series (that is the model's `number:`).
 
 ```java
 package custom;
@@ -164,7 +167,7 @@ import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.db.CalculatedField;
 
 @Component
-public class OrderNumberAction implements CalculatedField<OrderEntity, String> {
+public class OrderRegionAction implements CalculatedField<OrderEntity, String> {
 
     @Override
     public String calculate(OrderEntity entity) {
