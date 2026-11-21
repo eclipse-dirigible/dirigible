@@ -52,6 +52,20 @@ import com.google.gson.JsonParser;
  * {@code {{count}}}) are interpolated AFTER translation, so a translation may move them.
  *
  * <p>
+ * Two pieces of i18next's grammar work here as they do in the browser (#8777), so a catalog entry
+ * reads the same on both sides:
+ * <ul>
+ * <li><b>plural forms</b> - when the parameters carry a whole-number {@code count}, the catalog's
+ * {@code <key>_one} / {@code _few} / {@code _many} / {@code _other} entry the language's CLDR rule
+ * picks wins over the plain {@code <key>}, which stays the fallback, so a catalog without suffixed
+ * entries keeps working;</li>
+ * <li><b>{@code {name, lowercase}}</b> (and {@code {{name, lowercase}}}) - a label that sits inside
+ * a sentence, lower-cased word by word except a word in capitals (an acronym such as ДДС), the rule
+ * of the browser's {@code lowercase} formatter (#8133). Only the catalog phrase that opts in is
+ * affected.</li>
+ * </ul>
+ *
+ * <p>
  * Resolution never fails the refusal it serves: a catalog that cannot be read is skipped and the
  * next source used.
  */
@@ -60,10 +74,20 @@ public final class CheckMessages {
     private static final Logger LOGGER = LoggerFactory.getLogger(CheckMessages.class);
 
     /**
-     * {@code {{name}}} (i18next) or {@code {name}} (the authored DSL form); a name may be a one-hop
-     * path, {@code {Category.code}} (#8665).
+     * {@code {{name}}} (i18next) or {@code {name}} (the authored DSL form), each with an optional
+     * {@code , format}; a name may be a one-hop path, {@code {Category.code}} (#8665).
      */
-    private static final Pattern PLACEHOLDER = Pattern.compile("\\{\\{\\s*([\\w.]+)\\s*\\}\\}|\\{([\\w.]+)\\}");
+    private static final Pattern PLACEHOLDER =
+            Pattern.compile("\\{\\{\\s*([\\w.]+)\\s*(?:,\\s*(\\w+)\\s*)?\\}\\}|\\{([\\w.]+)(?:\\s*,\\s*(\\w+))?\\}");
+
+    /** The format of a label inside a sentence (#8777), as the browser's formatter names it. */
+    private static final String LOWERCASE = "lowercase";
+
+    /** The parameter whose value picks a plural form, as in i18next. */
+    private static final String COUNT = "count";
+
+    /** The language of the default texts: the generated code and the SDK author them in English. */
+    private static final String DEFAULT_LANGUAGE = "en";
 
     /** Reads the request language's own catalog entry for a key. */
     @FunctionalInterface
@@ -149,39 +173,103 @@ public final class CheckMessages {
      * @return the resolved text
      */
     static String resolve(String language, CatalogReader catalogs, String catalogKey, String text, Map<String, Object> params) {
-        String resolved = null;
-        String normalized = normalize(language);
-        if (normalized != null && catalogKey != null && catalogKey.indexOf(':') > 0) {
-            try {
-                resolved = catalogs.read(normalized, catalogKey);
-            } catch (RuntimeException e) {
-                LOGGER.debug("Could not read the [{}] catalogs for [{}]: {}", normalized, catalogKey, e.getMessage());
-            }
-        }
-        return interpolate(isBlank(resolved) ? text : resolved, params);
+        // singletonMap: a text may be null (a label nobody gave), which Map.of refuses.
+        return resolve(language, catalogs, catalogKey, Collections.singletonMap(PluralCategories.OTHER, text), params);
     }
 
     /**
-     * Interpolates {@code {name}} and {@code {{name}}} placeholders; an unknown name is left as it is,
-     * and a name present with a {@code null} value (an empty field of the record) becomes the empty
-     * string.
+     * Resolves a message whose default text has plural forms: the language's catalog - the entry of the
+     * plural category {@code count} falls into, else the plain one - else the default text of that
+     * category, and interpolates the placeholders into the winner.
+     *
+     * @param language the request language, may be blank
+     * @param catalogs the catalog reader
+     * @param catalogKey the fully qualified catalog key, may be {@code null}
+     * @param texts the default-language text by CLDR plural category; {@code other} is required
+     * @param params the placeholder values
+     * @return the resolved text
+     */
+    static String resolve(String language, CatalogReader catalogs, String catalogKey, Map<String, String> texts,
+            Map<String, Object> params) {
+        Long count = wholeCount(params);
+        String normalized = normalize(language);
+        if (normalized != null && catalogKey != null && catalogKey.indexOf(':') > 0) {
+            String category = count == null ? null : PluralCategories.of(normalized, count);
+            String resolved = category == null ? null : read(catalogs, normalized, catalogKey + "_" + category);
+            if (isBlank(resolved)) {
+                resolved = read(catalogs, normalized, catalogKey);
+            }
+            if (!isBlank(resolved)) {
+                return interpolate(resolved, params, normalized);
+            }
+        }
+        String category = count == null ? null : PluralCategories.of(DEFAULT_LANGUAGE, count);
+        String text = category == null ? null : texts.get(category);
+        return interpolate(text == null ? texts.get(PluralCategories.OTHER) : text, params, DEFAULT_LANGUAGE);
+    }
+
+    /** One catalog entry; a catalog that cannot be read is no entry. */
+    private static String read(CatalogReader catalogs, String language, String catalogKey) {
+        try {
+            return catalogs.read(language, catalogKey);
+        } catch (RuntimeException e) {
+            LOGGER.debug("Could not read the [{}] catalogs for [{}]", language, catalogKey, e);
+            return null;
+        }
+    }
+
+    /**
+     * The {@code count} parameter when it is a whole number - the only kind a plural form is picked by.
+     */
+    private static Long wholeCount(Map<String, Object> params) {
+        Object count = params == null ? null : params.get(COUNT);
+        if (count instanceof Integer || count instanceof Long || count instanceof Short || count instanceof Byte) {
+            return ((Number) count).longValue();
+        }
+        if (count instanceof Number number) {
+            double value = number.doubleValue();
+            return value == Math.rint(value) && !Double.isInfinite(value) ? (long) value : null;
+        }
+        return null;
+    }
+
+    /**
+     * Interpolates {@code {name}} and {@code {{name}}} placeholders in the default language.
      *
      * @param text the text
      * @param params the values
      * @return the interpolated text
+     * @see #interpolate(String, Map, String)
      */
     static String interpolate(String text, Map<String, Object> params) {
+        return interpolate(text, params, DEFAULT_LANGUAGE);
+    }
+
+    /**
+     * Interpolates {@code {name}} and {@code {{name}}} placeholders, each optionally formatted
+     * ({@code {name, lowercase}}); an unknown name is left as it is, a name present with a {@code null}
+     * value (an empty field of the record) becomes the empty string, and an unknown format leaves the
+     * value as it is - as i18next does.
+     *
+     * @param text the text
+     * @param params the values
+     * @param language the language of the text, which lower-cases by its own rules
+     * @return the interpolated text
+     */
+    static String interpolate(String text, Map<String, Object> params, String language) {
         if (text == null || params == null || params.isEmpty()) {
             return text;
         }
         Matcher matcher = PLACEHOLDER.matcher(text);
         StringBuilder out = new StringBuilder();
         while (matcher.find()) {
-            String name = matcher.group(1) != null ? matcher.group(1) : matcher.group(2);
+            boolean doubled = matcher.group(1) != null;
+            String name = doubled ? matcher.group(1) : matcher.group(3);
+            String format = doubled ? matcher.group(2) : matcher.group(4);
             Object value = params.get(name);
             String replacement;
             if (value != null) {
-                replacement = String.valueOf(value);
+                replacement = LOWERCASE.equals(format) ? lowercase(String.valueOf(value), language) : String.valueOf(value);
             } else {
                 // A parameter present with no value - the record's field is empty (#8747) - reads as
                 // nothing, never the text "null"; the error body's messageParams keep the JSON null.
@@ -191,6 +279,24 @@ public final class CheckMessages {
         }
         matcher.appendTail(out);
         return out.toString();
+    }
+
+    /**
+     * A label lower-cased for the inside of a sentence, word by word, keeping a word in capitals - the
+     * browser's {@code lowercase} formatter (#8133), so "Валута" reads "валута" and "ДДС" stays.
+     *
+     * @param value the label
+     * @param language the language whose case rules apply
+     * @return the lower-cased label
+     */
+    static String lowercase(String value, String language) {
+        Locale locale = Locale.forLanguageTag(language);
+        String[] words = value.split(" ", -1);
+        for (int i = 0; i < words.length; i++) {
+            String word = words[i];
+            words[i] = word.length() > 1 && word.equals(word.toUpperCase(locale)) ? word : word.toLowerCase(locale);
+        }
+        return String.join(" ", words);
     }
 
     /**

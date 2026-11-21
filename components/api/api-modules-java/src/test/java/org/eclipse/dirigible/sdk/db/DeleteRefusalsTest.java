@@ -46,10 +46,10 @@ class DeleteRefusalsTest {
     void everyReferencingEntityIsListedWithItsCount() {
         DeleteRestrictionException refusal = DeleteRefusals.referenced(null, CATALOGS, CATALOG, "Product", PRODUCT_LABEL_KEY, REFERENCES);
 
-        assertEquals("This Product is referenced by 1 Product Cost record(s), 2 Stock Movement record(s) and cannot be deleted",
+        assertEquals("This Product is referenced by 1 Product Cost record, 2 Stock Movement records and cannot be deleted",
                 refusal.getMessage());
         assertEquals(CATALOG + ".checks.deleteReferenced", refusal.getMessageKey());
-        assertEquals(Map.of("entity", "Product", "references", "1 Product Cost record(s), 2 Stock Movement record(s)"),
+        assertEquals(Map.of("entity", "Product", "references", "1 Product Cost record, 2 Stock Movement records"),
                 refusal.getMessageParams());
     }
 
@@ -70,7 +70,7 @@ class DeleteRefusalsTest {
         DeleteRestrictionException refusal = DeleteRefusals.referenced("bg", CATALOGS, null, "Product", null,
                 List.of(new DeleteRefusals.Reference("Product Cost", null, 1)));
 
-        assertEquals("This Product is referenced by 1 Product Cost record(s) and cannot be deleted", refusal.getMessage());
+        assertEquals("This Product is referenced by 1 Product Cost record and cannot be deleted", refusal.getMessage());
         assertNull(refusal.getMessageKey());
     }
 
@@ -110,5 +110,45 @@ class DeleteRefusalsTest {
         assertEquals("Продукт все още има записи Цени на продукта - първо изтрийте тях", refusal.getMessage());
         assertEquals(CATALOG + ".checks.deleteHasChildren", refusal.getMessageKey());
         assertEquals(Map.of("entity", "Продукт", "children", "Цени на продукта"), refusal.getMessageParams());
+    }
+
+    /**
+     * dirigible #8777: a catalog's plural forms are picked by the count - "1 запис", "5 записа" - and
+     * the label opting into lower case reads so inside the sentence; a catalog written before keeps its
+     * plain entry.
+     */
+    @Test
+    void eachReferenceTakesThePluralFormOfItsCount() {
+        Map<String, String> bg = Map.of( //
+                CATALOG + ".checks.deleteReferenced", "{entity} не може да бъде изтрит: използва се в {references}.", //
+                CATALOG + ".checks.deleteReference_one", "{count} запис в {label, lowercase}", //
+                CATALOG + ".checks.deleteReference_other", "{count} записа в {label, lowercase}", //
+                "inventory:inventory-model.t.STOCK_MOVEMENT", "Складови движения");
+        CheckMessages.CatalogReader catalogs = (language, key) -> "bg".equals(language) ? bg.get(key) : null;
+
+        DeleteRestrictionException refusal = DeleteRefusals.referenced("bg", catalogs, CATALOG, "Продукт", null,
+                List.of(new DeleteRefusals.Reference("Stock Movement", "inventory:inventory-model.t.STOCK_MOVEMENT", 1),
+                        new DeleteRefusals.Reference("Stock Movement", "inventory:inventory-model.t.STOCK_MOVEMENT", 5)));
+
+        assertEquals("Продукт не може да бъде изтрит: използва се в 1 запис в складови движения, 5 записа в складови движения.",
+                refusal.getMessage());
+    }
+
+    /** dirigible #8777: a master refusing its delete counts its children, in their plural form. */
+    @Test
+    void aMasterWithChildrenNamesHowManyInTheirPluralForm() {
+        assertEquals("This Product still has 1 Product Price record - delete it first",
+                DeleteRefusals.hasChildren(null, CATALOGS, CATALOG, "Product", PRODUCT_LABEL_KEY, "Product Price", PRODUCT_PRICE_LABEL_KEY,
+                        1)
+                              .getMessage());
+        assertEquals("This Product still has 3 Product Price records - delete those first",
+                DeleteRefusals.hasChildren(null, CATALOGS, CATALOG, "Product", PRODUCT_LABEL_KEY, "Product Price", PRODUCT_PRICE_LABEL_KEY,
+                        3)
+                              .getMessage());
+        // A catalog written before carries the plain, countless entry - it still answers.
+        ValidationException refusal = DeleteRefusals.hasChildren("bg", CATALOGS, CATALOG, "Product", PRODUCT_LABEL_KEY, "Product Price",
+                PRODUCT_PRICE_LABEL_KEY, 3);
+        assertEquals("Продукт все още има записи Цени на продукта - първо изтрийте тях", refusal.getMessage());
+        assertEquals(Map.of("entity", "Продукт", "children", "Цени на продукта", "count", 3L), refusal.getMessageParams());
     }
 }

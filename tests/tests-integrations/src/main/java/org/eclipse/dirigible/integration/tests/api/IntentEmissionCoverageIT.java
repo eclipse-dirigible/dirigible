@@ -4074,11 +4074,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                           .find(),
                 "the cascade must run as one unit of work with the record's own delete, its refusal first, got: " + entryRepository);
         // ...and the author's alternative is the refusal, on the child that declared it - naming both
-        // entities, in the repository, so it holds for a reaction and a cascade too, not only for REST.
+        // entities and how many children there are (#8777), in the repository, so it holds for a
+        // reaction and a cascade too, not only for REST.
         assertTrue(
-                entryRepository.contains("if (!new gen.emission.data.entry.EntryCopyRepository()")
+                entryRepository.contains("long children2 = new gen.emission.data.entry.EntryCopyRepository()")
+                        && entryRepository.contains("if (children2 > 0) {")
                         && entryRepository.contains("DeleteRefusals.hasChildren(messageCatalog(), \"Entry\", labelCatalogKey(),")
-                        && entryRepository.contains("\"Entry Copy\", \""),
+                        && entryRepository.contains("\"Entry Copy\", \"") && entryRepository.contains(", children2);"),
                 "whenMasterDeleted: refuse must reject the master's delete while children exist, got: " + entryRepository);
         assertFalse(entryRepository.contains("EntryCopyOwner.delete("),
                 "a refusing child must not be cascaded into, got: " + entryRepository);

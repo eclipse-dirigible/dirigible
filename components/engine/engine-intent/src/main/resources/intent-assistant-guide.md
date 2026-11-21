@@ -197,9 +197,9 @@ not as an apology.
   the children it owns.** `cascade` (the default, no key needed) deletes them with it, in the same
   transaction and through their own repository, so each child's delete event fires and every roll-up
   over the child relinquishes what it counted. `refuse` rejects the master's delete while any child
-  exists ("This Sales Order still has Sales Order Item records - delete those first", a 400 in the
-  reader's language: the sentence is `checks.deleteHasChildren` of the model catalog, the entities are
-  named by their `t.<TABLE>` labels, #8635), for a document whose lines must be removed deliberately. Every `refuse` is checked BEFORE the first cascade runs, so
+  exists ("This Sales Order still has 2 Sales Order Item records - delete those first", a 400 in the
+  reader's language: the sentence is `checks.deleteHasChildren_one` / `_other` of the model catalog,
+  the entities are named by their `t.<TABLE>` labels, #8635, #8777), for a document whose lines must be removed deliberately. Every `refuse` is checked BEFORE the first cascade runs, so
   a refusal never arrives after a cascading sibling's rows are already deleted. There is no third option: a header that leaves its lines
   behind leaves rows pointing at an id that no longer exists - invisible in the UI, since no parent page
   renders them, and still counted by every report and roll-up over the child. Declare it on the
@@ -257,9 +257,9 @@ not as an apology.
   `oneToOne` = what deleting the record it points at does to the records pointing at it** (#7547).
   - `restrict` is the DEFAULT, also when the key is absent: the delete is refused with ONE 409 naming
     every kind of referencing record with its count ("This Employee is referenced by 2 Expense Claim
-    record(s), 1 Advance record(s) and cannot be deleted"), in the reader's language: the sentence is
-    `checks.deleteReferenced` / `checks.deleteReference` of the deleted entity's model catalog, the
-    entities are named by their `t.<TABLE>` labels (#8569).
+    records, 1 Advance record and cannot be deleted"), in the reader's language: the sentence is
+    `checks.deleteReferenced` / `checks.deleteReference_one` / `_other` of the deleted entity's model
+    catalog, the entities are named by their `t.<TABLE>` labels (#8569, #8777).
   - `nullify` deletes the target and clears this relation. It is refused on a `required` relation.
   - `cascade` deletes this record together with the target, through its own repository, so its
     events, history and own rules apply.
@@ -1079,6 +1079,15 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   body's `messageParams` carries each by its placeholder name. A placeholder that is not a field or
   to-one of the record, or walks more than one hop, is a parse error; `count`, `match`, `remaining`,
   `capacity` and `requested` stay the generator's own.
+  **A catalog entry has i18next's plural forms and lower case (#8777)**, read the same on the server
+  as in the browser. When the message carries a whole-number `{count}`, the catalog's `<key>_one` /
+  `_few` / `_many` / `_other` entry the language's CLDR rule picks wins over the plain `<key>` (which
+  stays the fallback, so an older catalog keeps working): bg `"deleteReference_one": "{count} запис"`,
+  `"deleteReference_other": "{count} записа"`. A label that sits inside a sentence opts into lower
+  case per phrase with `{entity, lowercase}` (or `{{entity, lowercase}}`): each word is lower-cased
+  except one in capitals, so "Ставка ДДС" reads "ставка ДДС" - for the languages that do not keep a
+  title-cased label's capital mid-sentence. Never lower-case the label itself in `t.` to get there:
+  the same label heads a column and a form.
 - `postings:` (top-level) - **declarative posting**: when a (usually cross-model) source document
   reaches a status - or, for a source with no status lifecycle, when it is created; or when it
   reaches a declared enrichment `phases:` moment, the only trigger that may read an amount a

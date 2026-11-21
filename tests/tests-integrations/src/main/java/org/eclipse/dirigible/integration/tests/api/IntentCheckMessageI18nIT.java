@@ -183,16 +183,17 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
                                    .get(uomKey)
                                    .getAsString();
         // The translator's overlay: fieldTooLong is left untranslated, so it falls back to the default
-        // text.
+        // text. The entity's label is title-cased as a label is, and the duplicate sentence opts into
+        // lower case where the label sits inside it (#8777) - "САП" an acronym that keeps its capitals.
         writeResource(PROJECT_PATH + "/i18n/bg-BG/checkmsg.model.json", """
                 {
                   "checkmsg-model": {
                     "checks": {
                       "fieldRequired": "Полето '{label}' е задължително",
-                      "fieldDuplicate": "Вече съществува {entity} с това '{label}'",
+                      "fieldDuplicate": "Вече съществува {entity, lowercase} с това {label, lowercase}",
                       "fieldIban": "Стойността на '{label}' не е валиден IBAN"
                     },
-                    "t": { "%s": "САП код", "%s": "мерна единица" }
+                    "t": { "%s": "САП код", "%s": "Мерна единица" }
                   }
                 }
                 """.formatted(sapKey, uomKey));
@@ -220,7 +221,7 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
         create(UOMS, "{\"Sap\":\"KG\",\"Numerator\":1}", null, "en");
         refused(UOMS, "{\"Sap\":\"KG\",\"Numerator\":1}", "bg", 409)
                                                                     .body("message",
-                                                                            equalTo("Вече съществува мерна единица с това 'САП код'"))
+                                                                            equalTo("Вече съществува мерна единица с това САП код"))
                                                                     .body("messageKey", equalTo(CATALOG + "fieldDuplicate"))
                                                                     .body("field", equalTo("Sap"));
         refused(UOMS, "{\"Sap\":\"KG\",\"Numerator\":1}", "en", 409).body("message",
