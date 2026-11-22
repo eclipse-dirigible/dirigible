@@ -126,6 +126,23 @@ class GlueExportsTest {
                 JavaExpressions.expression(export.get("fileNameReading")));
     }
 
+    /**
+     * An export has no convention role to keep, so an {@code additive: true} token (issue #8852) gates
+     * it exactly as a plain one does - beside the roles of the other entries naming it.
+     */
+    @Test
+    void anAdditiveGrantOnAnExportIsItsGateLikeAnyOther() {
+        String additive = INTENT.replace("- { role: Accountant, can: [\"VatPurchaseLedger:read\"] }", """
+                - { role: Accountant, can: ["VatPurchaseLedger:read"] }
+                  - { role: Auditor, can: ["VatPurchaseLedger:read", "SupplierTotals:read"], additive: true }""");
+        List<Map<String, Object>> exports = GlueIntentGenerator.buildExportsForTest(IntentParser.parse(additive));
+
+        assertEquals("Accountant,Auditor", exports.get(0)
+                                                  .get("roles"));
+        assertEquals("Auditor", exports.get(1)
+                                       .get("roles"));
+    }
+
     @Test
     @SuppressWarnings("unchecked")
     void aReportExportReadsItsRowsByColumnAlias() {

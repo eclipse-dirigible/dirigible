@@ -3742,6 +3742,49 @@ class IntentParserTest {
     }
 
     /**
+     * {@code additive: true} on a permission entry is a declared key (issue #8852), absent means false,
+     * and a mis-spelled one is refused like any unknown key rather than silently replacing the
+     * convention roles the author meant to keep.
+     */
+    @Test
+    void aPermissionEntryMayBeAdditive() {
+        String yaml = visibleToYaml("", "").replace("- { role: Payroll }", "- { role: Payroll, can: [Employee:read], additive: true }");
+        IntentModel model = IntentParser.parse(yaml);
+
+        assertTrue(model.getPermissions()
+                        .get(0)
+                        .isAdditive());
+        assertFalse(model.getPermissions()
+                         .get(1)
+                         .isAdditive());
+        IntentValidationException ex =
+                assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml.replace("additive: true", "aditive: true")));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("aditive")),
+                "expected an unknown-key issue, got: " + ex.getIssues());
+    }
+
+    /**
+     * {@code additive} keeps the convention roles of the resources an entry names and {@code exclusive}
+     * gates them by the authored roles only, so one entry cannot say both.
+     */
+    @Test
+    void aPermissionEntryCannotBeBothAdditiveAndExclusive() {
+        String yaml = visibleToYaml("", "").replace("- { role: Payroll }",
+                "- { role: Payroll, can: [Employee:read], additive: true, exclusive: true }");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("permission [Payroll] declares both additive and exclusive")),
+                "expected the additive/exclusive refusal, got: " + ex.getIssues());
+        // Either one alone, and the two on separate entries of the role, parse.
+        IntentParser.parse(yaml.replace(", exclusive: true", ""));
+        IntentParser.parse(yaml.replace("additive: true, ", ""));
+        IntentParser.parse(yaml.replace(", exclusive: true }", " }\n  - { role: Payroll, can: [Employee:write], exclusive: true }"));
+    }
+
+    /**
      * An empty allow-list parses identically to an absent one, so it is refused rather than ignored.
      */
     @Test

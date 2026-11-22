@@ -1044,6 +1044,30 @@ class ModelParameterProcessorTest {
         assertEquals("library.Book.BookReadOnly,Owner,User", entity.get("roleRead"), "the gate itself keeps every role it admits");
     }
 
+    /**
+     * The gate an intent's {@code additive: true} permission produces (dirigible #8852): the convention
+     * roles first, then the role added for people, then the deployment's extras. Each gate's first role
+     * is the one declared, so the convention pair stays declared and the added role - which the
+     * intent's own {@code .roles} declares - is never declared a second time here.
+     */
+    @Test
+    void aConventionGateARoleWasAddedToDeclaresTheConventionRolesOnly() {
+        Map<String, Object> entity = entity("LeaveType", "LeaveTypes", property("Name", "VARCHAR"));
+        entity.put("generateDefaultRoles", "true");
+        entity.put("roleRead", "hr.LeaveType.LeaveTypeReadOnly,hr.LeaveType.LeaveTypeFullAccess,Employee,Owner,User");
+        entity.put("roleWrite", "hr.LeaveType.LeaveTypeFullAccess,Owner,User");
+        Map<String, Object> parameters = parameters();
+
+        ModelParameterProcessor.process(model(entity), parameters);
+
+        List<Object> roles = ModelValues.asList(parameters.get("roles"));
+        assertEquals(1, roles.size());
+        Map<String, Object> role = ModelValues.asMap(roles.get(0));
+        assertEquals("hr.LeaveType.LeaveTypeReadOnly", role.get("roleRead"));
+        assertEquals("hr.LeaveType.LeaveTypeFullAccess", role.get("roleWrite"));
+        assertFalse(role.containsValue("Employee"), "the added role is the intent's to declare: " + role);
+    }
+
     @Test
     void aReportContributesNoWriteRole() {
         Map<String, Object> report = entity("Revenue", "Reports", property("Total", "DECIMAL"));
