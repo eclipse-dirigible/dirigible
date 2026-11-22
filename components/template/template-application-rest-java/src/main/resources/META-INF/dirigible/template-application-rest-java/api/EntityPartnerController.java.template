@@ -1,7 +1,8 @@
 package gen.${javaGenFolderName}.api.${javaPerspectiveName};
 ## The refusals resolve their sentence and the names they quote from the model's catalog (#8775); a
 ## context rendered without one refuses in the default language, naming the entities by their names.
-#if(!$messageCatalogJava)#set($messageCatalogJava = "null")#end
+#set($catalogJava = "null")
+#if($messageCatalogJava)#set($catalogJava = $messageCatalogJava)#end
 #if(!$entityRefusalLabelJava)#set($entityRefusalLabelJava = 'new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label("' + $name + '", null)')#end
 #macro(lockRefusalLabel $level)#if($level.labelJava)${level.labelJava}#{else}new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label("${level.entity}", null)#end#end
 
@@ -211,7 +212,7 @@ public class ${name}PartnerController {
 #foreach($property in $properties)
 #if($property.name == $partnerParent.fkProperty && $property.refusalFieldArgsJava)#set($parentField = $property.refusalFieldArgsJava)#end
 #end
-            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required(${messageCatalogJava}, ${parentField});
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required(${catalogJava}, ${parentField});
         }
         requireMyParent(entity.${partnerParent.fkProperty});
 #else
@@ -503,15 +504,15 @@ public class ${name}PartnerController {
 #if($masterLock.always || $masterLock.statusProperty)
         if (!isMasterMutable(master)) {
 #if($masterLock.always)
-            throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.masterAppendOnly(${messageCatalogJava}, ${entityRefusalLabelJava}, #lockRefusalLabel($masterLock)));
+            throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.masterAppendOnly(${catalogJava}, ${entityRefusalLabelJava}, #lockRefusalLabel($masterLock)));
 #else
-            throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.masterImmutable(${messageCatalogJava}, ${entityRefusalLabelJava}, #lockRefusalLabel($masterLock)));
+            throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.masterImmutable(${catalogJava}, ${entityRefusalLabelJava}, #lockRefusalLabel($masterLock)));
 #end
         }
 #end
 #if($masterLock.period)
         if (!isMasterPeriodOpen(master.${masterLock.period.dateProperty})) {
-            throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.masterPeriodClosed(${messageCatalogJava}, #lockRefusalLabel($masterLock), #lockRefusalLabel($masterLock.period)));
+            throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.masterPeriodClosed(${catalogJava}, #lockRefusalLabel($masterLock), #lockRefusalLabel($masterLock.period)));
         }
 #end
 #foreach($ancestor in $masterLock.ancestors)
@@ -535,15 +536,15 @@ public class ${name}PartnerController {
 #if($ancestor.always || $ancestor.statusProperty)
         if (!isAncestor${ancestorIndex}Mutable(ancestor${ancestorIndex})) {
 #if($ancestor.always)
-            throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.masterAppendOnly(${messageCatalogJava}, ${entityRefusalLabelJava}, #lockRefusalLabel($ancestor)));
+            throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.masterAppendOnly(${catalogJava}, ${entityRefusalLabelJava}, #lockRefusalLabel($ancestor)));
 #else
-            throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.masterImmutable(${messageCatalogJava}, ${entityRefusalLabelJava}, #lockRefusalLabel($ancestor)));
+            throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.masterImmutable(${catalogJava}, ${entityRefusalLabelJava}, #lockRefusalLabel($ancestor)));
 #end
         }
 #end
 #if($ancestor.period)
         if (!isAncestor${ancestorIndex}PeriodOpen(ancestor${ancestorIndex}.${ancestor.period.dateProperty})) {
-            throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.masterPeriodClosed(${messageCatalogJava}, #lockRefusalLabel($ancestor), #lockRefusalLabel($ancestor.period)));
+            throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.masterPeriodClosed(${catalogJava}, #lockRefusalLabel($ancestor), #lockRefusalLabel($ancestor.period)));
         }
 #end
 #end
@@ -649,11 +650,11 @@ public class ${name}PartnerController {
     // unaffected, as on the power surface.
     private void requireMutable(${name}Entity existing) {
 #if($immutableAlways)
-        throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.appendOnly(${messageCatalogJava}, ${entityRefusalLabelJava}));
+        throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.appendOnly(${catalogJava}, ${entityRefusalLabelJava}));
 #else
 #if($immutableStatusProperty)
         if (!isStatusMutable(existing)) {
-            throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.immutable(${messageCatalogJava}, ${entityRefusalLabelJava}));
+            throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.immutable(${catalogJava}, ${entityRefusalLabelJava}));
         }
 #end
 #if($periodLock)
@@ -727,7 +728,7 @@ public class ${name}PartnerController {
     // A direct edit of the flow's column, answered 409 in the reader's language with the column as its
     // field (#8775).
     private static org.eclipse.dirigible.sdk.db.ConflictException workflowStatusRefusal() {
-        return new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.FieldRefusals.workflowOwned(${messageCatalogJava}, ${workflowStatusField}));
+        return new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.FieldRefusals.workflowOwned(${catalogJava}, ${workflowStatusField}));
     }
 #end
 #if($fixedAfterCreateProperties && $fixedAfterCreateProperties.size() > 0)
@@ -814,8 +815,8 @@ public class ${name}PartnerController {
                 instance = existing.ProcessId;
             }
             if (instance != null && !instance.isBlank() && org.eclipse.dirigible.sdk.bpm.Process.isRunning(instance)) {
-                throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.inFlow(${messageCatalogJava}, ${entityRefusalLabelJava},
-                        new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label(label, #if($messageCatalogJava != "null")${messageCatalogJava} + ".processes." + process#{else}null#end)));
+                throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.inFlow(${catalogJava}, ${entityRefusalLabelJava},
+                        new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label(label, #if($catalogJava != "null")${catalogJava} + ".processes." + process#{else}null#end)));
             }
         }
     }
@@ -843,7 +844,7 @@ public class ${name}PartnerController {
         if (isPeriodOpen(date)) {
             return;
         }
-        throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.periodClosed(${messageCatalogJava}, #lockRefusalLabel($periodLock)));
+        throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.periodClosed(${catalogJava}, #lockRefusalLabel($periodLock)));
     }
 
     // A date covered by no period at all is open: periods are declared as they are needed, and an
@@ -1248,7 +1249,7 @@ public class ${name}PartnerController {
 #if($property.refusalFieldArgsJava)#set($leafField = $property.refusalFieldArgsJava)#end
 #set($leafTarget = '"' + $property.relationshipEntityName + '", null')
 #if($property.leafOnlyTargetLabelArgsJava)#set($leafTarget = $property.leafOnlyTargetLabelArgsJava)#end
-            throw org.eclipse.dirigible.sdk.db.FieldRefusals.leafOnly(${messageCatalogJava}, ${leafField}, ${leafTarget});
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.leafOnly(${catalogJava}, ${leafField}, ${leafTarget});
         }
 #end
 #end
@@ -1267,7 +1268,7 @@ public class ${name}PartnerController {
             int depth = 0;
             while (cursor != null && depth++ < 100) {
                 if (cursor.equals(self)) {
-                    throw org.eclipse.dirigible.sdk.db.FieldRefusals.hierarchyCycle(${messageCatalogJava}, ${hierarchyField}, ${hierarchyEntity});
+                    throw org.eclipse.dirigible.sdk.db.FieldRefusals.hierarchyCycle(${catalogJava}, ${hierarchyField}, ${hierarchyEntity});
                 }
                 ${name}Entity parent = repository.findOne(cursor).orElse(null);
                 if (parent == null) {
@@ -1276,7 +1277,7 @@ public class ${name}PartnerController {
                 cursor = parent.${hierarchyProperty};
             }
             if (depth >= 100) {
-                throw org.eclipse.dirigible.sdk.db.RecordRefusals.hierarchyTooDeep(${messageCatalogJava}, ${entityRefusalLabelJava});
+                throw org.eclipse.dirigible.sdk.db.RecordRefusals.hierarchyTooDeep(${catalogJava}, ${entityRefusalLabelJava});
             }
         }
 #end

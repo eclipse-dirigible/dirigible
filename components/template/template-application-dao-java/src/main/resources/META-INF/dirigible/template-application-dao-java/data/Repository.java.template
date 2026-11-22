@@ -1,7 +1,8 @@
 package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 ## The refusals resolve their sentence and the names they quote from the model's catalog (#8775); a
 ## context rendered without one refuses in the default language, naming the entities by their names.
-#if(!$messageCatalogJava)#set($messageCatalogJava = "null")#end
+#set($catalogJava = "null")
+#if($messageCatalogJava)#set($catalogJava = $messageCatalogJava)#end
 #if(!$entityRefusalLabelJava)#set($entityRefusalLabelJava = 'new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label("' + $name + '", null)')#end
 #macro(lockRefusalLabel $level)#if($level.labelJava)${level.labelJava}#{else}new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label("${level.entity}", null)#end#end
 
@@ -197,7 +198,7 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #else
 #set($guardParentLabel = 'new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label("' + $rollupGuard.parentEntity + '", null)')
 #if($rollupGuard.parentLabelJava)#set($guardParentLabel = $rollupGuard.parentLabelJava)#end
-                    throw org.eclipse.dirigible.sdk.db.RecordRefusals.capacityExceeded(${messageCatalogJava}, ${guardParentLabel},
+                    throw org.eclipse.dirigible.sdk.db.RecordRefusals.capacityExceeded(${catalogJava}, ${guardParentLabel},
                             "${rollupGuard.ofField}", guardParent.${rollupGuard.capacityField}, guardConsumed, guardIncoming);
 #end
                 }
@@ -382,7 +383,7 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #set($refusalField = '"' + $property.name + '", "' + $property.name + '", null')
 #if($property.refusalFieldArgsJava)#set($refusalField = $property.refusalFieldArgsJava)#end
         if (entity.${property.name} == null#if($property.dataTypeJavaClass == "String") || org.eclipse.dirigible.sdk.db.Normalize.isBlank(entity.${property.name})#end) {
-            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required(${messageCatalogJava}, ${refusalField});
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required(${catalogJava}, ${refusalField});
         }
 #end
 #end
@@ -1522,7 +1523,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             } catch (NumberFormatException e) {
                 // Not the documented shape at all. Rejected rather than repaired: dropping the offending
                 // key would persist a DIFFERENT selection than the caller asked for, silently.
-                throw org.eclipse.dirigible.sdk.db.FieldRefusals.selection(${messageCatalogJava}, field, label, labelKey);
+                throw org.eclipse.dirigible.sdk.db.FieldRefusals.selection(${catalogJava}, field, label, labelKey);
             }
         }
         if (keys.isEmpty()) {
@@ -1667,11 +1668,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             return;
         }
         if (next == null) {
-            throw org.eclipse.dirigible.sdk.db.RecordRefusals.lifecycleNoStatus(${messageCatalogJava}, ${entityRefusalLabelJava},
+            throw org.eclipse.dirigible.sdk.db.RecordRefusals.lifecycleNoStatus(${catalogJava}, ${entityRefusalLabelJava},
                     "${lifecycleStatusProperty}", lifecycleLabel(previous));
         }
         if (!LIFECYCLE_EDGES.contains(String.valueOf(previous) + ">" + String.valueOf(next))) {
-            throw org.eclipse.dirigible.sdk.db.RecordRefusals.lifecycleMove(${messageCatalogJava}, ${entityRefusalLabelJava},
+            throw org.eclipse.dirigible.sdk.db.RecordRefusals.lifecycleMove(${catalogJava}, ${entityRefusalLabelJava},
                     "${lifecycleStatusProperty}", lifecycleLabel(previous), lifecycleLabel(next));
         }
     }
@@ -1685,7 +1686,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      */
     private void enforceLifecycleStart(Object status) {
         if (status != null && !"${lifecycleInitialStatus}".equals(String.valueOf(status))) {
-            throw org.eclipse.dirigible.sdk.db.RecordRefusals.lifecycleStart(${messageCatalogJava}, ${entityRefusalLabelJava},
+            throw org.eclipse.dirigible.sdk.db.RecordRefusals.lifecycleStart(${catalogJava}, ${entityRefusalLabelJava},
                     "${lifecycleStatusProperty}", lifecycleLabel("${lifecycleInitialStatus}"), lifecycleLabel(status));
         }
     }
@@ -2715,20 +2716,20 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      */
     public void requireDeleteAllowed(${name}Entity entity) {
 #if($immutableAlways)
-        throw new org.eclipse.dirigible.sdk.db.DeleteRestrictionException(org.eclipse.dirigible.sdk.db.RecordRefusals.appendOnly(${messageCatalogJava}, ${entityRefusalLabelJava}));
+        throw new org.eclipse.dirigible.sdk.db.DeleteRestrictionException(org.eclipse.dirigible.sdk.db.RecordRefusals.appendOnly(${catalogJava}, ${entityRefusalLabelJava}));
 #else
 #if($immutableStatusProperty)
         if (entity.${immutableStatusProperty} != null) {
             for (String immutable : "${immutableStatusValues}".split(",")) {
                 if (immutable.equals(String.valueOf(entity.${immutableStatusProperty}))) {
-                    throw new org.eclipse.dirigible.sdk.db.DeleteRestrictionException(org.eclipse.dirigible.sdk.db.RecordRefusals.immutable(${messageCatalogJava}, ${entityRefusalLabelJava}));
+                    throw new org.eclipse.dirigible.sdk.db.DeleteRestrictionException(org.eclipse.dirigible.sdk.db.RecordRefusals.immutable(${catalogJava}, ${entityRefusalLabelJava}));
                 }
             }
         }
 #end
 #if($periodLock)
         if (isPeriodClosed(entity.${periodLock.dateProperty})) {
-            throw new org.eclipse.dirigible.sdk.db.DeleteRestrictionException(org.eclipse.dirigible.sdk.db.RecordRefusals.periodClosed(${messageCatalogJava}, #lockRefusalLabel($periodLock)));
+            throw new org.eclipse.dirigible.sdk.db.DeleteRestrictionException(org.eclipse.dirigible.sdk.db.RecordRefusals.periodClosed(${catalogJava}, #lockRefusalLabel($periodLock)));
         }
 #end
 #set($deleteChecksLoadHops = false)
@@ -3381,7 +3382,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     // as on the controllers: periods are declared as they are needed.
     private void requirePeriodOpen(${periodLock.dateJavaClass} date) {
         if (isPeriodClosed(date)) {
-            throw org.eclipse.dirigible.sdk.db.RecordRefusals.periodClosed(${messageCatalogJava}, #lockRefusalLabel($periodLock));
+            throw org.eclipse.dirigible.sdk.db.RecordRefusals.periodClosed(${catalogJava}, #lockRefusalLabel($periodLock));
         }
     }
 
