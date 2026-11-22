@@ -31,6 +31,14 @@ public class PermissionIntent {
      */
     private Boolean exclusive;
 
+    /**
+     * Whether this entry ADDS its role to the gates of the resources its tokens bind instead of
+     * replacing their convention roles: the resource keeps
+     * {@code <project>.<perspective>.<Entity>ReadOnly} / {@code FullAccess} declared and admitted, and
+     * the role joins them (issue #8852). An entry is {@code additive} or {@code exclusive}, never both.
+     */
+    private Boolean additive;
+
     public String getRole() {
         return role;
     }
@@ -61,5 +69,13 @@ public class PermissionIntent {
 
     public void setExclusive(Boolean exclusive) {
         this.exclusive = exclusive;
+    }
+
+    public boolean isAdditive() {
+        return Boolean.TRUE.equals(additive);
+    }
+
+    public void setAdditive(Boolean additive) {
+        this.additive = additive;
     }
 }

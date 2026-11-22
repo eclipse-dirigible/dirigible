@@ -14,6 +14,8 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -23,6 +25,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
+import org.eclipse.dirigible.components.security.domain.Role;
+import org.eclipse.dirigible.components.security.service.RoleService;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
@@ -48,7 +52,8 @@ import io.restassured.response.Response;
  * without displacing the convention roles - dirigible #7652 - except where the module says
  * otherwise: an {@code exclusive: true} grant keeps them off its resource's gates (#8112), and a
  * user task takes them only with {@code extraRoles: true}, never letting its submitter approve
- * (#8111).
+ * (#8111). An {@code additive: true} grant is the other direction: it adds a role of the module to
+ * a gate whose convention roles keep working (#8852).
  *
  * <p>
  * A multitenant application runs a tenant member's request under the fixed application role
@@ -75,6 +80,7 @@ class IntentExtraRolesIT extends IntegrationTest {
     private static final String REPORT = "/services/java/" + PROJECT + "/gen/tickettotals/api/reports/TicketTotalsController";
     private static final String SALARIES = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api/salary/SalaryController";
     private static final String SALARY_PRINT = "/services/java/" + PROJECT + "/gen/events/" + PROJECT + "/SalaryPrintFeeder/";
+    private static final String LEAVE_TYPES = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api/leavetype/LeaveTypeController";
     private static final String LEAVES = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api/leaverequest/LeaveRequestController";
     private static final String TASKS = "/services/inbox/tasks";
     private static final long TIMEOUT_SECONDS = 90;
@@ -88,6 +94,10 @@ class IntentExtraRolesIT extends IntegrationTest {
     private static final String REQUESTER = "leave-requester";
     private static final String COLLEAGUE = "tenant-colleague";
     private static final String PAYROLL = "payroll-holder";
+    private static final String SELF_SERVICE = "self-service-holder";
+    private static final String TYPE_READER = "leave-type-reader";
+    private static final String TYPE_WRITER = "leave-type-writer";
+    private static final String OUTSIDER = "leave-type-outsider";
     /** The other test's Owner is a user of the same context, so this one needs a name of its own. */
     private static final String TENANT_OWNER = "tenant-owner";
 
@@ -115,6 +125,10 @@ class IntentExtraRolesIT extends IntegrationTest {
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: days, type: integer }
+              - name: LeaveType
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
 
             reports:
               - name: TicketTotals
@@ -136,6 +150,7 @@ class IntentExtraRolesIT extends IntegrationTest {
             permissions:
               - { role: Employee, can: [LeaveRequest:write] }
               - { role: Payroll,  can: [Salary:write], exclusive: true }
+              - { role: Employee, can: [LeaveType:read], additive: true }
             """;
 
     @Autowired
@@ -149,6 +164,9 @@ class IntentExtraRolesIT extends IntegrationTest {
 
     @Autowired
     private SecurityUtil securityUtil;
+
+    @Autowired
+    private RoleService roleService;
 
     @Test
     void every_gate_admits_the_extra_roles_and_the_convention_roles_keep_working() {
@@ -249,6 +267,62 @@ class IntentExtraRolesIT extends IntegrationTest {
         restAssuredExecutor.execute(() -> complete(approve, "approve").then()
                                                                       .statusCode(200),
                 "localhost", COLLEAGUE, PASSWORD);
+    }
+
+    /**
+     * An {@code additive: true} grant adds the module's role to the entity's gates and leaves the
+     * convention roles there (#8852): the role given to people reads and - holding a read token only -
+     * is refused the write, while an integration client's convention {@code ReadOnly} still reads and
+     * {@code FullAccess} still writes. Only the added role is a role of the intent, so only it is
+     * offered to a tenant's people; the convention roles stay declared, unmarked.
+     */
+    @Test
+    void an_additive_role_joins_a_gate_whose_convention_roles_keep_working() {
+        generateAndPublish();
+        String readOnly = PROJECT + ".LeaveType.LeaveTypeReadOnly";
+        String fullAccess = PROJECT + ".LeaveType.LeaveTypeFullAccess";
+        securityUtil.createUserInDefaultTenant(SELF_SERVICE, PASSWORD, "Employee");
+        securityUtil.createUserInDefaultTenant(TYPE_READER, PASSWORD, readOnly);
+        securityUtil.createUserInDefaultTenant(TYPE_WRITER, PASSWORD, fullAccess);
+        securityUtil.createUserInDefaultTenant(OUTSIDER, PASSWORD);
+        String leaveType = "{\"Name\":\"Annual\"}";
+
+        // The convention roles are still the gate's own.
+        assertStatus(TYPE_WRITER, 200, () -> given().contentType("application/json")
+                                                    .body(leaveType)
+                                                    .post(LEAVE_TYPES));
+        assertStatus(TYPE_WRITER, 200, () -> given().get(LEAVE_TYPES));
+        assertStatus(TYPE_READER, 200, () -> given().get(LEAVE_TYPES));
+        assertStatus(TYPE_READER, 403, () -> given().contentType("application/json")
+                                                    .body(leaveType)
+                                                    .post(LEAVE_TYPES));
+
+        // The added role reads; a read token gives it no write.
+        assertStatus(SELF_SERVICE, 200, () -> given().get(LEAVE_TYPES));
+        assertStatus(SELF_SERVICE, 403, () -> given().contentType("application/json")
+                                                     .body(leaveType)
+                                                     .post(LEAVE_TYPES));
+
+        // Holding none of them is still refused.
+        assertStatus(OUTSIDER, 403, () -> given().get(LEAVE_TYPES));
+
+        // What a tenant's Owner is offered is the roles marked assignable: the added one, never a
+        // convention role - those stay declared for integration clients.
+        assertTrue(roleService.findByName("Employee")
+                              .isAssignable());
+        assertFalse(roleService.findByName(readOnly)
+                               .isAssignable(),
+                "a convention role must not be offered to a tenant's people");
+        assertFalse(roleService.findByName(fullAccess)
+                               .isAssignable(),
+                "a convention role must not be offered to a tenant's people");
+        List<String> offered = roleService.getAll()
+                                          .stream()
+                                          .filter(Role::isAssignable)
+                                          .map(Role::getName)
+                                          .filter(name -> name.startsWith(PROJECT + "."))
+                                          .toList();
+        assertEquals(List.of(), offered, "no convention role of the project may be assignable");
     }
 
     private int createLeave() {

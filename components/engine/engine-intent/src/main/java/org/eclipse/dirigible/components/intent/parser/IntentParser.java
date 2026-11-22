@@ -6529,7 +6529,9 @@ public final class IntentParser {
      * halves are bound to the generated gates by {@code PermissionSupport}, which reports an undeclared
      * resource and an action outside the read/write vocabulary at Generate, where the entity and report
      * inventory is the one the generators actually emit. A malformed token belongs here instead,
-     * because there is nothing to bind it to and no reading of it that could be right.
+     * because there is nothing to bind it to and no reading of it that could be right. So does an entry
+     * that is both {@code additive} and {@code exclusive}: the one keeps the convention roles of its
+     * resources and the other gates them by the authored roles only (issue #8852).
      *
      * @param model the typed model
      * @param issues the issues collected so far, appended to
@@ -6540,6 +6542,11 @@ public final class IntentParser {
             if (isBlank(role)) {
                 issues.add("permission has no role name");
                 continue;
+            }
+            if (permission.isAdditive() && permission.isExclusive()) {
+                issues.add("permission [" + role.trim() + "] declares both additive and exclusive - additive keeps the convention roles"
+                        + " of the resources it names and exclusive gates them by the authored roles only, so an entry is one or the"
+                        + " other (split the tokens into two entries of the role)");
             }
             for (String token : permission.getCan()) {
                 String subject = "permission [" + role.trim() + "] can [" + token + "]";

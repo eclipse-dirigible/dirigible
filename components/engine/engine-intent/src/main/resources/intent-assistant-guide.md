@@ -4043,6 +4043,27 @@ deployment's `.settings` `access.extraRoles` off every gate of the resources it 
 payroll data the gate is then exactly the roles listed here:
 `- { role: HR, can: [Employee:write], exclusive: true }`.
 
+`additive: true` on an entry ADDS its role to the gates of the resources it names instead of
+replacing their convention roles - use it for a role given to people on a resource whose convention
+roles must keep working (integration clients hold them):
+
+```yaml
+permissions:
+  - { role: Employee, description: "Self-service", can: [LeaveType:read, PublicHoliday:read], additive: true }
+```
+
+`LeaveType` is then read by `<project>.LeaveType.LeaveTypeReadOnly`, `...LeaveTypeFullAccess` and
+`Employee`, and written by `...LeaveTypeFullAccess` only (`:read` grants no write; a `:write` or `:*`
+token adds the role to both gates). Only `Employee` is a role of the intent, offered to a tenant's
+people; the convention roles stay declared for integration clients and are not offered. **Never
+re-declare a convention role under `permissions:` to keep it** - that turns it into a role offered to
+people. Rules: an additive entry never removes anything - if another, non-additive entry names the
+same resource, that entry's roles replace the convention roles as always and the additive role joins
+them, and an `exclusive` entry of another role still keeps the deployment's extra roles off; one
+entry cannot be both `additive` and `exclusive` (refused at parse); a composition child takes its
+master's additive roles; a report keeps its convention read role beside the added one; an export has
+no convention role, so there `additive` changes nothing.
+
 ### seeds - initial data
 
 **Use when:** the app needs reference/lookup data present from the start (countries, statuses, ...).

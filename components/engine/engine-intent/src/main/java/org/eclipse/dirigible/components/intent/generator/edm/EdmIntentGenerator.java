@@ -1400,7 +1400,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * the convention roles are neither emitted nor declared ({@code generateDefaultRoles=false}): a
      * covered entity that no grant may WRITE keeps a write gate no declared role satisfies, which is
      * what an allow-list of read-only grants says. An entity no token names keeps the convention
-     * behaviour unchanged.
+     * behaviour unchanged, and one only {@code additive: true} entries name keeps its convention roles
+     * as the gate's first roles, still declared, with the added roles after them (issue #8852).
      *
      * @param name the entity's declared name
      * @param description the entity description
@@ -1450,6 +1451,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // A composition child is managed under its master, so it is gated by the master's grants when
         // it carries none of its own - otherwise granting write on a document would not extend to its
         // line items and the generated app would refuse the very edits the grant describes.
+        // An entity only `additive: true` entries name is not covered: its convention roles stay the
+        // gate's first roles and stay declared, the additive role joining them (#8852).
         String gateName = gates.covers(name) ? name : rolePerspective;
         entity.put("generateDefaultRoles", gates.covers(gateName) ? "false" : "true");
         // The deployment's extra roles (.settings access.extraRoles) are appended AFTER the gate's own
