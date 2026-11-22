@@ -142,7 +142,7 @@ document.addEventListener('alpine:init', () => {
     // processTasks store, the single place that knows how a task is named.
     taskItemText(task) {
       const tasks = Alpine.store('processTasks');
-      const name = tasks ? tasks.taskName(task) : (task.name || 'Task');
+      const name = tasks ? tasks.taskName(task) : (task.name || (window.T ? T('application-core:shell.inbox.task', 'Task') : 'Task'));
       const process = tasks ? tasks.processName(task) : (task.processDefinitionName || '');
       // ... and WHICH record it is about, once the store has resolved it (#7077): "New task: Approve"
       // says nothing about which invoice is waiting.

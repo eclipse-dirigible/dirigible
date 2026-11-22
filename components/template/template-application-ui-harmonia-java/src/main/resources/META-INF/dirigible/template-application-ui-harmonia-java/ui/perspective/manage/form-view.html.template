@@ -435,8 +435,8 @@
               </div>
             </div>
           </div>
-          <button type="button" x-h-button data-variant="outline" class="shrink-0" x-show="!isPreview#if($fixed) &amp;&amp; !isEdit#end" @click="addRelated('${property.name}', '${property.widgetDropdownAppUrl}', '${property.relationshipEntityName}')" :aria-label="T('$projectName:${tprefix}.defaults.new', 'New') + ' ' + T('$projectName:${tprefix}.t.${property.relationshipEntityName}', '${property.relationshipEntityName}')"><svg role="presentation" x-h-lucide data-lucide="plus" class="size-4"></svg> <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span></button>
-          <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="!isPreview#if($fixed) &amp;&amp; !isEdit#end" aria-label="Refresh" @click="loadOptions()"><svg role="presentation" x-h-lucide data-lucide="refresh-cw" class="size-4"></svg></button>
+          <button type="button" x-h-button data-variant="outline" class="shrink-0" x-show="!isPreview#if($fixed) &amp;&amp; !isEdit#end" @click="addRelated('${property.name}', '${property.widgetDropdownAppUrl}', '${property.relationshipEntityName}', T('${property.relationshipEntityLabelKeyJs}', '${property.relationshipEntityLabelJs}'))" :aria-label="T('$projectName:${tprefix}.defaults.newTitle', 'New {{name}}', { name: T('${property.relationshipEntityLabelKeyJs}', '${property.relationshipEntityLabelJs}') })"><svg role="presentation" x-h-lucide data-lucide="plus" class="size-4"></svg> <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span></button>
+          <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="!isPreview#if($fixed) &amp;&amp; !isEdit#end" :aria-label="T('$projectName:${tprefix}.defaults.refresh', 'Refresh')" @click="loadOptions()"><svg role="presentation" x-h-lucide data-lucide="refresh-cw" class="size-4"></svg></button>
         </div>
 #else
         <div x-h-select#if($property.isRequiredProperty != "true") data-clearable="true"#end>
@@ -473,7 +473,7 @@
               </div>
             </div>
           </div>
-          <button type="button" x-h-button data-variant="transparent" class="shrink-0" data-size="icon" x-show="!isPreview" aria-label="Refresh" @click="loadOptions()"><svg x-h-lucide data-lucide="refresh-cw"></svg></button>
+          <button type="button" x-h-button data-variant="transparent" class="shrink-0" data-size="icon" x-show="!isPreview" :aria-label="T('$projectName:${tprefix}.defaults.refresh', 'Refresh')" @click="loadOptions()"><svg x-h-lucide data-lucide="refresh-cw"></svg></button>
         </div>
 #elseif($property.widgetType == "NUMBER")
         <!-- step="any": without it the browser default step=1 rejects fractional input on DECIMAL fields. -->
@@ -500,13 +500,13 @@
              form.${property.name} round-trips unchanged. Readonly (preview) -> the input is disabled. -->
         <div x-h-date-picker>
           <input type="text" :placeholder="HarmoniaFormat.dateHint()" id="f_${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#{else}${fixedDis}#end />
-          <button x-h-date-picker-trigger aria-label="Choose date"></button>
+          <button x-h-date-picker-trigger :aria-label="T('$projectName:${tprefix}.defaults.chooseDate', 'Choose date')"></button>
           <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="form.${property.name}"></div>
         </div>
 #elseif($property.widgetType == "DATETIME-LOCAL")
         <div x-h-datetime-picker>
           <input type="text" id="f_${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#{else}${fixedDis}#end />
-          <button x-h-datetime-picker-trigger aria-label="Choose date and time"></button>
+          <button x-h-datetime-picker-trigger :aria-label="T('$projectName:${tprefix}.defaults.chooseDateTime', 'Choose date and time')"></button>
           <div x-h-datetime-picker-popup="HarmoniaFormat.pickerConfig('dateTime')" x-model="form.${property.name}"></div>
         </div>
 #elseif($property.widgetType == "TIME")
@@ -518,14 +518,14 @@
         <!-- Harmonia month picker: model is a YYYY-MM string, so form.${property.name} round-trips unchanged. -->
         <div x-h-month-picker>
           <input type="text" id="f_${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#{else}${fixedDis}#end />
-          <button x-h-month-picker-trigger aria-label="Choose month"></button>
+          <button x-h-month-picker-trigger :aria-label="T('$projectName:${tprefix}.defaults.chooseMonth', 'Choose month')"></button>
           <div x-h-month-picker-popup x-model="form.${property.name}"></div>
         </div>
 #elseif($property.widgetType == "WEEK")
         <!-- Harmonia week picker: model is a YYYY-Www ISO-week string, so form.${property.name} round-trips unchanged. -->
         <div x-h-week-picker>
           <input type="text" id="f_${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#{else}${fixedDis}#end />
-          <button x-h-week-picker-trigger aria-label="Choose week"></button>
+          <button x-h-week-picker-trigger :aria-label="T('$projectName:${tprefix}.defaults.chooseWeek', 'Choose week')"></button>
           <div x-h-week-picker-popup x-model="form.${property.name}"></div>
         </div>
 #else
@@ -630,11 +630,11 @@
                           <span class="text-xs text-muted-foreground" x-text="fileSizeText(row)"></span>
                         </div>
                         <template x-if="filesReadOnly">
-                          <a x-h-button data-variant="transparent" data-size="sm" :href="openHref(row)" target="_blank" rel="noopener" aria-label="Print"><svg role="presentation" x-h-lucide data-lucide="printer"></svg></a>
+                          <a x-h-button data-variant="transparent" data-size="sm" :href="openHref(row)" target="_blank" rel="noopener" :aria-label="T('$projectName:${tprefix}.defaults.print', 'Print')"><svg role="presentation" x-h-lucide data-lucide="printer"></svg></a>
                         </template>
-                        <a x-h-button data-variant="transparent" data-size="sm" :href="downloadHref(row)" target="_blank" rel="noopener" aria-label="Download"><svg role="presentation" x-h-lucide data-lucide="download"></svg></a>
+                        <a x-h-button data-variant="transparent" data-size="sm" :href="downloadHref(row)" target="_blank" rel="noopener" :aria-label="T('$projectName:${tprefix}.defaults.download', 'Download')"><svg role="presentation" x-h-lucide data-lucide="download"></svg></a>
                         <template x-if="!isPreview &amp;&amp; !filesReadOnly">
-                          <button type="button" x-h-button data-variant="transparent" data-size="sm" @click="askDelete(row)" aria-label="Remove"><svg role="presentation" x-h-lucide data-lucide="trash-2"></svg></button>
+                          <button type="button" x-h-button data-variant="transparent" data-size="sm" @click="askDelete(row)" :aria-label="T('$projectName:${tprefix}.defaults.remove', 'Remove')"><svg role="presentation" x-h-lucide data-lucide="trash-2"></svg></button>
                         </template>
                       </div>
                     </template>
@@ -681,7 +681,7 @@
                                actions (#8289), and then offers them and Preview: an action is the child's own
                                declared operation, not an edit, so Edit and Delete stay withheld there. -->
                           <div class="inline-flex" x-show="!isPreview || def.locksWithMaster === false || rowActions(row).length || rowDestructiveActions(row).length">
-                            <button type="button" x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions"><svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg></button>
+                            <button type="button" x-h-menu-trigger.dropdown x-h-table-cell-button :aria-label="T('$projectName:${tprefix}.defaults.rowActions', 'Row actions')"><svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg></button>
                             <ul x-h-menu data-align="bottom-end">
                               <!-- The row's record's own actions (#8289), first, as in the record page's menu. -->
                               <template x-for="action in rowActions(row)" :key="action.id">
@@ -717,8 +717,8 @@
           <div x-h-dialog-overlay :data-open="deleteOpen">
             <div x-h-dialog>
               <div x-h-dialog-header>
-                <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete') + ' ' + T(def.tkey, def.label)"></h2>
-                <button type="button" x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
+                <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.deleteNamed', 'Delete {{name}}', { name: T(def.tkey, def.label) })"></h2>
+                <button type="button" x-h-dialog-close @click="deleteOpen = false" :aria-label="T('$projectName:${tprefix}.defaults.close', 'Close')"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
               </div>
               <div x-h-dialog-content><p x-text="T('$projectName:${tprefix}.messages.deleteConfirm', 'Are you sure you want to delete {{name}}? This action cannot be undone.', { name: T(def.tkey, def.label) })"></p></div>
               <div x-h-dialog-footer>
@@ -778,7 +778,7 @@
                         <!-- The row's record's own actions (#8118), beside Open - only when it has any. -->
                         <template x-if="rowActions(row).length || rowDestructiveActions(row).length">
                           <span class="inline-flex">
-                            <button type="button" x-h-button data-variant="transparent" data-size="sm" x-h-menu-trigger.dropdown aria-label="Row actions"><svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg></button>
+                            <button type="button" x-h-button data-variant="transparent" data-size="sm" x-h-menu-trigger.dropdown :aria-label="T('$projectName:${tprefix}.defaults.rowActions', 'Row actions')"><svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg></button>
                             <ul x-h-menu data-align="bottom-end">
                               <template x-for="action in rowActions(row)" :key="action.id">
                                 <li x-h-menu-item @click="runRowAction(action, row)"
@@ -879,9 +879,9 @@
                   <span x-h-badge data-variant="outline" x-show="entry.Source === 'SYSTEM'" x-text="T('$projectName:${tprefix}.defaults.system', 'System')"></span>
                 </div>
                 <span class="text-sm wrap-anywhere">
-                  <span class="text-muted-foreground line-through" x-show="entry.OldValue" x-text="entry.OldValue"></span>
+                  <span class="text-muted-foreground line-through" x-show="entry.OldValue" x-text="historyValue(entry.Property, entry.OldValue)"></span>
                   <span x-show="entry.OldValue"> &rarr; </span>
-                  <span x-text="historyValue(entry.NewValue)"></span>
+                  <span x-text="historyValue(entry.Property, entry.NewValue)"></span>
                 </span>
                 <span class="text-xs text-muted-foreground" x-text="historyWho(entry)"></span>
               </div>
@@ -943,7 +943,7 @@
             <div x-h-dialog>
               <div x-h-dialog-header>
                 <h2 x-h-dialog-title x-text="t('revokeTitle', 'Revoke link')"></h2>
-                <button type="button" x-h-dialog-close @click="revokeOpen = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
+                <button type="button" x-h-dialog-close @click="revokeOpen = false" :aria-label="T('$projectName:${tprefix}.defaults.close', 'Close')"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
               </div>
               <div x-h-dialog-content>
                 <p x-text="t('revokeConfirm', 'Are you sure you want to revoke this link? Whoever has it will no longer be able to open the document. This action cannot be undone.')"></p>
@@ -973,7 +973,7 @@
       <div x-h-dialog-header>
         <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></h2>
         <p x-h-dialog-description x-text="printLanguages.length > 1 ? T('$projectName:${tprefix}.messages.printLanguage', 'Choose the template language.') : T('$projectName:${tprefix}.messages.printLayout', 'Choose the layout.')"></p>
-        <button x-h-dialog-close @click="printLangOpen = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
+        <button x-h-dialog-close @click="printLangOpen = false" :aria-label="T('$projectName:${tprefix}.defaults.close', 'Close')"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
       </div>
       <div x-h-dialog-content>
         <div class="vbox gap-2">
@@ -1008,7 +1008,7 @@
     <div x-h-dialog>
       <div x-h-dialog-header>
         <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.deleteTitle', 'Delete {{name}}?', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></h2>
-        <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
+        <button x-h-dialog-close @click="deleteOpen = false" :aria-label="T('$projectName:${tprefix}.defaults.close', 'Close')"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
       </div>
       <div x-h-dialog-content>
         <p x-text="T('$projectName:${tprefix}.messages.deleteConfirm', 'Are you sure you want to delete {{name}}? This action cannot be undone.', { name: (T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') + ' ' + recordLabel()).trim() })"></p>
@@ -1034,7 +1034,7 @@
     <div x-h-dialog>
       <div x-h-dialog-header>
         <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.messages.unsavedChanges', 'Unsaved changes')"></h2>
-        <button x-h-dialog-close @click="leaveKeepEditing()" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
+        <button x-h-dialog-close @click="leaveKeepEditing()" :aria-label="T('$projectName:${tprefix}.defaults.close', 'Close')"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
       </div>
       <div x-h-dialog-content>
         <p x-text="T('$projectName:${tprefix}.messages.unsavedChangesConfirm', 'This form has changes that have not been saved yet.')"></p>

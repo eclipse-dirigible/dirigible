@@ -114,6 +114,7 @@ final class ModelParameterProcessor {
         }
         markCollectionColumnRendering(entities);
         resolveDependentWidgets(entities);
+        resolveRelationshipLabels(entities, parameters);
         collectPerspectives(entities, parameters);
         collectRoles(entities, parameters);
     }
@@ -606,6 +607,33 @@ final class ModelParameterProcessor {
     private static String labelArgsJava(String label, String catalog, String dataName) {
         return "\"" + JavaLiterals.escape(label) + "\", "
                 + (catalog == null || dataName == null ? "null" : "\"" + JavaLiterals.escape(catalog + ".t." + dataName) + "\"");
+    }
+
+    /**
+     * Hands every relation the name of the entity it references, for a page to put into a sentence
+     * ("New {{name}}", #8778): {@code relationshipEntityLabelKeyJs} and
+     * {@code relationshipEntityLabelJs}, the catalog key and the default-language label as JavaScript
+     * string contents, which the page passes to {@code T()} when it renders. An entity another model
+     * owns has no label in this catalog: its key resolves to nothing, and the humanized name is shown.
+     *
+     * @param entities every entity in the model
+     * @param parameters the generation parameters
+     */
+    private static void resolveRelationshipLabels(List<Map<String, Object>> entities, Map<String, Object> parameters) {
+        for (Map<String, Object> entity : entities) {
+            for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+                String targetName = str(property, "relationshipEntityName");
+                if (targetName == null || targetName.isEmpty()) {
+                    continue;
+                }
+                Map<String, Object> target = findEntity(entities, targetName);
+                String dataName = target == null ? null : str(target, "dataName");
+                String label = target == null ? NamingHelper.humanizeIdentifier(targetName) : ModelTranslations.entityLabel(target);
+                property.put("relationshipEntityLabelKeyJs",
+                        JsLiterals.escape(ModelTranslations.catalogKey(parameters, "t." + (dataName == null ? targetName : dataName))));
+                property.put("relationshipEntityLabelJs", JsLiterals.escape(label));
+            }
+        }
     }
 
     /**

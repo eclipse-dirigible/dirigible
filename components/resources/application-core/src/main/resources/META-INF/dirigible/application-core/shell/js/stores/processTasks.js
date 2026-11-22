@@ -431,7 +431,7 @@ document.addEventListener('alpine:init', () => {
     // deployment — carries none and keeps rendering the raw BPMN name it always did. One rule here so
     // the Inbox, the bell, the task dialog and the in-record buttons cannot drift apart.
     taskName(task) {
-      const name = (task && task.name) || 'Task';
+      const name = (task && task.name) || (window.T ? T('application-core:shell.inbox.task', 'Task') : 'Task');
       return window.T ? T(task && task.nameKey, name) : name;
     },
 
@@ -476,7 +476,7 @@ document.addEventListener('alpine:init', () => {
                    + '&processInstanceId=' + encodeURIComponent(task.processInstanceId);
       // The dialog title is bound as T(formTitleKey, formTitle), so it keeps following the language
       // (and the catalogs, which may still be loading) rather than being resolved once here.
-      this.formTitle = task.name || 'Task';
+      this.formTitle = task.name || (window.T ? T('application-core:shell.inbox.task', 'Task') : 'Task');
       this.formTitleKey = task.nameKey || '';
       this.formTaskId = task.id;
       this.formProcessInstanceId = task.processInstanceId || '';

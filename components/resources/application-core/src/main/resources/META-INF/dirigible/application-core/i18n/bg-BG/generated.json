@@ -75,7 +75,8 @@
       "noCopiesHint": "Копие се съхранява автоматично при издаване на документа.",
       "unsavedChanges": "Незапазени промени",
       "unsavedChangesConfirm": "Формата има промени, които още не са запазени.",
-      "saved": "Запазено"
+      "saved": "Запазено",
+      "workflowAssignedAt": "възложено {{time}}"
     },
     "defaults": {
       "yes": "Да",
@@ -165,18 +166,26 @@
       "description": "Описание",
       "formGrpFilter": "Филтър {{name}}",
       "formHeadSelect": "Детайли за {{name}}",
-      "formHeadCreate": "Създаване на {{name}}",
+      "formHeadCreate": "Създаване на {{name, lowercase}}",
       "cannotCreate": "Можете да разглеждате записи от {{name}}, но не и да ги създавате.",
-      "formHeadUpdate": "Редакция на {{name}}",
+      "formHeadUpdate": "Редакция на {{name, lowercase}}",
       "reportTitle": "Справка {{name}}",
       "reportFilter": "Филтър на справката",
       "viewDetails": "Виж детайли",
-      "deleteTitle": "Изтриване на {{name}}?",
-      "newTitle": "Създаване на {{name}}",
-      "newEntity": "Създаване на {{name}}",
-      "editTitle": "Редакция на {{name}}",
+      "deleteTitle": "Изтриване на {{name, lowercase}}?",
+      "newTitle": "Създаване на {{name, lowercase}}",
+      "newEntity": "Създаване на {{name, lowercase}}",
+      "editTitle": "Редакция на {{name, lowercase}}",
       "deleteLine": "Изтриване на ред",
-      "loadMore": "Зареди още..."
+      "loadMore": "Зареди още...",
+      "chooseMonth": "Избор на месец",
+      "chooseWeek": "Избор на седмица",
+      "chooseDateTime": "Избор на дата и час",
+      "rowActions": "Действия за реда",
+      "download": "Изтегли",
+      "dismiss": "Затвори",
+      "myEntity": "Моите {{name, lowercase}}",
+      "deleteNamed": "Изтриване на {{name, lowercase}}"
     }
   }
 }

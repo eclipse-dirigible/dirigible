@@ -9,7 +9,7 @@
        page's own gutter frames it. Unlike the manage list it leads with the page's title: in the
        Personal shell, where this page mostly runs, no breadcrumb names it. -->
   <div class="hbox flex-wrap items-center gap-2">
-    <h1 class="truncate text-xl font-semibold tracking-tight" x-text="'My ' + T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}')"></h1>
+    <h1 class="truncate text-xl font-semibold tracking-tight" x-text="T('$projectName:${tprefix}.defaults.myEntity', 'My {{name}}', { name: T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}') })"></h1>
     <div class="flex-1"></div>
 
     <!-- The Inbox's Refresh (#8130): re-reads the rows, and the stamp says how old the ones on screen are. -->
@@ -116,7 +116,7 @@
             <td x-h-table-cell data-row-actions data-sticky="end" class="text-right" x-show="hasRowActions">
               <template x-if="rowActions(row).length || rowDestructiveActions(row).length">
                 <span class="inline-flex">
-                  <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions">
+                  <button x-h-menu-trigger.dropdown x-h-table-cell-button :aria-label="T('$projectName:${tprefix}.defaults.rowActions', 'Row actions')">
                     <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
                   </button>
                   <ul x-h-menu data-align="bottom-end">

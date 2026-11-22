@@ -607,7 +607,9 @@ function basePage() {
         case 'DATETIME-LOCAL':
           return window.HarmoniaFormat.date(value);
         case 'CHECKBOX':
-          return options ? label(Boolean(value)) : value ? 'Yes' : 'No';
+          if (options) return label(Boolean(value));
+          if (typeof window.T !== 'function') return value ? 'Yes' : 'No';
+          return value ? T('application-core:generated.defaults.yes', 'Yes') : T('application-core:generated.defaults.no', 'No');
         default:
           return pattern ? window.HarmoniaFormat.number(value, pattern, '') : String(value);
       }

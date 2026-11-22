@@ -75,7 +75,8 @@
       "noCopiesHint": "A copy is stored automatically when the document is issued.",
       "unsavedChanges": "Unsaved changes",
       "unsavedChangesConfirm": "This form has changes that have not been saved yet.",
-      "saved": "Saved"
+      "saved": "Saved",
+      "workflowAssignedAt": "assigned {{time}}"
     },
     "defaults": {
       "yes": "Yes",
@@ -176,7 +177,15 @@
       "newEntity": "New {{name}}",
       "editTitle": "Edit {{name}}",
       "deleteLine": "Delete line",
-      "loadMore": "Load More..."
+      "loadMore": "Load More...",
+      "chooseMonth": "Choose month",
+      "chooseWeek": "Choose week",
+      "chooseDateTime": "Choose date and time",
+      "rowActions": "Row actions",
+      "download": "Download",
+      "dismiss": "Dismiss",
+      "myEntity": "My {{name}}",
+      "deleteNamed": "Delete {{name}}"
     }
   }
 }

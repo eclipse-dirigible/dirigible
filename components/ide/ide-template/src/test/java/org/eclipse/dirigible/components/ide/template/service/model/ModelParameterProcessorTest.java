@@ -2312,6 +2312,33 @@ class ModelParameterProcessorTest {
      * @param entities the entities
      * @return the model
      */
+    /**
+     * #8778: a page names the entity a relation references inside one translated sentence ("New
+     * {{name}}"), so every relation carries that entity's catalog key and label - and a target of
+     * another model, whose label this catalog does not carry, its humanized name.
+     */
+    @Test
+    void aRelationCarriesTheLabelOfTheEntityItReferences() {
+        Map<String, Object> local = property("Currency", "INTEGER");
+        local.put("relationshipEntityName", "Currency");
+        Map<String, Object> foreign = property("Country", "INTEGER");
+        foreign.put("relationshipEntityName", "TaxCountry");
+        Map<String, Object> invoice = entity("Invoice", "Invoices", property("Id", "INTEGER"), local, foreign);
+        Map<String, Object> currency = entity("Currency", "Settings", property("Id", "INTEGER"));
+        currency.put("dataName", "BILLING_CURRENCY");
+        currency.put("entityLabel", "Currency's code");
+        Map<String, Object> parameters = parameters();
+        parameters.put("filePath", "billing.model");
+
+        ModelParameterProcessor.process(model(invoice, currency), parameters);
+
+        assertEquals("bookstore:billing-model.t.BILLING_CURRENCY", local.get("relationshipEntityLabelKeyJs"));
+        assertEquals("Currency\\'s code", local.get("relationshipEntityLabelJs"), "the label is escaped for a JS string");
+        assertEquals("bookstore:billing-model.t.TaxCountry", foreign.get("relationshipEntityLabelKeyJs"),
+                "a foreign target's key resolves to nothing, so its fallback shows");
+        assertEquals("Tax Country", foreign.get("relationshipEntityLabelJs"));
+    }
+
     private static Map<String, Object> model(Map<String, Object>... entities) {
         Map<String, Object> model = new LinkedHashMap<>();
         model.put("entities", List.of(entities));

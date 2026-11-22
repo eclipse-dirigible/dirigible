@@ -51,7 +51,7 @@
        Title + status on the left; the dismiss + submit + Back on the right. -->
   <div x-h-toolbar data-variant="clear" class="sticky top-0 z-10 border-b border-border">
     <span x-h-toolbar-title class="shrink-0"
-          x-text="(mode === 'edit' ? T('$projectName:${tprefix}.defaults.edit', 'Edit') : T('$projectName:${tprefix}.defaults.new', 'New')) + ' ' + T('$projectName:${tprefix}.t.${dataName}', '${documentLabel}')#if($docNumProp != '') + (window.HarmoniaFormat.documentNumber(form.${docNumProp}) ? ' ' + window.HarmoniaFormat.documentNumber(form.${docNumProp}) : '')#end + (ownerName ? ' ' + T('$projectName:${tprefix}.defaults.for', 'for') + ' ' + ownerName : '')"></span>
+          x-text="(mode === 'edit' ? T('$projectName:${tprefix}.defaults.editTitle', 'Edit {{name}}', { name: T('$projectName:${tprefix}.t.${dataName}', '${documentLabel}') }) : T('$projectName:${tprefix}.defaults.newTitle', 'New {{name}}', { name: T('$projectName:${tprefix}.t.${dataName}', '${documentLabel}') }))#if($docNumProp != '') + (window.HarmoniaFormat.documentNumber(form.${docNumProp}) ? ' ' + window.HarmoniaFormat.documentNumber(form.${docNumProp}) : '')#end + (ownerName ? ' ' + T('$projectName:${tprefix}.defaults.for', 'for') + ' ' + ownerName : '')"></span>
 #if($statusProp != "")
     <span x-h-badge class="shrink-0" :data-variant="statusVariant(statusText(), form.${statusProp})" x-show="mode === 'edit' && statusText()" x-text="statusText()"></span>
 #end
@@ -179,13 +179,13 @@
 #elseif($property.widgetType == "DATE")
         <div x-h-date-picker>
           <input type="text" :placeholder="HarmoniaFormat.dateHint()" :aria-invalid="fieldError === '${property.name}'"${fixedDis} />
-          <button x-h-date-picker-trigger aria-label="Choose date"></button>
+          <button x-h-date-picker-trigger :aria-label="T('$projectName:${tprefix}.defaults.chooseDate', 'Choose date')"></button>
           <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="form.${property.name}"></div>
         </div>
 #elseif($property.widgetType == "DATETIME-LOCAL")
         <div x-h-datetime-picker>
           <input type="text" :aria-invalid="fieldError === '${property.name}'"${fixedDis} />
-          <button x-h-datetime-picker-trigger aria-label="Choose date and time"></button>
+          <button x-h-datetime-picker-trigger :aria-label="T('$projectName:${tprefix}.defaults.chooseDateTime', 'Choose date and time')"></button>
           <div x-h-datetime-picker-popup="HarmoniaFormat.pickerConfig('dateTime')" x-model="form.${property.name}"></div>
         </div>
 #elseif($property.widgetType == "TIME")
@@ -197,14 +197,14 @@
         <!-- Harmonia month picker: model is a YYYY-MM string, so form.${property.name} round-trips unchanged. -->
         <div x-h-month-picker>
           <input type="text" :aria-invalid="fieldError === '${property.name}'"${fixedDis} />
-          <button x-h-month-picker-trigger aria-label="Choose month"></button>
+          <button x-h-month-picker-trigger :aria-label="T('$projectName:${tprefix}.defaults.chooseMonth', 'Choose month')"></button>
           <div x-h-month-picker-popup x-model="form.${property.name}"></div>
         </div>
 #elseif($property.widgetType == "WEEK")
         <!-- Harmonia week picker: model is a YYYY-Www ISO-week string, so form.${property.name} round-trips unchanged. -->
         <div x-h-week-picker>
           <input type="text" :aria-invalid="fieldError === '${property.name}'"${fixedDis} />
-          <button x-h-week-picker-trigger aria-label="Choose week"></button>
+          <button x-h-week-picker-trigger :aria-label="T('$projectName:${tprefix}.defaults.chooseWeek', 'Choose week')"></button>
           <div x-h-week-picker-popup x-model="form.${property.name}"></div>
         </div>
 #else
@@ -359,7 +359,7 @@
                 </template>
 #if(!$documentItemsReadOnly)
                 <td x-h-table-cell class="text-right">
-                  <button x-h-button data-variant="transparent" data-size="icon-sm"#if($immutableStatusProperty || $immutableAlways || $periodLock) x-show="mutable"#end aria-label="Delete" data-row-control @click="deleteItem(row)"><svg role="presentation" x-h-lucide data-lucide="trash-2"></svg></button>
+                  <button x-h-button data-variant="transparent" data-size="icon-sm"#if($immutableStatusProperty || $immutableAlways || $periodLock) x-show="mutable"#end :aria-label="T('$projectName:${tprefix}.defaults.delete', 'Delete')" data-row-control @click="deleteItem(row)"><svg role="presentation" x-h-lucide data-lucide="trash-2"></svg></button>
                 </td>
 #end
               </tr>
@@ -469,7 +469,7 @@
     <div x-h-dialog style="width: 92vw; max-width: 640px;">
       <div x-h-dialog-header>
         <h2 x-h-dialog-title x-text="(itemMode === 'fill' ? T('$projectName:${tprefix}.defaults.fillMonth', 'Fill Month') + ' - ' : '') + (itemsDef ? T(itemsDef.tkey, '${documentItemsLabel}') : '${documentItemsLabel}')"></h2>
-        <button type="button" x-h-dialog-close @click="itemDialog = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
+        <button type="button" x-h-dialog-close @click="itemDialog = false" :aria-label="T('$projectName:${tprefix}.defaults.close', 'Close')"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
       </div>
       <div x-h-dialog-content>
         <div x-show="itemError" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="itemError"></div></div>
@@ -506,11 +506,11 @@
                 <div class="hbox items-center"><span x-h-checkbox><input type="checkbox" x-model="draft[col.name]" :aria-invalid="itemFieldError === col.name" /></span></div>
               </template>
               <template x-if="!col.readonly && !col.lookup && col.date && !(itemMode === 'fill' && col.name === fillDateName())">
-                <div x-h-date-picker><input type="text" :placeholder="HarmoniaFormat.dateHint()" :aria-invalid="itemFieldError === col.name" /><button x-h-date-picker-trigger aria-label="Choose date"></button><div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="draft[col.name]"></div></div>
+                <div x-h-date-picker><input type="text" :placeholder="HarmoniaFormat.dateHint()" :aria-invalid="itemFieldError === col.name" /><button x-h-date-picker-trigger :aria-label="T('$projectName:${tprefix}.defaults.chooseDate', 'Choose date')"></button><div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="draft[col.name]"></div></div>
               </template>
               <!-- Fill Month: the fill-target date column picks the MONTH - every working day gets a line. -->
               <template x-if="!col.readonly && !col.lookup && col.date && itemMode === 'fill' && col.name === fillDateName()">
-                <div x-h-month-picker><input type="text" :aria-invalid="itemFieldError === col.name" /><button x-h-month-picker-trigger aria-label="Choose month"></button><div x-h-month-picker-popup x-model="draft[col.name]"></div></div>
+                <div x-h-month-picker><input type="text" :aria-invalid="itemFieldError === col.name" /><button x-h-month-picker-trigger :aria-label="T('$projectName:${tprefix}.defaults.chooseMonth', 'Choose month')"></button><div x-h-month-picker-popup x-model="draft[col.name]"></div></div>
               </template>
               <template x-if="!col.readonly && !col.lookup && !col.date && !col.number && col.widget !== 'CHECKBOX'">
                 <input x-h-input type="text" x-model="draft[col.name]" :maxlength="col.maxLength" :pattern="col.pattern" :title="col.patternTkey ? T(col.patternTkey, col.patternMessage) : null" @blur="if (col.normalize) draft[col.name] = col.normalize(draft[col.name])" :aria-invalid="itemFieldError === col.name" />
@@ -547,7 +547,7 @@
     <div x-h-dialog>
       <div x-h-dialog-header>
         <span x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete') + '?'"></span>
-        <button type="button" x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
+        <button type="button" x-h-dialog-close @click="deleteOpen = false" :aria-label="T('$projectName:${tprefix}.defaults.close', 'Close')"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
       </div>
       <div x-h-dialog-content><p x-h-text.muted x-text="T('$projectName:${tprefix}.messages.deleteConfirm', 'Are you sure you want to delete {{name}}? This action cannot be undone.', { name: T('$projectName:${tprefix}.t.${dataName}', '${documentLabel}') })"></p></div>
       <div x-h-dialog-footer>
@@ -567,7 +567,7 @@
     <div x-h-dialog>
       <div x-h-dialog-header>
         <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.messages.unsavedChanges', 'Unsaved changes')"></h2>
-        <button x-h-dialog-close @click="leaveKeepEditing()" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
+        <button x-h-dialog-close @click="leaveKeepEditing()" :aria-label="T('$projectName:${tprefix}.defaults.close', 'Close')"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
       </div>
       <div x-h-dialog-content>
         <p x-text="T('$projectName:${tprefix}.messages.unsavedChangesConfirm', 'This form has changes that have not been saved yet.')"></p>

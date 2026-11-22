@@ -25,7 +25,7 @@
             <svg x-h-lucide role="presentation" data-lucide="wrench" class="size-4"></svg>
             <span class="font-semibold" x-text="config.title"></span>
         </div>
-        <ul x-h-list aria-label="Entities">
+        <ul x-h-list :aria-label="t('shell.nav.entities', 'Entities')">
             <template x-for="e in config.entities" :key="e.name">
                 <li x-h-list-item>
                     <button type="button" x-h-list-item-button :aria-current="selected && selected.name === e.name" @click="select(e)">
@@ -40,13 +40,13 @@
     <main class="vbox flex-1 overflow-hidden" x-show="selected">
         <div x-h-toolbar>
             <span x-h-toolbar-title x-text="selected ? selected.label : ''"></span>
-            <span class="text-sm opacity-75" x-text="total + ' record(s)'"></span>
+            <span class="text-sm opacity-75" x-text="t('shell.admin.records', '{{count}} record(s)', { count: total })"></span>
             <span class="flex-1"></span>
-            <button type="button" x-h-button data-variant="transparent" @click="load()" aria-label="Refresh">
+            <button type="button" x-h-button data-variant="transparent" @click="load()" :aria-label="t('shell.admin.refresh', 'Refresh')">
                 <svg x-h-lucide role="presentation" data-lucide="refresh-cw" class="size-4"></svg>
             </button>
             <button type="button" x-h-button data-variant="primary" @click="startCreate()">
-                <svg x-h-lucide role="presentation" data-lucide="plus" class="size-4"></svg> New
+                <svg x-h-lucide role="presentation" data-lucide="plus" class="size-4"></svg> <span x-text="t('shell.admin.new', 'New')"></span>
             </button>
         </div>
 
@@ -73,7 +73,7 @@
                                 <td x-h-table-cell><span class="admin-cell inline-block" x-text="display(p, row[p.name])"></span></td>
                             </template>
                             <td x-h-table-cell class="text-right" data-row-control>
-                                <button type="button" x-h-button data-variant="transparent" aria-label="Delete" @click="remove(row)">
+                                <button type="button" x-h-button data-variant="transparent" :aria-label="t('shell.admin.delete', 'Delete')" @click="remove(row)">
                                     <svg x-h-lucide role="presentation" data-lucide="trash-2" class="size-4"></svg>
                                 </button>
                             </td>
@@ -83,9 +83,9 @@
             </table>
             </div>
             <div class="hbox items-center gap-2 pt-3" x-show="total > limit">
-                <button type="button" x-h-button data-variant="outline" :disabled="offset === 0" @click="page(-1)">Previous</button>
-                <span class="text-sm" x-text="(offset + 1) + ' - ' + Math.min(offset + limit, total) + ' of ' + total"></span>
-                <button type="button" x-h-button data-variant="outline" :disabled="offset + limit >= total" @click="page(1)">Next</button>
+                <button type="button" x-h-button data-variant="outline" :disabled="offset === 0" @click="page(-1)" x-text="t('shell.admin.previous', 'Previous')"></button>
+                <span class="text-sm" x-text="t('shell.admin.range', '{{from}} - {{to}} of {{total}}', { from: offset + 1, to: Math.min(offset + limit, total), total: total })"></span>
+                <button type="button" x-h-button data-variant="outline" :disabled="offset + limit >= total" @click="page(1)" x-text="t('shell.admin.next', 'Next')"></button>
             </div>
         </div>
 
@@ -102,7 +102,7 @@
                         <template x-if="p.lookup">
                             <!-- An optional column's picker is cleared by re-clicking its selected option (#8658). -->
                             <div x-h-select :data-clearable="p.required ? null : 'true'">
-                                <input x-h-select-input :id="'a_' + p.name" x-model="draft[p.name]" :disabled="p.readonly" :placeholder="'Select ' + p.name + '...'" />
+                                <input x-h-select-input :id="'a_' + p.name" x-model="draft[p.name]" :disabled="p.readonly" :placeholder="t('shell.admin.select', 'Select {{name}}...', { name: p.name })" />
                                 <div x-h-select-content>
                                     <div x-h-select-search data-filter="contains"></div>
                                     <div x-h-select-list>
@@ -122,22 +122,27 @@
                         <template x-if="!p.lookup && p.type !== 'boolean' && p.type !== 'number'">
                             <input x-h-input type="text" :id="'a_' + p.name" x-model="draft[p.name]" :maxlength="p.maxLength" :disabled="p.readonly || (p.pk && !isNew)" />
                         </template>
-                        <p x-h-field-description x-show="p.maxLength && !p.lookup && p.type === 'string' && String(draft[p.name] ?? '').length >= p.maxLength" x-text="'Maximum ' + p.maxLength + ' characters'"></p>
+                        <p x-h-field-description x-show="p.maxLength && !p.lookup && p.type === 'string' && String(draft[p.name] ?? '').length >= p.maxLength" x-text="t('shell.admin.maxLength', 'Maximum {{count}} characters', { count: p.maxLength })"></p>
                     </div>
                 </template>
             </div>
             <div class="hbox gap-2 pt-4">
                 <button type="button" x-h-button data-variant="primary" @click="save()" :disabled="saving">
                     <span x-show="saving" x-h-spinner></span>
-                    <span x-text="isNew ? 'Create' : 'Save'"></span>
+                    <span x-text="isNew ? t('shell.admin.create', 'Create') : t('shell.admin.save', 'Save')"></span>
                 </button>
-                <button type="button" x-h-button data-variant="transparent" @click="cancel()">Cancel</button>
+                <button type="button" x-h-button data-variant="transparent" @click="cancel()" x-text="t('shell.admin.cancel', 'Cancel')"></button>
             </div>
         </div>
     </main>
 
     <!-- The shared refusal gate (application-core): the ONLY path from a REST error body to the banner. -->
     <script src="/services/web/application-core/shell/js/services/apiError.js"></script>
+    <!-- i18n (#8778): this page renders only the shell's own words, so the 'application-core' catalog
+         i18n.js always loads is all it needs; the column names are the schema's, shown as they are. -->
+    <script>window.App = window.App || { config: {} }; App.config = App.config || {};</script>
+    <script src="/services/web/application-core/shell/js/stores/locale.js"></script>
+    <script src="/services/web/application-core/shell/js/services/i18n.js"></script>
     <script>
         // Generated metadata: every non-projection, non-report entity of this module with its full
         // column list and its power REST controller (the same API the application pages use).
@@ -168,7 +173,13 @@
                 // editor before the options exist leaves every combobox blank with the id bound.
                 lookupsReady: Promise.resolve(),
 
-                init() { if (this.config.entities.length) this.select(this.config.entities[0]); },
+                init() {
+                    document.title = this.t('shell.admin.title', '{{app}} - Administration', { app: this.config.title });
+                    if (this.config.entities.length) this.select(this.config.entities[0]);
+                },
+
+                /** A shell catalog word, in the selected language. */
+                t(key, fallback, options) { return window.T('application-core:' + key, fallback, options); },
 
                 async select(entity) {
                     this.selected = entity;
@@ -241,7 +252,7 @@
                     if (reason) console.error('[admin] HTTP ' + res.status + ': ' + reason);
                     const err = new Error(App.services.apiErrors.refusalMessageFor(
                         { httpStatus: res.status, errorMessage: reason },
-                        'HTTP ' + res.status + ' - the server log has the reason.'));
+                        this.t('shell.admin.httpFailed', 'HTTP {{status}} - the server log has the reason.', { status: res.status })));
                     err.shown = true;
                     return err;
                 },
@@ -269,7 +280,7 @@
                         this.rows = await res.json();
                     } catch (e) {
                         this.rows = [];
-                        this.error = this.banner(e, 'Could not load the records.');
+                        this.error = this.banner(e, this.t('shell.admin.loadFailed', 'Could not load the records.'));
                     }
                 },
 
@@ -344,14 +355,14 @@
                         this.editing = false;
                         await this.load();
                     } catch (e) {
-                        this.error = this.banner(e, 'Could not save the record.');
+                        this.error = this.banner(e, this.t('shell.admin.saveFailed', 'Could not save the record.'));
                     } finally {
                         this.saving = false;
                     }
                 },
 
                 async remove(row) {
-                    if (!window.confirm('Delete ' + this.selected.name + ' ' + row[this.selected.pk] + '?')) return;
+                    if (!window.confirm(this.t('shell.admin.deleteConfirm', 'Delete {{name}} {{id}}?', { name: this.selected.name, id: row[this.selected.pk] }))) return;
                     this.error = '';
                     try {
                         const res = await fetch(this.selected.api + '/' + encodeURIComponent(row[this.selected.pk]), {
@@ -360,7 +371,7 @@
                         if (!res.ok && res.status !== 204) throw await this.apiError(res);
                         await this.load();
                     } catch (e) {
-                        this.error = this.banner(e, 'Could not delete the record.');
+                        this.error = this.banner(e, this.t('shell.admin.deleteFailed', 'Could not delete the record.'));
                     }
                 }
             }));

@@ -185,7 +185,8 @@ document.addEventListener('alpine:init', () => {
     },
     printList() {
       this.printRows(this.items, this.columns, (r, c) => this.exportCell(r, c),
-        'My ' + (window.T ? window.T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}') : '${menuLabel}'));
+        window.T ? window.T('$projectName:${tprefix}.defaults.myEntity', 'My {{name}}', { name: window.T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}') })
+          : 'My ${menuLabel}');
     },
 
 #if($calendarView)

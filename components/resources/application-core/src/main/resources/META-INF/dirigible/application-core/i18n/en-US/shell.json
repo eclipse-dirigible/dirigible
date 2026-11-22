@@ -19,13 +19,17 @@
       "administration": "Administration",
       "partner": "Partner",
       "partnerPortal": "Partner Portal",
-      "issues": "Issues"
+      "issues": "Issues",
+      "navigation": "Navigation",
+      "loadingPage": "Loading page",
+      "openTasks": "Open tasks: {{count}}"
     },
     "user": {
       "user": "User",
       "logout": "Log out",
       "reportIssue": "Report an issue",
-      "about": "About"
+      "about": "About",
+      "menu": "User menu"
     },
     "tenant": {
       "title": "Tenant",
@@ -66,12 +70,14 @@
       "title": "Notifications",
       "unread": "{{count}} unread",
       "caughtUp": "You’re all caught up.",
-      "newTask": "New task: {{name}}"
+      "newTask": "New task: {{name}}",
+      "markAllRead": "Mark all as read"
     },
     "dashboard": {
       "title": "Dashboard",
       "viewAll": "View all",
-      "viewAllOf": "Open the {{name}} report"
+      "viewAllOf": "Open the {{name}} report",
+      "reportPreview": "Report preview"
     },
     "inbox": {
       "refresh": "Refresh",
@@ -94,7 +100,8 @@
       "ref": "Ref {{key}}",
       "actAsHidden": "Acting as {{person}} — {{count}} of your own tasks are hidden",
       "actAsServing": "Acting as {{person}} — this Inbox serves their tasks, not yours",
-      "noTasksActAsHint": "You are acting as {{person}} and this list is theirs. Exit to see your own tasks."
+      "noTasksActAsHint": "You are acting as {{person}} and this list is theirs. Exit to see your own tasks.",
+      "task": "Task"
     },
     "documents": {
       "newFolder": "New folder",
@@ -520,7 +527,17 @@
       "promptMissing": "Required: {{fields}}",
       "promptCancel": "Cancel",
       "promptRun": "Run",
-      "promptSelect": "Select..."
+      "promptSelect": "Select...",
+      "dialogTitle": "Action",
+      "failed": "Action failed",
+      "completed": "Completed",
+      "completedNamed": "{{name}} completed",
+      "created": "Created {{ref}}",
+      "done": "Done",
+      "doneRef": "Done - {{ref}}",
+      "mailFailed": "e-mail not sent - {{reason}}",
+      "mailSkipped": "no e-mail address on the record - nothing was sent",
+      "unknownError": "unknown error"
     },
     "list": {
       "resizeColumn": "Resize column",
@@ -686,6 +703,32 @@
       },
       "doneMessage": "Captured {{file}}: {{n}} to review",
       "rejectedFlagsTitle": "What was read needs your attention"
+    },
+    "format": {
+      "dateHint": "Enter the date as {{pattern}}."
+    },
+    "print": {
+      "failed": "Print failed"
+    },
+    "admin": {
+      "title": "{{app}} - Administration",
+      "records": "{{count}} record(s)",
+      "refresh": "Refresh",
+      "new": "New",
+      "delete": "Delete",
+      "previous": "Previous",
+      "next": "Next",
+      "range": "{{from}} - {{to}} of {{total}}",
+      "select": "Select {{name}}...",
+      "maxLength": "Maximum {{count}} characters",
+      "create": "Create",
+      "save": "Save",
+      "cancel": "Cancel",
+      "httpFailed": "HTTP {{status}} - the server log has the reason.",
+      "loadFailed": "Could not load the records.",
+      "saveFailed": "Could not save the record.",
+      "deleteFailed": "Could not delete the record.",
+      "deleteConfirm": "Delete {{name}} {{id}}?"
     }
   }
 }
