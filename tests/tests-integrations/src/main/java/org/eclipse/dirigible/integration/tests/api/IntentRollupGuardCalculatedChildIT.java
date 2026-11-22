@@ -109,7 +109,7 @@ class IntentRollupGuardCalculatedChildIT extends IntegrationTest {
                                                  .post(ORDERS)
                                                  .then()
                                                  .statusCode(400)
-                                                 .body(containsString("CashDesk capacity exceeded")));
+                                                 .body(containsString("The Cash Desk capacity is exceeded")));
 
         // Raising the stored payment to 200 would pay out 150 of 100: refused on the update path too.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
@@ -118,7 +118,7 @@ class IntentRollupGuardCalculatedChildIT extends IntegrationTest {
                                                  .put(ORDERS + "/" + payment)
                                                  .then()
                                                  .statusCode(400)
-                                                 .body(containsString("CashDesk capacity exceeded")));
+                                                 .body(containsString("The Cash Desk capacity is exceeded")));
 
         // A payment that fits is still accepted, and the refused writes changed nothing.
         createOnce(ORDERS, "{\"Amount\":30,\"Kind\":2,\"CashDesk\":" + desk + "}");

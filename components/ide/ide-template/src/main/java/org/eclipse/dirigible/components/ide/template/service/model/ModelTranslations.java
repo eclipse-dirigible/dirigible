@@ -188,7 +188,75 @@ final class ModelTranslations {
             Map.entry("generateReportValueTooLarge", "report column [{column}] holds [{value}], too large to be read exactly"), //
             Map.entry("generateReportValueNotWhole", "report column [{column}] holds [{value}], which is not a whole number"), //
             Map.entry("generateReportValueRounding",
-                    "report column [{column}] holds [{value}], which a field of {scale} decimal places cannot hold without rounding"));
+                    "report column [{column}] holds [{value}], which a field of {scale} decimal places cannot hold without rounding"), //
+            Map.entry("generateAlreadyGeneratedRows",
+                    "{action} already generated {count} {target} rows from this {entity} - undo them before running it again"), //
+            Map.entry("generateAlreadyGeneratedDocument",
+                    "{action} already generated {target} [{id}] from this {entity} - undo it before running it again"), //
+            Map.entry("generateNothingToUndo", "{action} has generated no {target} from this {entity} - there is nothing to undo"), //
+            Map.entry("generateNothingLiveToUndo", "{action} has generated no live {target} from this {entity} - there is nothing to undo"), //
+            Map.entry("generateAlreadyReversed", "{target} [{id}] is already reversed by [{reversal}] - post that reversal"), //
+            Map.entry("generateReversalStatus", "{target} [{id}] is not in a status its reversal accepts ({allowed}) - it is {status}"));
+
+    /**
+     * The default-language texts of the refusals about a record as a whole (dirigible #8775), by
+     * feature: each group is written into the en-US catalog only for a model that declares the feature,
+     * so every other model's catalog stays as it was. They are the ones
+     * {@code org.eclipse.dirigible.sdk.db.RecordRefusals} and {@code FieldRefusals} fall back to; the
+     * platform catalog ({@code application-core/i18n/<locale>/generated.json}) translates them.
+     */
+    static final List<Map.Entry<String, String>> STATUS_ACTION_MESSAGES = List.of( //
+            Map.entry("actionStatusNotAllowed", "{action} is allowed only from {allowed} - this {entity} is {status}"), //
+            Map.entry("actionConditionNotMet", "{action} requires {condition}"), //
+            Map.entry("actionAlreadyGenerated", "{action} was already generated from this {entity}"));
+
+    /** The refusals of a status move a {@code lifecycle:} does not declare (dirigible #8775). */
+    static final List<Map.Entry<String, String>> LIFECYCLE_MESSAGES = List.of( //
+            Map.entry("lifecycleNoStatus", "This {entity} is {status} and cannot be left without a status"), //
+            Map.entry("lifecycleMove", "This {entity} cannot move from {from} to {to} - that is not a step its lifecycle allows"), //
+            Map.entry("lifecycleStart", "A new {entity} starts at {initial}, not at {status}"));
+
+    /** The refusal of a write a roll-up's capacity cannot take, for a guard with no message. */
+    static final Map.Entry<String, String> CAPACITY_MESSAGE = Map.entry("capacityExceeded",
+            "The {parent} capacity is exceeded: capacity {capacity}, already consumed {sum}, requested {requested}");
+
+    /** The refusals of a change to a locked record or to the detail of a locked master. */
+    static final List<Map.Entry<String, String>> LOCK_MESSAGES = List.of( //
+            Map.entry("recordAppendOnly", "This {entity} is append-only - records can neither be edited nor deleted"), //
+            Map.entry("recordImmutable", "This {entity} is immutable in its current status - corrections go through the workflow"), //
+            Map.entry("recordPeriodClosed", "The {period} covering this date is closed - book the correction in an open period"), //
+            Map.entry("masterAppendOnly", "This {entity} belongs to an append-only {master} and can no longer be changed"), //
+            Map.entry("masterImmutable",
+                    "The {master} of this {entity} is immutable in its current status - corrections go through the workflow"), //
+            Map.entry("masterPeriodClosed", "The {period} covering this {master} is closed - book the correction in an open period"));
+
+    /** The refusal of a direct edit of a workflow-owned status. */
+    static final Map.Entry<String, String> WORKFLOW_OWNED_MESSAGE =
+            Map.entry("fieldWorkflowOwned", "'{label}' changes through the workflow, not a direct edit");
+
+    /** The refusal of the delete of a record whose process is still running. */
+    static final Map.Entry<String, String> IN_FLOW_MESSAGE =
+            Map.entry("recordInFlow", "This {entity} is still in its {process} flow - complete or cancel it before deleting");
+
+    /** The refusals of a share link that cannot be made. */
+    static final List<Map.Entry<String, String>> SHARE_MESSAGES = List.of( //
+            Map.entry("shareNotShareable", "This {entity} cannot be shared in its current state"), //
+            Map.entry("shareSwitchedOff", "Sharing documents through a link is switched off"), //
+            Map.entry("shareNoIssuedCopy",
+                    "This {entity} has no issued copy yet - a link serves the stored copy, which is minted when the document is issued"));
+
+    /** The refusals of a parent reference in a {@code hierarchy:}. */
+    static final List<Map.Entry<String, String>> HIERARCHY_MESSAGES = List.of( //
+            Map.entry("fieldHierarchyCycle", "The '{label}' reference would create a cycle in the {entity} hierarchy"), //
+            Map.entry("hierarchyTooDeep", "The {entity} hierarchy is implausibly deep - aborting"));
+
+    /** The refusal of a {@code leafOnly} reference to a record with children. */
+    static final Map.Entry<String, String> LEAF_ONLY_MESSAGE =
+            Map.entry("fieldLeafOnly", "The '{label}' must reference a leaf {target} - the selected one has children");
+
+    /** The refusal of a multi-select value that is not the chosen ids. */
+    static final Map.Entry<String, String> SELECTION_MESSAGE =
+            Map.entry("fieldSelection", "The '{label}' selection must be the chosen ids, comma-separated");
 
     /**
      * The catalog key of a check's message (issue #7611): the one the generator recorded, or - for a
@@ -223,6 +291,36 @@ final class ModelTranslations {
             return null;
         }
         return str(entity, "name") + "_unique_" + name.replaceAll("[^A-Za-z0-9_]", "_");
+    }
+
+    /**
+     * The catalog key of a roll-up guard's authored {@code message:} (dirigible #8775):
+     * {@code <Entity>_rollupGuard_<FK>_<capacity field>} - one per guard, since an entity may be
+     * guarded by several roll-ups.
+     *
+     * @param entity the guarded child entity
+     * @param guard the guard
+     * @return the key, relative to the catalog's {@code checks} sub-object; {@code null} when the guard
+     *         carries no message
+     */
+    static String rollupGuardMessageKey(Map<String, Object> entity, Map<String, Object> guard) {
+        String message = str(guard, "message");
+        if (message == null || message.isBlank()) {
+            return null;
+        }
+        return str(entity, "name") + "_rollupGuard_" + str(guard, "fkProperty") + "_" + str(guard, "capacityField");
+    }
+
+    /**
+     * The catalog key of the refusal a junction's {@code checks: agree} raises on the record it links
+     * (dirigible #8775): {@code <Entity>_agreeGuard_<junction>_<FK>}.
+     *
+     * @param entity the linked record's entity
+     * @param guard the agree guard
+     * @return the key, relative to the catalog's {@code checks} sub-object
+     */
+    static String agreeGuardMessageKey(Map<String, Object> entity, Map<String, Object> guard) {
+        return str(entity, "name") + "_agreeGuard_" + str(guard, "referencingEntity") + "_" + str(guard, "fkProperty");
     }
 
     /**
@@ -524,6 +622,7 @@ final class ModelTranslations {
                 messages.put(SINGLE_REQUIRED_MESSAGE.getKey(), SINGLE_REQUIRED_MESSAGE.getValue());
             }
             GENERATE_REFUSAL_MESSAGES.forEach(message -> messages.put(message.getKey(), message.getValue()));
+            recordRefusalMessages(entities, messages);
         }
         // A create-from's authored refusal sentences (#8646), keyed by the intent.
         Map<String, Object> generateRefusals = asMap(model.get("generateRefusals"));
@@ -546,6 +645,17 @@ final class ModelTranslations {
                 }
             }
             slotMessages(entity).forEach((rule, message) -> messages.put(slotMessageKey(entity, rule), message));
+            for (Map<String, Object> guard : asMaps(entity.get("rollupGuards"))) {
+                String key = rollupGuardMessageKey(entity, guard);
+                if (key != null) {
+                    messages.put(key, guard.get("message"));
+                }
+            }
+            for (Map<String, Object> guard : asMaps(entity.get("agreeGuards"))) {
+                if (ModelValues.truthy(guard, "message")) {
+                    messages.put(agreeGuardMessageKey(entity, guard), guard.get("message"));
+                }
+            }
             for (Map<String, Object> property : asMaps(entity.get("properties"))) {
                 for (String flag : FIXED_FLAGS) {
                     String fixedKey = fixedMessageKey(entity, property, flag);
@@ -579,6 +689,58 @@ final class ModelTranslations {
             }
         }
         return messages;
+    }
+
+    /**
+     * Writes the record refusals (dirigible #8775) of the features the model declares - see
+     * {@link #STATUS_ACTION_MESSAGES} and the groups after it.
+     *
+     * @param entities the model's entities
+     * @param messages the catalog's check messages being filled
+     */
+    private static void recordRefusalMessages(List<Map<String, Object>> entities, Map<String, Object> messages) {
+        boolean status = false;
+        boolean lifecycle = false;
+        boolean capacity = false;
+        boolean locks = false;
+        boolean workflowOwned = false;
+        boolean inFlow = false;
+        boolean share = false;
+        boolean hierarchy = false;
+        boolean leafOnly = false;
+        boolean selection = false;
+        for (Map<String, Object> entity : entities) {
+            lifecycle |= ModelValues.truthy(entity, "lifecycleEdges");
+            capacity |= asMaps(entity.get("rollupGuards")).stream()
+                                                          .anyMatch(guard -> rollupGuardMessageKey(entity, guard) == null);
+            locks |= ModelValues.isTrue(entity, "immutableAlways") || ModelValues.truthy(entity, "immutableStatusProperty")
+                    || ModelValues.truthy(entity, "periodLockEntity");
+            workflowOwned |= ModelValues.truthy(entity, "workflowStatusProperty");
+            inFlow |= ModelValues.truthy(entity, "processDeleteGuards");
+            share |= entity.get("share") != null;
+            hierarchy |= ModelValues.truthy(entity, "hierarchyProperty");
+            for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+                status |= "DOCUMENT_STATUS".equals(str(property, "widgetType"));
+                leafOnly |= ModelValues.isTrue(property, "widgetLeafOnly");
+                selection |= "MULTISELECT".equals(str(property, "widgetType"));
+            }
+        }
+        putAll(messages, status, STATUS_ACTION_MESSAGES);
+        putAll(messages, lifecycle, LIFECYCLE_MESSAGES);
+        putAll(messages, capacity, List.of(CAPACITY_MESSAGE));
+        putAll(messages, locks, LOCK_MESSAGES);
+        putAll(messages, workflowOwned, List.of(WORKFLOW_OWNED_MESSAGE));
+        putAll(messages, inFlow, List.of(IN_FLOW_MESSAGE));
+        putAll(messages, share, SHARE_MESSAGES);
+        putAll(messages, hierarchy, HIERARCHY_MESSAGES);
+        putAll(messages, leafOnly, List.of(LEAF_ONLY_MESSAGE));
+        putAll(messages, selection, List.of(SELECTION_MESSAGE));
+    }
+
+    private static void putAll(Map<String, Object> messages, boolean declared, List<Map.Entry<String, String>> entries) {
+        if (declared) {
+            entries.forEach(entry -> messages.put(entry.getKey(), entry.getValue()));
+        }
     }
 
     /** The catalog key suffix of a boolean property's word for {@code true} (#8564). */

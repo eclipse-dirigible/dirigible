@@ -51,7 +51,7 @@ class IntentCrossModelPeriodLockIT extends IntegrationTest {
     private static final String PERIODS = api(JOURNAL) + "/fiscalperiod/FiscalPeriodController";
     private static final String TRANSITIONS = "/services/java/" + JOURNAL + "/gen/events/" + JOURNAL + "/";
     private static final String ORDERS = api(CASH) + "/cashorder/CashOrderController";
-    private static final String CLOSED = "The FiscalPeriod covering this date is closed";
+    private static final String CLOSED = "The Fiscal Period covering this date is closed";
     private static final long TIMEOUT_SECONDS = 90;
 
     private static final String JOURNAL_YAML = """

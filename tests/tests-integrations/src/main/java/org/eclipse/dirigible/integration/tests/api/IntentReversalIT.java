@@ -355,7 +355,7 @@ class IntentReversalIT extends IntegrationTest {
 
         // A draft is not offered the action, and refused it when called anyway.
         int draft = create(ENTRIES, "{\"Date\":\"" + today + "\",\"Note\":\"draft\"}");
-        reverse(draft, 409, "current status is [1]");
+        reverse(draft, 409, "is allowed only from");
 
         // Reverse the posted entry: the twin is a DRAFT dated today, pointing at the original.
         int twin = reverse(original);
@@ -421,7 +421,7 @@ class IntentReversalIT extends IntegrationTest {
                                                  .put(API + "/fiscalperiod/FiscalPeriodController/" + period)
                                                  .then()
                                                  .statusCode(200));
-        reverse(another, 400, "The FiscalPeriod covering this date is closed");
+        reverse(another, 400, "The Fiscal Period covering this date is closed");
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(ENTRIES + "/" + another)
                                                  .then()
@@ -657,7 +657,7 @@ class IntentReversalIT extends IntegrationTest {
                                                  .post(OPENING_BALANCES + "/run")
                                                  .then()
                                                  .statusCode(409)
-                                                 .body(containsString("already generated 4 OpeningBalance rows")),
+                                                 .body(containsString("already generated 4 Opening Balance rows")),
                 TIMEOUT_SECONDS);
 
         // Undo deletes exactly the rows the run wrote; another year's row stays.

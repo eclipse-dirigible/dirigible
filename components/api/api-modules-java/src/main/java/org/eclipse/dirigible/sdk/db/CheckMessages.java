@@ -44,6 +44,9 @@ import com.google.gson.JsonParser;
  * translates it under the same key. The text is resolved in this order:
  * <ol>
  * <li>the request language's own catalog - an overlay a translator maintains;</li>
+ * <li>for a sentence the platform shares between every model (a {@code checks.<key>} the platform
+ * catalog {@code application-core:generated.checks} carries - a required value, a status move, a
+ * locked record, dirigible #8775), the platform's translation in that language;</li>
  * <li>the default-language text, the one the model authors.</li>
  * </ol>
  * Placeholders ({@code {count}}, {@code {match}}, a value of the record such as
@@ -63,6 +66,16 @@ public final class CheckMessages {
      * path, {@code {Category.code}} (#8665).
      */
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{\\{\\s*([\\w.]+)\\s*\\}\\}|\\{([\\w.]+)\\}");
+
+    /** The segment of a fully qualified key that starts a catalog's check messages. */
+    private static final String CHECKS_SEGMENT = ".checks.";
+
+    /**
+     * The platform catalog the sentences shared by every model are translated in - the
+     * {@code generated} section of {@code application-core/i18n/<locale>/generated.json}, the same
+     * catalog a generated page's own catalog falls back to.
+     */
+    static final String PLATFORM_CATALOG = "application-core:generated";
 
     /** Reads the request language's own catalog entry for a key. */
     @FunctionalInterface
@@ -151,13 +164,36 @@ public final class CheckMessages {
         String resolved = null;
         String normalized = normalize(language);
         if (normalized != null && catalogKey != null && catalogKey.indexOf(':') > 0) {
-            try {
-                resolved = catalogs.read(normalized, catalogKey);
-            } catch (RuntimeException e) {
-                LOGGER.debug("Could not read the [{}] catalogs for [{}]: {}", normalized, catalogKey, e.getMessage());
+            resolved = read(catalogs, normalized, catalogKey);
+            String shared = platformKey(catalogKey);
+            if (isBlank(resolved) && shared != null) {
+                resolved = read(catalogs, normalized, shared);
             }
         }
         return interpolate(isBlank(resolved) ? text : resolved, params);
+    }
+
+    private static String read(CatalogReader catalogs, String language, String catalogKey) {
+        try {
+            return catalogs.read(language, catalogKey);
+        } catch (RuntimeException e) {
+            LOGGER.debug("Could not read the [{}] catalogs for [{}]", language, catalogKey, e);
+            return null;
+        }
+    }
+
+    /**
+     * The platform catalog's key of a model's check message - {@code <project>:<prefix>.checks.<key>}
+     * becomes {@code application-core:generated.checks.<key>}; {@code null} for a key that names no
+     * check message. A message the platform does not share (an authored one, keyed by its entity) is
+     * simply not found there.
+     *
+     * @param catalogKey the model's fully qualified key
+     * @return the platform's key, or {@code null}
+     */
+    static String platformKey(String catalogKey) {
+        int checks = catalogKey.lastIndexOf(CHECKS_SEGMENT);
+        return checks < 0 ? null : PLATFORM_CATALOG + catalogKey.substring(checks);
     }
 
     /**

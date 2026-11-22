@@ -1,4 +1,9 @@
 package gen.${javaGenFolderName}.data.${javaPerspectiveName};
+## The refusals resolve their sentence and the names they quote from the model's catalog (#8775); a
+## context rendered without one refuses in the default language, naming the entities by their names.
+#if(!$messageCatalogJava)#set($messageCatalogJava = "null")#end
+#if(!$entityRefusalLabelJava)#set($entityRefusalLabelJava = 'new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label("' + $name + '", null)')#end
+#macro(lockRefusalLabel $level)#if($level.labelJava)${level.labelJava}#{else}new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label("${level.entity}", null)#end#end
 
 #set($preservedOnUpdate = [])
 #set($reportedOnUpdate = [])
@@ -183,12 +188,17 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
                 }
                 java.math.BigDecimal guardIncoming = entity.${rollupGuard.ofField} == null ? java.math.BigDecimal.ZERO : #rollupDecimal($rollupGuard.ofFieldType "entity.${rollupGuard.ofField}");
                 if (guardConsumed.add(guardIncoming).compareTo(#rollupDecimal($rollupGuard.capacityFieldType "guardParent.${rollupGuard.capacityField}")) > 0) {
-#if($rollupGuard.messageExpression && $rollupGuard.messageExpression != "")
-                    throw new ValidationException(${rollupGuard.messageExpression});
+## The refusal names what the write asked for (#8775): an authored message is a catalog entry whose
+## figures are placeholders, the default the shared capacityExceeded sentence.
+#if($rollupGuard.messageArgsJava)
+                    throw org.eclipse.dirigible.sdk.db.CheckMessages.fieldRefusal("${rollupGuard.ofField}", ${rollupGuard.messageArgsJava},
+                            "capacity", guardParent.${rollupGuard.capacityField}, "sum", guardConsumed, "requested", guardIncoming,
+                            "remaining", #rollupDecimal($rollupGuard.capacityFieldType "guardParent.${rollupGuard.capacityField}").subtract(guardConsumed));
 #else
-                    throw new ValidationException("${rollupGuard.parentEntity} capacity exceeded (id " + entity.${rollupGuard.fkProperty}
-                            + "): capacity " + guardParent.${rollupGuard.capacityField} + ", already consumed " + guardConsumed
-                            + ", requested " + guardIncoming);
+#set($guardParentLabel = 'new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label("' + $rollupGuard.parentEntity + '", null)')
+#if($rollupGuard.parentLabelJava)#set($guardParentLabel = $rollupGuard.parentLabelJava)#end
+                    throw org.eclipse.dirigible.sdk.db.RecordRefusals.capacityExceeded(${messageCatalogJava}, ${guardParentLabel},
+                            "${rollupGuard.ofField}", guardParent.${rollupGuard.capacityField}, guardConsumed, guardIncoming);
 #end
                 }
             }
@@ -255,7 +265,9 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #macro(normalizeSubsets)
 #foreach($property in $properties)
 #if($property.widgetType == "MULTISELECT")
-        entity.${property.name} = normalizeKeySet("${property.name}", entity.${property.name});
+#set($refusalField = '"' + $property.name + '", "' + $property.name + '", null')
+#if($property.refusalFieldArgsJava)#set($refusalField = $property.refusalFieldArgsJava)#end
+        entity.${property.name} = normalizeKeySet(entity.${property.name}, ${refusalField});
 #end
 #end
 #end
@@ -367,8 +379,10 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 ## A text value that is blank is as missing as a null one (#7719): the write has trimmed it already, so
 ## a whitespace-only value arrives here empty.
 #if(!$property.dataPrimaryKey && $property.dataNotNull && !$property.dataDefaultValue && !$property.numberStampOnCreate)
+#set($refusalField = '"' + $property.name + '", "' + $property.name + '", null')
+#if($property.refusalFieldArgsJava)#set($refusalField = $property.refusalFieldArgsJava)#end
         if (entity.${property.name} == null#if($property.dataTypeJavaClass == "String") || org.eclipse.dirigible.sdk.db.Normalize.isBlank(entity.${property.name})#end) {
-            throw new ValidationException("${name}.${property.name} is required");
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required(${messageCatalogJava}, ${refusalField});
         }
 #end
 #end
@@ -1427,7 +1441,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($property.overflowMessageArgsJava)
             case "${property.name}" -> {
                 if (value.setScale(${property.dataScale}, java.math.RoundingMode.HALF_UP).precision() > ${property.dataPrecision}) {
-                    throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${property.overflowMessageArgsJava}, "value", value.setScale(${property.dataScale}, java.math.RoundingMode.HALF_UP).toPlainString());
+                    throw org.eclipse.dirigible.sdk.db.CheckMessages.fieldRefusal("${property.name}", ${property.overflowMessageArgsJava}, "value", value.setScale(${property.dataScale}, java.math.RoundingMode.HALF_UP).toPlainString());
                 }
             }
 #end
@@ -1487,11 +1501,13 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      * (recording, with {@code history: true}, a change nobody made). The delimiter, the order and the
      * de-duplication are not authorable, so nothing here is configurable either.
      *
-     * @param property the property being written, for the rejection message
      * @param value the incoming value
+     * @param field the property being written, for the rejection
+     * @param label the property's default-language label
+     * @param labelKey the catalog key of that label, or null
      * @return the value in its normative shape, or null for an empty selection
      */
-    private static String normalizeKeySet(String property, String value) {
+    private static String normalizeKeySet(String value, String field, String label, String labelKey) {
         if (value == null || value.isBlank()) {
             return null;
         }
@@ -1506,8 +1522,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             } catch (NumberFormatException e) {
                 // Not the documented shape at all. Rejected rather than repaired: dropping the offending
                 // key would persist a DIFFERENT selection than the caller asked for, silently.
-                throw new ValidationException("The '" + property + "' selection must be the chosen ids, comma-separated"
-                        + " (e.g. \"1,3\"), got \"" + value + "\"");
+                throw org.eclipse.dirigible.sdk.db.FieldRefusals.selection(${messageCatalogJava}, field, label, labelKey);
             }
         }
         if (keys.isEmpty()) {
@@ -1551,6 +1566,43 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         return true;
     }
 #end
+#if($hasStatusLabel)
+
+    /**
+     * A status of this ${name} as the person reading a refusal reads it (dirigible #8775): the status
+     * row's label, which its repository translates for the request's language when the status entity
+     * is multilingual - else the bare id. Shared by every refusal that names a status: the lifecycle's,
+     * a transition's and a create-from's.
+     *
+     * @param status the status id, may be null
+     * @return the label; empty for no status
+     */
+    public static String statusLabel(Object status) {
+        if (status == null) {
+            return "";
+        }
+#if($statusLabelRepositoryClass)
+        ${statusLabelEntityClass} row = new ${statusLabelRepositoryClass}().findById(status);
+        return row == null || row.${statusLabelProperty} == null ? String.valueOf(status) : String.valueOf(row.${statusLabelProperty});
+#else
+        return String.valueOf(status);
+#end
+    }
+
+    /**
+     * The statuses an action accepts, as {@link #statusLabel} names them, comma-separated.
+     *
+     * @param statuses the status ids
+     * @return the labels
+     */
+    public static String statusLabels(int... statuses) {
+        java.util.StringJoiner labels = new java.util.StringJoiner(", ");
+        for (int status : statuses) {
+            labels.add(statusLabel(status));
+        }
+        return labels.toString();
+    }
+#end
 #if($lifecycleEdges)
 
     /**
@@ -1578,8 +1630,14 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         return names;
     }
 
-    /** A status as a person reads it: its seeded name when it has one, else the bare id. */
+    /** A status as a person reads it: its row's label, else its seeded name, else the bare id. */
     private static String lifecycleLabel(Object status) {
+#if($hasStatusLabel)
+        String label = statusLabel(status);
+        if (!label.equals(String.valueOf(status))) {
+            return label;
+        }
+#end
         String id = String.valueOf(status);
         String name = LIFECYCLE_STATUS_NAMES.get(id);
         return name == null ? id : name;
@@ -1609,11 +1667,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             return;
         }
         if (next == null) {
-            throw new ValidationException("This ${name} is " + lifecycleLabel(previous) + " and cannot be left without a status");
+            throw org.eclipse.dirigible.sdk.db.RecordRefusals.lifecycleNoStatus(${messageCatalogJava}, ${entityRefusalLabelJava},
+                    "${lifecycleStatusProperty}", lifecycleLabel(previous));
         }
         if (!LIFECYCLE_EDGES.contains(String.valueOf(previous) + ">" + String.valueOf(next))) {
-            throw new ValidationException("This ${name} cannot move from " + lifecycleLabel(previous) + " to "
-                    + lifecycleLabel(next) + " - that is not a step its lifecycle allows");
+            throw org.eclipse.dirigible.sdk.db.RecordRefusals.lifecycleMove(${messageCatalogJava}, ${entityRefusalLabelJava},
+                    "${lifecycleStatusProperty}", lifecycleLabel(previous), lifecycleLabel(next));
         }
     }
 #if($lifecycleInitialStatus)
@@ -1626,8 +1685,8 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      */
     private void enforceLifecycleStart(Object status) {
         if (status != null && !"${lifecycleInitialStatus}".equals(String.valueOf(status))) {
-            throw new ValidationException("A new ${name} starts at " + lifecycleLabel("${lifecycleInitialStatus}") + ", not at "
-                    + lifecycleLabel(status));
+            throw org.eclipse.dirigible.sdk.db.RecordRefusals.lifecycleStart(${messageCatalogJava}, ${entityRefusalLabelJava},
+                    "${lifecycleStatusProperty}", lifecycleLabel("${lifecycleInitialStatus}"), lifecycleLabel(status));
         }
     }
 #end
@@ -2656,23 +2715,20 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      */
     public void requireDeleteAllowed(${name}Entity entity) {
 #if($immutableAlways)
-        throw new org.eclipse.dirigible.sdk.db.DeleteRestrictionException(
-                "This ${name} is append-only - records can neither be edited nor deleted");
+        throw new org.eclipse.dirigible.sdk.db.DeleteRestrictionException(org.eclipse.dirigible.sdk.db.RecordRefusals.appendOnly(${messageCatalogJava}, ${entityRefusalLabelJava}));
 #else
 #if($immutableStatusProperty)
         if (entity.${immutableStatusProperty} != null) {
             for (String immutable : "${immutableStatusValues}".split(",")) {
                 if (immutable.equals(String.valueOf(entity.${immutableStatusProperty}))) {
-                    throw new org.eclipse.dirigible.sdk.db.DeleteRestrictionException(
-                            "This ${name} is immutable in its current status - corrections go through the workflow");
+                    throw new org.eclipse.dirigible.sdk.db.DeleteRestrictionException(org.eclipse.dirigible.sdk.db.RecordRefusals.immutable(${messageCatalogJava}, ${entityRefusalLabelJava}));
                 }
             }
         }
 #end
 #if($periodLock)
         if (isPeriodClosed(entity.${periodLock.dateProperty})) {
-            throw new org.eclipse.dirigible.sdk.db.DeleteRestrictionException(
-                    "The ${periodLock.entity} covering this date is closed - book the correction in an open period");
+            throw new org.eclipse.dirigible.sdk.db.DeleteRestrictionException(org.eclipse.dirigible.sdk.db.RecordRefusals.periodClosed(${messageCatalogJava}, #lockRefusalLabel($periodLock)));
         }
 #end
 #set($deleteChecksLoadHops = false)
@@ -2873,7 +2929,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         refusals.put("${uniqueConstraint.nameJavaLiteral}",
                 () -> org.eclipse.dirigible.sdk.db.CheckMessages.refusal("${uniqueConstraint.messageCatalogKeyJavaLiteral}", "${uniqueConstraint.messageJavaLiteral}"));
 #else
-        refusals.put("${uniqueConstraint.nameJavaLiteral}", () -> new org.eclipse.dirigible.sdk.db.ValidationException("${uniqueConstraint.messageJavaLiteral}"));
+        refusals.put("${uniqueConstraint.nameJavaLiteral}", () -> org.eclipse.dirigible.sdk.db.CheckMessages.refusal(null, "${uniqueConstraint.messageJavaLiteral}"));
 #end
 #end
 #end
@@ -3084,7 +3140,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
                 && !new ${guard.repositoryClass}()
                         .findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${guard.fkProperty}", id))
                         .isEmpty()) {
-            throw new ValidationException("${guard.messageJavaLiteral}");
+            throw org.eclipse.dirigible.sdk.db.CheckMessages.fieldRefusal("${guard.property}", ${guard.messageArgsJava});
         }
 #end
     }
@@ -3325,8 +3381,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     // as on the controllers: periods are declared as they are needed.
     private void requirePeriodOpen(${periodLock.dateJavaClass} date) {
         if (isPeriodClosed(date)) {
-            throw new ValidationException(
-                    "The ${periodLock.entity} covering this date is closed - book the correction in an open period");
+            throw org.eclipse.dirigible.sdk.db.RecordRefusals.periodClosed(${messageCatalogJava}, #lockRefusalLabel($periodLock));
         }
     }
 

@@ -238,7 +238,7 @@ class IntentRollupTargetPreservedIT extends IntegrationTest {
                                                  .post(TIMESHEETS)
                                                  .then()
                                                  .statusCode(400)
-                                                 .body(containsString("Project capacity exceeded")),
+                                                 .body(containsString("The Project capacity is exceeded")),
                 TIMEOUT_SECONDS);
     }
 

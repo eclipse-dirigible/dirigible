@@ -54,7 +54,8 @@ class RollupGuardCrossModelTemplateIT {
                 "the guard must load the parent out of the owner's gen folder: " + rendered);
         assertTrue(rendered.contains("guardParent.Amount != null"),
                 "the guard must read the foreign parent's capacity column: " + rendered);
-        assertTrue(rendered.contains("throw new ValidationException(\"CustomerPayment capacity exceeded"),
+        assertTrue(rendered.contains(
+                "RecordRefusals.capacityExceeded(null, new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label(\"CustomerPayment\", null),"),
                 "the refusal must name the parent: " + rendered);
     }
 
@@ -203,12 +204,12 @@ class RollupGuardCrossModelTemplateIT {
     @Test
     void anAuthoredMessageReplacesTheGeneratedOne() throws Exception {
         Map<String, Object> guard = guard("");
-        guard.put("messageExpression", "\"Only \" + guardParent.Amount.subtract(guardConsumed) + \" left.\"");
+        guard.put("messageArgsJava", "\"checks.Payment_rollupGuard\", \"Only {remaining} left.\"");
         String rendered = render(context(guard));
 
-        assertTrue(rendered.contains("throw new ValidationException(\"Only \" + guardParent.Amount.subtract(guardConsumed) + \" left.\");"),
+        assertTrue(rendered.contains("CheckMessages.fieldRefusal(\"Amount\", \"checks.Payment_rollupGuard\", \"Only {remaining} left.\","),
                 "the authored message must be the refusal: " + rendered);
-        assertFalse(rendered.contains("CustomerPayment capacity exceeded"),
+        assertFalse(rendered.contains("RecordRefusals.capacityExceeded("),
                 "the generated wording must not be emitted beside the authored one: " + rendered);
     }
 
@@ -258,8 +259,8 @@ class RollupGuardCrossModelTemplateIT {
         assertTrue(rendered.contains(OWNER_TYPE + "Entity guardParent = new " + OWNER_TYPE + "Repository().findById("),
                 "the foreign parent's check must be rendered alongside it: " + rendered);
         assertTrue(
-                rendered.contains("throw new ValidationException(\"SalesInvoice capacity exceeded")
-                        && rendered.contains("throw new ValidationException(\"CustomerPayment capacity exceeded"),
+                rendered.contains("new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label(\"SalesInvoice\", null)")
+                        && rendered.contains("new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label(\"CustomerPayment\", null)"),
                 "both refusals must name their own parent: " + rendered);
         assertTrue(rendered.contains("import gen.sales_invoices.data.salesinvoice.SalesInvoiceEntity;"),
                 "the local parent of the second guard is still imported: " + rendered);

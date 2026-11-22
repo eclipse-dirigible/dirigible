@@ -64,6 +64,8 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
     private static final String ITEMS = API + "/invoice/InvoiceItemController";
     private static final String UOMS = API + "/uom/UomController";
     private static final String CURRENCIES = API + "/currency/CurrencyController";
+    private static final String DOCS = API + "/doc/DocController";
+    private static final String APPROVE_DOC = "/services/java/" + PROJECT + "/gen/events/" + PROJECT + "/ApproveDocTransition/run";
     private static final String CONFIRM = "X-Confirm-Warnings";
     private static final String CATALOG = PROJECT + ":" + PROJECT + "-model.checks.";
     private static final long TIMEOUT_SECONDS = 90;
@@ -132,6 +134,44 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
                   - { name: price, type: decimal, precision: 18, scale: 2 }
                 relations:
                   - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+
+              - name: DocStatus
+                kind: setting
+                multilingual: true
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 40 }
+
+              - name: Doc
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string, length: 100 }
+                relations:
+                  - { name: Status, kind: manyToOne, to: DocStatus, function: EntityStatus, init: 1 }
+                lifecycle:
+                  edges:
+                    - { from: DRAFT, to: [SUBMITTED] }
+                    - { from: SUBMITTED, to: [APPROVED, CANCELLED] }
+
+            transitions:
+              - { name: ApproveDoc, forEntity: Doc, from: [2], setStatus: 3, label: Approve }
+
+            seeds:
+              - name: doc-statuses
+                entity: DocStatus
+                rows:
+                  - { id: 1, name: Draft }
+                  - { id: 2, name: Submitted }
+                  - { id: 3, name: Approved }
+                  - { id: 4, name: Cancelled }
+              - name: doc-statuses-bg
+                entity: DocStatus
+                language: bg
+                rows:
+                  - { id: 1, name: "Чернова" }
+                  - { id: 2, name: "Подаден" }
+                  - { id: 3, name: "Одобрен" }
+                  - { id: 4, name: "Отказан" }
             """;
 
     /**
@@ -182,8 +222,8 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
         String uomLabel = generated.getAsJsonObject("t")
                                    .get(uomKey)
                                    .getAsString();
-        // The translator's overlay: fieldTooLong is left untranslated, so it falls back to the default
-        // text.
+        // The translator's overlay: fieldTooLong is left untranslated, so it falls back to the platform's
+        // translation (#8775).
         writeResource(PROJECT_PATH + "/i18n/bg-BG/checkmsg.model.json", """
                 {
                   "checkmsg-model": {
@@ -203,7 +243,9 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
                                       .body("messageKey", equalTo(CATALOG + "fieldRequired"))
                                       .body("field", equalTo("Sap"));
         refused(UOMS, "{}", "en", 400).body("message", equalTo("The 'SAP Code' property is required"));
-        refused(UOMS, "{\"Sap\":\"TOOLONGX\"}", "bg", 400).body("message", equalTo("The 'САП код' exceeds the maximum length of 6"))
+        refused(UOMS, "{\"Sap\":\"TOOLONGX\"}", "bg", 400)
+                                                          .body("message",
+                                                                  equalTo("Полето „САП код“ надвишава максималната дължина от 6 знака"))
                                                           .body("field", equalTo("Sap"));
         // A compare about one field names it, so the form marks it (#8597).
         refused(UOMS, "{\"Sap\":\"M\",\"Numerator\":0}", "bg", 400).body("message", equalTo("The numerator is greater than zero"))
@@ -225,6 +267,66 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
                                                                     .body("field", equalTo("Sap"));
         refused(UOMS, "{\"Sap\":\"KG\",\"Numerator\":1}", "en", 409).body("message",
                 equalTo("A " + uomLabel + " with this 'SAP Code' already exists"));
+    }
+
+    /**
+     * dirigible #8775: a transition asked from a wrong status and a status move the lifecycle does not
+     * allow are answered in the reader's language - the sentence from the platform catalog, which the
+     * project does not translate, the action and the entity by the project's labels and the statuses by
+     * their rows' translations - with the key, and for the move the status as its field. The
+     * transition's body keeps the older {@code error} key beside {@code message}.
+     */
+    @Test
+    void a_status_refusal_is_answered_in_the_request_language_with_translated_labels() {
+        generateProject();
+        JsonObject generated = generatedCatalog();
+        assertEquals("{action} is allowed only from {allowed} - this {entity} is {status}", generated.getAsJsonObject("checks")
+                                                                                                     .get("actionStatusNotAllowed")
+                                                                                                     .getAsString());
+        String docKey = entityKey(generated, "_DOC");
+        writeResource(PROJECT_PATH + "/i18n/bg-BG/checkmsg.model.json", """
+                {
+                  "checkmsg-model": {
+                    "t": { "%s": "документ" },
+                    "actions": { "ApproveDoc": "Одобри" }
+                  }
+                }
+                """.formatted(docKey));
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        int doc = create(DOCS, "{\"Note\":\"draft\"}", null, "en");
+        String notAllowed = "„Одобри“ е разрешено само от статус Подаден - този запис „документ“ е в статус Чернова";
+        restAssuredExecutor.execute(() -> request(null, "bg").body("{\"id\":" + doc + "}")
+                                                             .when()
+                                                             .post(APPROVE_DOC)
+                                                             .then()
+                                                             .statusCode(409)
+                                                             .body("message", equalTo(notAllowed))
+                                                             .body("error", equalTo(notAllowed))
+                                                             .body("messageKey", equalTo(CATALOG + "actionStatusNotAllowed"))
+                                                             .body("messageParams.status", equalTo("Чернова")),
+                TIMEOUT_SECONDS);
+        restAssuredExecutor.execute(() -> request(null, "en").body("{\"id\":" + doc + "}")
+                                                             .when()
+                                                             .post(APPROVE_DOC)
+                                                             .then()
+                                                             .statusCode(409)
+                                                             .body("message",
+                                                                     equalTo("Approve is allowed only from Submitted - this Doc is Draft")),
+                TIMEOUT_SECONDS);
+
+        restAssuredExecutor.execute(() -> request(null, "bg").body("{\"Id\":" + doc + ",\"Note\":\"draft\",\"Status\":4}")
+                                                             .when()
+                                                             .put(DOCS + "/" + doc)
+                                                             .then()
+                                                             .statusCode(400)
+                                                             .body("message", equalTo(
+                                                                     "Този запис „документ“ не може да премине от Чернова към Отказан"
+                                                                             + " - жизненият му цикъл не позволява тази стъпка"))
+                                                             .body("messageKey", equalTo(CATALOG + "lifecycleMove"))
+                                                             .body("field", equalTo("Status")),
+                TIMEOUT_SECONDS);
     }
 
     /**

@@ -292,6 +292,58 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * #8775: an entity with a status names it in a refusal by the status row's label - its repository
+     * is handed the status entity's repository and label property - and the entity itself by its label
+     * and catalog key.
+     */
+    @Test
+    void anEntityWithAStatusNamesItByTheStatusRowsLabel() {
+        Map<String, Object> status = property("Status", "INTEGER");
+        status.put("widgetType", "DOCUMENT_STATUS");
+        status.put("relationshipEntityName", "InvoiceStatus");
+        status.put("relationshipEntityPerspectiveName", "Settings");
+        status.put("widgetDropDownValue", "Name");
+        Map<String, Object> invoice = entity("Invoice", "Invoices", property("Id", "INTEGER"), status);
+        invoice.put("dataName", "INVOICES_INVOICE");
+        Map<String, Object> parameters = javaParameters();
+        parameters.put("filePath", "invoices.model");
+
+        ModelParameterProcessor.process(model(invoice), parameters);
+
+        assertEquals(Boolean.TRUE, invoice.get("hasStatusLabel"));
+        assertEquals("gen.sales_order.data.settings.InvoiceStatusRepository", invoice.get("statusLabelRepositoryClass"));
+        assertEquals("gen.sales_order.data.settings.InvoiceStatusEntity", invoice.get("statusLabelEntityClass"));
+        assertEquals("Name", invoice.get("statusLabelProperty"));
+        assertEquals(
+                "new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label(\"Invoice\", \"bookstore:invoices-model.t.INVOICES_INVOICE\")",
+                invoice.get("entityRefusalLabelJava"));
+    }
+
+    /**
+     * #8775: the shared record refusals reach the en-US catalog only for a model declaring the feature
+     * they refuse - the lifecycle's moves for a lifecycle, the locks for a locked entity - so every
+     * other model's catalog stays as it was.
+     */
+    @Test
+    void theRecordRefusalsReachTheCatalogOnlyForTheFeaturesTheModelDeclares() {
+        Map<String, Object> invoice = entity("Invoice", "Invoices", property("Id", "INTEGER"));
+
+        Map<String, Object> plain = ModelTranslations.checkMessages(model(invoice));
+        assertFalse(plain.containsKey("lifecycleMove"));
+        assertFalse(plain.containsKey("recordImmutable"));
+        assertFalse(plain.containsKey("actionStatusNotAllowed"));
+
+        invoice.put("lifecycleEdges", "1>2");
+        invoice.put("immutableStatusProperty", "Status");
+        Map<String, Object> declared = ModelTranslations.checkMessages(model(invoice));
+        assertEquals("This {entity} cannot move from {from} to {to} - that is not a step its lifecycle allows",
+                declared.get("lifecycleMove"));
+        assertEquals("This {entity} is immutable in its current status - corrections go through the workflow",
+                declared.get("recordImmutable"));
+        assertFalse(declared.containsKey("shareSwitchedOff"));
+    }
+
+    /**
      * #8700: a required single flag's refusal is the shared {@code fieldSingleRequired} sentence,
      * naming the flag by its label's catalog key like the other field refusals; the entity is marked,
      * so the repository and the REST deletes render the guard. The sentence reaches the en-US catalog
@@ -1752,12 +1804,12 @@ class ModelParameterProcessorTest {
 
     /**
      * The parent side of a junction's {@code checks: agree} (#7589): the guard carries facts only and
-     * this pass resolves the junction's repository FQN and the message's Java-literal twin - a quoted
-     * field name in the message must not end the literal it is written into. A guard naming a junction
-     * that was not generated is dropped.
+     * this pass resolves the junction's repository FQN and the message's catalog entry (#8775) - a
+     * quoted field name in the message must not end the literal it is written into. A guard naming a
+     * junction that was not generated is dropped.
      */
     @Test
-    void anAgreeGuardResolvesToTheJunctionsRepositoryAndEscapesItsMessage() {
+    void anAgreeGuardResolvesToTheJunctionsRepositoryAndItsMessageToACatalogEntry() {
         Map<String, Object> payment = entity("CustomerPayment", "payments", property("Id", "INTEGER"));
         Map<String, Object> guard = new LinkedHashMap<>();
         guard.put("referencingEntity", "InvoicePayment");
@@ -1776,8 +1828,10 @@ class ModelParameterProcessorTest {
         assertEquals(1, guards.size(), "the guard naming an ungenerated junction must be dropped: " + guards);
         assertEquals("gen.sales_order.data.allocations.InvoicePaymentRepository", guards.get(0)
                                                                                         .get("repositoryClass"));
-        assertEquals("The \\\"customer\\\" must match the invoice's", guards.get(0)
-                                                                            .get("messageJavaLiteral"));
+        assertEquals(
+                "\"checks.CustomerPayment_agreeGuard_InvoicePayment_CustomerPayment\", \"The \\\"customer\\\" must match the invoice's\"",
+                guards.get(0)
+                      .get("messageArgsJava"));
     }
 
     /**
@@ -2530,6 +2584,7 @@ class ModelParameterProcessorTest {
         Map<String, Object> total = property("Total", "DECIMAL");
         Map<String, Object> guard = new LinkedHashMap<>();
         guard.put("parentEntity", "Contract");
+        guard.put("fkProperty", "Contract");
         guard.put("capacityField", "Ceiling");
         guard.put("filter", List.of(clause("ne", "Status", "number", "3")));
         guard.put("guardStatusProperty", "Status");
@@ -2545,8 +2600,8 @@ class ModelParameterProcessorTest {
         assertEquals(".ne(\"Status\", 3)", guard.get("filterChain"));
         assertEquals("!(entity.Status != null && entity.Status.longValue() == 3L)", guard.get("incomingMatch"),
                 "the row in hand is tested by VALUE - a boxed equality across two widths is never true");
-        assertEquals("\"Only \" + guardParent.Ceiling.subtract(guardConsumed) + \" of \" + guardParent.Ceiling + \" left; asked \""
-                + " + guardIncoming + \".\"", guard.get("messageExpression"));
+        assertEquals("\"checks.CallOff_rollupGuard_Contract_Ceiling\", \"Only {remaining} of {capacity} left; asked {requested}.\"",
+                guard.get("messageArgsJava"), "the authored message is a catalog entry, its figures ordinary placeholders (#8775)");
         assertEquals("true", entity.get("hasGatedRollupGuards"),
                 "the targeted write path has to run the gated guards too - a workflow setter is how a document reaches the gate");
     }
@@ -2566,7 +2621,9 @@ class ModelParameterProcessorTest {
 
         assertNull(guard.get("filterChain"));
         assertNull(guard.get("incomingMatch"));
-        assertNull(guard.get("messageExpression"));
+        assertNull(guard.get("messageArgsJava"));
+        assertEquals("new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label(\"Contract\", null)", guard.get("parentLabelJava"),
+                "a parent this model does not generate is named by its humanized name (#8775)");
         assertNull(entity.get("hasGatedRollupGuards"));
     }
 

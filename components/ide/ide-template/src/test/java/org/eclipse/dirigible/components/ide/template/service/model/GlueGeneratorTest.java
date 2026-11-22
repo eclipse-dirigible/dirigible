@@ -50,14 +50,22 @@ class GlueGeneratorTest {
         refusal.put("terms", List.of(term));
         refusal.put("message", "Entry \"7\" is already reversed");
 
-        List<Map<String, Object>> rendered = GlueGenerator.refusals(List.of(refusal));
+        List<Map<String, Object>> rendered = GlueGenerator.refusals(List.of(refusal), "");
 
         assertThat(rendered).hasSize(1);
         assertThat(rendered.get(0)
                            .get("condition")).isEqualTo("((source == null ? null : source.ReversedBy) != null)");
         assertThat(rendered.get(0)
                            .get("message")).isEqualTo("Entry \\\"7\\\" is already reversed");
-        assertThat(GlueGenerator.refusals(null)).isEmpty();
+        assertThat(rendered.get(0)
+                           .get("messageKeyJava")).isEqualTo("null");
+        assertThat(GlueGenerator.refusals(null, "")).isEmpty();
+
+        // #8775: the message is an entry of the model catalog, under the key the .model writes it.
+        refusal.put("messageKey", "reverseEntryReversalRefused0");
+        assertThat(GlueGenerator.refusals(List.of(refusal), "ledger:ledger-model")
+                                .get(0)
+                                .get("messageKeyJava")).isEqualTo("\"ledger:ledger-model.checks.reverseEntryReversalRefused0\"");
     }
 
     @Test

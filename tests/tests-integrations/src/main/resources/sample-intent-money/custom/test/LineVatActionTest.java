@@ -88,7 +88,8 @@ class LineVatActionTest {
                                                .with("VatRate", 5)
                                                .saved());
 
-        assertEquals("InvoiceLine.Quantity is required", refusal.getMessage());
+        assertEquals("The 'Quantity' property is required", refusal.getMessage());
+        assertEquals("Quantity", refusal.getField());
         assertEquals(0, lines.count());
     }
 

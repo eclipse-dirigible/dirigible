@@ -186,11 +186,21 @@ public class ${className}Generate {
 #end
 #if($hasRefusals || $hasReportItems || $hasReportRows)
 
-    /** A declared refusal held under the original's row lock - answered with 409 and its message. */
+    /**
+     * A refusal held under the original's row lock - answered with 409 and the refusal's body, its
+     * message resolved for the reader's language (#8775).
+     */
     static final class Refused extends RuntimeException {
 
-        Refused(String message) {
-            super(message);
+        private final transient org.eclipse.dirigible.sdk.db.ValidationException refusal;
+
+        Refused(org.eclipse.dirigible.sdk.db.ValidationException refusal) {
+            super(refusal.getMessage());
+            this.refusal = refusal;
+        }
+
+        org.eclipse.dirigible.sdk.db.ValidationException refusal() {
+            return refusal;
         }
     }
 #end
@@ -244,8 +254,20 @@ public class ${className}Generate {
         // Calc reads the status FK with the calculated-field semantics (null -> 0, never a seed id).
         int currentStatus = org.eclipse.dirigible.sdk.utils.Calc.eval("${guardStatusProperty}", source, 0).intValue();
         if (!(${guardStatusExpr})) {
+            // Answered in the reader's language, with the body every generated refusal carries (#8775).
             Response.setStatus(409);
-            return "{\"error\": \"${name} ${guardStatusText} - current status is [" + currentStatus + "]\"}";
+#if($guardStatusImplied)
+            return Json.stringify(org.eclipse.dirigible.sdk.db.RecordRefusals.body(org.eclipse.dirigible.sdk.db.RecordRefusals.alreadyGenerated(
+                    REFUSAL_CATALOG, ${actionLabelJava}, ${fromEntityLabelJava})));
+#elseif($sourceStatusLabels)
+            return Json.stringify(org.eclipse.dirigible.sdk.db.RecordRefusals.body(org.eclipse.dirigible.sdk.db.RecordRefusals.statusNotAllowed(
+                    REFUSAL_CATALOG, ${actionLabelJava}, ${fromEntityLabelJava},
+                    gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository.statusLabels(${guardStatuses}),
+                    gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository.statusLabel(currentStatus))));
+#else
+            return Json.stringify(org.eclipse.dirigible.sdk.db.RecordRefusals.body(org.eclipse.dirigible.sdk.db.RecordRefusals.statusNotAllowed(
+                    REFUSAL_CATALOG, ${actionLabelJava}, ${fromEntityLabelJava}, "${guardStatuses}", String.valueOf(currentStatus))));
+#end
         }
 #end
 #if($hasReportRows)
@@ -254,7 +276,7 @@ public class ${className}Generate {
             rows = generateRows(req.id);
         } catch (Refused refused) {
             Response.setStatus(409);
-            return Json.stringify(java.util.Map.of("error", refused.getMessage()));
+            return Json.stringify(org.eclipse.dirigible.sdk.db.RecordRefusals.body(refused.refusal()));
         }
         if (rows == null) {
             return sourceNotFound(req.id); // deleted since the check above
@@ -268,7 +290,7 @@ public class ${className}Generate {
         } catch (Refused refused) {
             // Thrown inside the unit, so nothing it wrote survives; the message is the authored one.
             Response.setStatus(409);
-            return Json.stringify(java.util.Map.of("error", refused.getMessage()));
+            return Json.stringify(org.eclipse.dirigible.sdk.db.RecordRefusals.body(refused.refusal()));
         }
 #else
         gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity saved = create(req.id#if($hasPrompt), req.values#end);
@@ -301,7 +323,7 @@ public class ${className}Generate {
             reversals = undo(req.id);
         } catch (Refused refused) {
             Response.setStatus(409);
-            return Json.stringify(java.util.Map.of("error", refused.getMessage()));
+            return Json.stringify(org.eclipse.dirigible.sdk.db.RecordRefusals.body(refused.refusal()));
         }
         if (reversals == null) {
             return sourceNotFound(req.id);
@@ -355,8 +377,8 @@ public class ${className}Generate {
                                                             .eq("${backRefProperty}", sourceId))
                                            .size();
             if (existing > 0) {
-                throw new Refused("${name} already generated " + existing + " ${toEntity} rows from this ${fromEntity} - undo them"
-                        + " before running it again");
+                throw new Refused(org.eclipse.dirigible.sdk.db.GenerateRefusals.alreadyGeneratedRows(REFUSAL_CATALOG, ${actionLabelJava}, existing, ${toEntityLabelJava},
+                        ${fromEntityLabelJava}));
             }
 #reportRows()
             java.util.List<gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity> rows = new java.util.ArrayList<>();
@@ -439,7 +461,7 @@ public class ${className}Generate {
             }
     #foreach($refusal in $refusals)
             if (${refusal.condition}) {
-                throw new Refused("${refusal.message}");
+                throw new Refused(org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${refusal.messageKeyJava}, "${refusal.message}"));
             }
     #end
     #if($hasEvent && !$appendMode)
@@ -532,8 +554,8 @@ public class ${className}Generate {
                     Criteria.create()
                             .eq("${backRefProperty}", sourceId))) {
                 if (${liveCondition}) {
-                    throw new Refused("${name} already generated ${toEntity} [" + candidate.${toPk}
-                            + "] from this ${fromEntity} - undo it before running it again");
+                    throw new Refused(org.eclipse.dirigible.sdk.db.GenerateRefusals.alreadyGeneratedDocument(REFUSAL_CATALOG, ${actionLabelJava}, ${toEntityLabelJava},
+                            candidate.${toPk}, ${fromEntityLabelJava}));
                 }
             }
 #reportRows()
@@ -814,7 +836,7 @@ public class ${className}Generate {
                     targetRepository.findAll(Criteria.create()
                                                      .eq("${backRefProperty}", sourceId));
             if (deleted.isEmpty()) {
-                throw new Refused("${name} has generated no ${toEntity} from this ${fromEntity} - there is nothing to undo");
+                throw new Refused(org.eclipse.dirigible.sdk.db.GenerateRefusals.nothingToUndo(REFUSAL_CATALOG, false, ${actionLabelJava}, ${toEntityLabelJava}, ${fromEntityLabelJava}));
             }
             for (gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity row : deleted) {
                 targetRepository.delete(row);
@@ -830,28 +852,34 @@ public class ${className}Generate {
                 }
                 if (candidate.${undoBackLinkProperty} != null) {
                     // Reversed already: the reversal retires it once it is posted.
-                    throw new Refused("${toEntity} [" + candidate.${toPk} + "] is already reversed by [" + candidate.${undoBackLinkProperty}
-                            + "] - post that reversal");
+                    throw new Refused(org.eclipse.dirigible.sdk.db.GenerateRefusals.alreadyReversed(REFUSAL_CATALOG, ${toEntityLabelJava}, candidate.${toPk},
+                            candidate.${undoBackLinkProperty}));
                 }
 #if($undoStatusProperty != "")
                 int undoStatus = candidate.${undoStatusProperty} == null ? 0 : candidate.${undoStatusProperty};
                 if (!(${undoStatusExpr})) {
-                    throw new Refused("${toEntity} [" + candidate.${toPk} + "] is not in a status its reversal accepts ${undoStatuses} - current"
-                            + " status is [" + undoStatus + "]");
+#if($targetStatusLabels)
+                    throw new Refused(org.eclipse.dirigible.sdk.db.GenerateRefusals.reversalStatus(REFUSAL_CATALOG, ${toEntityLabelJava}, candidate.${toPk},
+                            gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository.statusLabels(${undoStatusIds}),
+                            gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository.statusLabel(undoStatus)));
+#else
+                    throw new Refused(org.eclipse.dirigible.sdk.db.GenerateRefusals.reversalStatus(REFUSAL_CATALOG, ${toEntityLabelJava}, candidate.${toPk}, "${undoStatusIds}",
+                            String.valueOf(undoStatus)));
+#end
                 }
 #end
 #if($undoReversalRefuses)
                 try {
                     reversals.add(new ${undoReversalClass}Generate().create(candidate.${toPk}));
                 } catch (${undoReversalClass}Generate.Refused refused) {
-                    throw new Refused(refused.getMessage());
+                    throw new Refused(refused.refusal());
                 }
 #else
                 reversals.add(new ${undoReversalClass}Generate().create(candidate.${toPk}));
 #end
             }
             if (reversals.isEmpty()) {
-                throw new Refused("${name} has generated no live ${toEntity} from this ${fromEntity} - there is nothing to undo");
+                throw new Refused(org.eclipse.dirigible.sdk.db.GenerateRefusals.nothingToUndo(REFUSAL_CATALOG, true, ${actionLabelJava}, ${toEntityLabelJava}, ${fromEntityLabelJava}));
             }
             return reversals;
 #end

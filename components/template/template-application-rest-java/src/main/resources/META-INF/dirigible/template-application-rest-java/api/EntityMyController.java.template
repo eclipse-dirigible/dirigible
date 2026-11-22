@@ -1,4 +1,9 @@
 package gen.${javaGenFolderName}.api.${javaPerspectiveName};
+## The refusals resolve their sentence and the names they quote from the model's catalog (#8775); a
+## context rendered without one refuses in the default language, naming the entities by their names.
+#if(!$messageCatalogJava)#set($messageCatalogJava = "null")#end
+#if(!$entityRefusalLabelJava)#set($entityRefusalLabelJava = 'new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label("' + $name + '", null)')#end
+#macro(lockRefusalLabel $level)#if($level.labelJava)${level.labelJava}#{else}new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label("${level.entity}", null)#end#end
 
 ## A duplicate is the same refusal whichever door the caller used: a collision with a business key is
 ## answered here with the 409 naming the field that the power surface answers with, rather than
@@ -237,7 +242,11 @@ public class ${name}MyController {
 #end
 #if($personalParent)
         if (entity.${personalParent.fkProperty} == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${personalParent.fkProperty} is required");
+#set($parentField = '"' + $personalParent.fkProperty + '", "' + $personalParent.fkProperty + '", null')
+#foreach($property in $properties)
+#if($property.name == $personalParent.fkProperty && $property.refusalFieldArgsJava)#set($parentField = $property.refusalFieldArgsJava)#end
+#end
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required(${messageCatalogJava}, ${parentField});
         }
         requireMyParent(entity.${personalParent.fkProperty});
 #else
@@ -558,18 +567,15 @@ public class ${name}MyController {
 #if($masterLock.always || $masterLock.statusProperty)
         if (!isMasterMutable(master)) {
 #if($masterLock.always)
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "This ${name} belongs to an append-only ${masterLock.entity} and can no longer be changed");
+            throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.masterAppendOnly(${messageCatalogJava}, ${entityRefusalLabelJava}, #lockRefusalLabel($masterLock)));
 #else
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "The ${masterLock.entity} of this ${name} is immutable in its current status - corrections go through the workflow");
+            throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.masterImmutable(${messageCatalogJava}, ${entityRefusalLabelJava}, #lockRefusalLabel($masterLock)));
 #end
         }
 #end
 #if($masterLock.period)
         if (!isMasterPeriodOpen(master.${masterLock.period.dateProperty})) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "The ${masterLock.period.entity} covering this ${masterLock.entity} is closed - book the correction in an open period");
+            throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.masterPeriodClosed(${messageCatalogJava}, #lockRefusalLabel($masterLock), #lockRefusalLabel($masterLock.period)));
         }
 #end
 #foreach($ancestor in $masterLock.ancestors)
@@ -593,18 +599,15 @@ public class ${name}MyController {
 #if($ancestor.always || $ancestor.statusProperty)
         if (!isAncestor${ancestorIndex}Mutable(ancestor${ancestorIndex})) {
 #if($ancestor.always)
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "This ${name} belongs to an append-only ${ancestor.entity} and can no longer be changed");
+            throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.masterAppendOnly(${messageCatalogJava}, ${entityRefusalLabelJava}, #lockRefusalLabel($ancestor)));
 #else
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "The ${ancestor.entity} of this ${name} is immutable in its current status - corrections go through the workflow");
+            throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.masterImmutable(${messageCatalogJava}, ${entityRefusalLabelJava}, #lockRefusalLabel($ancestor)));
 #end
         }
 #end
 #if($ancestor.period)
         if (!isAncestor${ancestorIndex}PeriodOpen(ancestor${ancestorIndex}.${ancestor.period.dateProperty})) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "The ${ancestor.period.entity} covering this ${ancestor.entity} is closed - book the correction in an open period");
+            throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.masterPeriodClosed(${messageCatalogJava}, #lockRefusalLabel($ancestor), #lockRefusalLabel($ancestor.period)));
         }
 #end
 #end
@@ -710,13 +713,11 @@ public class ${name}MyController {
     // unaffected, as on the power surface.
     private void requireMutable(${name}Entity existing) {
 #if($immutableAlways)
-        throw new ResponseStatusException(HttpStatus.CONFLICT,
-                "This ${name} is append-only - records can neither be edited nor deleted");
+        throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.appendOnly(${messageCatalogJava}, ${entityRefusalLabelJava}));
 #else
 #if($immutableStatusProperty)
         if (!isStatusMutable(existing)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "This ${name} is immutable in its current status - corrections go through the workflow");
+            throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.immutable(${messageCatalogJava}, ${entityRefusalLabelJava}));
         }
 #end
 #if($periodLock)
@@ -759,7 +760,7 @@ public class ${name}MyController {
             return;
         }
 #end
-        throw new ResponseStatusException(HttpStatus.CONFLICT, WORKFLOW_STATUS_REFUSAL);
+        throw workflowStatusRefusal();
     }
 
     // An absent value is not a change - a caller PUTs the fields its form edits - so it is taken from
@@ -778,7 +779,7 @@ public class ${name}MyController {
         }
         if (!java.util.Objects.equals(entity.${workflowStatusProperty}, stored.${workflowStatusProperty})#if($workflowStatusValues)
                 && isButtonOwnedStatus(entity.${workflowStatusProperty})#{end}) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, WORKFLOW_STATUS_REFUSAL);
+            throw workflowStatusRefusal();
         }
     }
 #if($workflowStatusValues)
@@ -793,8 +794,15 @@ public class ${name}MyController {
     }
 #end
 
-    private static final String WORKFLOW_STATUS_REFUSAL =
-            "'${workflowStatusProperty}' changes through the workflow, not a direct edit";
+#set($workflowStatusField = '"' + $workflowStatusProperty + '", "' + $workflowStatusProperty + '", null')
+#foreach($property in $properties)
+#if($property.name == $workflowStatusProperty && $property.refusalFieldArgsJava)#set($workflowStatusField = $property.refusalFieldArgsJava)#end
+#end
+    // A direct edit of the flow's column, answered 409 in the reader's language with the column as its
+    // field (#8775).
+    private static org.eclipse.dirigible.sdk.db.ConflictException workflowStatusRefusal() {
+        return new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.FieldRefusals.workflowOwned(${messageCatalogJava}, ${workflowStatusField}));
+    }
 #end
 #if($fixedAfterCreateProperties && $fixedAfterCreateProperties.size() > 0)
 
@@ -825,7 +833,7 @@ public class ${name}MyController {
 #else
         } else if (!java.util.Objects.equals(entity.${fixed.name}, stored.${fixed.name})) {
 #end
-            throw new ResponseStatusException(HttpStatus.CONFLICT, org.eclipse.dirigible.sdk.db.CheckMessages.message(${fixed.messageArgsJava}));
+            throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.CheckMessages.fieldRefusal("${fixed.name}", ${fixed.messageArgsJava}));
         }
 #end
     }
@@ -861,7 +869,7 @@ public class ${name}MyController {
             if (referenced && entity.${fixed.name} == null) {
                 entity.${fixed.name} = stored.${fixed.name};
             } else if (referenced) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, org.eclipse.dirigible.sdk.db.CheckMessages.message(${fixed.messageArgsJava}));
+                throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.CheckMessages.fieldRefusal("${fixed.name}", ${fixed.messageArgsJava}));
             }
         }
 #end
@@ -880,8 +888,8 @@ public class ${name}MyController {
                 instance = existing.ProcessId;
             }
             if (instance != null && !instance.isBlank() && org.eclipse.dirigible.sdk.bpm.Process.isRunning(instance)) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "This ${name} is still in its " + label + " flow - complete or cancel it before deleting");
+                throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.inFlow(${messageCatalogJava}, ${entityRefusalLabelJava},
+                        new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label(label, #if($messageCatalogJava != "null")${messageCatalogJava} + ".processes." + process#{else}null#end)));
             }
         }
     }
@@ -909,8 +917,7 @@ public class ${name}MyController {
         if (isPeriodOpen(date)) {
             return;
         }
-        throw new ResponseStatusException(HttpStatus.CONFLICT,
-                "The ${periodLock.entity} covering this date is closed - book the correction in an open period");
+        throw new org.eclipse.dirigible.sdk.db.ConflictException(org.eclipse.dirigible.sdk.db.RecordRefusals.periodClosed(${messageCatalogJava}, #lockRefusalLabel($periodLock)));
     }
 
     // A date covered by no period at all is open: periods are declared as they are needed, and an
@@ -1312,12 +1319,21 @@ public class ${name}MyController {
         if (entity.${property.name} != null && !new ${property.leafOnlyRepositoryClass}().findAll(
                 org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
                         .eq("${property.widgetHierarchyProperty}", entity.${property.name})).isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "The '${property.name}' must reference a leaf ${property.relationshipEntityName} - the selected one has children");
+#set($leafField = '"' + $property.name + '", "' + $property.name + '", null')
+#if($property.refusalFieldArgsJava)#set($leafField = $property.refusalFieldArgsJava)#end
+#set($leafTarget = '"' + $property.relationshipEntityName + '", null')
+#if($property.leafOnlyTargetLabelArgsJava)#set($leafTarget = $property.leafOnlyTargetLabelArgsJava)#end
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.leafOnly(${messageCatalogJava}, ${leafField}, ${leafTarget});
         }
 #end
 #end
 #if($hierarchyProperty)
+#set($hierarchyField = '"' + $hierarchyProperty + '", "' + $hierarchyProperty + '", null')
+#foreach($property in $properties)
+#if($property.name == $hierarchyProperty && $property.refusalFieldArgsJava)#set($hierarchyField = $property.refusalFieldArgsJava)#end
+#end
+#set($hierarchyEntity = '"' + $name + '", null')
+#if($entityLabelJava)#set($hierarchyEntity = $entityLabelJava + ', ' + $labelCatalogKeyJava)#end
         // The tree edge must not form a cycle: walk up from the assigned parent; hitting the entity
         // itself (or an implausible depth) rejects the write.
         if (entity.${hierarchyProperty} != null) {
@@ -1326,8 +1342,7 @@ public class ${name}MyController {
             int depth = 0;
             while (cursor != null && depth++ < 100) {
                 if (cursor.equals(self)) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "The '${hierarchyProperty}' reference would create a cycle in the ${name} hierarchy");
+                    throw org.eclipse.dirigible.sdk.db.FieldRefusals.hierarchyCycle(${messageCatalogJava}, ${hierarchyField}, ${hierarchyEntity});
                 }
                 ${name}Entity parent = repository.findOne(cursor).orElse(null);
                 if (parent == null) {
@@ -1336,7 +1351,7 @@ public class ${name}MyController {
                 cursor = parent.${hierarchyProperty};
             }
             if (depth >= 100) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The ${name} hierarchy is implausibly deep - aborting");
+                throw org.eclipse.dirigible.sdk.db.RecordRefusals.hierarchyTooDeep(${messageCatalogJava}, ${entityRefusalLabelJava});
             }
         }
 #end

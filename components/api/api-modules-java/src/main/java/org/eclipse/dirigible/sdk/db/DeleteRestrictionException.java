@@ -58,6 +58,16 @@ public class DeleteRestrictionException extends RuntimeException {
     }
 
     /**
+     * Creates the delete restriction a refusal describes - a lock that keeps a record a cascade would
+     * delete (dirigible #8775) - carrying its translation key and parameters.
+     *
+     * @param refusal the refusal, its message resolved for the request's language
+     */
+    public DeleteRestrictionException(ValidationException refusal) {
+        this(refusal.getMessage(), refusal.getMessageKey(), refusal.getMessageParams());
+    }
+
+    /**
      * The translation key the message was resolved from.
      *
      * @return the fully qualified key, or {@code null} for a literal message

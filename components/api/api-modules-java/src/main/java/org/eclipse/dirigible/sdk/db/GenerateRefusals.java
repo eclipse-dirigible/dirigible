@@ -121,6 +121,72 @@ public final class GenerateRefusals {
     public static final String REPORT_VALUE_NOT_WHOLE_TEXT = "report column [{column}] holds [{value}], which is not a whole number";
 
     /**
+     * The key, under a catalog's {@code checks}, of the sentence refusing a second run while the rows
+     * the first one generated stand.
+     */
+    public static final String ALREADY_GENERATED_ROWS_KEY = "generateAlreadyGeneratedRows";
+
+    /**
+     * The default-language sentence refusing a second run while its rows stand: {@code {count}} is how
+     * many there are (dirigible #8775).
+     */
+    public static final String ALREADY_GENERATED_ROWS_TEXT =
+            "{action} already generated {count} {target} rows from this {entity} - undo them before running it again";
+
+    /**
+     * The key, under a catalog's {@code checks}, of the sentence refusing a second run while the
+     * document the first one generated stands.
+     */
+    public static final String ALREADY_GENERATED_DOCUMENT_KEY = "generateAlreadyGeneratedDocument";
+
+    /** The default-language sentence refusing a second run while its document stands. */
+    public static final String ALREADY_GENERATED_DOCUMENT_TEXT =
+            "{action} already generated {target} [{id}] from this {entity} - undo it before running it again";
+
+    /**
+     * The key, under a catalog's {@code checks}, of the sentence refusing an undo with nothing to undo.
+     */
+    public static final String NOTHING_TO_UNDO_KEY = "generateNothingToUndo";
+
+    /** The default-language sentence refusing an undo of a run that generated nothing. */
+    public static final String NOTHING_TO_UNDO_TEXT = "{action} has generated no {target} from this {entity} - there is nothing to undo";
+
+    /**
+     * The key, under a catalog's {@code checks}, of the sentence refusing an undo whose documents are
+     * all cancelled or reversed already.
+     */
+    public static final String NOTHING_LIVE_TO_UNDO_KEY = "generateNothingLiveToUndo";
+
+    /** The default-language sentence refusing an undo whose documents are all retired already. */
+    public static final String NOTHING_LIVE_TO_UNDO_TEXT =
+            "{action} has generated no live {target} from this {entity} - there is nothing to undo";
+
+    /**
+     * The key, under a catalog's {@code checks}, of the sentence refusing an undo of a document a
+     * reversal already reverses.
+     */
+    public static final String ALREADY_REVERSED_KEY = "generateAlreadyReversed";
+
+    /**
+     * The default-language sentence refusing an undo of a document already reversed: {@code {reversal}}
+     * is the reversal's key.
+     */
+    public static final String ALREADY_REVERSED_TEXT = "{target} [{id}] is already reversed by [{reversal}] - post that reversal";
+
+    /**
+     * The key, under a catalog's {@code checks}, of the sentence refusing an undo of a document in a
+     * status its reversal does not accept.
+     */
+    public static final String REVERSAL_STATUS_KEY = "generateReversalStatus";
+
+    /**
+     * The default-language sentence refusing an undo of a document in a status its reversal does not
+     * accept: {@code {allowed}} are the statuses it accepts, {@code {status}} the document's.
+     */
+    public static final String REVERSAL_STATUS_TEXT =
+            "{target} [{id}] is not in a status its reversal accepts ({allowed}) - it is {status}";
+
+    /**
      * An entity or an action as a refusal names it.
      *
      * @param text the default-language label, e.g. {@code Stay Night}
@@ -250,6 +316,92 @@ public final class GenerateRefusals {
      */
     public static ValidationException reportValueRounding(String catalog, String column, Object value, int scale) {
         return reportValueRounding(CheckMessages.language(), CheckMessages::readCatalog, catalog, column, value, scale);
+    }
+
+    /**
+     * The refusal of a second run while the rows the first one generated stand.
+     *
+     * @param catalog the intent's model catalog, or {@code null}
+     * @param action the create-from
+     * @param count how many rows stand
+     * @param target the generated entity
+     * @param entity the source entity
+     * @return the refusal, carrying the key and the parameters
+     */
+    public static ValidationException alreadyGeneratedRows(String catalog, Label action, int count, Label target, Label entity) {
+        String language = CheckMessages.language();
+        return refusal(language, CheckMessages::readCatalog, catalog, ALREADY_GENERATED_ROWS_KEY, ALREADY_GENERATED_ROWS_TEXT,
+                CheckMessages.params("action", label(language, CheckMessages::readCatalog, action), "count", count, "target",
+                        label(language, CheckMessages::readCatalog, target), "entity",
+                        label(language, CheckMessages::readCatalog, entity)));
+    }
+
+    /**
+     * The refusal of a second run while the document the first one generated stands.
+     *
+     * @param catalog the intent's model catalog, or {@code null}
+     * @param action the create-from
+     * @param target the generated entity
+     * @param id the standing document's key
+     * @param entity the source entity
+     * @return the refusal, carrying the key and the parameters
+     */
+    public static ValidationException alreadyGeneratedDocument(String catalog, Label action, Label target, Object id, Label entity) {
+        String language = CheckMessages.language();
+        return refusal(language, CheckMessages::readCatalog, catalog, ALREADY_GENERATED_DOCUMENT_KEY, ALREADY_GENERATED_DOCUMENT_TEXT,
+                CheckMessages.params("action", label(language, CheckMessages::readCatalog, action), "target",
+                        label(language, CheckMessages::readCatalog, target), "id", id, "entity",
+                        label(language, CheckMessages::readCatalog, entity)));
+    }
+
+    /**
+     * The refusal of an undo of a run that generated nothing - or nothing that is still live.
+     *
+     * @param catalog the intent's model catalog, or {@code null}
+     * @param live whether the run generated documents that are all retired already
+     * @param action the create-from
+     * @param target the generated entity
+     * @param entity the source entity
+     * @return the refusal, carrying the key and the parameters
+     */
+    public static ValidationException nothingToUndo(String catalog, boolean live, Label action, Label target, Label entity) {
+        String language = CheckMessages.language();
+        return refusal(language, CheckMessages::readCatalog, catalog, live ? NOTHING_LIVE_TO_UNDO_KEY : NOTHING_TO_UNDO_KEY,
+                live ? NOTHING_LIVE_TO_UNDO_TEXT : NOTHING_TO_UNDO_TEXT,
+                CheckMessages.params("action", label(language, CheckMessages::readCatalog, action), "target",
+                        label(language, CheckMessages::readCatalog, target), "entity",
+                        label(language, CheckMessages::readCatalog, entity)));
+    }
+
+    /**
+     * The refusal of an undo of a document a reversal already reverses.
+     *
+     * @param catalog the intent's model catalog, or {@code null}
+     * @param target the generated entity
+     * @param id the document's key
+     * @param reversal the reversal's key
+     * @return the refusal, carrying the key and the parameters
+     */
+    public static ValidationException alreadyReversed(String catalog, Label target, Object id, Object reversal) {
+        String language = CheckMessages.language();
+        return refusal(language, CheckMessages::readCatalog, catalog, ALREADY_REVERSED_KEY, ALREADY_REVERSED_TEXT,
+                CheckMessages.params("target", label(language, CheckMessages::readCatalog, target), "id", id, "reversal", reversal));
+    }
+
+    /**
+     * The refusal of an undo of a document in a status its reversal does not accept.
+     *
+     * @param catalog the intent's model catalog, or {@code null}
+     * @param target the generated entity
+     * @param id the document's key
+     * @param allowed the labels of the statuses the reversal accepts
+     * @param status the label of the document's status
+     * @return the refusal, carrying the key and the parameters
+     */
+    public static ValidationException reversalStatus(String catalog, Label target, Object id, String allowed, String status) {
+        String language = CheckMessages.language();
+        return refusal(language, CheckMessages::readCatalog, catalog, REVERSAL_STATUS_KEY, REVERSAL_STATUS_TEXT, CheckMessages.params(
+                "target", label(language, CheckMessages::readCatalog, target), "id", id, "allowed", allowed, "status", status));
     }
 
     static ValidationException reportValueMissing(String language, CheckMessages.CatalogReader catalogs, String catalog, Label entity,

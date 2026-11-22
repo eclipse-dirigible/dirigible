@@ -31,16 +31,16 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
         roundDecimals(entity);
         entity.VatAmount = Beans.get(LineVatAction.class).calculate(entity);
         if (entity.Description == null || org.eclipse.dirigible.sdk.db.Normalize.isBlank(entity.Description)) {
-            throw new ValidationException("InvoiceLine.Description is required");
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required("sample-intent-money:money-model", "Description", "Description", "sample-intent-money:money-model.t.INVOICE_LINE_DESCRIPTION");
         }
         if (entity.Quantity == null) {
-            throw new ValidationException("InvoiceLine.Quantity is required");
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required("sample-intent-money:money-model", "Quantity", "Quantity", "sample-intent-money:money-model.t.INVOICE_LINE_QUANTITY");
         }
         if (entity.UnitPrice == null) {
-            throw new ValidationException("InvoiceLine.UnitPrice is required");
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required("sample-intent-money:money-model", "UnitPrice", "UnitPrice", "sample-intent-money:money-model.t.INVOICE_LINE_UNIT_PRICE");
         }
         if (entity.VatRate == null) {
-            throw new ValidationException("InvoiceLine.VatRate is required");
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required("sample-intent-money:money-model", "VatRate", "VatRate", "sample-intent-money:money-model.t.INVOICE_LINE_VAT_RATE");
         }
         InvoiceLineEntity saved = insert(entity);
         return saved;
@@ -107,16 +107,16 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
         }
         entity.VatAmount = Beans.get(LineVatAction.class).calculate(entity);
         if (entity.Description == null || org.eclipse.dirigible.sdk.db.Normalize.isBlank(entity.Description)) {
-            throw new ValidationException("InvoiceLine.Description is required");
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required("sample-intent-money:money-model", "Description", "Description", "sample-intent-money:money-model.t.INVOICE_LINE_DESCRIPTION");
         }
         if (entity.Quantity == null) {
-            throw new ValidationException("InvoiceLine.Quantity is required");
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required("sample-intent-money:money-model", "Quantity", "Quantity", "sample-intent-money:money-model.t.INVOICE_LINE_QUANTITY");
         }
         if (entity.UnitPrice == null) {
-            throw new ValidationException("InvoiceLine.UnitPrice is required");
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required("sample-intent-money:money-model", "UnitPrice", "UnitPrice", "sample-intent-money:money-model.t.INVOICE_LINE_UNIT_PRICE");
         }
         if (entity.VatRate == null) {
-            throw new ValidationException("InvoiceLine.VatRate is required");
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required("sample-intent-money:money-model", "VatRate", "VatRate", "sample-intent-money:money-model.t.INVOICE_LINE_VAT_RATE");
         }
         // The update event is recorded in the event outbox inside this write's own transaction - see
         // save() - so the intent reactions under gen/events see exactly the changes that committed.
@@ -134,16 +134,16 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
         trimText(entity);
         roundDecimals(entity);
         if (entity.Description == null || org.eclipse.dirigible.sdk.db.Normalize.isBlank(entity.Description)) {
-            throw new ValidationException("InvoiceLine.Description is required");
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required("sample-intent-money:money-model", "Description", "Description", "sample-intent-money:money-model.t.INVOICE_LINE_DESCRIPTION");
         }
         if (entity.Quantity == null) {
-            throw new ValidationException("InvoiceLine.Quantity is required");
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required("sample-intent-money:money-model", "Quantity", "Quantity", "sample-intent-money:money-model.t.INVOICE_LINE_QUANTITY");
         }
         if (entity.UnitPrice == null) {
-            throw new ValidationException("InvoiceLine.UnitPrice is required");
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required("sample-intent-money:money-model", "UnitPrice", "UnitPrice", "sample-intent-money:money-model.t.INVOICE_LINE_UNIT_PRICE");
         }
         if (entity.VatRate == null) {
-            throw new ValidationException("InvoiceLine.VatRate is required");
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required("sample-intent-money:money-model", "VatRate", "VatRate", "sample-intent-money:money-model.t.INVOICE_LINE_VAT_RATE");
         }
         InvoiceLineEntity updated = super.update(entity);
         return updated;
