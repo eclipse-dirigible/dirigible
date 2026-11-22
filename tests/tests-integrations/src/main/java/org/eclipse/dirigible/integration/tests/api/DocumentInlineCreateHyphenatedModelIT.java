@@ -58,7 +58,8 @@ class DocumentInlineCreateHyphenatedModelIT extends IntegrationTest {
     private static final String ITEMS_REGISTER = "gen/" + GEN_FOLDER + "/js/components/pages/CashOrder/CashOrderItem.detail.js";
     private static final String APP_URL = "/services/web/" + PROJECT + "/gen/" + GEN_FOLDER + "/index.html";
     private static final String APP_JS = "/META-INF/dirigible/application-core/shell/js/app.js";
-    private static final Pattern ADD_RELATED = Pattern.compile("addRelated\\('(\\w+)', '([^']*)', '(\\w+)'\\)");
+    private static final Pattern ADD_RELATED =
+            Pattern.compile("addRelated\\('(\\w+)', '([^']*)', '(\\w+)'(?:, T\\('[^']*', '[^']*'\\))?\\)");
     private static final long TIMEOUT_SECONDS = 90;
 
     /**
