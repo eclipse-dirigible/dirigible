@@ -4955,6 +4955,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "personalReadOnly must NOT emit a persisting create/update on the personal controller");
         String balanceMyView = contentOf("gen/emission/views/my/Balance-list.html");
         assertTrue(!balanceMyView.contains("newEntity()"), "personalReadOnly my list must not render the New button");
+        assertTrue(balanceMyView.contains("messages.noDataYet") && !balanceMyView.contains("messages.getStarted"),
+                "personalReadOnly my list's empty state must not invite the user to create a record");
         // ... and no write affordance survives on the my FORM either. The child panel's Add was the
         // last one left: the child controller refuses every use of it (403), so it was an affordance
         // that always failed on exactly the surface whose point is read-without-author.
@@ -5691,8 +5693,32 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the calendar must map rows through the shared HarmoniaCalendar");
         assertTrue(leaveCalendar.contains("this.calCfg = { events: this.buildEvents() };"),
                 "a reload must keep the view the user navigated to");
-        assertTrue(contentOf("gen/emission/views/my/Leave-list.html").contains("goCalendar()"),
-                "the personal list must offer the switch to the personal calendar");
+        // #7390: the personal browse pages take the same shape - one action row, led by the page's
+        // title (the Personal shell shows no breadcrumb), and the same icon-only view group between
+        // the calendar and the list.
+        String myLeaveList = contentOf("gen/emission/views/my/Leave-list.html");
+        assertTrue(myLeaveList.contains("x-model=\"viewChoice\"") && myLeaveList.contains("x-h-button-group-radio=\"'calendar'\""),
+                "the personal list must offer the switch to the personal calendar as the view group");
+        assertTrue(
+                contentOf("gen/emission/js/components/pages/my/LeaveMyListPage.js").contains(
+                        "set viewChoice(value) { if (value === 'calendar') this.goCalendar(); },"),
+                "picking the calendar in the personal list's view group must open the personal calendar");
+        assertTrue(myLeaveView.contains("x-model=\"viewChoice\"") && myLeaveView.contains("x-h-button-group-radio=\"'table'\""),
+                "the personal calendar must offer the switch back to the personal list as the view group");
+        assertTrue(myLeaveCalendar.contains("set viewChoice(value) { if (value === 'table') this.goList(); },"),
+                "picking the table in the personal calendar's view group must open the personal list");
+        for (String myBrowse : List.of(myLeaveList, myLeaveView)) {
+            assertTrue(myBrowse.contains("<h1 ") && myBrowse.contains("'My ' + T('"),
+                    "a personal browse page leads its action row with its own title");
+            assertTrue(myBrowse.contains("x-h-info-page") && myBrowse.contains("defaults.retry"),
+                    "a personal browse page reports a failed load as the info page with Retry");
+        }
+        assertTrue(myLeaveView.contains(":data-today-label=") && myLeaveView.contains(":data-more-label="),
+                "the personal calendar must hand x-h-calendar its labels translated");
+        assertTrue(
+                myLeaveCalendar.contains("window.HarmoniaCalendar.events(")
+                        && myLeaveCalendar.contains("this.calCfg = { events: this.buildEvents() };"),
+                "the personal calendar must map rows through the shared HarmoniaCalendar and keep the view on a reload");
 
         // #6546: a scoped calendar filters through /<Calendar>?<Scope>=<id>, so the record it filters
         // BY must link there. Both of the scope target's record surfaces carry the affordance - the
