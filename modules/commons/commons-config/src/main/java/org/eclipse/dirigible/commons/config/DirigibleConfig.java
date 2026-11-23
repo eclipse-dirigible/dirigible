@@ -63,6 +63,22 @@ public enum DirigibleConfig {
      * that leaves no trace at all.
      */
     FLOWABLE_HISTORY_LEVEL("DIRIGIBLE_FLOWABLE_HISTORY_LEVEL", "audit", meta().type(ConfigType.ENUM)), //
+    /**
+     * How long, in seconds, the process engine keeps a lock on an async job (a process step) and on its
+     * process instance while it runs - so how long a step cut by a stop or a crash waits before the
+     * next instance continues it; it must be longer than the longest step, or a second thread runs the
+     * step while the first still does. Flowable's own default, one hour.
+     */
+    FLOWABLE_ASYNC_JOB_LOCK_TIME_SECONDS("DIRIGIBLE_FLOWABLE_ASYNC_JOB_LOCK_TIME_SECONDS", "3600", meta().type(ConfigType.INT)
+                                                                                                         .subgroup("process")), //
+    /**
+     * How long, in seconds, the process engine keeps a lock on a due timer job while it hands the job
+     * on to run as an async job (whose run {@link #FLOWABLE_ASYNC_JOB_LOCK_TIME_SECONDS} governs) - so
+     * how long a due timer picked up by an instance that stopped before handing it on waits before the
+     * next instance takes it. Flowable's own default, one hour.
+     */
+    FLOWABLE_TIMER_JOB_LOCK_TIME_SECONDS("DIRIGIBLE_FLOWABLE_TIMER_JOB_LOCK_TIME_SECONDS", "3600", meta().type(ConfigType.INT)
+                                                                                                         .subgroup("process")), //
 
     FLOWABLE_MAIL_SERVER_HOST("DIRIGIBLE_FLOWABLE_MAIL_SERVER_HOST", null, meta().subgroup("process")), //
     FLOWABLE_MAIL_SERVER_PORT("DIRIGIBLE_FLOWABLE_MAIL_SERVER_PORT", "587", meta().subgroup("process")), //
