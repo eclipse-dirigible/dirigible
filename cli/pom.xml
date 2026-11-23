@@ -23,7 +23,7 @@
         <dependency>
             <groupId>org.springframework.shell</groupId>
             <artifactId>spring-shell-starter</artifactId>
-            <version>4.0.3</version>
+            <version>4.0.4</version>
         </dependency>
         <!-- no platform dependency: `generate` runs from the platform jar, the CLI is a launcher (#7793) -->
         <dependency>
