@@ -66,6 +66,21 @@ class TenantUserRolesTest {
                                          .get(1));
     }
 
+    /**
+     * A name is offered when any declaration marks it (#8854): the generated
+     * {@code default-roles.roles} declares every convention role without a mark, and that must neither
+     * hide a role another file marks nor offer one nobody marks.
+     */
+    @Test
+    void anUnmarkedDeclarationNeitherHidesNorOffersARole() {
+        registered.add(role("/acme/default-roles.roles", "Accountant", null, null, false));
+        registered.add(role("/acme/app.roles", "Accountant", "Bookkeeper", "Enters invoices.", true));
+        registered.add(role("/acme/default-roles.roles", "acme.Invoices.InvoiceReadOnly", null, null, false));
+
+        assertEquals(List.of(offer("Owner"), offer("User"), new TenantUserRoles.Offer("Accountant", "Bookkeeper", "Enters invoices.")),
+                roles.catalog());
+    }
+
     @Test
     void aRoleOfTheInstanceTheProvisioningRoleAndAnOverlongNameAreNeverOffered() {
         registered.add(role("/acme/acme.roles", "ADMINISTRATOR", null, null, true));
