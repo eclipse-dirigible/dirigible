@@ -1144,16 +1144,7 @@ class GlueGenerator {
         context.put("fieldAssignments", assignments(item.get("fieldAssignments")));
         context.put("itemFieldAssignments", assignments(item.get("itemFieldAssignments")));
         context.put("itemLines", rows(item.get("itemLines")));
-        // A prompt field's source default (issue #7748); one written before the key existed has none.
-        List<Map<String, Object>> promptFields = assignments(item.get("promptFields"));
-        promptFields.forEach(field -> field.putIfAbsent("defaultProp", ""));
-        // A missing required input is refused as a field refusal (#8646), naming the input by its label.
-        // A .glue written before the label existed names it by its humanized name, with no catalog key.
-        promptFields.forEach(field -> {
-            field.put("labelJava", javaString(strOr(field, "label", NamingHelper.humanizeName(str(field, "prop")))));
-            field.put("labelKeyJava", javaStringOrNull(strOr(field, "labelKey", "")));
-        });
-        context.put("promptFields", promptFields);
+        bindPromptFields(item, context);
         // The topic the listener binds is the glue's to state and the template's to emit verbatim - but
         // a .glue written before the step axis (issue #6800) carries no suffix at all, and a bare
         // reference renders as its own literal into a destination nothing ever publishes on. An absent
@@ -1318,6 +1309,25 @@ class GlueGenerator {
     }
 
     /**
+     * Binds the {@code prompt:} inputs of a create-from (issue #6685) or a transition (#7909): each
+     * input's conversion rendered from the type it carries, its source default (#7748; one written
+     * before the key existed has none), and the label and catalog key a missing required input is
+     * refused with (#8646) - a .glue written before the label existed names it by its humanized name.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     */
+    private static void bindPromptFields(Map<String, Object> item, Map<String, Object> context) {
+        List<Map<String, Object>> promptFields = assignments(item.get("promptFields"));
+        promptFields.forEach(field -> {
+            field.putIfAbsent("defaultProp", "");
+            field.put("labelJava", javaString(strOr(field, "label", NamingHelper.humanizeName(str(field, "prop")))));
+            field.put("labelKeyJava", javaStringOrNull(strOr(field, "labelKey", "")));
+        });
+        context.put("promptFields", promptFields);
+    }
+
+    /**
      * Binds an on-demand transition - the controller that validates the guards and flips only the
      * status column, optionally notifying afterwards.
      *
@@ -1352,6 +1362,9 @@ class GlueGenerator {
             stampNumbers.add(bound);
         }
         context.put("stampNumbers", stampNumbers);
+        // The record's own inputs, written with the status (#7909); a .glue without the key asks none.
+        bindPromptFields(item, context);
+        context.put("refusalCatalogJava", javaStringOrNull(strOr(item, "refusalCatalog", "")));
         context.put("personalSurface", "false");
     }
 

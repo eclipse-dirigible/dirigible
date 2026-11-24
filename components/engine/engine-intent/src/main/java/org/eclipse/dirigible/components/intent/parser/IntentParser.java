@@ -13697,6 +13697,9 @@ public final class IntentParser {
                 if (t.getStamp() != null) {
                     validateTransitionStamp(subject, t, entity, issues);
                 }
+                if (t.hasPrompt()) {
+                    validateTransitionPrompt(subject, t, entity, issues);
+                }
             }
             if (t.getFrom() == null || t.getFrom()
                                         .isEmpty()) {
@@ -13730,6 +13733,43 @@ public final class IntentParser {
             // Optional outbound mail after the flip ("on Void, mail the counterparty"), about the
             // transitioned record itself.
             validateNotifyBlock(t.getNotify(), subject + " notify", entity == null ? null : entity.getName(), model, true, issues);
+        }
+    }
+
+    /**
+     * A transition's {@code prompt:} (#7909) names the record's OWN fields and to-one relations, once
+     * each - the generates prompt grammar. Not its status (the move writes it), nor a column the
+     * platform writes (its key, a document number, a status stamp), nor a {@code timestamp} the dialog
+     * cannot collect; and no {@code default:} - the record an input would default from is the one it
+     * writes.
+     */
+    private static void validateTransitionPrompt(String subject, TransitionIntent t, EntityIntent entity, List<String> issues) {
+        Set<String> seen = new HashSet<>();
+        for (PromptFieldIntent p : t.getPrompt()) {
+            String field = p.getField();
+            if (field == null || field.isBlank()) {
+                issues.add(subject + " prompt entry has no field");
+                continue;
+            }
+            String prefix = subject + " prompt field [" + field + "]";
+            if (!seen.add(field)) {
+                issues.add(subject + " prompt names [" + field + "] more than once");
+            }
+            if (p.hasDefault()) {
+                issues.add(prefix + " declares default: - a transition's input has no source to default from;"
+                        + " a date stamped with the move is the field's stampOn: { status }");
+            }
+            FieldIntent own = fieldByName(entity, field);
+            RelationIntent relation = toOneRelationByName(entity, field);
+            if (own == null && relation == null) {
+                issues.add(prefix + " is not a field or to-one relation of [" + entity.getName() + "]");
+            } else if (relation != null && relation.isEntityStatus()) {
+                issues.add(prefix + " is the status the transition writes - setStatus decides it");
+            } else if (own != null && (own.isPrimaryKey() || own.getNumber() != null || own.getStampOn() != null)) {
+                issues.add(prefix + " is written by the platform (its key, a document number or a status stamp), not asked for");
+            } else if (own != null && "timestamp".equals(own.getType())) {
+                issues.add(prefix + " has type timestamp, which the prompt dialog does not support yet");
+            }
         }
     }
 

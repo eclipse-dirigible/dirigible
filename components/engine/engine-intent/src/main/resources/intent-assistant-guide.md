@@ -2896,6 +2896,26 @@ transitions:
   - { name: CancelProtocol, forEntity: Protocol, from: [DRAFT], setStatus: CANCELLED }
 ```
 
+`prompt:` makes the move ask for input first - a Void that must record its reason. Each entry names a
+field or to-one relation of the record ITSELF (`field`, `required` - the `generates` prompt grammar,
+without `default:`); the button opens the prompt dialog instead of the plain confirm, and the answers
+are written in the SAME targeted write as `setStatus`, so an `immutableWhen` lock does not refuse them
+and `checks:` gated on `setStatus` read them. A required answer left out is a **400** naming the field
+and the record does not move. Declare the prompted fields `readOnly: true` so only the move writes
+them; a date stamped with the move is the field's `stampOn: { status: ... }`, not a prompt. Refused at
+parse: the status relation, a key / `number:` / `stampOn:` field, a `timestamp`, and `default:`.
+
+```yaml
+transitions:
+  - name: VoidSalesInvoice
+    forEntity: SalesInvoice
+    from: [ISSUED, SENT]
+    setStatus: VOIDED
+    prompt:
+      - { field: voidReason, required: true }   # voidReason: readOnly: true on the entity
+      - { field: ReplacedBy }                   # an optional to-one, readOnly: true
+```
+
 ### generates - create one document from another (create-from)
 
 **Use when:** a record should spawn a new record of another type - often a document in another model:
