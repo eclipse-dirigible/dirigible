@@ -1181,9 +1181,8 @@ class GlueGenerator {
         context.put("toGenFolder", truthy(item, "crossModel") ? sanitize(item, "toModel") : str(parameters, "javaGenFolderName"));
         context.put("toJavaPerspective", sanitize(item, "toPerspective"));
         // The project publishing the TARGET's "-transitioned" topic, which only the reopen listener
-        // binds. A reopen is refused for a cross-model target - its retiring statuses are classified in
-        // the owner model and unresolvable here - so the target's project is always this one.
-        context.put("toProjectName", str(parameters, "projectName"));
+        // binds: the owner's for a cross-model target (#7954), as for a cross-model source above.
+        context.put("toProjectName", truthy(item, "crossModel") ? str(item, "toProject") : str(parameters, "projectName"));
         // A primary source item that is not a composition child lives outside the source document's
         // perspective, which the intent layer resolves; for the common case it is the same one.
         context.put("fromItemJavaPerspective",

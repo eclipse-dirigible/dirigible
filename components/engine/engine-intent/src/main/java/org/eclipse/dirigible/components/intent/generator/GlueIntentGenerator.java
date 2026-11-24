@@ -1258,13 +1258,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("eventOnly", !g.hasButton());
             putGeneratesEvent(g, e, fromPk, source, context);
             putWithdrawnSource(g, e, model, source, sourceInfo);
-            putSupersededTarget(g, e, model, crossModel ? null : byName.get(g.getTo()), context);
+            putSupersededTarget(g, e, model, crossModel ? null : byName.get(g.getTo()), target, context);
             // Cross-model source: the gen folder and the project that owns the source's topics/views.
             e.put("crossModelSource", crossModelSource);
             e.put("fromModel", crossModelSource ? g.getFromUses() : "");
             e.put("fromProject", crossModelSource ? fromUses.resolveProject() : "");
             e.put("toEntity", g.getTo());
             e.put("toModel", crossModel ? g.getUses() : "");
+            // The project publishing a cross-model target's topics - the one its reopen listens on (#7954).
+            e.put("toProject", crossModel ? uses.resolveProject() : "");
             e.put("toPerspective", toPerspective);
             e.put("toPk", toPk);
             // The role gate of the click (issue #7913): run() changes the source (its sourceStatus flip, a
@@ -1828,11 +1830,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * say it is deliberate - two vocabularies for "this row no longer counts" could only drift.
      *
      * <p>
-     * Nothing is emitted when the create-from appends (there is no guard to make state-aware), when the
-     * target carries no lifecycle at all (there is no state to read), or for a cross-model target,
-     * whose seeds live in its owner model so no classification is resolvable here. A target that DOES
-     * carry a lifecycle whose nomenclature nobody classified gets the warning - that combination is the
-     * silent one, where the guard looks state-aware and is not.
+     * Nothing is emitted when the create-from appends (there is no guard to make state-aware) or when
+     * the target carries no lifecycle at all (there is no state to read). A cross-model target's seeds
+     * live in its owner model, which publishes their classification on the status property of its
+     * {@code .model} ({@code statusStages}, #8243) - read here exactly as the local one is (#7954). A
+     * target that DOES carry a lifecycle whose nomenclature nobody classified gets the warning - that
+     * combination is the silent one, where the guard looks state-aware and is not - and a reopen of a
+     * cross-model target that cannot be recognised as retired is refused, the parser having had no
+     * owner model to refuse it against.
      *
      * <p>
      * The SAME resolution also drives the declared reopen (issue #6868), which reads the classification
@@ -1845,10 +1850,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * @param e the glue entry being built
      * @param model the model being generated
      * @param target the local target entity, {@code null} for a cross-model target
+     * @param crossModelTarget the cross-model target as its owner's {@code .model} describes it,
+     *        {@code null} for a local one
      * @param context the generation context collecting the warnings, may be {@code null}
      */
     private static void putSupersededTarget(GeneratesIntent g, Map<String, Object> e, IntentModel model, EntityIntent target,
-            IntentGenerationContext context) {
+            CrossModelSupport.TargetInfo crossModelTarget, IntentGenerationContext context) {
         e.put("hasRetiredStatus", false);
         e.put("retiredStatusProperty", "");
         e.put("retiredStatusCondition", "");
@@ -1871,22 +1878,50 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         if (!guarded && !g.hasReopen()) {
             return; // a plain button create-from: no guard to make stage-aware, no reopen to emit
         }
-        RelationIntent status = LifecycleStages.statusRelation(target);
-        if (status == null || status.getTo() == null) {
-            return;
+        String property;
+        String nomenclature;
+        Map<String, List<Integer>> stages;
+        if (crossModelTarget != null) {
+            property = crossModelTarget.statusProperty();
+            if (property == null) {
+                if (g.hasReopen()) {
+                    throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(List.of("generates [" + g.getName()
+                            + "] declares sourceStatusOnRetire but its cross-model target [" + g.getTo() + "] (model [" + g.getUses()
+                            + "]) declares no function: EntityStatus relation in its owner's .model - it can never be"
+                            + " retired, so the reopen could never fire"));
+                }
+                return;
+            }
+            // The owner's nomenclature, in the `model:Entity` form a cross-model reference is written in.
+            nomenclature = g.getUses() + ":" + crossModelTarget.propertyRelations()
+                                                               .getOrDefault(property, property);
+            stages = crossModelTarget.statusStages();
+        } else {
+            RelationIntent status = LifecycleStages.statusRelation(target);
+            if (status == null || status.getTo() == null) {
+                return;
+            }
+            property = IntentNaming.pascalCase(status.getName());
+            nomenclature = status.getTo();
+            stages = status.isCrossModel() ? Map.of() : LifecycleStages.stagesOf(model, status.getTo());
         }
-        Map<String, List<Integer>> stages = status.isCrossModel() ? Map.of() : LifecycleStages.stagesOf(model, status.getTo());
         List<Integer> retired = new ArrayList<>(stages.getOrDefault(LifecycleStages.CANCELLED, List.of()));
         retired.addAll(stages.getOrDefault(LifecycleStages.VOID, List.of()));
+        if (retired.isEmpty() && crossModelTarget != null && g.hasReopen()) {
+            throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(
+                    List.of("generates [" + g.getName() + "] declares sourceStatusOnRetire but no seed row of [" + nomenclature
+                            + "] is classified `stage: cancelled` or `stage: void` - that classification is what makes a [" + g.getTo()
+                            + "] retired; classify those seed rows with `stage:` in model [" + g.getUses() + "] and generate it first"));
+        }
         if (retired.isEmpty()) {
             String warning = "generates [" + g.getName() + "] " + (guarded ? "is event-driven" : "declares sourceStatusOnRetire")
-                    + " and its target [" + g.getTo() + "] carries a lifecycle status [" + status.getName() + "], but no seed row of ["
-                    + status.getTo() + "] is classified with `stage:` - "
+                    + " and its target [" + g.getTo() + "] carries a lifecycle status [" + property + "], but no seed row of ["
+                    + nomenclature + "] is classified with `stage:` - "
                     + (guarded
                             ? "the at-most-once guard can only ask whether a [" + g.getTo()
                                     + "] exists, so a cancelled or voided one blocks its replacement forever."
                             : "nothing here can tell a retired [" + g.getTo() + "] from a live one, so the source is never returned.")
-                    + " Classify the seed rows of [" + status.getTo()
+                    + " Classify the seed rows of [" + nomenclature
                     + "] with `stage:` (draft/live/cancelled/void) so a retired target can be superseded.";
             LOGGER.warn(LoggedValue.of(warning));
             if (context != null) {
@@ -1894,7 +1929,6 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             }
             return;
         }
-        String property = IntentNaming.pascalCase(status.getName());
         e.put("hasRetiredStatus", guarded);
         e.put("retiredStatusProperty", property);
         // Rendered against the template's loop variable: a retired candidate is stepped over, the first
