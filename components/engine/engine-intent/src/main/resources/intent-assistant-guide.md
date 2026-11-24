@@ -5370,7 +5370,7 @@ model reads, so a value it could not read is expected and is flagged, never a re
 ```yaml
 captures:
   - name: supplierInvoice
-    into: PurchaseInvoice            # the entity whose record the document becomes (local, not a composition child)
+    into: PurchaseInvoice            # the entity whose record the document becomes (local; a composition child is a line of an existing record, below)
     label: Scan a supplier invoice   # optional: the caption of the button; defaults to the humanized name
     attachment: InvoiceScan          # optional: a `function: Attachment` composition child of `into` that keeps the file
     instructions: "The supplier is the party that issued the document, not the one billed."
@@ -5435,9 +5435,10 @@ takes the code's value, which is exact and wins over the reading; a reading that
 `QR_MISMATCH` and one the code confirms or supplies needs no review. A part that does not convert to
 the field's type is ignored and the reading stands. QR decoding applies to images only, not to a PDF.
 
-**Rules:** unique name; `into` is a local entity with a primary key that is not a composition child and
-extends nothing; `fields:` names at least one field of it, each once, never the primary key and only of
-type string, integer, decimal, date or boolean (a timestamp is refused); `match:` only on a relation,
+**Rules:** unique name; `into` is a local entity with a primary key that extends nothing (a composition
+child is captured as a line of an existing master, below, and then takes no `items:`); `fields:`
+names at least one field of it, each once, never the primary key and only of type string, integer,
+decimal, date or boolean (a timestamp is refused); `match:` only on a relation,
 by string fields of the target; `qr:` only on a header field, naming a declared part, and not with
 `compare:`; the status relation and an item's back-reference are not read; `items.into` is a
 composition child of `into` and is not a file entity; `attachment` is a `function: Attachment` child of
@@ -5461,6 +5462,19 @@ documents. A self-hosted model plugs in as a client `@Component` implementing
 `label:`) on the list, which opens a dialog to pick or photograph the document, uploads it and shows
 what was flagged; and `<label> review` on a record, which shows the kept file beside the flags of the
 capture that created it. The flags are a list beside the document, not marks on the record's form.
+
+**A line of an existing record.** `into:` may be a composition child: a receipt photographed onto an
+expense claim that is already open becomes ONE `ExpenseClaimItem`, not a new claim. The upload names the
+master by the line's back-reference, `POST .../<Name>Capture/upload?ExpenseClaim=<id>`, and a job calls
+`capture(master, fileName, bytes)`. The master is checked before the document is read: no id is a 400,
+an id no record has a 404, and a master a line could not be added to by hand - locked by `immutable`,
+`immutableWhen` or `immutableInPeriod`, its own or an ancestor's - is refused with the line
+controller's own 409; nothing is read, written or recorded then. The line is created under that master
+through its own validation, so the master's totals re-sum. `attachment:` is then a `function:
+Attachment` child of the line, `items:` is refused, and the back-reference is never a read field. The
+capture button sits on the master's record and the review button on the line. It is offered on the
+power pages only: an owner capturing onto their own `personal:` record from the personal pages is not
+supported yet.
 
 **Not supported in v1:** timestamp fields, nested collections, creating the targets of relations, and
 flag marks on the fields of the record's own form.

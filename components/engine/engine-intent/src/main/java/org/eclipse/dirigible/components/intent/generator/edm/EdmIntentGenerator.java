@@ -533,6 +533,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (captureTargets.contains(name)) {
                 entityMap.put("captureLedger", "true");
             }
+            // captureUnderMaster: the capture creates a line of an existing record (#8626), so the line's
+            // controller lends it the master lock its own create applies (requireCaptureMasterMutable).
+            if (captureTargets.contains(name) && compositionParents.containsKey(name)) {
+                entityMap.put("captureUnderMaster", "true");
+            }
             // dropped (#7635): the columns of former fields and relations a publish removes, data
             // included. A field simply deleted from the intent keeps its column and its values; this
             // list is the explicit contract step. Comma-separated, so it survives the scalar-only .edm.

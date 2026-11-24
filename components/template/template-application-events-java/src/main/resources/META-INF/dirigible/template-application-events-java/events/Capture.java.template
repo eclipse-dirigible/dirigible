@@ -77,7 +77,8 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
 
 /**
  * Document capture ${className}: a vision model reads an uploaded scan, photo or PDF into a new
- * ${entity}, which a person then reviews.
+ * ${entity}#if($hasMaster) - a line of the existing ${masterEntity} the upload names (?${masterBackRef}=<id>), which must exist and
+ * accept new lines before the document is read#end, which a person then reviews.
  *
  * Generated from the intent captures block - do not edit; it is re-generated with the application.
  * The upload is served under /services/java/<project>/gen/events/${javaGenFolderName}/${className}Capture/upload
@@ -131,14 +132,22 @@ public class ${className}Capture {
     ;
 
     private final List<Hook> hooks;
+#if($hasMaster)
 
-    public ${className}Capture(List<Hook> hooks) {
+    /** The line's own controller: the lock its create applies to the ${masterEntity} is the capture's too. */
+    private final gen.${javaGenFolderName}.api.${javaPerspective}.${entity}Controller lines;
+#end
+
+    public ${className}Capture(List<Hook> hooks#if($hasMaster), gen.${javaGenFolderName}.api.${javaPerspective}.${entity}Controller lines#end) {
         this.hooks = List.copyOf(hooks);
+#if($hasMaster)
+        this.lines = lines;
+#end
     }
 
     @Post("/upload")
     @Roles({${roles}})
-    public String upload(@QueryParam("fileName") String fileName) {
+    public String upload(@QueryParam("fileName") String fileName#if($hasMaster), @QueryParam("${masterBackRef}") ${masterKeyJavaClass} master#end) {
         // Every answer below is JSON, so the endpoint says so - a caller must not have to guess.
         Response.setContentType("application/json");
         UploadedFile file;
@@ -153,7 +162,7 @@ public class ${className}Capture {
             Response.setStatus(400);
             return Json.stringify(Map.of("error", "the upload holds no file"));
         }
-        Outcome outcome = run(file.getName(), file.getContent());
+        Outcome outcome = run(#if($hasMaster)master, #{end}file.getName(), file.getContent());
         Response.setStatus(outcome.status());
         return Json.stringify(outcome.result());
     }
@@ -170,19 +179,26 @@ public class ${className}Capture {
     /**
      * Capture a document - the same capture the upload performs, for a job that fetched the file itself.
      *
+#if($hasMaster)
+     * @param master the ${masterEntity} the ${entity} is created under; a missing or locked one is refused
+     *        (ResponseStatusException 400, 404 or 409) before the document is read
+#end
      * @param fileName the file's name; its extension tells an image from a PDF
      * @param content the file's bytes
      * @return the outcome; a record exists only when it is CAPTURED
      */
-    public CaptureResult capture(String fileName, byte[] content) {
-        return run(fileName, content).result();
+    public CaptureResult capture(#if($hasMaster)${masterKeyJavaClass} master, #{end}String fileName, byte[] content) {
+        return run(#if($hasMaster)master, #{end}fileName, content).result();
     }
 
     /** A capture's outcome and the HTTP status the upload answers it with. */
     private record Outcome(CaptureResult result, int status) {
     }
 
-    private Outcome run(String fileName, byte[] content) {
+    private Outcome run(#if($hasMaster)${masterKeyJavaClass} master, #{end}String fileName, byte[] content) {
+#if($hasMaster)
+        requireMaster(master);
+#end
         String checksum = ImportText.checksum(content);
         String contentType = fileName == null ? null : java.net.URLConnection.guessContentTypeFromName(fileName);
 #if($hasQr)
@@ -206,6 +222,9 @@ public class ${className}Capture {
         List<CaptureFlag> flags = new ArrayList<>();
         CaptureValues read = reading.fields();
         ${entity}Entity entity = new ${entity}Entity();
+#if($hasMaster)
+        entity.${masterBackRef} = master;
+#end
 #foreach($field in $fields)
 #if($field.hasQr)
         entity.${field.property} = exact(value(read, ${field.nameLiteral}, ${field.nameLiteral}, VALUES::${field.conversion}, true, flags), ${field.nameLiteral},
@@ -362,6 +381,26 @@ public class ${className}Capture {
         CaptureLedger.record(TABLE, result);
         return result;
     }
+#if($hasMaster)
+
+    /**
+     * The ${masterEntity} the ${entity} is filed under (#8626), asked before the document is read, so
+     * nothing is sent to the reading service - or written - for a line that could not be saved: it is
+     * named, it exists, and it accepts new lines by the lock ${entity}Controller's create applies.
+     */
+    private void requireMaster(${masterKeyJavaClass} master) {
+        if (master == null) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "Name the ${masterEntity} the ${entity} is captured under (?${masterBackRef}=<id>)");
+        }
+        if (new gen.${javaGenFolderName}.data.${javaMasterPerspective}.${masterEntity}Repository().findOne(master)
+                                                                                         .isEmpty()) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND,
+                    "${masterEntity} not found");
+        }
+        lines.requireCaptureMasterMutable(master);
+    }
+#end
 
     /**
      * One value the model read, converted to its field's type. A value not on the document, or one

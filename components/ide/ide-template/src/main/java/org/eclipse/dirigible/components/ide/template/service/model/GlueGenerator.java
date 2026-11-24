@@ -900,6 +900,9 @@ class GlueGenerator {
             tablePrefix = tablePrefix + "_";
         }
         context.put("table", tablePrefix + str(item, "table"));
+        // A line captured under an existing record (#8626), named by the line's key to it.
+        copy(context, item, "hasMaster", "masterEntity", "masterBackRef", "masterKeyJavaClass");
+        context.put("javaMasterPerspective", truthy(item, "hasMaster") ? sanitize(item, "masterPerspective") : "");
     }
 
     /** Whether any of a capture's fields or relations is one its row cannot be inserted without. */

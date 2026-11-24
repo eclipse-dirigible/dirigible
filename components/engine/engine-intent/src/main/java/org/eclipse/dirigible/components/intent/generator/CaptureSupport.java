@@ -121,30 +121,34 @@ public final class CaptureSupport {
                 issues.add(subject + " captures into unknown entity [" + declared.getInto() + "]");
                 continue;
             }
-            validateTarget(into, compositionParents, subject, issues);
+            validateTarget(into, subject, issues);
+            // A composition child is captured as one line of an existing master the upload names (#8626).
+            String master = compositionParents.get(into.getName());
             Set<String> qrParts = validateQr(declared.getQr(), subject, issues);
             if (declared.getFields()
                         .isEmpty()) {
                 issues.add(subject + " reads no fields - name at least one field of [" + into.getName() + "] under fields:");
             }
-            validateFields(declared.getFields(), into, null, qrParts, true, model, byName, subject, issues);
-            validateItems(declared.getItems(), into, model, byName, subject, issues);
+            validateFields(declared.getFields(), into, master == null ? null : backReference(into, master), qrParts, true, model, byName,
+                    subject, issues);
+            if (master != null && declared.getItems() != null) {
+                issues.add(subject + " declares items:, but [" + into.getName() + "] is a line of a [" + master
+                        + "] - a capture under a master creates that one line, not a collection of its own");
+            } else {
+                validateItems(declared.getItems(), into, model, byName, subject, issues);
+            }
             validateAttachment(declared.getAttachment(), into, byName, subject, issues);
         }
     }
 
     /**
      * A capture creates one record of its target and, optionally, the rows it owns, so the target must
-     * be a table of this model a row can be inserted into on its own.
+     * be a table of this model a row can be inserted into - on its own, or as a line under the master
+     * the upload names.
      */
-    private static void validateTarget(EntityIntent into, Map<String, String> compositionParents, String subject, List<String> issues) {
+    private static void validateTarget(EntityIntent into, String subject, List<String> issues) {
         if (into.getExtend() != null) {
             issues.add(subject + " captures into [" + into.getName() + "], which extends another model's entity and owns no table");
-            return;
-        }
-        if (compositionParents.containsKey(into.getName())) {
-            issues.add(subject + " captures into [" + into.getName() + "], a composition child - its rows are created under a ["
-                    + compositionParents.get(into.getName()) + "]; capture that, and read this as its items:");
             return;
         }
         if (into.isFileChild()) {
@@ -256,7 +260,7 @@ public final class CaptureSupport {
             Map<String, EntityIntent> byName, String where, List<String> issues) {
         if (relation.getName()
                     .equals(backReference)) {
-            issues.add(where + " is the line's back-reference to the document, which is filled from the saved record");
+            issues.add(where + " is the line's back-reference to the document, which the capture fills itself");
             return;
         }
         if (relation.isEntityStatus()) {
@@ -440,6 +444,21 @@ public final class CaptureSupport {
                 entry.put("attachmentEntity", attachment.getName());
                 entry.put("attachmentPerspective", IntentEntities.resolvePerspective(attachment.getName(), compositionParents, model));
                 entry.put("attachmentBackRef", IntentNaming.pascalCase(attachmentBackReference));
+            }
+
+            // A line of an existing record (#8626): the upload names its master by the line's key to it,
+            // and the capture checks that master before the document is read.
+            String master = compositionParents.get(entity);
+            EntityIntent masterEntity = master == null ? null : byName.get(master);
+            String masterBackReference = masterEntity == null ? null : backReference(into, master);
+            boolean hasMaster = masterBackReference != null;
+            entry.put("hasMaster", hasMaster);
+            if (hasMaster) {
+                FieldIntent masterKey = IntentEntities.primaryKeyOf(masterEntity);
+                entry.put("masterEntity", master);
+                entry.put("masterPerspective", IntentEntities.resolvePerspective(master, compositionParents, model));
+                entry.put("masterBackRef", IntentNaming.pascalCase(masterBackReference));
+                entry.put("masterKeyJavaClass", CalculatedActionStubGenerator.valueType(masterKey == null ? null : masterKey.getType()));
             }
             captures.add(entry);
         }

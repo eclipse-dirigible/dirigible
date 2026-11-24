@@ -33,8 +33,10 @@ import org.springframework.stereotype.Component;
  *
  * <ul>
  * <li><b>the capture action</b> ({@code <name>-capture-action}) - a toolbar button on the entity's
- * list. It opens the shared capture page in the app-wide dialog, where the user picks or
- * photographs the document, uploads it and is shown what the capture flagged for review.</li>
+ * list, or for a composition child a per-record button on its master, whose id the page passes to
+ * the upload as the line's key to it ({@code under}, #8626). It opens the shared capture page in
+ * the app-wide dialog, where the user picks or photographs the document, uploads it and is shown
+ * what the capture flagged for review.</li>
  * <li><b>the review action</b> ({@code <name>-capture-review-action}) - a per-record button that
  * opens the same page on an existing record: the kept file beside the flags of its capture.</li>
  * </ul>
@@ -80,12 +82,19 @@ public class CaptureIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             String page = page(project, capture, byName, compositionParents, model, context);
+            // A line of an existing record (#8626) is captured from that record: the button is the
+            // master's per-record action, and the page is told the line's key to it for the upload.
+            String master = compositionParents.get(into.getName());
+            String under = master == null ? null : IntentEntities.itemsBackReference(into, master);
+            String captureView = under == null ? into.getName() : master;
             write(context, project, name + "-capture-action",
-                    descriptor(project, capture, name, CaptureSupport.label(capture), page, "page", "sap-icon--camera", context),
-                    "Capture action [" + name + "] on [" + into.getName() + "]");
+                    descriptor(project, capture, name, CaptureSupport.label(capture),
+                            under == null ? page : page + "&under=" + encode(under), captureView, under == null ? "page" : "entity",
+                            "sap-icon--camera", context),
+                    "Capture action [" + name + "] on [" + captureView + "]");
             String review = name + REVIEW_SUFFIX;
             write(context, project, name + "-capture-review-action", descriptor(project, capture, review,
-                    CaptureSupport.reviewLabel(capture), page + "&mode=review", "entity", "sap-icon--inspection", context),
+                    CaptureSupport.reviewLabel(capture), page + "&mode=review", into.getName(), "entity", "sap-icon--inspection", context),
                     "Capture review action [" + name + "] on [" + into.getName() + "]");
         }
     }
@@ -99,15 +108,15 @@ public class CaptureIntentGenerator implements IntentTargetGenerator {
         context.writeModelFile(fileBase + ".json", descriptor);
     }
 
-    private static String descriptor(String project, CaptureIntent capture, String actionName, String label, String path, String type,
-            String icon, IntentGenerationContext context) {
+    private static String descriptor(String project, CaptureIntent capture, String actionName, String label, String path, String viewName,
+            String type, String icon, IntentGenerationContext context) {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("id", project + "-" + capture.getInto() + "-" + actionName);
         view.put("label", label);
         // The renderer shows T(translation.key, label) - untranslated apps keep the raw label.
         view.put("translation", Map.of("key", IntentNaming.customActionTranslationKey(project, context, actionName)));
         view.put("path", path);
-        view.put("view", capture.getInto());
+        view.put("view", viewName);
         view.put("type", type);
         view.put("icon", icon);
         return JsonHelper.toJson(view);

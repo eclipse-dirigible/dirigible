@@ -245,11 +245,44 @@ class CaptureSupportTest {
     }
 
     @Test
-    void a_composition_child_target_is_refused() {
+    void a_composition_child_target_is_planned_as_a_line_under_the_master_the_upload_names() {
+        IntentModel model = IntentParser.parse(ENTITIES + """
+                captures:
+                  - { name: lineScan, into: PurchaseInvoiceItem, fields: [{ field: description }, { field: price }] }
+                """);
+
+        Map<String, Object> line = build(model, new IntentSettings()).get(0);
+
+        assertEquals(Set.of("PurchaseInvoiceItem"), CaptureSupport.targets(model), "the ledger is the line's");
+        assertEquals("PurchaseInvoiceItem", line.get("entity"));
+        assertEquals(Boolean.TRUE, line.get("hasMaster"));
+        assertEquals("PurchaseInvoice", line.get("masterEntity"));
+        assertEquals("PurchaseInvoice", line.get("masterBackRef"), "the upload names the master by the line's key to it");
+        assertEquals("Integer", line.get("masterKeyJavaClass"));
+        assertEquals(line.get("perspective"), line.get("masterPerspective"), "a line lives in its master's perspective");
+        assertFalse(((String) line.get("roles")).isBlank(), "the upload is gated by the line's write gate");
+        assertEquals(Boolean.FALSE, build(IntentParser.parse(VALID), new IntentSettings()).get(0)
+                                                                                          .get("hasMaster"),
+                "a top-level record has no master");
+    }
+
+    @Test
+    void items_on_a_composition_child_target_are_refused() {
         assertRefused("""
                 captures:
-                  - { name: scan, into: PurchaseInvoiceItem, fields: [{ field: description }] }
-                """, "a composition child");
+                  - name: scan
+                    into: PurchaseInvoiceItem
+                    fields: [{ field: description }]
+                    items: { into: PurchaseInvoiceNote, fields: [{ field: text }] }
+                """, "is a line of a [PurchaseInvoice] - a capture under a master creates that one line");
+    }
+
+    @Test
+    void the_master_back_reference_of_a_child_target_is_not_read() {
+        assertRefused("""
+                captures:
+                  - { name: scan, into: PurchaseInvoiceItem, fields: [{ field: PurchaseInvoice, match: [number] }] }
+                """, "is the line's back-reference to the document, which the capture fills itself");
     }
 
     @Test
