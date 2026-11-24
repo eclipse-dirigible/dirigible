@@ -69,6 +69,9 @@ final class ModelParameterProcessor {
     /** The grouped integer part of a float display pattern; the scale's decimals follow it. */
     private static final String FLOAT_PATTERN_INTEGER_PART = "### ### ### ##0";
 
+    /** The decimals a scaled float always shows; the rest of its scale shows only when present. */
+    private static final int MANDATORY_FLOAT_DECIMALS = 2;
+
     /**
      * Not instantiable.
      */
@@ -2994,7 +2997,8 @@ final class ModelParameterProcessor {
     /**
      * The display pattern of a float property: its own {@code widgetPattern}, else one with as many
      * decimals as its {@code dataScale} (#8701 - a scale-6 rate read 1.955834 as 1.96), else the
-     * two-decimal default.
+     * two-decimal default. Above two, the decimals are optional ({@code #}): a scale-6 quantity of 10
+     * reads 10.00, not 10.000000, while 1.955834 keeps all six (#8878).
      *
      * @param property the property
      * @return the pattern
@@ -3010,7 +3014,11 @@ final class ModelParameterProcessor {
         if (Double.isNaN(scale) || scale < 0) {
             return DEFAULT_FLOAT_PATTERN;
         }
-        return scale == 0 ? FLOAT_PATTERN_INTEGER_PART : FLOAT_PATTERN_INTEGER_PART + "." + "0".repeat((int) scale);
+        if (scale == 0) {
+            return FLOAT_PATTERN_INTEGER_PART;
+        }
+        int mandatory = (int) Math.min(scale, MANDATORY_FLOAT_DECIMALS);
+        return FLOAT_PATTERN_INTEGER_PART + "." + "0".repeat(mandatory) + "#".repeat((int) scale - mandatory);
     }
 
     /**
