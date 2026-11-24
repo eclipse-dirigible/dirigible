@@ -339,7 +339,8 @@ not as an apology.
 - **`{appUrl}` is the raw origin** (`DIRIGIBLE_APP_BASE_URL`, tenant-overridable, else `DIRIGIBLE_HOST`) - reach for it only
   for a link the two above cannot express, e.g. a page of your own: `"{appUrl}/services/web/..."`.
   All three names are reserved, so an entity must not declare a field literally named `appUrl`,
-  `recordUrl` or `inboxUrl` (it would be shadowed in every notify block).
+  `recordUrl` or `inboxUrl` (it would be shadowed in every notify block) - nor `shareUrl`, the
+  share link of an entity that declares `share:` (see *share*).
 - **A recipient that cannot be resolved is surfaced, not silent.** If `to` names a field/relation that
   does not exist, that notification or schedule is dropped and reported in the generate response's
   `warnings` (as well as the server log) - fix the reference so the glue is emitted.
@@ -4500,6 +4501,21 @@ Rules to follow when proposing it:
   it to `permissions` in the same proposal.
 - Issuing a document does not create a link. A user creates one on the record page (Share links), sees
   how often it was opened, and can revoke it.
+- **To MAIL the link, put `{shareUrl}` in a notify `body:` / `html:`** ("mail the invoice" with a link
+  instead of, or next to, the attachment). The send mints a new link to the record's issued copy -
+  same `when:`, same copy, same expiry as the Share action, recorded as created by the system - and
+  mails its URL. Bind that notify to a step AFTER the snapshot delegate: before the copy exists no
+  link can be made, so the send fails (nothing mailed, `outcome:` stamped). `{shareUrl}` is refused on
+  an entity without `share:`, in a `subject:`, and inside a `forEach`.
+
+  ```yaml
+        - { name: mint, kind: serviceTask, args: { delegate: gen.events.SalesInvoiceSnapshotGenerator, next: mail } }
+        - name: mail
+          kind: serviceTask
+          args:
+            notify: { to: Customer.email, subject: "Invoice {number}", body: "Read it online: {shareUrl}", outcome: mailOutcome }
+            next: end
+  ```
 
 ### schedules - run on a cron and notify or generate records
 

@@ -365,6 +365,15 @@ public class ${controllerClass} {
             java.util.Map part = new java.util.HashMap();
             part.put("type", "text");
             part.put("contentType", "text/plain");
+#if($usesShareUrl == "true")
+            // {shareUrl} (#8616) - a share link to the issued copy of the record this message is about, minted
+            // HERE: once per message, after the recipient is known, so a record with nobody to mail gets none.
+            // The generated repository applies the entity's share: exactly as the Share action does; a record it
+            // refuses fails this send like an unreachable mailbox - never a mail without its link. The URL is
+            // built on the configured base URL and is never logged.
+            String shareUrl = gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository.createShareUrl(entity,
+                    "system (notify ${name})");
+#end
             part.put("text", ${notifyBodyExpression});
             java.util.List<java.util.Map> parts = new java.util.ArrayList<>();
             parts.add(part);

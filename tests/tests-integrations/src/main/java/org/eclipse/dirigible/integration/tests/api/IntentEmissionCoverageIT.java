@@ -2856,12 +2856,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(
                 repositoryCode.contains("org.eclipse.dirigible.components.engine.share.ShareSubject")
                         && repositoryCode.contains("public static final String SHARE_SUBJECT = \"")
-                        && repositoryCode.contains("return entity != null && !java.util.Objects.equals(entity.Title, \"Draft\");"),
-                "the repository must contribute the share subject with the declared condition: " + repositoryCode);
+                        && repositoryCode.contains("return entity != null && !java.util.Objects.equals(entity.Title, \"Draft\");")
+                        && repositoryCode.contains("ArchiveCopyRepository().findAll("),
+                "the repository must contribute the share subject with the declared condition, and read the issued copy: "
+                        + repositoryCode);
         String controller = contentOf("gen/emission/api/archive/ArchiveController.java");
         assertTrue(controller.contains("@Get(\"/{id}/share-links\")") && controller.contains("@Post(\"/{id}/share-links\")")
                 && controller.contains("@Delete(\"/{id}/share-links/{linkId}\")") && controller.contains("if (!isInAnyRole(\"Payroll\")) {")
-                && controller.contains("ArchiveCopyRepository().findAll(") && controller.contains("issued.StoragePath, issued.FileName,"),
+                && controller.contains("ArchiveRepository.issuedCopy(id)") && controller.contains("issued.StoragePath, issued.FileName,"),
                 "the controller must gate the link endpoints by the declared role and serve the stored copy: " + controller);
         String page = contentOf("gen/emission/js/components/pages/Archive/ArchiveDocumentPage.js");
         assertTrue(page.contains("shareWhen: [{ property: 'Title', equal: false, value: 'Draft' }],"),

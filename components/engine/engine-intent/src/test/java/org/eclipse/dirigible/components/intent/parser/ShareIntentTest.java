@@ -179,6 +179,53 @@ class ShareIntentTest {
         assertIssue(YAML.replace("copy: SalesInvoiceCopy", "copy: SalesInvoiceCopy\n      anyone: true"), "anyone");
     }
 
+    /** A process that mints the copy and then mails, its notify block being the given one. */
+    private static String mailing(String notify) {
+        return YAML + """
+                processes:
+                  - name: InvoiceMail
+                    trigger: { onCreate: SalesInvoice }
+                    steps:
+                      - { name: mint, kind: serviceTask, args: { delegate: gen.events.SalesInvoiceSnapshotGenerator, next: mail } }
+                      - name: mail
+                        kind: serviceTask
+                        args:
+                          notify: %s
+                          next: done
+                      - { name: done, kind: end }
+                """.formatted(notify);
+    }
+
+    @Test
+    void aShareUrlInTheBodyOfAnEntityThatDeclaresShareParses() {
+        IntentParser.parse(mailing("{ to: a@example.com, subject: \"Invoice {id}\", body: \"Read it at {shareUrl}\" }"));
+        IntentParser.parse(
+                mailing("{ to: a@example.com, subject: \"Invoice {id}\", body: \"Read it\", html: \"<a href='{shareUrl}'>here</a>\" }"));
+    }
+
+    @Test
+    void aShareUrlOfAnEntityWithoutShareIsRejected() {
+        assertIssue(YAML + """
+                notifications:
+                  - name: memoNote
+                    event: { onUpdate: Memo }
+                    to: a@example.com
+                    subject: "Memo"
+                    body: "Read it at {shareUrl}"
+                """, "uses {shareUrl}, but [Memo] declares no share:");
+    }
+
+    @Test
+    void aShareUrlInTheSubjectIsRejected() {
+        assertIssue(mailing("{ to: a@example.com, subject: \"Invoice {shareUrl}\", body: \"Read it\" }"), "uses {shareUrl} in its subject");
+    }
+
+    @Test
+    void aShareUrlInAFanOutIsRejected() {
+        assertIssue(mailing("{ forEach: SalesInvoiceItem, to: a@example.com, subject: \"Invoice\", body: \"Read it at {shareUrl}\" }"),
+                "uses {shareUrl} in a forEach");
+    }
+
     private static EntityIntent invoice(IntentModel model) {
         return model.getEntities()
                     .stream()

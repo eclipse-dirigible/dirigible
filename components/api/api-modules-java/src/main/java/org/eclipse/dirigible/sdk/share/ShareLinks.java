@@ -133,8 +133,27 @@ public final class ShareLinks {
      */
     public static Created create(String entity, Object recordId, String storagePath, String fileName, String contentType,
             int expiresAfterDays) {
+        return create(entity, recordId, storagePath, fileName, contentType, expiresAfterDays, User.getName());
+    }
+
+    /**
+     * Create a link to one stored file of a record, on behalf of whoever {@code createdBy} names - the
+     * application itself when a declared send mints it (a notify's {@code {shareUrl}}).
+     *
+     * @param entity the record's entity name
+     * @param recordId the record's key
+     * @param storagePath the stored file the link serves (the issued copy's {@code StoragePath})
+     * @param fileName the file name the reader receives
+     * @param contentType the stored file's content type
+     * @param expiresAfterDays the link's life in days, {@code 0} for a permanent link
+     * @param createdBy who the link is recorded as created by
+     * @return the link and the URL to hand out
+     * @throws IllegalStateException when the tenant switched sharing off
+     */
+    public static Created create(String entity, Object recordId, String storagePath, String fileName, String contentType,
+            int expiresAfterDays, String createdBy) {
         ShareLinkService.Created created =
-                service().create(entity, String.valueOf(recordId), storagePath, fileName, contentType, expiresAfterDays, User.getName());
+                service().create(entity, String.valueOf(recordId), storagePath, fileName, contentType, expiresAfterDays, createdBy);
         return new Created(link(created.link()), Configurations.appBaseUrl() + PUBLIC_PATH + created.token());
     }
 
