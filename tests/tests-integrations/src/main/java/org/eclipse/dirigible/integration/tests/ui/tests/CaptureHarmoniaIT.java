@@ -11,6 +11,7 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -101,6 +102,9 @@ class CaptureHarmoniaIT extends UserInterfaceIntegrationTest {
                   - { name: registrationNumber, type: string,  length: 20 }
                   - { name: vatNumber,          type: string,  length: 20 }
               - name: Bill
+                checks:
+                  - { kind: duplicate, fields: [Vendor, vendorNumber],
+                      message: "A bill with this vendor number already exists: {match} - continue?" }
                 fields:
                   - { name: id,           type: integer, primaryKey: true, generated: true }
                   - { name: vendorNumber, type: string,  length: 50, required: true }
@@ -324,6 +328,35 @@ class CaptureHarmoniaIT extends UserInterfaceIntegrationTest {
         Selenide.sleep(500);
         assertEquals(announced, announcements(), "reviewing an existing record announces nothing");
         assertEquals(1, requests.size(), "one upload is one provider call");
+
+        // The same scan again (#8631): the bill's duplicate check is asked in the shell's confirm dialog
+        // before anything is saved, and once confirmed the capture goes through, listing it to review.
+        browser.openPath(PAGE + "?capture="
+                + java.net.URLEncoder.encode("/services/java/billcapture/gen/events/billcapture/BillScanCapture", StandardCharsets.UTF_8)
+                + "&entity=Bill");
+        Selenide.$("#capture-file")
+                .uploadFile(scan);
+        Selenide.$("#capture-submit")
+                .shouldBe(Condition.enabled)
+                .click();
+        Selenide.$(".warnings-list")
+                .shouldBe(Condition.visible, WAIT)
+                .shouldHave(Condition.text("A bill with this vendor number already exists: " + billId));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/bill/BillController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("size()", equalTo(1)));
+        Selenide.$("[data-answer='yes']")
+                .click();
+        Selenide.$("#capture-review")
+                .shouldBe(Condition.visible, WAIT);
+        Selenide.$("#capture-flag-count")
+                .shouldHave(Condition.exactText("7 things to review"));
+        Selenide.$("[data-flag-field='Bill'][data-flag-reason='WARNING']")
+                .shouldHave(Condition.text("Warning"))
+                .shouldHave(Condition.text("A bill with this vendor number already exists: " + billId));
+        assertEquals(3, requests.size(), "the held upload and its confirmed repeat each read the document");
     }
 
     @Test

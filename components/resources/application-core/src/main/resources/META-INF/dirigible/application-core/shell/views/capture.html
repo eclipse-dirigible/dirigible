@@ -406,22 +406,35 @@
             this.notice = null;
             this.rejectedFlags = [];
             try {
-              const form = new FormData();
-              form.append('file', this.chosen, this.chosen.name);
               let response;
-              try {
-                response = await fetch(this.captureBase + '/upload', {
-                  method: 'POST',
-                  body: form,
-                  credentials: 'same-origin',
-                  headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                });
-              } catch (e) {
-                this.notice = this.failure({ httpStatus: 0, errorType: 'NetworkError' }, null);
-                return;
-              }
               let body = null;
-              try { body = await response.json(); } catch (e) { body = null; }
+              let confirmed = [];
+              for (;;) {
+                const form = new FormData();
+                form.append('file', this.chosen, this.chosen.name);
+                const headers = { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
+                if (confirmed.length) headers['X-Confirm-Warnings'] = confirmed.join(',');
+                try {
+                  response = await fetch(this.captureBase + '/upload', { method: 'POST', body: form, credentials: 'same-origin', headers });
+                } catch (e) {
+                  this.notice = this.failure({ httpStatus: 0, errorType: 'NetworkError' }, null);
+                  return;
+                }
+                body = null;
+                try { body = await response.json(); } catch (e) { body = null; }
+                // What the record's soft checks warn about - the same document captured twice (#8631) -
+                // is asked as a save asks it (the shared dialog), and the upload repeated naming the codes
+                // confirmed; a warning that appears only on the repeat is asked again.
+                if (response.status !== 428 || !body || !Array.isArray(body.warnings) || !body.warnings.length) break;
+                this.busy = false; // not reading while the person answers
+                const yes = await App.services.confirmWarnings(body.warnings);
+                this.busy = true;
+                if (!yes) {
+                  this.notice = { variant: 'warning', title: this.t('notConfirmed', 'Not captured - the warnings were not confirmed.'), text: '' };
+                  return;
+                }
+                confirmed = body.warnings.map((w) => w.code);
+              }
               if (response.ok && body && body.status === 'CAPTURED' && body.recordId !== null && body.recordId !== undefined) {
                 this.accept(body);
                 return;
@@ -573,6 +586,7 @@
               MISMATCH: ['MISMATCH', 'Differs from the calculated value'],
               LINE: ['LINE', 'Line read with low confidence'],
               LINE_SKIPPED: ['LINE_SKIPPED', 'Line not created'],
+              WARNING: ['WARNING', 'Warning'],
             };
             const entry = labels[reason];
             return entry ? this.t('reason.' + entry[0], entry[1]) : this.t('reason.OTHER', 'Needs a look');

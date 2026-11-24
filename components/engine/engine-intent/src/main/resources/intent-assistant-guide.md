@@ -5407,7 +5407,7 @@ flag on it, served by the review endpoint. The reasons: `MISSING` (the value is 
 field's type; the field stays empty), `NO_MATCH` and `AMBIGUOUS_MATCH` (a relation found no row or
 several), `QR_MISMATCH` (the reading differs from the document's code), `MISMATCH` (the printed value
 of a `compare:` field differs from the saved record's) `LINE` (a line was read with less than high
-confidence) and `LINE_SKIPPED` (a line was left out, see below). The record goes through the entity's own validation, as one a person creates would, and
+confidence), `LINE_SKIPPED` (a line was left out, see below) and `WARNING` (a soft check, see below). The record goes through the entity's own validation, as one a person creates would, and
 the capture never approves, posts or transitions it. Two readings create no record (REJECTED, answered 400 as the refusal it is, with
 the flags of what was read, so the person can supply what is missing and capture again): one that
 lacks a value the record cannot be inserted without - a `required` field or relation nothing defaults,
@@ -5416,6 +5416,14 @@ that lacks a required value is left out and flagged `LINE_SKIPPED`, so one unrea
 document; a compared total then shows the difference. A provider that fails creates nothing (FAILED): 412 when no provider is
 configured, 502 when the provider is unreachable or errors, 422 when it refuses or the file is
 unreadable.
+
+**Soft checks are asked.** A `duplicate` check (or any `severity: warn` one) of `into` - the same
+supplier invoice scanned twice - is asked of the person uploading as it is of the person saving the
+form: the upload is answered 428 listing the warnings and creates nothing (the attempt is in the
+ledger as REJECTED) until it is repeated with their codes in `X-Confirm-Warnings`; the capture page
+asks with the shared confirm dialog and repeats it, reading the document again. The record then
+carries a `WARNING` flag with the check's message, `{match}` naming the existing record. A job's
+`capture(...)` has nobody to ask: the record is created and flagged.
 
 **Relations.** A to-one relation is named in `fields:` with `match:`, the target's string fields the
 document carries. The model reads one value per key; the keys are tried in the declared order against
