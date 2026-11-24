@@ -941,7 +941,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // the rows they test.
         buildBanners(entities, builtByName);
         // share: (#8613) - the declaration that an entity's issued copy may be handed out through a link.
-        buildShare(entities, builtByName, byName, compositionParents, settingEntities);
+        buildShare(entities, builtByName, byName, compositionParents, settingEntities, crossModelLookup(context, usesByAlias));
         // The reverse link of a scoped calendar: the record the calendar filters by gets a way to open
         // it. Same sweep reason as the registers above - the scope target may be declared after the
         // calendar entity that names it.
@@ -4537,15 +4537,20 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * guards with -, the snapshot child whose stored file a link serves (with the foreign key that
      * finds a record's copies), the declared life and the roles that may create and revoke links.
      * Nothing without the block, so an entity that does not declare it generates no share code at all.
+     * The life by record ({@code expiry}, #8620) rides along as typed terms per entry, its one-hop
+     * reads as {@code pathLoads} - one walker for all entries, so a relation two entries read is loaded
+     * once.
      *
      * @param entities the model's entities
      * @param builtByName the entity maps built so far, by name
      * @param byName the entities by name
      * @param compositionParents each child's composition master
      * @param settingEntities the setting entities (perspective resolution)
+     * @param crossModel the owner facts of a cross-model hop an expiry condition reads
      */
     private static void buildShare(List<EntityIntent> entities, Map<String, Map<String, Object>> builtByName,
-            Map<String, EntityIntent> byName, Map<String, String> compositionParents, Set<String> settingEntities) {
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, Set<String> settingEntities,
+            NotificationSupport.CrossModelLookup crossModel) {
         for (EntityIntent entity : entities) {
             Map<String, Object> entityMap = builtByName.get(entity.getName());
             ShareIntent declared = entity.getShare();
@@ -4561,7 +4566,22 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     masterFk = IntentNaming.pascalCase(relation.getName());
                 }
             }
-            if (terms == null || masterFk == null || declared.getRoles() == null) {
+            ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, compositionParents, crossModel);
+            List<Map<String, Object>> expiry = new ArrayList<>();
+            for (ShareIntent.Expiry rule : declared.getExpiry() == null ? List.<ShareIntent.Expiry>of() : declared.getExpiry()) {
+                List<Map<String, Object>> ruleTerms =
+                        rule == null ? null : CheckSupport.conditionTerms(entity, byName, walker, rule.getWhen());
+                Integer days = rule == null ? null : rule.daysOrNull();
+                if (ruleTerms == null || days == null) {
+                    expiry = null;
+                    break;
+                }
+                Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("whenTerms", ruleTerms);
+                entry.put("days", String.valueOf(days));
+                expiry.add(entry);
+            }
+            if (terms == null || masterFk == null || declared.getRoles() == null || expiry == null) {
                 continue; // reported by the parser - never emitted as a weaker gate
             }
             Map<String, Object> share = new LinkedHashMap<>();
@@ -4572,6 +4592,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             share.put("copyMasterFk", masterFk);
             share.put("expiresAfterDays", String.valueOf(declared.expiresAfterDaysOrNull()));
             share.put("roles", String.join(",", declared.getRoles()));
+            if (!expiry.isEmpty()) {
+                share.put("expiry", expiry);
+            }
+            if (!walker.hops()
+                       .isEmpty()) {
+                share.put("pathLoads", pathLoadsOf(walker));
+            }
             entityMap.put("share", share);
         }
     }

@@ -291,6 +291,16 @@ final class StatusSymbolResolver {
             if (share != null && share.get("when") != null) {
                 rewriteRecordWhen(share, "when", entityName, "entity [" + entityName + "] share when");
             }
+            // share.expiry[].when (#8620): the record's own property or one hop away (`Customer.Kind == 2`),
+            // so it takes the forbidWhen resolver, which reads a hop's status in the TARGET's terms.
+            int expiryIndex = 0;
+            for (Object ruleNode : share == null ? List.of() : asList(share.get("expiry"))) {
+                expiryIndex++;
+                Map<?, ?> rule = asMap(ruleNode);
+                if (rule != null && rule.get("when") != null) {
+                    rewriteForbidWhen(entityName, rule, "entity [" + entityName + "] share expiry[" + expiryIndex + "] when");
+                }
+            }
         }
     }
 

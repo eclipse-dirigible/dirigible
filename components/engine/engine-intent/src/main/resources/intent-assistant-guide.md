@@ -4483,6 +4483,8 @@ reachable from outside.
       copy: SalesInvoiceCopy        # required - the function: Snapshot child whose stored file is served
       roles: [SalesInvoiceShare]    # required - who may create and revoke links; [] admits nobody
       expiresAfterDays: 0           # optional - 0 (default) = permanent; a tenant can only shorten it
+      expiry:                       # optional - the first entry the record meets sets the link's life
+        - { when: "Customer.Kind == 2", days: 30 }   # a private individual's invoice: 30 days
 ```
 
 Rules to follow when proposing it:
@@ -4499,6 +4501,13 @@ Rules to follow when proposing it:
   A record that leaves the state loses its links for good - a voided invoice is not readable any more.
 - `roles:` lists roles declared under `permissions`. The key is required; do not invent a role - add
   it to `permissions` in the same proposal.
+- **A link to a private individual's document should expire** - it carries a name and a home address.
+  Say so with `expiry:` rather than one short `expiresAfterDays` for everybody: each entry is
+  `{ when, days }`, the first whose `when` the record meets when the link is created wins, and
+  `expiresAfterDays` covers the rest. `when` is a condition like a `forbidWhen`'s - the record's own
+  field, or one hop away (`Customer.Kind == 2`); a cross-model nomenclature is named by its numeric id.
+  `days: 0` is permanent. The life is fixed when the link is created, for a mailed `{shareUrl}` link
+  too, and the tenant's cap still shortens it.
 - Issuing a document does not create a link. A user creates one on the record page (Share links), sees
   how often it was opened, and can revoke it.
 - **To MAIL the link, put `{shareUrl}` in a notify `body:` / `html:`** ("mail the invoice" with a link

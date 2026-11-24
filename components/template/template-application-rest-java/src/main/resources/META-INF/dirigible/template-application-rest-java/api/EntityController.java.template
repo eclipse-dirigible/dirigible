@@ -368,7 +368,7 @@ public class ${name}Controller {
         }
         org.eclipse.dirigible.sdk.http.Response.setStatus(201);
         return org.eclipse.dirigible.sdk.share.ShareLinks.create(${name}Repository.SHARE_SUBJECT, id, issued.StoragePath, issued.FileName,
-                issued.ContentType, ${share.expiresAfterDays}).toMap();
+                issued.ContentType, ${name}Repository.shareExpiresAfterDays(entity)).toMap();
     }
 
     @Delete("/{id}/share-links/{linkId}")

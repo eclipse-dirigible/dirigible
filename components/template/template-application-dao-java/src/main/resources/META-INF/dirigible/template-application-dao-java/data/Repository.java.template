@@ -585,10 +585,32 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     }
 
     /**
+     * The life in days of a share link created now on a ${name} - the single reading of it, used by the
+     * Share action and by a notify's {shareUrl} alike: the first share: expiry: entry whose condition
+     * the record meets (#8620), else expiresAfterDays. 0 is permanent; the tenant's cap shortens either
+     * where the link is stored. Read from the record, never from a request.
+     *
+     * @param entity the record the link is created on
+     * @return the days, 0 for a permanent link
+     */
+    public static int shareExpiresAfterDays(${name}Entity entity) {
+#foreach($load in $share.pathLoads)
+        Object ${load.local}Fk = ${load.sourceExpression};
+        ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+#end
+#foreach($rule in $share.expiry)
+        if (${rule.whenJavaExpression}) {
+            return ${rule.days};
+        }
+#end
+        return ${share.expiresAfterDays};
+    }
+
+    /**
      * Creates a share link to the issued copy of a ${name} on behalf of the application - a notify's
      * {shareUrl} (#8616) - and answers its URL, which the message hands out and nothing logs. The
      * rules are the Share action's: the record is in its share: state, its copy is stored, the tenant
-     * allows sharing, and the link lives the declared days.
+     * allows sharing, and the link lives {@link #shareExpiresAfterDays} days.
      *
      * @param entity the record the message is about
      * @param createdBy who the link is recorded as created by - the system, naming the send
@@ -605,7 +627,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             throw new IllegalStateException("${name} [" + id + "] has no issued copy yet - mail its link after the copy is minted");
         }
         return org.eclipse.dirigible.sdk.share.ShareLinks.create(SHARE_SUBJECT, id, issued.StoragePath, issued.FileName,
-                issued.ContentType, ${share.expiresAfterDays}, createdBy).url();
+                issued.ContentType, shareExpiresAfterDays(entity), createdBy).url();
     }
 #end
 

@@ -6193,10 +6193,53 @@ public final class IntentParser {
             issues.add(subject + " expiresAfterDays [" + share.getExpiresAfterDays()
                     + "] must be a whole number of days from 0 (permanent) to " + ShareIntent.MAX_EXPIRES_AFTER_DAYS);
         }
+        validateShareExpiry(entity, share, byName, subject, issues);
         String personal = personalScope(entity, byName);
         if (personal != null) {
             issues.add(subject + " is not allowed on a personal entity - " + personal + ", and a link is a bearer credential: whoever holds"
                     + " it reads the document. A personal document stays behind sign-in; a notification may carry {recordUrl}");
+        }
+    }
+
+    /**
+     * The {@code expiry:} of a {@code share:} (#8620) - a link's life by record, the first entry whose
+     * {@code when} holds when the link is created. Each condition is read like a {@code forbidWhen}'s:
+     * the record's own property or a one-hop {@code Relation.field} (the customer's kind), so a term
+     * the generator could not compile - an unknown relation, a literal of the wrong type - is refused
+     * here rather than leaving a private individual's link permanent while looking authored.
+     */
+    private static void validateShareExpiry(EntityIntent entity, ShareIntent share, Map<String, EntityIntent> byName, String subject,
+            List<String> issues) {
+        if (share.getExpiry() == null) {
+            return;
+        }
+        if (share.getExpiry()
+                 .isEmpty()) {
+            issues.add(subject + " expiry must not be an empty list - leave it out, and every link lives expiresAfterDays");
+        }
+        int index = 0;
+        for (ShareIntent.Expiry rule : share.getExpiry()) {
+            index++;
+            String ruleSubject = subject + " expiry[" + index + "]";
+            if (rule == null || rule.getWhen() == null) {
+                issues.add(ruleSubject + " needs a when - the record condition that gives a link this life, e.g."
+                        + " `{ when: \"Customer.Kind == 2\", days: 30 }`");
+            } else if (!(rule.getWhen() instanceof String) && !(rule.getWhen() instanceof List<?>)) {
+                issues.add(ruleSubject + " when must be a condition string or a list of them");
+            } else {
+                List<String> terms = CheckSupport.terms(rule.getWhen());
+                if (terms.isEmpty()) {
+                    issues.add(ruleSubject + " when must not be an empty list");
+                }
+                for (String term : terms) {
+                    validateForbidWhenTerm(entity, byName, term, ruleSubject, issues);
+                }
+            }
+            Integer days = rule == null ? null : rule.daysOrNull();
+            if (days == null || days < 0 || days > ShareIntent.MAX_EXPIRES_AFTER_DAYS) {
+                issues.add(ruleSubject + " days [" + (rule == null ? null : rule.getDays())
+                        + "] must be a whole number of days from 0 (permanent) to " + ShareIntent.MAX_EXPIRES_AFTER_DAYS);
+            }
         }
     }
 
