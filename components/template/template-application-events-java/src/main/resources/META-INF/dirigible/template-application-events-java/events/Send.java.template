@@ -222,6 +222,22 @@ public class ${className} implements JavaDelegate {
         Map part = new HashMap();
         part.put("type", "text");
         part.put("contentType", "text/plain");
+#if($usesShareUrl == "true")
+        // {shareUrl} (#8616) - a share link to the issued copy of the record this message is about, minted
+        // HERE: once per message, after the recipient is known, so a record with nobody to mail gets none.
+        // The generated repository applies the entity's share: exactly as the Share action does; a record it
+        // refuses fails this send like an unreachable mailbox - never a mail without its link. The URL is
+        // built on the configured base URL and is never logged.
+        String shareUrl;
+        try {
+            shareUrl = ${entity}Repository.createShareUrl(entity, "system (notify ${process}.${step})");
+        } catch (RuntimeException ex) {
+#if($notifyOutcomeProperty != "")
+            stampNotifyOutcome(entity.${notifyOutcomeKeyProperty}, ex);
+#end
+            throw new RuntimeException("Failed to send the ${step} mail of the ${process} process: " + ex.getMessage(), ex);
+        }
+#end
         part.put("text", ${notifyBodyExpression});
         List<Map> parts = new ArrayList<>();
         parts.add(part);

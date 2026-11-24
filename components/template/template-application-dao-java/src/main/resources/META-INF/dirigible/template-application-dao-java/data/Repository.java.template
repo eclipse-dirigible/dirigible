@@ -565,6 +565,48 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     public static boolean isShareable(${name}Entity entity) {
         return entity != null && ${share.whenJavaExpression};
     }
+
+    /**
+     * The newest stored ${share.copyEntity} of a ${name} - the file a share link serves - or null while
+     * none is minted. Never a render of the live record.
+     *
+     * @param id the ${name}'s key
+     * @return the issued copy, or null
+     */
+    public static gen.${javaGenFolderName}.data.${share.javaCopyPerspective}.${share.copyEntity}Entity issuedCopy(Object id) {
+        gen.${javaGenFolderName}.data.${share.javaCopyPerspective}.${share.copyEntity}Entity issued = null;
+        for (gen.${javaGenFolderName}.data.${share.javaCopyPerspective}.${share.copyEntity}Entity copy : new gen.${javaGenFolderName}.data.${share.javaCopyPerspective}.${share.copyEntity}Repository().findAll(
+                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${share.copyMasterFk}", id))) {
+            if (copy.StoragePath != null && (issued == null || (copy.Version != null && (issued.Version == null || copy.Version > issued.Version)))) {
+                issued = copy;
+            }
+        }
+        return issued;
+    }
+
+    /**
+     * Creates a share link to the issued copy of a ${name} on behalf of the application - a notify's
+     * {shareUrl} (#8616) - and answers its URL, which the message hands out and nothing logs. The
+     * rules are the Share action's: the record is in its share: state, its copy is stored, the tenant
+     * allows sharing, and the link lives the declared days.
+     *
+     * @param entity the record the message is about
+     * @param createdBy who the link is recorded as created by - the system, naming the send
+     * @return the link's URL
+     * @throws IllegalStateException when no link can be created, saying why - the message must then not go out
+     */
+    public static String createShareUrl(${name}Entity entity, String createdBy) {
+        var id = entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end;
+        if (!isShareable(entity)) {
+            throw new IllegalStateException("${name} [" + id + "] cannot be shared in its current state");
+        }
+        var issued = issuedCopy(id);
+        if (issued == null) {
+            throw new IllegalStateException("${name} [" + id + "] has no issued copy yet - mail its link after the copy is minted");
+        }
+        return org.eclipse.dirigible.sdk.share.ShareLinks.create(SHARE_SUBJECT, id, issued.StoragePath, issued.FileName,
+                issued.ContentType, ${share.expiresAfterDays}, createdBy).url();
+    }
 #end
 
     @Override

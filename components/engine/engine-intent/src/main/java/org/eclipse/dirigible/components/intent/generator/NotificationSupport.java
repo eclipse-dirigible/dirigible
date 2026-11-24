@@ -106,6 +106,16 @@ public final class NotificationSupport {
     static final String INBOX_URL_TOKEN = "inboxUrl";
 
     /**
+     * The reserved {@code {shareUrl}} placeholder name (#8616) - a share link to the issued copy of the
+     * record the message is about, minted at send time exactly as a user's Share action mints one, for
+     * the reader who has no account. Like {@link #RECORD_URL_TOKEN} it resolves to a bare identifier:
+     * the events template mints the link into that local once per message, after the recipient is
+     * known, and the generated repository of the entity's {@code share:} decides whether it may exist.
+     * A text placeholder only - a recipient is a mailbox, and a link is no address.
+     */
+    public static final String SHARE_URL_TOKEN = "shareUrl";
+
+    /**
      * The {@code escalation.<field>} scope - the level a schedule's days-past-due ladder placed the row
      * at (issue #7276), reachable from the message text so the wording can differ per level ("a
      * friendly reminder" at the first, "final notice before collection" at the last). It is also the
@@ -232,11 +242,12 @@ public final class NotificationSupport {
      * HTML-escaped, or {@code null} when none is declared. {@code ccExpression} / {@code bccExpression}
      * are the copy recipients, {@code null} when not authored, and {@code usesVariables} reports a
      * recipient read off the process instance ({@link #VAR_PREFIX}), which needs the step's
-     * {@code execution} in scope.
+     * {@code execution} in scope. {@code usesShareUrl} reports a {@link #SHARE_URL_TOKEN} the template
+     * must mint.
      */
     public record Plan(List<RelationLoad> loads, List<Map<String, Object>> guardTerms, String toExpression, String ccExpression,
             String bccExpression, String subjectExpression, String bodyExpression, String htmlExpression, boolean usesRecordUrl,
-            boolean usesInboxUrl, boolean usesVariables) {
+            boolean usesInboxUrl, boolean usesVariables, boolean usesShareUrl) {
     }
 
     /**
@@ -338,7 +349,8 @@ public final class NotificationSupport {
         String bodyExpression = resolver.text(notification.getBody());
         String htmlExpression = resolver.html(notification.getHtml());
         return new Plan(resolver.loads(), guardTerms(when, eventEntity, byName), recipient, ccExpression, bccExpression, subjectExpression,
-                bodyExpression, htmlExpression, resolver.usesRecordUrl(), resolver.usesInboxUrl(), resolver.usesVariables());
+                bodyExpression, htmlExpression, resolver.usesRecordUrl(), resolver.usesInboxUrl(), resolver.usesVariables(),
+                resolver.usesShareUrl());
     }
 
     /**
@@ -442,7 +454,8 @@ public final class NotificationSupport {
         String bodyExpression = resolver.text(body);
         String htmlExpression = resolver.html(html);
         return new Plan(resolver.loads(), guardTerms(when, entity, byName), recipient, ccExpression, bccExpression, subjectExpression,
-                bodyExpression, htmlExpression, resolver.usesRecordUrl(), resolver.usesInboxUrl(), resolver.usesVariables());
+                bodyExpression, htmlExpression, resolver.usesRecordUrl(), resolver.usesInboxUrl(), resolver.usesVariables(),
+                resolver.usesShareUrl());
     }
 
     private static boolean isBlank(String value) {
@@ -558,6 +571,7 @@ public final class NotificationSupport {
         private boolean usesRecordUrl;
         private boolean usesInboxUrl;
         private boolean usesVariables;
+        private boolean usesShareUrl;
 
         Resolver(EntityIntent entity, EntityIntent anchor, EntityIntent escalation, Map<String, EntityIntent> byName,
                 Map<String, String> compositionParents, CrossModelLookup crossModel, boolean walksChains) {
@@ -585,6 +599,10 @@ public final class NotificationSupport {
 
         boolean usesVariables() {
             return usesVariables;
+        }
+
+        boolean usesShareUrl() {
+            return usesShareUrl;
         }
 
         /**
@@ -692,6 +710,10 @@ public final class NotificationSupport {
             if (INBOX_URL_TOKEN.equals(path)) {
                 usesInboxUrl = true;
                 return INBOX_URL_TOKEN;
+            }
+            if (recordScope && SHARE_URL_TOKEN.equals(path)) {
+                usesShareUrl = true;
+                return SHARE_URL_TOKEN;
             }
             if (recordScope && escalation != null && path.startsWith(ESCALATION_LOCAL + ".")) {
                 // The escalation level this row was placed at, already loaded by the generated job: one

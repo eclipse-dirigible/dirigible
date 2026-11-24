@@ -1944,7 +1944,8 @@ public final class IntentParser {
      * the source row has no target to load. Name a direct field of the row.</li>
      * <li><b>The {@code recordUrl} deep link.</b> The route it composes is this application's; the
      * record it would link lives in the owner's. A message that needs to point at it says so with
-     * {@code appUrl} plus the owner's own path.</li>
+     * {@code appUrl} plus the owner's own path. The {@code shareUrl} share link likewise: only the
+     * owner declares the record's {@code share:} and generates the code that mints it.</li>
      * <li><b>{@code attach: print} / {@code recordPrint}.</b> The rendered document's print feeder is
      * generated in the model that owns the entity, so only the owner can attach the source's own
      * document. A report ({@code attach: { report, bind }}) is this model's and is the point of the
@@ -1989,6 +1990,10 @@ public final class IntentParser {
             issues.add(subject + " uses {" + NotificationSupport.RECORD_URL_TOKEN
                     + "}, which links a record of THIS application - the cross-model source [" + sourceEntity
                     + "] is a record of its own owner's application, so compose that link with {appUrl} and the owner's path");
+        }
+        if (paths.containsValue(NotificationSupport.SHARE_URL_TOKEN)) {
+            issues.add(subject + " uses {" + NotificationSupport.SHARE_URL_TOKEN + "} on the cross-model source [" + sourceEntity
+                    + "] - a share link is minted by the model that owns the record and declares its share:; keep the schedule there");
         }
         String outcome = notify.getOutcome();
         if (outcome != null && !outcome.isBlank()) {
@@ -4027,6 +4032,7 @@ public final class IntentParser {
         }
         validateRecordScope(notify, subject, fansOut, anchorEntity, model, issues);
         validateNotifyPaths(notify, subject, aboutEntity, model, issues);
+        validateShareUrl(notify, subject, fansOut, aboutEntity, model, issues);
         // The delivery outcome is stamped on the record the message is ABOUT - the ROW inside a
         // fan-out, which is the record that carries the recipient and therefore the one whose delivery
         // succeeded or failed. Validated here, after the fan-out has moved `aboutEntity`.
@@ -4299,6 +4305,49 @@ public final class IntentParser {
         if (body == null || body.isBlank()) {
             issues.add(subject + " declares html without body - body is required, html is only its marked-up alternative"
                     + " (a text-only client reads the body)");
+        }
+    }
+
+    /**
+     * The reserved {@code {shareUrl}} placeholder (#8616): the generated sender mints a share link to
+     * the issued copy of the record the message is about and mails it. A link is a bearer credential,
+     * so it exists only for an entity that declares {@code share:} - the same opt-in a user's Share
+     * action needs - and it travels in the body or the marked-up alternative, never in the subject
+     * every mail list and preview shows. A fan-out is refused rather than given a meaning: there the
+     * message is about the ROW, while the document a fan-out mails belongs to its anchor.
+     *
+     * @param notify the block
+     * @param subject the message prefix identifying the call site
+     * @param fansOut whether the block declares a {@code forEach}
+     * @param aboutEntity the entity the message is about, or {@code null} when it is unknown (already
+     *        reported, or a cross-model source - refused on its own)
+     * @param model the parsed model
+     * @param issues the collected issues
+     */
+    private static void validateShareUrl(NotificationIntent notify, String subject, boolean fansOut, String aboutEntity, IntentModel model,
+            List<String> issues) {
+        String token = "{" + NotificationSupport.SHARE_URL_TOKEN + "}";
+        if (notify.getSubject() != null && notify.getSubject()
+                                                 .contains(token)) {
+            issues.add(subject + " uses " + token + " in its subject - a share link is a bearer credential, and a subject is shown in"
+                    + " every mail list and preview; carry it in the body");
+        }
+        boolean used = notify.getBody() != null && notify.getBody()
+                                                         .contains(token)
+                || notify.getHtml() != null && notify.getHtml()
+                                                     .contains(token);
+        if (!used) {
+            return;
+        }
+        if (fansOut) {
+            issues.add(subject + " uses " + token + " in a forEach - each message there is about a row, while the document belongs to"
+                    + " the record the rows hang off; mail the link from a notify without forEach");
+            return;
+        }
+        EntityIntent about = aboutEntity == null ? null : entityByName(model, aboutEntity);
+        if (about != null && about.getShare() == null) {
+            issues.add(subject + " uses " + token + ", but [" + aboutEntity + "] declares no share: - a link to a record's issued copy"
+                    + " exists only for an entity that declares one");
         }
     }
 
