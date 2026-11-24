@@ -5836,7 +5836,7 @@ resolves:
     match: { vehicle: vehicle }             # register property <- record property or PATH (one or more)
     where: { status: ACTIVE }               # optional: constant register filter (one or more, ANDed)
     between: { start: validFrom, end: validTo, value: violationAt }
-    copy: { rate: rate }                    # optional: register field -> record field, on found only
+    copy: { rate: rate }                    # optional: register field -> record field, filled on the write
     outcome: resolution                     # optional string field stamped found/notFound/ambiguous
     found:     { setStatus: IDENTIFIED }
     notFound:  { setStatus: UNRESOLVED }     # both failures share the routing status;
@@ -5948,6 +5948,18 @@ field the record does not already carry a value in - so a price a person typed s
 of the copy applies. Both sides must be plain fields of the same declared type; a relation on either
 side is refused, because the relation the row points at is what `set:` fills.
 
+**The copy happens on the record's own write, and the form shows it before the save.** The record's
+repository runs the lookup when it creates the record (`onCreate`) or updates it (`onUpdate`), after
+the field defaults and BEFORE the calculated fields and the checks: a line created without a price -
+over REST, by an import, from the form - is stored with the list price, its `net` is computed from
+it, a `required: true` price is satisfied by it, and the document total includes it. In the form, a
+copied field that has a `dependsOn` asks the lookup when the Depends-On fires (the record's
+`POST .../<Entity>Controller/resolve`), so the line dialog shows the list price and its totals before
+the save - the Depends-On value (the product's own price, say) is the fallback when no register row
+covers. So keep the `dependsOn` on the price: it is the default where the list has no row. A field
+without a `dependsOn` is filled on the save. A `defaultValue:` on the copied field counts as a value
+the record carries - the lookup never replaces it.
+
 **Semantics worth knowing:**
 - The value copied is **derived**: the register must have exactly ONE to-one relation to the same
   entity as `set:`. Zero or two is an error - name the register's column unambiguously instead. The
@@ -5955,11 +5967,8 @@ side is refused, because the relation the row points at is what `set:` fills.
   (`set: priceListItem` / `from: PriceListItem`): the row carries the value, so the row is what the
   record links to and the resolved value is that row's own key.
 - A record that already carries the relation is skipped, so a manual correction is never overwritten.
-- **A copied value moves a document's totals, but does not re-fire an `-updated` reaction.** The write
-  is targeted, so a header-items master resums itself from it (a copied line price reaches the
-  document total), but a `rollups:` handler over some other relation binds `-updated` and a targeted
-  write publishes none - deliberately, since an automatic write is not a person's edit. When a
-  consumer must observe a copied value, give the record a `phases:` moment and bind `onPhase`.
+- **A copied value is part of the record's create (or update)**: every reaction to that event sees it,
+  and the generated handler afterwards only links the covering row and records the outcome.
 - `between.start` / `between.end` are register date fields, `between.value` the record's date. Either
   bound may be omitted (open-ended = still valid); the end is **inclusive**, and a date-only bound
   covers its whole day.

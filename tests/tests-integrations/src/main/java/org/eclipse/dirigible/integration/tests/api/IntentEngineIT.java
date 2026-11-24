@@ -1060,7 +1060,7 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(lookup.contains("if (entity.SalesRep != null)"),
                 "an already-resolved record should be skipped, so a manual correction is never overwritten");
         assertTrue(
-                lookup.contains("stamp(entity, \"found\", resolved, java.util.Map.of())") && lookup.contains("\"notFound\"")
+                lookup.contains("stamp(entity, \"found\", resolved)") && lookup.contains("\"notFound\"")
                         && lookup.contains("\"ambiguous\""),
                 "all three outcomes should be generated - an ambiguous register is never resolved by picking one");
         // The RESULT - the relation and the trace - is one targeted update. The routing status is a
@@ -1347,12 +1347,9 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(lookup.contains("Integer resolved = covered.Id;"),
                 "a lookup whose set: is the register must resolve to the covering row's own key, got: " + lookup);
 
-        // The copy is per field and never overwrites, and it rides the RESULT write rather than one of
-        // its own: a partial commit would leave a line pointing at a price-list item with no price.
-        assertTrue(lookup.contains("if (entity.Price == null) {\n            values.put(\"Price\", covered.Price);"),
-                "a copy must skip a field the record already carries a value in, got: " + lookup);
-        assertTrue(lookup.contains("values.putAll(copied);"), "the copied scalars must ride the result write, got: " + lookup);
-        assertFalse(lookup.contains("updateProperty(id, \"Price\""), "a copy must not be a write of its own, got: " + lookup);
+        // The copy is NOT this handler's (#7911): the line's repository fills the price on the write
+        // itself, before the line's calculated fields read it - IntentResolveCopyOnWriteIT runs that.
+        assertFalse(lookup.contains("\"Price\""), "the handler must not write the copied price, got: " + lookup);
     }
 
     @Test

@@ -125,6 +125,38 @@ class GlueResolvePathCopyTest {
     }
 
     /**
+     * The copy is the record's to make on its own write (#7911): the lookup reaches the line's
+     * repository - keyed by the record, carrying the event it is bound to and the same operands the
+     * handler queries by - and a lookup that copies nothing does not.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void handsTheCopyingLookupToTheRecordsWrite() {
+        Map<String, List<Map<String, Object>>> byRecord =
+                GlueIntentGenerator.resolveCopies(IntentParser.parse(YAML), new IntentSettings(), null);
+        assertEquals(List.of("SalesInvoiceItem"), List.copyOf(byRecord.keySet()));
+        Map<String, Object> lookup = byRecord.get("SalesInvoiceItem")
+                                             .get(0);
+        assertEquals("onCreate", lookup.get("event"));
+        assertEquals("PriceFromList", lookup.get("className"));
+        assertEquals("PriceListItem", lookup.get("registerEntity"));
+        assertEquals("(hop1 == null ? null : hop1.PriceList)", ((List<Map<String, String>>) lookup.get("matches")).get(1)
+                                                                                                                  .get("recordExpression"));
+        assertEquals("(hop0 == null ? null : hop0.Date)", lookup.get("valueExpression"));
+        assertEquals(2, ((List<?>) lookup.get("pathLoads")).size());
+        assertEquals(List.of(Map.of("registerProperty", "Price", "recordProperty", "Price")), lookup.get("copies"));
+
+        String onUpdate = YAML.replace("event: { onCreate: SalesInvoiceItem }", "event: { onUpdate: SalesInvoiceItem }");
+        assertEquals("onUpdate", GlueIntentGenerator.resolveCopies(IntentParser.parse(onUpdate), new IntentSettings(), null)
+                                                    .get("SalesInvoiceItem")
+                                                    .get(0)
+                                                    .get("event"));
+        String noCopy = YAML.replace("    copy: { price: price }\n", "");
+        assertTrue(GlueIntentGenerator.resolveCopies(IntentParser.parse(noCopy), new IntentSettings(), null)
+                                      .isEmpty());
+    }
+
+    /**
      * The two ways a path can be wrong, both reported at parse: a middle segment that is not a to-one,
      * and a terminal segment the walk's target does not declare.
      */

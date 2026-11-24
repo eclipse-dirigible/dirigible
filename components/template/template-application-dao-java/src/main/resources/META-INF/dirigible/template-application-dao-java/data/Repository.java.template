@@ -12,6 +12,8 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #set($hasStatusStamps = $statusStamps && $statusStamps.size() > 0)
 ## The single flags (#8101): booleans at most one row holds, fleet-wide or per scope.
 #set($hasSingleFlags = $singleFlags && $singleFlags.size() > 0)
+## The `resolves:` lookups that copy a register row's scalar onto this record (#7911) - see resolveCopies().
+#set($hasResolveCopies = $resolveCopies && $resolveCopies.size() > 0)
 ## The case-insensitive keys (#8095): `unique: { ignoreCase: true }` fields.
 #set($hasUniqueIgnoringCase = false)
 ## The business keys (#8661): a composite `unique:` or a `unique: true` field - a write colliding with one
@@ -599,6 +601,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #applyDefaults()
 #normalizeSubsets()
 #normalizeInput()
+#if($hasResolveCopies)
+        resolveCopies(entity, "onCreate");
+#end
 #if($lifecycleInitialStatus)
         enforceLifecycleStart(entity.${lifecycleStatusProperty});
 #end
@@ -790,6 +795,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #normalizeSubsets()
 #normalizeInput()
 #keepDefaultedWhenOmitted()
+#if($hasResolveCopies)
+        resolveCopies(entity, "onUpdate");
+#end
 #if($lifecycleEdges)
         enforceLifecycle(entity);
 #end
@@ -2000,6 +2008,128 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
     }
 #end
+#if($hasResolveCopies)
+
+    /**
+     * Fills the fields this record's {@code resolves:} lookups copy - the price a price list names for
+     * a line - from the single register row whose period covers the record's date, into the fields the
+     * record leaves EMPTY (#7911). A value the record carries is never replaced: a price a person typed,
+     * or one a create-from copied from its source line, stands.
+     *
+     * <p>
+     * It runs on the write itself, before the calculated fields and the checks read the record, so the
+     * line's amount, the document's total and a required-value check all see the copied price whatever
+     * path wrote the line - a form, the REST API, an import, a generated create-from. The handler under
+     * gen/events still fills the relation to the covering row and stamps the outcome afterwards; the
+     * copy used to ride that asynchronous write, where a field the form had pre-filled was never empty,
+     * a required one refused the create first, and the calculated fields were never recomputed from it.
+     * The line form asks the same method before it shows the value (the controller's {@code /resolve}).
+     *
+     * <p>
+     * No row, or more than one, copies nothing - an ambiguous register is not resolved by picking one.
+     *
+     * @param entity the record about to be written, filled in place
+     * @param event the event the write is ({@code onCreate} / {@code onUpdate}): the lookups bound to it
+     *        run; {@code null} runs every lookup - the form's question about a record not yet written
+     * @return the record
+     */
+    public ${name}Entity resolveCopies(${name}Entity entity, String event) {
+        boolean copied = false;
+#foreach($lookup in $resolveCopies)
+        if ((event == null || "${lookup.event}".equals(event)) && (#foreach($copy in $lookup.copies)#if($foreach.index > 0) || #{end}entity.${copy.recordProperty} == null#end)#if($lookup.guardExpression != "true") && (${lookup.guardExpression})#end) {
+            copied |= resolveCopies${lookup.className}(entity);
+        }
+#end
+#if($haveScaledDecimals)
+        if (copied) {
+            // A register column may carry more decimals than this record's - round as any input is.
+            roundDecimals(entity);
+        }
+#end
+        return entity;
+    }
+#foreach($lookup in $resolveCopies)
+
+    /**
+     * The {@code ${lookup.name}} lookup: the ${lookup.registerEntity} row matching [#foreach($match in $lookup.matches)#if($foreach.index > 0), #end${match.registerProperty} = ${match.recordProperty}#end] whose period covers
+     * ${lookup.valueProperty}#if($lookup.filters.size() > 0), among the rows with [#foreach($filter in $lookup.filters)#if($foreach.index > 0), #end${filter.property} = ${filter.literal}#end]#end.
+     *
+     * @return whether a field was copied
+     */
+    private static boolean resolveCopies${lookup.className}(${name}Entity entity) {
+#foreach($load in $lookup.pathLoads)
+        Object ${load.local}Fk = ${load.sourceExpression};
+        ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+#end
+#foreach($match in $lookup.matches)
+        Object ${match.local} = ${match.recordExpression};
+#end
+        Long at = lookupMillis(${lookup.valueExpression});
+        if (at == null#foreach($match in $lookup.matches) || ${match.local} == null#end) {
+            return false;
+        }
+        ${lookup.registerEntityClass} covered = null;
+        for (${lookup.registerEntityClass} row : new ${lookup.registerRepositoryClass}().findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()#foreach($match in $lookup.matches).eq("${match.registerProperty}", ${match.local})#end#foreach($filter in $lookup.filters).eq("${filter.property}", ${filter.literal})#end)) {
+#if($lookup.startProperty != "")
+            Long from = lookupMillis(row.${lookup.startProperty});
+            if (from != null && at < from) {
+                continue;
+            }
+#end
+#if($lookup.endProperty != "")
+            Long to = lookupEndExclusive(row.${lookup.endProperty});
+            if (to != null && at >= to) {
+                continue;
+            }
+#end
+            if (covered != null) {
+                return false; // ambiguous - left to the person, never picked
+            }
+            covered = row;
+        }
+        if (covered == null) {
+            return false;
+        }
+        boolean copied = false;
+#foreach($copy in $lookup.copies)
+        if (entity.${copy.recordProperty} == null && covered.${copy.registerProperty} != null) {
+            entity.${copy.recordProperty} = covered.${copy.registerProperty};
+            copied = true;
+        }
+#end
+        return copied;
+    }
+#end
+
+    /** Epoch-milli of a date or an instant, so the two compare on one axis (a date at its start, UTC). */
+    private static Long lookupMillis(Object value) {
+        if (value instanceof java.time.Instant instant) {
+            return instant.toEpochMilli();
+        }
+        if (value instanceof java.time.LocalDate date) {
+            return date.atStartOfDay(java.time.ZoneOffset.UTC)
+                       .toInstant()
+                       .toEpochMilli();
+        }
+        if (value instanceof java.time.LocalDateTime dateTime) {
+            return dateTime.toInstant(java.time.ZoneOffset.UTC)
+                           .toEpochMilli();
+        }
+        if (value instanceof java.util.Date date) {
+            return date.getTime();
+        }
+        return null;
+    }
+
+    /** The exclusive upper bound of a period end: a date-only end covers its whole day. */
+    private static Long lookupEndExclusive(Object value) {
+        if (value instanceof java.time.LocalDate date) {
+            return lookupMillis(date.plusDays(1));
+        }
+        Long at = lookupMillis(value);
+        return at == null ? null : at + 1;
+    }
+#end
 
     /**
      * The record this create would store, as far as its calculated fields go - the row the controller's
@@ -2021,9 +2151,14 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($haveScaledDecimals)
         roundDecimals(submitted);
 #end
-#if($haveCalculatedExpressionOnCreate)
+#if($haveCalculatedExpressionOnCreate || $hasResolveCopies)
         ${name}Entity entity = copyOf(submitted);
 #applyDefaults()
+#if($hasResolveCopies)
+        // What the create copies from a register row is part of the row the checks judge (#7911): a
+        // required price the lookup fills is not missing.
+        resolveCopies(entity, "onCreate");
+#end
 #foreach ($property in $properties)
 #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate && !$property.calculatedActionOnCreate)
 #calcAssign($property $property.calculatedPropertyExpressionCreate)
@@ -2057,9 +2192,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($haveScaledDecimals)
         roundDecimals(submitted);
 #end
-#if($haveCalculatedExpressionOnUpdate || $preservedOnUpdate.size() > 0 || $keptWhenOmitted.size() > 0)
+#if($haveCalculatedExpressionOnUpdate || $preservedOnUpdate.size() > 0 || $keptWhenOmitted.size() > 0 || $hasResolveCopies)
         ${name}Entity entity = copyOf(submitted);
 #keepDefaultedWhenOmitted()
+#if($hasResolveCopies)
+        resolveCopies(entity, "onUpdate");
+#end
 #if($preservedOnUpdate.size() > 0)
         ${name}Entity stored = entity.${pkPropertyName} == null ? null : findById(entity.${pkPropertyName});
         if (stored != null) {
@@ -2138,7 +2276,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
     }
 #end
-#if($haveCalculatedExpressionOnCreate || $haveCalculatedExpressionOnUpdate || $preservedOnUpdate.size() > 0 || $keptWhenOmitted.size() > 0)
+#if($haveCalculatedExpressionOnCreate || $haveCalculatedExpressionOnUpdate || $preservedOnUpdate.size() > 0 || $keptWhenOmitted.size() > 0 || $hasResolveCopies)
 
     private static ${name}Entity copyOf(${name}Entity source) {
         ${name}Entity copy = new ${name}Entity();

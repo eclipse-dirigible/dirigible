@@ -764,8 +764,28 @@ document.addEventListener('alpine:init', () => {
     },
 #end
 #set($hasConditionalDependsOn = false)
+#set($hasResolveCopied = false)
 #foreach($property in $properties)
 #if($property.widgetDependsOnValueBy)#set($hasConditionalDependsOn = true)#end
+#if($property.resolveCopied && $property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl && !$property.widgetDependsOnHeader)#set($hasResolveCopied = true)#end
+#end
+#if($hasResolveCopied)
+
+    // A field a `resolves:` lookup copies (#7911) - a price from the price list in force - takes what the
+    // server's lookup answers for the record as the form holds it, asked with the field emptied so the
+    // Depends-On value does not stand in for the register's. The create fills the field from the same
+    // lookup, so the value shown is the value stored. No covering row (or no answer) keeps the fallback.
+    async resolvedValue(field, fallback) {
+      try {
+        const payload = this.toPayload();
+        payload[field] = null;
+        const answer = await App.services.api.post(this.apiPath + '/resolve', payload);
+        return answer != null && answer[field] != null ? answer[field] : fallback;
+      } catch (e) {
+        console.error('[${name}FormPage] the lookup failed for ' + field, e);
+        return fallback;
+      }
+    },
 #end
 #if($hasConditionalDependsOn)
 
@@ -802,11 +822,18 @@ document.addEventListener('alpine:init', () => {
     async applyDependsOn${property.name}(value, adjust) {
       try {
         const rec = await App.services.api.get('${property.widgetDependsOnControllerUrl}/' + encodeURIComponent(value), { baseUrl: '' });
+#set($fromDecl = "const")
+#if($property.resolveCopied)#set($fromDecl = "let")#end
 #if($property.widgetDependsOnValueBy)
         const prop${property.name} = await this.resolveDependsOnSource${name}({ path: '${property.widgetDependsOnValueBy}', #if($property.widgetDependsOnValueByUrl)url: '${property.widgetDependsOnValueByUrl}', #{end}cases: ${property.widgetDependsOnValueCases}#if($property.widgetDependsOnValueDefault), deflt: '${property.widgetDependsOnValueDefault}'#end });
-        const from = rec == null || prop${property.name} == null ? null : rec[prop${property.name}];
+        ${fromDecl} from = rec == null || prop${property.name} == null ? null : rec[prop${property.name}];
 #else
-        const from = rec == null ? null : rec.${property.widgetDependsOnValueFrom};
+        ${fromDecl} from = rec == null ? null : rec.${property.widgetDependsOnValueFrom};
+#end
+#if($property.resolveCopied)
+        // A field a `resolves:` lookup copies (#7911): what the register says for this record, the
+        // Depends-On value only where no register row covers it.
+        from = await this.resolvedValue('${property.name}', from);
 #end
 #if($property.widgetType == "DROPDOWN")
         if (from == null || from === '') {

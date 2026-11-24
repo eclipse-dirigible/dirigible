@@ -1741,7 +1741,8 @@ class GlueGenerator {
         context.put("matches", resolveMatches(item.get("matches"), parameters));
         context.put("valueExpression", strOr(item, "valueExpression", "entity." + str(item, "valueProperty")));
         context.put("pathLoads", resolvePathLoads(item.get("pathLoads"), parameters));
-        context.put("copies", item.containsKey("copies") ? item.get("copies") : java.util.List.of());
+        // The copies themselves are filled by the record's repository at write time (#7911); the handler
+        // only names them in its javadoc.
         context.put("hasCopies", strOr(item, "hasCopies", "false"));
         context.put("copySummary", strOr(item, "copySummary", ""));
     }

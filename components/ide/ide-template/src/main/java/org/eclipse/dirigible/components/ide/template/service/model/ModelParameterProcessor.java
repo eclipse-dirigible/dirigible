@@ -147,6 +147,7 @@ final class ModelParameterProcessor {
         }
         entity.put("referencedProjections", new ArrayList<>());
         splitChecks(entity, parameters);
+        resolveResolveCopies(entity, parameters);
         resolveUniqueConstraintLiterals(entity, parameters);
         resolveFixedProperties(entity, parameters);
         resolveRefusalCatalog(entity, parameters);
@@ -927,6 +928,17 @@ final class ModelParameterProcessor {
         if (hops.isEmpty()) {
             return;
         }
+        check.put("pathLoads", resolvedPathLoads(hops, parameters));
+    }
+
+    /**
+     * Each declared path hop with the generated classes that load it.
+     *
+     * @param hops the hops as the intent generator declares them
+     * @param parameters the generation parameters
+     * @return the hops the templates render
+     */
+    private static List<Object> resolvedPathLoads(List<Map<String, Object>> hops, Map<String, Object> parameters) {
         List<Object> loads = new ArrayList<>();
         for (Map<String, Object> hop : hops) {
             String qualified = generatedClass(hop, parameters);
@@ -937,7 +949,39 @@ final class ModelParameterProcessor {
             load.put("repositoryClass", qualified + "Repository");
             loads.add(load);
         }
-        check.put("pathLoads", loads);
+        return loads;
+    }
+
+    /**
+     * Resolves the {@code resolves:} lookups that copy a scalar onto this record (#7911) to what the
+     * generated repository runs at write time: the register's and each path hop's generated classes,
+     * and the event guard as Java. Every copied property is marked {@code resolveCopied}, which is what
+     * makes the forms ask the lookup before they show the value.
+     *
+     * @param entity the record entity
+     * @param parameters the generation parameters
+     */
+    private static void resolveResolveCopies(Map<String, Object> entity, Map<String, Object> parameters) {
+        Set<String> copied = new HashSet<>();
+        for (Map<String, Object> lookup : asMaps(entity.get("resolveCopies"))) {
+            Map<String, Object> register = new LinkedHashMap<>();
+            register.put("entity", lookup.get("registerEntity"));
+            register.put("perspective", lookup.get("registerPerspective"));
+            String registerClass = generatedClass(register, parameters);
+            lookup.put("registerEntityClass", registerClass + "Entity");
+            lookup.put("registerRepositoryClass", registerClass + "Repository");
+            lookup.put("pathLoads", resolvedPathLoads(asMaps(lookup.get("pathLoads")), parameters));
+            String guard = JavaLiterals.conditionExpression(asMaps(lookup.get("guardTerms")));
+            lookup.put("guardExpression", guard == null ? "true" : guard);
+            for (Map<String, Object> copy : asMaps(lookup.get("copies"))) {
+                copied.add(str(copy, "recordProperty"));
+            }
+        }
+        for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+            if (copied.contains(str(property, "name"))) {
+                property.put("resolveCopied", "true");
+            }
+        }
     }
 
     /**

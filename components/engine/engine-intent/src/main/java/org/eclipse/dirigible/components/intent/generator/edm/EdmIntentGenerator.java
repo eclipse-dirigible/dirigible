@@ -32,6 +32,7 @@ import com.google.gson.GsonBuilder;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.ExportSupport;
+import org.eclipse.dirigible.components.intent.generator.GlueIntentGenerator;
 import org.eclipse.dirigible.components.intent.generator.CaptureSupport;
 import org.eclipse.dirigible.components.intent.generator.capture.CaptureIntentGenerator;
 import org.eclipse.dirigible.components.intent.generator.ImportSupport;
@@ -256,6 +257,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // generated DAO enforces it synchronously (the DAO is generated from this .model, which otherwise
         // does not see the roll-ups - those live in the .glue).
         Map<String, List<Map<String, Object>>> rollupGuards = buildRollupGuards(context, model, byName, compositionParents, usesByAlias);
+        // The `resolves:` lookups that copy a scalar onto their record (#7911) - a price-list price onto a
+        // line - run in the record's generated DAO at write time, so they are stamped onto the record
+        // the same way: the copy is in the stored row before its calculated fields and checks read it,
+        // whichever path wrote it, and the form asks the same lookup before it shows the value.
+        Map<String, List<Map<String, Object>>> resolveCopies = GlueIntentGenerator.resolveCopies(model, settings, context);
         // The read / write gates the intent's `permissions[].can:` tokens authorize. An entity a token
         // names is gated by the roles the author declared instead of the convention-derived names,
         // which nothing else in the intent mentions. Every gate, either kind, also admits the roles the
@@ -315,6 +321,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 // capacity-bearing roll-up contributes its own guard and the DAO renders one check per
                 // guard. A single-valued attribute silently dropped every guard but the first (#7448).
                 entityMap.put("rollupGuards", rollupGuards.get(name));
+            }
+            if (resolveCopies.containsKey(name)) {
+                entityMap.put("resolveCopies", resolveCopies.get(name));
             }
             // A calendar entity renders its records as events on a Harmonia x-h-calendar. The calendar is
             // an ADDITIONAL page, not a replacement: the entity keeps its own layout (MANAGE /
@@ -6036,7 +6045,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     private static final Set<String> STRUCTURED_ATTRIBUTES = Set.of("rollupGuards", "rollupGuard", "checks", "labelParts", "aggregateKeys",
             "groupingKeys", "relatedEntities", "scopedCalendars", "agreeGuards", "lifecycleStatusNameList", "duplicateReset",
             "duplicateDefaults", "lookupColumns", "languages", "widgets", "customActionLabels", "generateRefusals", "processTaskLabels",
-            "singleFlags", "reports", "collectionColumns");
+            "singleFlags", "reports", "collectionColumns", "resolveCopies");
 
     /**
      * Compact, non-HTML-escaping JSON for the structured {@code .edm} attributes. Compact so the value
