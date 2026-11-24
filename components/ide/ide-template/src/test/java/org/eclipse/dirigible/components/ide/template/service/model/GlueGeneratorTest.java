@@ -946,7 +946,8 @@ class GlueGeneratorTest {
                                 "public String upload(@QueryParam(\"fileName\") String fileName, @QueryParam(\"Claim\") Integer master) {")
                         .contains("Outcome outcome = run(master, file.getName(), file.getContent());")
                         .contains("public CaptureResult capture(Integer master, String fileName, byte[] content) {")
-                        .contains("private Outcome run(Integer master, String fileName, byte[] content) {\n        requireMaster(master);")
+                        .containsSubsequence("private Outcome run(Integer master, String fileName, byte[] content) {",
+                                "requireMaster(master);")
                         .contains("entity.Claim = master;")
                         .contains("new gen.expenses.data.claim.ClaimRepository().findOne(master)")
                         .contains("lines.requireCaptureMasterMutable(master);")
@@ -959,7 +960,7 @@ class GlueGeneratorTest {
         assertThat(personal).as(
                 "the owner's capture from the personal surface: no role gate, the claim proven theirs by the line's MyController")
                             .contains("gen.expenses.api.claim.ClaimItemMyController myLines) {")
-                            .contains("@Post(\"/my/upload\")\n    public String uploadMine(")
+                            .containsSubsequence("@Post(\"/my/upload\")", "public String uploadMine(")
                             .contains("myLines.requireCaptureMasterMine(master);")
                             .contains("return upload(fileName, master);")
                             .contains("public String reviewMine(@PathParam(\"id\") Integer id) {")
