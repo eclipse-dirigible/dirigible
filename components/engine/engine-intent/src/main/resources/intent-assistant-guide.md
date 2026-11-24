@@ -5637,6 +5637,16 @@ rollups:
 the parent `field` must be the same type as `of`. Recomputes on child create/update/delete; if a
 currency has no rate rows the parent field resets to null.
 
+**Over the columns the generator adds.** `of`, `by` and `where` may also name a column you never
+declare: a `function: Attachment` (or `Snapshot`) child's `FileName`, `ContentType`, `FileSize`,
+`StoragePath`, `Uuid` (and a snapshot's `Version`), and `CreatedAt` / `CreatedBy` / `UpdatedAt` /
+`UpdatedBy` of a file child or an `audit: true` entity. Mirror the newest upload onto its parent - a
+company's logo path, one hop from every document that names the company:
+```yaml
+rollups:
+  - { name: latestLogo, entity: CompanyLogo, via: Company, field: logo, op: latest, of: StoragePath, by: CreatedAt }
+```
+
 **Transitive (chained) roll-ups.** Roll-ups compose across a multi-level composition: if the parent of
 one roll-up is itself the child of another, a change flows all the way up. Declare one roll-up per
 level and the chain maintains itself - e.g. a 3-level timesheet:
