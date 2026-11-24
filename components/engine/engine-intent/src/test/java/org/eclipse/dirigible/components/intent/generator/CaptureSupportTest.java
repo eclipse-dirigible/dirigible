@@ -267,6 +267,45 @@ class CaptureSupportTest {
     }
 
     @Test
+    void a_line_of_a_personal_master_is_also_captured_from_the_personal_surface_unless_it_is_see_only_there() {
+        String yaml = """
+                name: expenses
+                entities:
+                  - name: Employee
+                    identity: email
+                    fields:
+                      - { name: id,    type: integer, primaryKey: true, generated: true }
+                      - { name: email, type: string }
+                  - name: Claim
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Employee, kind: manyToOne, to: Employee, personal: true }
+                  - name: ClaimItem
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: Claim, kind: manyToOne, to: Claim, composition: true, required: true%s }
+                captures:
+                  - { name: receipt, into: ClaimItem, fields: [{ field: amount }] }
+                """;
+
+        Map<String, Object> line = build(IntentParser.parse(yaml.formatted("")), new IntentSettings()).get(0);
+        Map<String, Object> seeOnly = build(IntentParser.parse(yaml.formatted(", personalReadOnly: true")), new IntentSettings()).get(0);
+
+        assertEquals(Boolean.TRUE, line.get("hasPersonalMaster"));
+        assertEquals("Integer", line.get("keyJavaClass"), "the personal review reads the line by its own key");
+        assertEquals(Boolean.FALSE, seeOnly.get("hasPersonalMaster"), "a line its owner may not write there is not captured there");
+        assertEquals(Boolean.FALSE, build(IntentParser.parse(ENTITIES + """
+                captures:
+                  - { name: lineScan, into: PurchaseInvoiceItem, fields: [{ field: description }] }
+                """), new IntentSettings()).get(0)
+                                           .get("hasPersonalMaster"),
+                "a master without a personal owner has no personal surface");
+    }
+
+    @Test
     void items_on_a_composition_child_target_are_refused() {
         assertRefused("""
                 captures:

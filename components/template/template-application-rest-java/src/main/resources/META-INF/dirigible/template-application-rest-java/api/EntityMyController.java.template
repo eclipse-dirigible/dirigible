@@ -515,6 +515,31 @@ public class ${name}MyController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "${personalParent.entity} not found");
         }
     }
+#if($captureUnderMaster)
+
+    /**
+     * The owner's document capture of a ${name} under a ${personalParent.entity} (#8626): only under one
+     * of their own - the same 404 as any write here - and only where this surface takes writes.
+     *
+     * @param parentId the ${personalParent.entity} the capture names
+     */
+    public void requireCaptureMasterMine(${personalParent.fkJavaClass} parentId) {
+#if($personalReadOnly)
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This ${name} is read-only on your personal surface");
+#else
+        requireMyParent(parentId);
+#end
+    }
+
+    /**
+     * The review of a captured ${name} on the personal surface (#8626): only one of the caller's own.
+     *
+     * @param id the ${name}
+     */
+    public void requireCaptureLineMine(Object id) {
+        requireMine(id);
+    }
+#end
 #end
 #if($masterLock)
 

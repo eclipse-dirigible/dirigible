@@ -900,8 +900,9 @@ class GlueGenerator {
             tablePrefix = tablePrefix + "_";
         }
         context.put("table", tablePrefix + str(item, "table"));
-        // A line captured under an existing record (#8626), named by the line's key to it.
-        copy(context, item, "hasMaster", "masterEntity", "masterBackRef", "masterKeyJavaClass");
+        // A line captured under an existing record (#8626), named by the line's key to it - also by its
+        // owner from the personal surface when the record is `personal:`.
+        copy(context, item, "hasMaster", "masterEntity", "masterBackRef", "masterKeyJavaClass", "hasPersonalMaster", "keyJavaClass");
         context.put("javaMasterPerspective", truthy(item, "hasMaster") ? sanitize(item, "masterPerspective") : "");
     }
 

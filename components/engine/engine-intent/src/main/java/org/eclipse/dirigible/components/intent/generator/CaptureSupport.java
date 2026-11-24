@@ -460,6 +460,14 @@ public final class CaptureSupport {
                 entry.put("masterBackRef", IntentNaming.pascalCase(masterBackReference));
                 entry.put("masterKeyJavaClass", CalculatedActionStubGenerator.valueType(masterKey == null ? null : masterKey.getType()));
             }
+            // ... and from the personal surface when the master has a `personal:` owner who may write its
+            // lines there: the owner captures onto their own record, proven by the line's MyController.
+            boolean hasPersonalMaster = hasMaster && fromPersonalSurface(into, byName, compositionParents);
+            entry.put("hasPersonalMaster", hasPersonalMaster);
+            if (hasPersonalMaster) {
+                FieldIntent key = IntentEntities.primaryKeyOf(into);
+                entry.put("keyJavaClass", CalculatedActionStubGenerator.valueType(key == null ? null : key.getType()));
+            }
             captures.add(entry);
         }
         return captures;
@@ -654,12 +662,44 @@ public final class CaptureSupport {
 
     /** The name of the composition relation of {@code child} pointing back at {@code master}. */
     private static String backReference(EntityIntent child, String master) {
+        RelationIntent relation = composition(child, master);
+        return relation == null ? null : relation.getName();
+    }
+
+    /** The composition relation of {@code child} pointing back at {@code master}. */
+    private static RelationIntent composition(EntityIntent child, String master) {
         for (RelationIntent relation : child.getRelations()) {
             if (relation.isComposition() && master.equals(relation.getTo()) && relation.getName() != null) {
-                return relation.getName();
+                return relation;
             }
         }
         return null;
+    }
+
+    /**
+     * Whether a capture into {@code into} is also offered on the personal surface (#8626): {@code into}
+     * is a line of a master with a {@code personal:} owner, and neither the owner relation nor the
+     * line's composition makes that surface see-only - the owner then captures onto their own record
+     * there.
+     *
+     * @param into the captured entity
+     * @param byName all local entities by name
+     * @param compositionParents composition-parent map
+     * @return whether the owner may capture it from the personal surface
+     */
+    public static boolean fromPersonalSurface(EntityIntent into, Map<String, EntityIntent> byName, Map<String, String> compositionParents) {
+        String master = compositionParents.get(into.getName());
+        EntityIntent masterEntity = master == null ? null : byName.get(master);
+        RelationIntent line = masterEntity == null ? null : composition(into, master);
+        if (line == null || line.isPersonalReadOnly()) {
+            return false;
+        }
+        for (RelationIntent relation : masterEntity.getRelations()) {
+            if (relation.isPersonal()) {
+                return !relation.isPersonalReadOnly();
+            }
+        }
+        return false;
     }
 
     private static UsesIntent findUses(IntentModel model, String alias) {

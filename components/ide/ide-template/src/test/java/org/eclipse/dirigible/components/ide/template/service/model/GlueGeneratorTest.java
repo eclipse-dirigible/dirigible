@@ -931,7 +931,7 @@ class GlueGeneratorTest {
     @Test
     void aCaptureUnderAMasterTakesChecksAndFilesTheLineUnderIt() throws IOException {
         Map<String, Object> line = capture("receiptPhoto", "ReceiptPhoto");
-        line.put("entity", "ClaimLine");
+        line.put("entity", "ClaimItem");
         line.put("perspective", "Claim");
         line.put("hasMaster", Boolean.TRUE);
         line.put("masterEntity", "Claim");
@@ -941,7 +941,7 @@ class GlueGeneratorTest {
 
         String java = renderCapture(line, Map.of("javaGenFolderName", "expenses"));
 
-        assertThat(java).contains("public ReceiptPhotoCapture(List<Hook> hooks, gen.expenses.api.claim.ClaimLineController lines) {")
+        assertThat(java).contains("public ReceiptPhotoCapture(List<Hook> hooks, gen.expenses.api.claim.ClaimItemController lines) {")
                         .contains(
                                 "public String upload(@QueryParam(\"fileName\") String fileName, @QueryParam(\"Claim\") Integer master) {")
                         .contains("Outcome outcome = run(master, file.getName(), file.getContent());")
@@ -949,7 +949,21 @@ class GlueGeneratorTest {
                         .contains("private Outcome run(Integer master, String fileName, byte[] content) {\n        requireMaster(master);")
                         .contains("entity.Claim = master;")
                         .contains("new gen.expenses.data.claim.ClaimRepository().findOne(master)")
-                        .contains("lines.requireCaptureMasterMutable(master);");
+                        .contains("lines.requireCaptureMasterMutable(master);")
+                        .doesNotContain("/my/");
+
+        line.put("hasPersonalMaster", Boolean.TRUE);
+        line.put("keyJavaClass", "Integer");
+        String personal = renderCapture(line, Map.of("javaGenFolderName", "expenses"));
+
+        assertThat(personal).as(
+                "the owner's capture from the personal surface: no role gate, the claim proven theirs by the line's MyController")
+                            .contains("gen.expenses.api.claim.ClaimItemMyController myLines) {")
+                            .contains("@Post(\"/my/upload\")\n    public String uploadMine(")
+                            .contains("myLines.requireCaptureMasterMine(master);")
+                            .contains("return upload(fileName, master);")
+                            .contains("public String reviewMine(@PathParam(\"id\") Integer id) {")
+                            .contains("myLines.requireCaptureLineMine(id);");
         assertThat(renderCapture(capture("plainScan", "PlainScan"),
                 Map.of("javaGenFolderName", "purchasing"))).contains("public PlainScanCapture(List<Hook> hooks) {")
                                                            .contains("Outcome outcome = run(file.getName(), file.getContent());")

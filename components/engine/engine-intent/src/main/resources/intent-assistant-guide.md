@@ -5472,9 +5472,11 @@ an id no record has a 404, and a master a line could not be added to by hand - l
 controller's own 409; nothing is read, written or recorded then. The line is created under that master
 through its own validation, so the master's totals re-sum. `attachment:` is then a `function:
 Attachment` child of the line, `items:` is refused, and the back-reference is never a read field. The
-capture button sits on the master's record and the review button on the line. It is offered on the
-power pages only: an owner capturing onto their own `personal:` record from the personal pages is not
-supported yet.
+capture button sits on the master's record and the review button on the line. When the master has a
+`personal:` owner, the button is on its personal pages too: the owner captures onto their own record
+through `.../<Name>Capture/my/upload` (no role needed; another person's record is a 404, a locked one
+the same 409), and reviews only their own lines. A `personalReadOnly` owner or line composition offers
+no personal capture.
 
 **Not supported in v1:** timestamp fields, nested collections, creating the targets of relations, and
 flag marks on the fields of the record's own form.

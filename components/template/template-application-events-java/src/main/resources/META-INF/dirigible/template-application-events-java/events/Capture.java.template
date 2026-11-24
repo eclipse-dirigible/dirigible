@@ -137,11 +137,20 @@ public class ${className}Capture {
     /** The line's own controller: the lock its create applies to the ${masterEntity} is the capture's too. */
     private final gen.${javaGenFolderName}.api.${javaPerspective}.${entity}Controller lines;
 #end
+#if($hasPersonalMaster)
 
-    public ${className}Capture(List<Hook> hooks#if($hasMaster), gen.${javaGenFolderName}.api.${javaPerspective}.${entity}Controller lines#end) {
+    /** The line's personal controller: who owns a ${masterEntity} is its answer, never the capture's. */
+    private final gen.${javaGenFolderName}.api.${javaPerspective}.${entity}MyController myLines;
+#end
+
+    public ${className}Capture(List<Hook> hooks#if($hasMaster), gen.${javaGenFolderName}.api.${javaPerspective}.${entity}Controller lines#end#if($hasPersonalMaster),
+            gen.${javaGenFolderName}.api.${javaPerspective}.${entity}MyController myLines#end) {
         this.hooks = List.copyOf(hooks);
 #if($hasMaster)
         this.lines = lines;
+#end
+#if($hasPersonalMaster)
+        this.myLines = myLines;
 #end
     }
 
@@ -175,6 +184,28 @@ public class ${className}Capture {
         String latest = CaptureLedger.latest(TABLE, id);
         return latest == null ? "{\"flags\":[]}" : latest;
     }
+#if($hasPersonalMaster)
+
+    /**
+     * The owner's upload from the personal surface (#8626): no role gate - the ${masterEntity} must be the
+     * caller's own, proven by ${entity}MyController as for any line written there (404 otherwise), and the
+     * upload above then makes the same checks and the same capture.
+     */
+    @Post("/my/upload")
+    public String uploadMine(@QueryParam("fileName") String fileName, @QueryParam("${masterBackRef}") ${masterKeyJavaClass} master) {
+        if (master != null) {
+            myLines.requireCaptureMasterMine(master);
+        }
+        return upload(fileName, master);
+    }
+
+    /** What the capture of one of the caller's own ${entity} records flagged, on the personal surface. */
+    @Get("/my/review/{id}")
+    public String reviewMine(@PathParam("id") ${keyJavaClass} id) {
+        myLines.requireCaptureLineMine(id);
+        return review(String.valueOf(id));
+    }
+#end
 
     /**
      * Capture a document - the same capture the upload performs, for a job that fetched the file itself.

@@ -37,6 +37,7 @@ import com.sun.net.httpserver.HttpServer;
 import io.restassured.path.json.config.JsonPathConfig;
 import io.restassured.path.json.config.JsonPathConfig.NumberReturnType;
 import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.components.base.callable.CallableNoResultAndNoException;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.repository.api.IRepository;
@@ -44,6 +45,7 @@ import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
+import org.eclipse.dirigible.tests.framework.security.SecurityUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -58,6 +60,12 @@ import org.springframework.beans.factory.annotation.Autowired;
  * a claim that does not exist is a 404, and a claim its {@code immutableWhen} locks is refused with
  * the 409 the line's own controller answers - in both cases the provider is not called and nothing
  * is written, no line, no file and no ledger row.
+ *
+ * <p>
+ * The claim has a {@code personal:} owner, so its owner captures from the personal surface too: a
+ * real user holding no role at all uploads to the owner-scoped {@code /my/upload} under their own
+ * claim, is refused the role-gated upload, gets the 404 of a write to someone else's claim and the
+ * lock's 409 on their own submitted one, and reviews only their own lines.
  */
 class IntentCaptureUnderMasterIT extends IntegrationTest {
 
@@ -68,17 +76,26 @@ class IntentCaptureUnderMasterIT extends IntegrationTest {
     private static final String CLAIMS = API + "/ClaimController";
     private static final String LINES = API + "/ClaimItemController";
     private static final String RECEIPTS = API + "/ClaimReceiptController";
+    private static final String EMPLOYEES = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api/employee/EmployeeController";
     private static final String CAPTURE = "/services/java/" + PROJECT + "/gen/events/" + PROJECT + "/ReceiptPhotoCapture";
     private static final String LEDGER = "CLAIMCAPTURE_CLAIM_ITEM_CAPTURES";
     private static final String LOCKED =
             "The Claim of this ClaimItem is immutable in its current status - corrections go through the workflow";
     private static final long TIMEOUT_SECONDS = 90;
+    private static final String PASSWORD = "claim-capture-it-password";
+    private static final String OWNER = "claim-owner";
+    private static final String COLLEAGUE = "claim-colleague";
 
     private static final String INTENT_YAML = """
             name: claimcapture
             description: a receipt photographed into a line of an open expense claim
 
             entities:
+              - name: Employee
+                identity: email
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: email, type: string,  length: 100 }
               - name: ClaimStatus
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
@@ -91,6 +108,7 @@ class IntentCaptureUnderMasterIT extends IntegrationTest {
                   - { name: amount,      type: decimal, precision: 18, scale: 2, aggregate: true }
                 relations:
                   - { name: Status, kind: manyToOne, to: ClaimStatus, function: EntityStatus, init: 1 }
+                  - { name: Employee, kind: manyToOne, to: Employee, personal: true }
               - name: ClaimItem
                 fields:
                   - { name: id,      type: integer, primaryKey: true, generated: true }
@@ -137,6 +155,9 @@ class IntentCaptureUnderMasterIT extends IntegrationTest {
     @Autowired
     private DataSourcesManager dataSourcesManager;
 
+    @Autowired
+    private SecurityUtil securityUtil;
+
     private HttpServer provider;
     private final AtomicInteger calls = new AtomicInteger();
 
@@ -176,7 +197,8 @@ class IntentCaptureUnderMasterIT extends IntegrationTest {
     }
 
     @Test
-    void a_receipt_becomes_a_line_of_the_claim_the_upload_names_and_only_of_one_that_exists_and_is_open() throws SQLException {
+    void a_receipt_becomes_a_line_of_the_claim_the_upload_names_and_only_of_one_that_exists_is_open_and_the_caller_may_write()
+            throws SQLException {
         writeProjectFile("app.intent", INTENT_YAML);
         generateProject();
         restAssuredExecutor.execute(() -> given().when()
@@ -223,9 +245,9 @@ class IntentCaptureUnderMasterIT extends IntegrationTest {
 
         // A claim that does not exist, a locked claim and no claim at all are refused before the
         // document is read: nothing is sent to the provider and nothing is written.
-        upload(receipt, "?Claim=" + (submitted + 1000), 404, "Claim not found");
-        upload(receipt, "?Claim=" + submitted, 409, LOCKED);
-        upload(receipt, "", 400, null);
+        upload(null, "/upload?Claim=" + (submitted + 1000), receipt, 404, "Claim not found");
+        upload(null, "/upload?Claim=" + submitted, receipt, 409, LOCKED);
+        upload(null, "/upload", receipt, 400, null);
         assertEquals(1, calls.get(), "a refused master costs no reading");
         assertEquals(0, list(LINES + "?Claim=" + submitted).size(), "a locked claim gets no line");
         assertEquals(1, list(LINES).size());
@@ -245,19 +267,96 @@ class IntentCaptureUnderMasterIT extends IntegrationTest {
                          .getAsString()
                          .endsWith("&under=Claim"),
                 action.toString());
+
+        assertTheOwnerCapturesOntoTheirOwnClaimFromThePersonalSurface(receipt, lineId.get());
     }
 
-    private void upload(byte[] receipt, String query, int status, String message) {
-        restAssuredExecutor.execute(() -> {
+    /**
+     * The personal surface: users holding no role, each an employee owning claims. The owner's upload
+     * is proven theirs by the line's personal controller; the role-gated upload stays closed to them.
+     */
+    private void assertTheOwnerCapturesOntoTheirOwnClaimFromThePersonalSurface(byte[] receipt, Object adminsLine) throws SQLException {
+        securityUtil.ensureUserInDefaultTenant(OWNER, PASSWORD);
+        securityUtil.ensureUserInDefaultTenant(COLLEAGUE, PASSWORD);
+        int owner = create(EMPLOYEES, "{\"Email\":\"" + OWNER + "\"}");
+        int colleague = create(EMPLOYEES, "{\"Email\":\"" + COLLEAGUE + "\"}");
+        int mine = create(CLAIMS, "{\"Description\":\"my trip\",\"Employee\":" + owner + "}");
+        int theirs = create(CLAIMS, "{\"Description\":\"their trip\",\"Employee\":" + colleague + "}");
+        int mineSubmitted = create(CLAIMS, "{\"Description\":\"my last trip\",\"Employee\":" + owner + ",\"Status\":2}");
+
+        AtomicReference<Object> myLine = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> myLine.set(given().multiPart("file", "mine.pdf", receipt, "application/pdf")
+                                                            .when()
+                                                            .post(CAPTURE + "/my/upload?Claim=" + mine)
+                                                            .then()
+                                                            .statusCode(200)
+                                                            .body("status", equalTo("CAPTURED"))
+                                                            .extract()
+                                                            .path("recordId")),
+                OWNER, PASSWORD);
+        assertEquals(mine, ((Number) get(LINES + "/" + myLine.get()).get("Claim")).intValue(),
+                "the owner's line is filed under their claim");
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(CAPTURE + "/my/review/" + myLine.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("captureName", equalTo("receiptPhoto")),
+                OWNER, PASSWORD);
+
+        upload(OWNER, "/my/upload?Claim=" + theirs, receipt, 404, "Claim not found");
+        upload(OWNER, "/my/upload?Claim=" + mineSubmitted, receipt, 409, LOCKED);
+        upload(OWNER, "/upload?Claim=" + mine, receipt, 403, null);
+        review(OWNER, adminsLine, 404);
+        review(COLLEAGUE, myLine.get(), 404);
+
+        assertEquals(2, calls.get(), "only the owner's own open claim was read for");
+        assertEquals(0, list(LINES + "?Claim=" + theirs).size(), "another user's claim gets no line");
+        assertEquals(0, list(LINES + "?Claim=" + mineSubmitted).size(), "a locked claim gets no line");
+        assertEquals(2, list(LINES).size());
+        assertEquals(2, list(RECEIPTS).size());
+        assertEquals(List.of("receiptPhoto CAPTURED receipt.pdf", "receiptPhoto CAPTURED mine.pdf"), ledger());
+
+        // The owner's button sits on the personal pages of the claim and talks to the /my endpoints.
+        JsonObject action = JsonParser.parseString(new String(repository.getResource(PROJECT_PATH + "/receiptPhoto-capture-my-action.json")
+                                                                        .getContent(),
+                StandardCharsets.UTF_8))
+                                      .getAsJsonObject();
+        assertEquals("my", action.get("surface")
+                                 .getAsString());
+        assertEquals("Claim", action.get("view")
+                                    .getAsString());
+        assertEquals("entity", action.get("type")
+                                     .getAsString());
+        String path = action.get("path")
+                            .getAsString();
+        assertTrue(path.contains("ReceiptPhotoCapture%2Fmy&") && path.endsWith("&under=Claim"), path);
+    }
+
+    private void review(String user, Object line, int status) {
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(CAPTURE + "/my/review/" + line)
+                                                 .then()
+                                                 .statusCode(status),
+                user, PASSWORD);
+    }
+
+    /** One refused upload, sent once - as admin when {@code user} is null. */
+    private void upload(String user, String endpoint, byte[] receipt, int status, String message) {
+        CallableNoResultAndNoException call = () -> {
             var response = given().multiPart("file", "refused.pdf", receipt, "application/pdf")
                                   .when()
-                                  .post(CAPTURE + "/upload" + query)
+                                  .post(CAPTURE + endpoint)
                                   .then()
                                   .statusCode(status);
             if (message != null) {
                 response.body("message", equalTo(message));
             }
-        });
+        };
+        if (user == null) {
+            restAssuredExecutor.execute(call);
+        } else {
+            restAssuredExecutor.execute(call, user, PASSWORD);
+        }
     }
 
     private List<String> ledger() throws SQLException {

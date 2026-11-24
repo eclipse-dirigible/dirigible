@@ -37,6 +37,9 @@ import org.springframework.stereotype.Component;
  * the upload as the line's key to it ({@code under}, #8626). It opens the shared capture page in
  * the app-wide dialog, where the user picks or photographs the document, uploads it and is shown
  * what the capture flagged for review.</li>
+ * <li><b>the personal capture action</b> ({@code <name>-capture-my-action}) - the same button on
+ * the personal pages of the master, when it has a {@code personal:} owner: the page then talks to
+ * the capture's owner-scoped {@code /my} endpoints.</li>
  * <li><b>the review action</b> ({@code <name>-capture-review-action}) - a per-record button that
  * opens the same page on an existing record: the kept file beside the flags of its capture.</li>
  * </ul>
@@ -81,7 +84,7 @@ public class CaptureIntentGenerator implements IntentTargetGenerator {
             if (name == null || name.isBlank() || into == null) {
                 continue;
             }
-            String page = page(project, capture, byName, compositionParents, model, context);
+            String page = page(project, capture, "", byName, compositionParents, model, context);
             // A line of an existing record (#8626) is captured from that record: the button is the
             // master's per-record action, and the page is told the line's key to it for the upload.
             String master = compositionParents.get(into.getName());
@@ -90,11 +93,21 @@ public class CaptureIntentGenerator implements IntentTargetGenerator {
             write(context, project, name + "-capture-action",
                     descriptor(project, capture, name, CaptureSupport.label(capture),
                             under == null ? page : page + "&under=" + encode(under), captureView, under == null ? "page" : "entity",
-                            "sap-icon--camera", context),
+                            "sap-icon--camera", null, context),
                     "Capture action [" + name + "] on [" + captureView + "]");
+            if (under != null && CaptureSupport.fromPersonalSurface(into, byName, compositionParents)) {
+                // ... and by its owner on the personal pages of their own record, through the capture's
+                // owner-scoped endpoints (.../my/upload, .../my/review/{id}).
+                write(context, project, name + "-capture-my-action",
+                        descriptor(project, capture, name, CaptureSupport.label(capture),
+                                page(project, capture, "/my", byName, compositionParents, model, context) + "&under=" + encode(under),
+                                master, "entity", "sap-icon--camera", "my", context),
+                        "Personal capture action [" + name + "] on [" + master + "]");
+            }
             String review = name + REVIEW_SUFFIX;
-            write(context, project, name + "-capture-review-action", descriptor(project, capture, review,
-                    CaptureSupport.reviewLabel(capture), page + "&mode=review", into.getName(), "entity", "sap-icon--inspection", context),
+            write(context, project, name + "-capture-review-action",
+                    descriptor(project, capture, review, CaptureSupport.reviewLabel(capture), page + "&mode=review", into.getName(),
+                            "entity", "sap-icon--inspection", null, context),
                     "Capture review action [" + name + "] on [" + into.getName() + "]");
         }
     }
@@ -109,9 +122,9 @@ public class CaptureIntentGenerator implements IntentTargetGenerator {
     }
 
     private static String descriptor(String project, CaptureIntent capture, String actionName, String label, String path, String viewName,
-            String type, String icon, IntentGenerationContext context) {
+            String type, String icon, String surface, IntentGenerationContext context) {
         Map<String, Object> view = new LinkedHashMap<>();
-        view.put("id", project + "-" + capture.getInto() + "-" + actionName);
+        view.put("id", project + "-" + capture.getInto() + "-" + actionName + (surface == null ? "" : "-" + surface));
         view.put("label", label);
         // The renderer shows T(translation.key, label) - untranslated apps keep the raw label.
         view.put("translation", Map.of("key", IntentNaming.customActionTranslationKey(project, context, actionName)));
@@ -119,17 +132,23 @@ public class CaptureIntentGenerator implements IntentTargetGenerator {
         view.put("view", viewName);
         view.put("type", type);
         view.put("icon", icon);
+        if (surface != null) {
+            view.put("surface", surface);
+        }
         return JsonHelper.toJson(view);
     }
 
-    /** The capture page's URL for one capture, without the mode and the record id. */
-    private static String page(String project, CaptureIntent capture, Map<String, EntityIntent> byName,
+    /**
+     * The capture page's URL for one capture, without the mode and the record id; {@code endpoints} is
+     * appended to the capture controller's path ({@code /my} for the owner-scoped ones).
+     */
+    private static String page(String project, CaptureIntent capture, String endpoints, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, IntentModel model, IntentGenerationContext context) {
         String module = IntentNaming.javaModule(context);
         StringBuilder url = new StringBuilder(PAGE);
         url.append("?capture=")
-           .append(encode(
-                   "/services/java/" + project + "/gen/events/" + module + "/" + IntentNaming.pascalCase(capture.getName()) + "Capture"));
+           .append(encode("/services/java/" + project + "/gen/events/" + module + "/" + IntentNaming.pascalCase(capture.getName())
+                   + "Capture" + endpoints));
         url.append("&entity=")
            .append(encode(capture.getInto()));
         EntityIntent attachment = capture.getAttachment() == null ? null : byName.get(capture.getAttachment());
