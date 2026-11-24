@@ -78,6 +78,7 @@ import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.EscalateIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
+import org.eclipse.dirigible.components.intent.model.FormItemsIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesItemsIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesLinkIntent;
@@ -11384,7 +11385,69 @@ public final class IntentParser {
             }
             validateFormRelationFields(form, bound, byName, issues);
             validateFormEditable(form, bound, taskFormTriggers, issues);
+            validateFormItems(form, bound, byName, taskFormTriggers, issues);
         }
+    }
+
+    /**
+     * A task form's {@code items:} lines table (issue #7907): the rows of a composition child of the
+     * form's {@code forEntity}, listed by the record the task is about. The table is loaded from the
+     * child's controller, which the process trigger hands the form as a locator, so - as for an
+     * {@code editable} relation - the form must be a task form of processes triggered on its
+     * {@code forEntity}. The columns are the child's own fields.
+     */
+    private static void validateFormItems(FormIntent form, EntityIntent bound, Map<String, EntityIntent> byName,
+            Map<String, Set<String>> taskFormTriggers, List<String> issues) {
+        FormItemsIntent items = form.getItems();
+        if (items == null) {
+            return;
+        }
+        String subject = "form [" + form.getName() + "] items";
+        if (bound == null) {
+            issues.add(subject + " needs the form's forEntity - the lines are the rows of one of its composition children");
+            return;
+        }
+        EntityIntent child = isBlank(items.getEntity()) ? null : byName.get(items.getEntity());
+        if (child == null) {
+            issues.add(subject + " entity [" + items.getEntity() + "] is not a declared entity");
+            return;
+        }
+        RelationIntent master = masterRelation(child);
+        if (master == null || child.isSetting() || !bound.getName()
+                                                         .equals(master.getTo())
+                || !"manyToOne".equals(master.getKind()) || !isBlank(master.getModel())) {
+            issues.add(subject + " entity [" + child.getName() + "] is not a composition child of [" + bound.getName()
+                    + "] - declare a manyToOne relation to it with composition: true");
+            return;
+        }
+        Set<String> triggers = taskFormTriggers.get(form.getName());
+        if (triggers == null || !triggers.equals(Set.of(bound.getName()))) {
+            issues.add(subject + " can only be shown on a TASK form whose forEntity [" + bound.getName()
+                    + "] is the trigger entity of every process that uses it - the lines are located through that trigger");
+        }
+        if (items.getFields()
+                 .isEmpty()) {
+            issues.add(subject + " lists no fields - name the columns of the lines table");
+        }
+        for (String field : items.getFields()) {
+            if (field == null || fieldByName(child, field) == null) {
+                issues.add(subject + " field [" + field + "] is not a field of [" + child.getName() + "] - a column is one of the"
+                        + " line's own fields");
+            }
+        }
+    }
+
+    /**
+     * The child's composition relation - the first to-one one, as
+     * {@link IntentEntities#compositionParents} reads it.
+     */
+    private static RelationIntent masterRelation(EntityIntent child) {
+        for (RelationIntent relation : child.getRelations()) {
+            if (relation.isComposition() && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+                return relation;
+            }
+        }
+        return null;
     }
 
     /**

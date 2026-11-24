@@ -2614,6 +2614,21 @@ paths / relations.
         - { name: identify, kind: userTask, args: { assignee: officer, form: IdentifyDriver } }
         - { name: done, kind: end }
   ```
+- **`items: { entity: <Child>, fields: [...] }` shows the record's LINES** under the fields - a
+  read-only table of the rows of a composition child of `forEntity` that belong to the task's record,
+  so the approver of an invoice sees what is billed, not only the total. `entity` must be a
+  `manyToOne` `composition: true` child of `forEntity`, `fields` are that child's own fields (one
+  column each, formatted like the header fields), and - as for an editable relation - the form must
+  be a task form whose `forEntity` IS the trigger entity of every process that uses it: the lines are
+  listed live through the child's controller, which the trigger hands the form. The approver reads
+  them with their own access, exactly as they read the header: a reviewer who may not read the lines
+  sees no table.
+
+  ```yaml
+  forms:
+    - { name: ApproveSalesInvoice, forEntity: SalesInvoice, fields: [number, date, Customer, total, Status],
+        items: { entity: SalesInvoiceItem, fields: [name, quantity, price, vatRate, total] }, actions: [approve, reject] }
+  ```
 - **The status stepper is the flow's own walk.** When `forEntity` carries a `function: EntityStatus`
   relation, the form renders a read-only step indicator above the fields, and its steps are the
   statuses THIS flow walks: the relation's `init:` status plus every status the owning process writes

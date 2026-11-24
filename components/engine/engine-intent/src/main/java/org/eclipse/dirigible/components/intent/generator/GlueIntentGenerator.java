@@ -28,6 +28,7 @@ import org.eclipse.dirigible.components.intent.generator.edm.CrossModelSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.EscalateIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
+import org.eclipse.dirigible.components.intent.model.FormIntent;
 import org.eclipse.dirigible.components.intent.model.GenerateChildIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesItemsIntent;
@@ -50,6 +51,7 @@ import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleConditionIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.eclipse.dirigible.components.intent.model.SettlementIntent;
+import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.eclipse.dirigible.components.intent.model.UniqueKeyIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
@@ -277,6 +279,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // Per to-one relation: enough to build the target controller URL so the task form can resolve
             // each FK to a display name (the form falls back to the raw id when a URL is missing).
             trigger.put("relationLinks", buildRelationLinks(byName.get(entity), model, byName, compositionParents, context));
+            // Per lines table a task form of this process shows (forms[].items, #7907): the controller the
+            // form lists the record's lines from. Absent when no form shows one.
+            List<Map<String, Object>> itemLinks = buildItemLinks(process, entity, model, compositionParents);
+            if (!itemLinks.isEmpty()) {
+                trigger.put("itemLinks", itemLinks);
+            }
             // What a task of this process is ABOUT, wherever it is listed away from its own
             // application: the property names the reader resolves live against the record (#7077).
             trigger.put("subjectFields", TaskSubjectSupport.subjectFields(byName.get(entity)));
@@ -542,6 +550,40 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 link.put("targetPerspective", IntentEntities.resolvePerspective(relation.getTo(), compositionParents, model));
                 link.put("labelField", nameField(target));
             }
+            links.add(link);
+        }
+        return links;
+    }
+
+    /**
+     * One link per composition child a {@code userTask} form of the process lists as its {@code items:}
+     * (issue #7907): the child and its perspective, from which the events template assembles the
+     * child's controller URL - the task form lists the record's lines through it, filtered on the
+     * line's master key. Only a form bound to the trigger entity counts (the parser refuses any other).
+     */
+    private static List<Map<String, Object>> buildItemLinks(ProcessIntent process, String entity, IntentModel model,
+            Map<String, String> compositionParents) {
+        Set<String> taskForms = new LinkedHashSet<>();
+        for (StepIntent step : process.getSteps()) {
+            if ("userTask".equals(step.getKind()) && step.getArgs() != null && step.getArgs()
+                                                                                   .get("form") != null) {
+                taskForms.add(String.valueOf(step.getArgs()
+                                                 .get("form")));
+            }
+        }
+        Set<String> children = new LinkedHashSet<>();
+        for (FormIntent form : model.getForms()) {
+            if (taskForms.contains(form.getName()) && entity.equals(form.getForEntity()) && form.getItems() != null && form.getItems()
+                                                                                                                           .getEntity() != null) {
+                children.add(form.getItems()
+                                 .getEntity());
+            }
+        }
+        List<Map<String, Object>> links = new ArrayList<>();
+        for (String child : children) {
+            Map<String, Object> link = new LinkedHashMap<>();
+            link.put("entity", child);
+            link.put("perspective", IntentEntities.resolvePerspective(child, compositionParents, model));
             links.add(link);
         }
         return links;
