@@ -16,37 +16,27 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 import java.util.Locale;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
-/**
- * The print dialog's template languages are named in themselves, whatever the UI or JVM language
- * (#8877).
- */
+/** The print dialog's template languages are named in the caller's UI language (#8877). */
 class PrintEndpointLanguagesTest {
 
-    private final Locale defaultLocale = Locale.getDefault();
-
-    @AfterEach
-    void restoreDefaultLocale() {
-        Locale.setDefault(defaultLocale);
+    @Test
+    void aBulgarianUiNamesTheLanguagesInBulgarian() throws Exception {
+        assertEquals(List.of("Български", "Английски", "xx"), names(Locale.forLanguageTag("bg-BG")));
     }
 
     @Test
-    void eachLanguageIsNamedInItselfAndAnUnknownCodeByItsCode() throws Exception {
-        Locale.setDefault(Locale.ENGLISH);
-        assertEquals(List.of("Български", "English", "Deutsch", "xx"), names());
-
-        Locale.setDefault(Locale.forLanguageTag("bg"));
-        assertEquals(List.of("Български", "English", "Deutsch", "xx"), names());
+    void anEnglishUiNamesTheLanguagesInEnglish() throws Exception {
+        assertEquals(List.of("Bulgarian", "English", "xx"), names(Locale.forLanguageTag("en-US")));
     }
 
-    private static List<String> names() throws Exception {
+    private static List<String> names(Locale uiLocale) throws Exception {
         PrintTemplateCatalog catalog = mock(PrintTemplateCatalog.class);
-        when(catalog.languages("GoodsReceipt")).thenReturn(List.of("bg", "en", "de", "xx"));
+        when(catalog.languages("GoodsReceipt")).thenReturn(List.of("bg", "en", "xx"));
         PrintEndpoint endpoint = new PrintEndpoint(catalog, mock(PrintImageResolver.class));
 
-        return endpoint.getLanguages("GoodsReceipt")
+        return endpoint.getLanguages("GoodsReceipt", uiLocale)
                        .getBody()
                        .stream()
                        .map(language -> language.get("name"))

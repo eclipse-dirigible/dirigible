@@ -102,18 +102,20 @@ class PrintEndpoint extends BaseEndpoint {
      * Lists the languages the given entity has print templates for.
      *
      * @param entity the domain entity name
+     * @param uiLocale the caller's language, from its {@code Accept-Language}
      * @return a JSON array of {@code {"code": "en", "name": "English", "selectionKey":
      *         "DIRIGIBLE_PRINT_TEMPLATE_SALESINVOICE_EN"}} entries - the selection key is the tenant
-     *         configuration that selects the language's active template, the name the language's own
-     *         ("Български" for {@code bg}) - empty when the entity has no templates
+     *         configuration that selects the language's active template, the name in the caller's
+     *         language ("Български" for {@code bg} in a Bulgarian UI, "Bulgarian" in an English one) -
+     *         empty when the entity has no templates
      */
     @GetMapping(value = "/{entity}/languages", produces = MediaType.APPLICATION_JSON_VALUE)
-    ResponseEntity<List<Map<String, String>>> getLanguages(@PathVariable("entity") String entity) {
+    ResponseEntity<List<Map<String, String>>> getLanguages(@PathVariable("entity") String entity, Locale uiLocale) {
         try {
             List<Map<String, String>> languages = catalog.languages(entity)
                                                          .stream()
-                                                         .map(code -> Map.of("code", code, "name", displayName(code), "selectionKey",
-                                                                 PrintTemplateSelection.key(entity, code)))
+                                                         .map(code -> Map.of("code", code, "name", displayName(code, uiLocale),
+                                                                 "selectionKey", PrintTemplateSelection.key(entity, code)))
                                                          .toList();
             return ResponseEntity.ok(languages);
         } catch (PrintTemplateException e) {
@@ -297,20 +299,20 @@ class PrintEndpoint extends BaseEndpoint {
     }
 
     /**
-     * Names the language in itself ("Български", "English"), as language pickers do: a reader
-     * recognizes their own language whatever the UI language, and the name needs no translation catalog
-     * (#8877). Falls back to the code when the JDK has no name for it.
+     * Names the language in the caller's language, as the rest of the print dialog is (#8877):
+     * "Български" / "Английски" in a Bulgarian UI, "Bulgarian" / "English" in an English one. Falls
+     * back to the code when the JDK has no name for it.
      */
-    private static String displayName(String code) {
+    private static String displayName(String code, Locale uiLocale) {
         Locale locale = Locale.forLanguageTag(code);
-        String name = locale.getDisplayLanguage(locale);
+        String name = locale.getDisplayLanguage(uiLocale);
         // The JDK answers a code it has no name for with the code itself.
         if (name.isBlank() || name.equalsIgnoreCase(locale.getLanguage())) {
             return code;
         }
         int first = name.offsetByCodePoints(0, 1);
         return name.substring(0, first)
-                   .toUpperCase(locale)
+                   .toUpperCase(uiLocale)
                 + name.substring(first);
     }
 }
