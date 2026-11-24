@@ -762,6 +762,18 @@ class GlueSchedulesTest {
         assertEquals("SalesInvoice", s.get("perspective"));
     }
 
+    /** {@code value: null} is the presence test (#7984) - "no status yet" - not a name to refuse. */
+    @Test
+    void aNullStatusOnACrossModelScheduleSourceRendersAsAPresenceTest() {
+        IntentGenerationContext context =
+                contextWithOwnerModel(IntentParser.parse(CROSS_MODEL_DUNNING.replace("value: OVERDUE", "value: null")));
+
+        Map<String, Object> s = GlueIntentGenerator.buildSchedulesForTest(context.getModel(), context)
+                                                   .get(0);
+
+        assertEquals("Criteria.create().eq(\"Status\", null)", GlueRendering.criteria(s));
+    }
+
     /**
      * An ordinary column compared with a string stays a string: only the status condition is refused,
      * because only there is a literal a value no row can ever carry.

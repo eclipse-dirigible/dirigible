@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.intent.parser;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -96,6 +97,29 @@ class RollupMembershipIntentTest {
     @Test
     void anInexactOperatorIsRefused() {
         assertTrue(refusalOf(YAML.replace("op: ne", "op: like")).contains("supported: eq/ne"));
+    }
+
+    /**
+     * {@code value: null} is the presence test (#7984): {@code eq} keeps the rows whose property is
+     * empty, {@code ne} the rows where it is set - the only form of it a filter can express, since
+     * every other comparison excludes an empty column. A status relation takes it too.
+     */
+    @Test
+    void aNullValueTestsForAnEmptyProperty() {
+        String yaml = YAML.replace("      - { field: Status, op: ne, value: CANCELLED }\n",
+                "      - { field: Status, op: ne, value: CANCELLED }\n      - { field: total, op: ne, value: null }\n"
+                        + "      - { field: Status, op: ne, value: null }\n");
+        assertEquals(3, IntentParser.parse(yaml)
+                                    .getRollups()
+                                    .get(0)
+                                    .getWhere()
+                                    .size());
+        assertNull(IntentParser.parse(yaml)
+                               .getRollups()
+                               .get(0)
+                               .getWhere()
+                               .get(1)
+                               .getValue());
     }
 
     @Test

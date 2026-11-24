@@ -2544,6 +2544,26 @@ class ModelParameterProcessorTest {
         assertNull(entity.get("hasGatedRollupGuards"));
     }
 
+    /**
+     * A {@code value: null} term (#7984) tests whether the property is set, in every Java shape - the
+     * by-value comparison of a number would render {@code longValue() == nullL}, which does not
+     * compile.
+     */
+    @Test
+    void aNullFilterTermTestsTheRowInHandForPresence() {
+        Map<String, Object> guard = new LinkedHashMap<>();
+        guard.put("parentEntity", "Payment");
+        guard.put("fitField", "PostedTotal");
+        guard.put("filter", List.of(clause("eq", "Storno", "null", null), clause("ne", "Note", "null", null)));
+        Map<String, Object> entity = entity("Entry", "Entries", property("Storno", "INTEGER"), property("Note", "VARCHAR"));
+        entity.put("rollupGuards", List.of(guard));
+
+        ModelParameterProcessor.process(model(entity), javaParameters());
+
+        assertEquals(".eq(\"Storno\", null).ne(\"Note\", null)", guard.get("filterChain"));
+        assertEquals("(entity.Storno == null) && (entity.Note != null)", guard.get("incomingMatch"));
+    }
+
     private static Map<String, Object> clause(String op, String property, String kind, String text) {
         Map<String, Object> value = new LinkedHashMap<>();
         value.put("kind", kind);
