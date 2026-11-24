@@ -1199,6 +1199,12 @@ class GlueGenerator {
         context.put("itemWhere", item.containsKey("itemCriteria") ? JavaLiterals.criteriaChain(asMaps(item.get("itemCriteria")))
                 : strOr(item, "itemWhere", ""));
         context.put("itemRefuse", strOr(item, "itemRefuse", ""));
+        // The mark each consumed source row receives (issue #7956), and the clause that leaves a marked row
+        // out of every item query. A .glue written before the key existed marks nothing and selects as
+        // before.
+        String itemBackLink = strOr(item, "itemBackLink", "");
+        context.put("itemBackLink", itemBackLink);
+        context.put("itemUnconsumed", itemBackLink.isEmpty() ? "" : ".isNull(\"" + JavaLiterals.escape(itemBackLink) + "\")");
         // The refusal is written into a Java string literal, so a quote or a backslash in the authored
         // message would end that literal and fail the compile of the whole generated module (#7241).
         context.put("itemRefuseJavaLiteral", JavaLiterals.escape(strOr(item, "itemRefuse", "")));

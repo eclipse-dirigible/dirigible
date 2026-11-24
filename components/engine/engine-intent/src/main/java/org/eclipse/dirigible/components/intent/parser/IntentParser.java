@@ -12412,6 +12412,7 @@ public final class IntentParser {
                 validateMapTarget(crossModel || items.getTo() == null ? null : byName.get(items.getTo()), items.getMap(),
                         "generates [" + name + "]", "items map", issues);
                 validateGeneratesItemsWhere(items, "generates [" + name + "]", itemSource, issues);
+                validateGeneratesItemsBackLink(g, itemSource, crossModel, issues);
             }
             if (g.hasUnique()) {
                 // The natural key is a SCHEDULE's idempotency guard (issue #7070). An on-demand
@@ -12476,6 +12477,28 @@ public final class IntentParser {
             }
             validateScheduleMoment(condition, itemSource, subject + " items", issues);
             validateWhereStatusValue(condition, itemSource, subject + " items", issues);
+        }
+    }
+
+    /**
+     * The mark a create-from writes on each source row it consumed (issue #7956): a to-one of the item
+     * source to the TARGET, so the row names the document it became a line of and a later run can tell
+     * it is spent. A cross-model source's items live in the owner model and are checked at generation.
+     */
+    private static void validateGeneratesItemsBackLink(GeneratesIntent g, EntityIntent itemSource, boolean crossModel,
+            List<String> issues) {
+        String backLink = g.getItems()
+                           .getBackLink();
+        if (!g.getItems()
+              .hasBackLink() || itemSource == null) {
+            return;
+        }
+        RelationIntent relation = toOneRelationByName(itemSource, backLink);
+        if (relation == null || relation.isComposition() || !java.util.Objects.equals(relation.getTo(), g.getTo())
+                || !java.util.Objects.equals(relation.isCrossModel() ? relation.getModel() : null, crossModel ? g.getUses() : null)) {
+            issues.add("generates [" + g.getName() + "] items backLink [" + backLink + "] must be a manyToOne/oneToOne of ["
+                    + itemSource.getName() + "] to the target [" + g.getTo() + "]" + (crossModel ? " (model [" + g.getUses() + "])" : "")
+                    + " - each consumed row is marked with the document it became a line of");
         }
     }
 

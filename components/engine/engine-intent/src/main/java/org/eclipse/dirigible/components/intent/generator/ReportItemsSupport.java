@@ -155,6 +155,9 @@ public final class ReportItemsSupport {
             if (items.hasRefuse()) {
                 issues.add(at + " declares refuse - a report row the where leaves out is simply not a line");
             }
+            if (items.hasBackLink()) {
+                issues.add(at + " declares backLink - a report row is no stored row a mark could be written on");
+            }
             if (backReference(g, source) == null) {
                 issues.add(subject + " reads report lines but its map copies no source key onto the target: add the target's to-one back"
                         + " to [" + source.getName() + "] to the map (the source's [" + IntentEntities.keyFieldName(source)
