@@ -126,8 +126,12 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 ## Assign a calculated property. Numeric properties evaluate the neutral arithmetic expression via the
 ## shared Calc evaluator (the same expression the generated UI previews with); the BigDecimal result is
 ## narrowed to the field type. Non-numeric calculated properties keep their expression verbatim.
+## A money field rounded to its currency (intent roundTo:, #8307 / #8327) is evaluated straight to that
+## currency's minor units - rounding the column-scale result a second time would round 0.495 up to 1.
 #macro(calcAssign $property $expr)
-#if($property.dataTypeJavaClass == "java.math.BigDecimal")
+#if($property.dataTypeJavaClass == "java.math.BigDecimal" && $property.roundToIndex)
+        entity.${property.name} = Calc.eval("${expr}", entity, minorUnits(currencyDigits[${property.roundToIndex}], #calcScale($property)));
+#elseif($property.dataTypeJavaClass == "java.math.BigDecimal")
         entity.${property.name} = Calc.eval("${expr}", entity, #calcScale($property));
 #elseif($property.dataTypeJavaClass == "Double")
         entity.${property.name} = Calc.eval("${expr}", entity, #calcScale($property)).doubleValue();
@@ -340,6 +344,23 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #macro(roundDecimals)
 #if($haveScaledDecimals)
         roundDecimals(entity);
+#end
+#end
+## A money field is rounded to the minor units of the currency it is stated in (intent roundTo:, #8307 /
+## #8327) - a yen amount holds no fraction of a yen. The currency is read where the calculated fields are
+## about to be evaluated, once the record's references (and a header's resummed totals) are in place:
+## the inputs are rounded first, so an expression reads what the row will hold, and `currencyDigits`
+## stays in scope for #calcAssign, which evaluates each such calculated field straight to those digits.
+#macro(roundToMinorUnits)
+#if($haveRoundTo)
+        Integer[] currencyDigits = currencyDigits(entity);
+        roundToMinorUnits(entity, currencyDigits);
+#end
+#end
+## ...and once more after a calculated ACTION, whose hand-written result no expression rounded.
+#macro(roundToMinorUnitsAfterActions)
+#if($haveRoundTo && $haveCalculatedPropertyAction)
+        roundToMinorUnits(entity, currencyDigits);
 #end
 #end
 ## Required values: refuse a write that leaves a NOT NULL column empty, naming the property, instead of
@@ -573,6 +594,70 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     public static boolean isShareable(${name}Entity entity) {
         return entity != null && ${share.whenJavaExpression};
     }
+
+    /**
+     * The newest stored ${share.copyEntity} of a ${name} - the file a share link serves - or null while
+     * none is minted. Never a render of the live record.
+     *
+     * @param id the ${name}'s key
+     * @return the issued copy, or null
+     */
+    public static gen.${javaGenFolderName}.data.${share.javaCopyPerspective}.${share.copyEntity}Entity issuedCopy(Object id) {
+        gen.${javaGenFolderName}.data.${share.javaCopyPerspective}.${share.copyEntity}Entity issued = null;
+        for (gen.${javaGenFolderName}.data.${share.javaCopyPerspective}.${share.copyEntity}Entity copy : new gen.${javaGenFolderName}.data.${share.javaCopyPerspective}.${share.copyEntity}Repository().findAll(
+                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${share.copyMasterFk}", id))) {
+            if (copy.StoragePath != null && (issued == null || (copy.Version != null && (issued.Version == null || copy.Version > issued.Version)))) {
+                issued = copy;
+            }
+        }
+        return issued;
+    }
+
+    /**
+     * The life in days of a share link created now on a ${name} - the single reading of it, used by the
+     * Share action and by a notify's {shareUrl} alike: the first share: expiry: entry whose condition
+     * the record meets (#8620), else expiresAfterDays. 0 is permanent; the tenant's cap shortens either
+     * where the link is stored. Read from the record, never from a request.
+     *
+     * @param entity the record the link is created on
+     * @return the days, 0 for a permanent link
+     */
+    public static int shareExpiresAfterDays(${name}Entity entity) {
+#foreach($load in $share.pathLoads)
+        Object ${load.local}Fk = ${load.sourceExpression};
+        ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+#end
+#foreach($rule in $share.expiry)
+        if (${rule.whenJavaExpression}) {
+            return ${rule.days};
+        }
+#end
+        return ${share.expiresAfterDays};
+    }
+
+    /**
+     * Creates a share link to the issued copy of a ${name} on behalf of the application - a notify's
+     * {shareUrl} (#8616) - and answers its URL, which the message hands out and nothing logs. The
+     * rules are the Share action's: the record is in its share: state, its copy is stored, the tenant
+     * allows sharing, and the link lives {@link #shareExpiresAfterDays} days.
+     *
+     * @param entity the record the message is about
+     * @param createdBy who the link is recorded as created by - the system, naming the send
+     * @return the link's URL
+     * @throws IllegalStateException when no link can be created, saying why - the message must then not go out
+     */
+    public static String createShareUrl(${name}Entity entity, String createdBy) {
+        var id = entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end;
+        if (!isShareable(entity)) {
+            throw new IllegalStateException("${name} [" + id + "] cannot be shared in its current state");
+        }
+        var issued = issuedCopy(id);
+        if (issued == null) {
+            throw new IllegalStateException("${name} [" + id + "] has no issued copy yet - mail its link after the copy is minted");
+        }
+        return org.eclipse.dirigible.sdk.share.ShareLinks.create(SHARE_SUBJECT, id, issued.StoragePath, issued.FileName,
+                issued.ContentType, shareExpiresAfterDays(entity), createdBy).url();
+    }
 #end
 
 ## Whether an ungated capacity guard locks its parent (#7827) - save() and update() then open the unit
@@ -631,6 +716,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($hasLabel)
         computeName(entity);
 #end
+#roundToMinorUnits()
 #if($haveCalculatedPropertyOnCreate)
 #foreach ($property in $properties)
 #if($property.isCalculatedProperty && $property.calculatedActionOnCreate)
@@ -639,6 +725,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #calcAssign($property $property.calculatedPropertyExpressionCreate)
 #end
 #end
+#roundToMinorUnitsAfterActions()
 #end
 ## The capacity guards run AFTER the create-time calculated fields (#7943): the summed field may be one
 ## of them (Amount = Quantity * Price, a signed cash outflow), and guarded before it was assigned it read
@@ -780,7 +867,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 
     @Override
     public ${name}Entity update(${name}Entity entity) {
-#if($hasSingleFlags || $documentItem || $preservedOnUpdate.size() > 0 || $hasCapacityGuards)
+#if($hasSingleFlags || $documentItem || $preservedOnUpdate.size() > 0 || $hasCapacityGuards || $hasNotExistsChecks)
         // One unit with the header total(s) it moves - see save() (#8096) - with the row lock the
         // carried-over system-owned columns are read under (#8109), and with the lock a capacity guard
         // holds on its parent (#7827).
@@ -883,6 +970,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($documentMaster)
         recalculate(entity);
 #end
+#roundToMinorUnits()
 #if($haveCalculatedPropertyOnUpdate)
 ## The update-time recomputes run AFTER recalculate() and the preservation block above, so an
 ## expression like Balance = Total - Paid reads the freshly resummed Total and the preserved Paid -
@@ -895,6 +983,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #calcAssign($property $property.calculatedPropertyExpressionUpdate)
 #end
 #end
+#roundToMinorUnitsAfterActions()
 #end
 ## The capacity guards and the aggregate guard run after the update-time calculated fields, as on
 ## create (#7943, #8743).
@@ -998,7 +1087,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      * re-fire onUpdate reactions (notifications, roll-ups, integrations) for a change the user never made.
      */
     public ${name}Entity updateWithoutEvent(${name}Entity entity) {
-#if($hasSingleFlags || $documentItem)
+#if($hasSingleFlags || $documentItem || $hasNotExistsChecks)
         // One unit with the header total(s) it moves - see save() (#8096).
 #if($hasDuplicateKeys)
         try {
@@ -1019,6 +1108,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #normalizeSubsets()
 #normalizeInput()
 #keepDefaultedWhenOmitted()
+#roundToMinorUnits()
 #if($hasStatusStamps)
         // The status the record stands in BEFORE this write: a stamp records an arrival, and the
         // lifecycle (when declared) judges the same move - one read serves both.
@@ -1150,8 +1240,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 
     @Override
     public int updateProperties(Object id, java.util.Map<String, Object> values, String eventTopic) {
-#if($documentItem)
-        // One unit with the header total(s) it moves - see save() (#8096).
+#if($documentItem || $hasNotExistsChecks)
+        // One unit with the header total(s) it moves - see save() (#8096) - and with the row lock a
+        // notExists check counts under (#8002).
         return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updatePropertiesInUnit(id, values, eventTopic));
     }
 
@@ -1965,6 +2056,57 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             ) == 0) {
                 throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
             }
+#elseif($check.kind == "notExists")
+            // The move into this status is refused WHILE a row of another entity matches (intent `checks:
+            // notExists`, #8002, #8623) - a month closed with a draft entry dated inside it, a deal marked
+            // lost with an accepted quotation. An unset match value or path skips it; the query binds its
+            // values.
+#foreach($load in $check.pathLoads)
+            Object ${load.local}Fk = ${load.sourceExpression};
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null
+                    : (${load.entityClass}) loadedHops.computeIfAbsent("${load.repositoryClass}:" + ${load.local}Fk,
+                            hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
+#end
+#foreach($pair in $check.match)
+            Object match${foreach.count} = ${pair.expression};
+#end
+#foreach($term in $check.where)
+#if($term.expression)
+            Object where${foreach.count} = ${term.expression};
+#end
+#end
+            if (#if($check.guardJavaExpression)(${check.guardJavaExpression}) && #end#foreach($pair in $check.match)match${foreach.count} != null && #{end}#foreach($term in $check.where)#if($term.expression)where${foreach.count} != null && #end#{end}true) {
+                // The record is locked BEFORE the rows are counted, and stays locked until the move
+                // commits: a referencing row's create share-locks it in its reference check (#8252), so
+                // a matching row written at the same moment either committed before this count and is
+                // counted, or waits for the move and lands after it.
+                if (entity.${pkPropertyName} != null && store().isInUnitOfWork()) {
+                    lockForUpdate(entity.${pkPropertyName});
+                }
+                org.eclipse.dirigible.components.data.store.java.repository.Criteria refusing =
+                        org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+#foreach($pair in $check.match)
+                                                                                           .eq("${pair.property}", match${foreach.count})
+#end
+#foreach($term in $check.where)
+#if($term.expression)
+                                                                                           .${term.method}("${term.property}", where${foreach.count})
+#elseif($term.valueJava)
+                                                                                           .${term.method}("${term.property}", ${term.valueJava})
+#else
+                                                                                           .${term.method}("${term.property}")
+#end
+#end
+                                                                                           ;
+#if($check.targetGenFolder)
+                long refusingRows = countRowsOf("${check.targetGenFolder}", "${check.targetEntity}", refusing);
+#else
+                long refusingRows = new ${check.targetRepositoryClass}().count(refusing);
+#end
+                if (refusingRows > 0) {
+                    throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava}, "count", refusingRows);
+                }
+            }
 #elseif($check.kind == "compare")
             // A value of the row compared with a second one (intent `checks: compare`) - another field
             // of the same row, or a literal (#7338) - gated on the status at which it must finally hold:
@@ -2053,6 +2195,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($haveCalculatedExpressionOnCreate)
         ${name}Entity entity = copyOf(submitted);
 #applyDefaults()
+#roundToMinorUnits()
 #foreach ($property in $properties)
 #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate && !$property.calculatedActionOnCreate)
 #calcAssign($property $property.calculatedPropertyExpressionCreate)
@@ -2060,6 +2203,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
         return entity;
 #else
+#if($haveRoundTo)
+        roundToMinorUnits(submitted, currencyDigits(submitted));
+#end
         return submitted;
 #end
     }
@@ -2100,6 +2246,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($documentMaster)
         recalculate(entity);
 #end
+#roundToMinorUnits()
 #foreach ($property in $properties)
 #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionUpdate && !$property.calculatedActionOnUpdate)
 #calcAssign($property $property.calculatedPropertyExpressionUpdate)
@@ -2107,6 +2254,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
         return entity;
 #else
+#if($haveRoundTo)
+        roundToMinorUnits(submitted, currencyDigits(submitted));
+#end
         return submitted;
 #end
     }
@@ -2144,6 +2294,63 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if(!$property.dataPrimaryKey && $property.dataTypeJavaClass == "java.math.BigDecimal" && $property.dataScale && $property.dataScale != "")
         if (entity.${property.name} != null && entity.${property.name}.scale() > ${property.dataScale}) {
             entity.${property.name} = entity.${property.name}.setScale(${property.dataScale}, java.math.RoundingMode.HALF_UP);
+        }
+#end
+#end
+    }
+#end
+#if($haveRoundTo)
+
+    /**
+     * The minor units of the currency each money field of a ${name} is stated in (intent roundTo:,
+     * #8307 / #8327), one per such field in declaration order - null where the record reaches no
+     * currency. A related record is loaded once, however many fields read it.
+     *
+     * @param entity the record
+     * @return the decimal places per money field, by its roundToIndex
+     */
+    private static Integer[] currencyDigits(${name}Entity entity) {
+#foreach($load in $roundToLoads)
+        Object ${load.local}Fk = ${load.sourceExpression};
+        ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+#end
+        return new Integer[] {
+#foreach($read in $roundToDigits)
+                // ${read.property}
+                minorUnitsOf(${read.expression}),
+#end
+        };
+    }
+
+    /** A currency's rounding as read off its row - any integral column type - or null when unset. */
+    private static Integer minorUnitsOf(Object rounding) {
+        return rounding instanceof Number number ? number.intValue() : null;
+    }
+
+    /**
+     * The decimal places a money field is rounded to: its currency's minor units, never more than its
+     * column holds, and the column's scale when the record reaches no currency.
+     */
+    private static int minorUnits(Integer currencyDigits, int columnScale) {
+        return currencyDigits == null ? columnScale : Math.max(0, Math.min(currencyDigits, columnScale));
+    }
+
+    /**
+     * Rounds the money fields of a record about to be written to the minor units of the currency each is
+     * stated in, half up (intent roundTo:, #8307 / #8327) - 1199.99 yen is not an amount anyone can pay. A
+     * value already within them is left as it is.
+     *
+     * @param entity the record, changed in place
+     * @param currencyDigits the minor units per money field, from {@link #currencyDigits}
+     */
+    private static void roundToMinorUnits(${name}Entity entity, Integer[] currencyDigits) {
+#foreach($property in $properties)
+#if($property.roundToIndex)
+        if (entity.${property.name} != null) {
+            int ${property.name}Digits = minorUnits(currencyDigits[${property.roundToIndex}], ${property.dataScale});
+            if (entity.${property.name}.scale() > ${property.name}Digits) {
+                entity.${property.name} = entity.${property.name}.setScale(${property.name}Digits, java.math.RoundingMode.HALF_UP);
+            }
         }
 #end
 #end
@@ -2615,10 +2822,29 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      * @param stored the row as stored before this write, {@code null} for a create
      */
     private void requireReferencesExist(${name}Entity entity, ${name}Entity stored) {
+#if($hierarchyProperty)
+        // A parent this write gives the row gains a child, which a leaf that leafOnly relations - of
+        // this model or another - reference must not (dirigible #7826). Asked FIRST, so the parent is
+        // locked for update before the reference check below share-locks it.
+        if (stored == null || !java.util.Objects.equals(stored.${hierarchyProperty}, entity.${hierarchyProperty})) {
+            requireMayGainChild(entity.${hierarchyProperty});
+        }
+#end
 #foreach($property in $properties)
 #if($property.targetEntityClass)
         if (stored == null || !java.util.Objects.equals(stored.${property.name}, entity.${property.name})) {
             requireReferenceExists("${property.name}", "${property.targetEntityClass}", entity.${property.name});
+#if($property.widgetLeafOnly && $property.leafOnlyRepositoryClass && $property.widgetHierarchyProperty)
+            // leafOnly (#7826): counted under the share lock the check above took on the referenced
+            // ${property.relationshipEntityName}, so a child being given to it either committed first and is
+            // counted here, or waits for this write and is then refused by the tree's own check.
+            if (entity.${property.name} != null && new ${property.leafOnlyRepositoryClass}().count(
+                    org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                            .eq("${property.widgetHierarchyProperty}", entity.${property.name})) > 0) {
+                throw new org.eclipse.dirigible.sdk.db.ValidationException(
+                        "The '${property.name}' must reference a leaf ${property.relationshipEntityName} - the selected one has children");
+            }
+#end
         }
 #end
 #end
@@ -2751,6 +2977,32 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
     }
 
+#set($hasLeafOnlyReferences = false)
+#foreach($property in $properties)
+#if($property.widgetLeafOnly && $property.widgetHierarchyProperty && $property.targetEntityClass)
+#set($hasLeafOnlyReferences = true)
+#end
+#end
+#if($hasLeafOnlyReferences)
+    /**
+     * How many ${name} rows reference a tree record through a leafOnly relation (dirigible #7826): the
+     * tree's repository asks before it gives that record a child, which would turn the referenced leaf
+     * into a group with these references still on it.
+     */
+    @Override
+    public int countLeafReferences(String targetEntity, Object targetId) {
+        long referencing = 0;
+#foreach($property in $properties)
+#if($property.widgetLeafOnly && $property.widgetHierarchyProperty && $property.targetEntityClass)
+        if ("${property.targetEntityClass}".equals(targetEntity)) {
+            referencing += count(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${property.name}", targetId));
+        }
+#end
+#end
+        return (int) Math.min(referencing, Integer.MAX_VALUE);
+    }
+
+#end
     @Override
     public String referencingLabel() {
         return "${entityLabel}";
@@ -2981,6 +3233,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             return null;
         }
         recalculate(entity);
+#roundToMinorUnits()
 #foreach ($property in $properties)
 #if($property.isCalculatedProperty && !$property.calculatedActionOnUpdate && $property.calculatedPropertyExpressionUpdate)
 #if($foreach.first)

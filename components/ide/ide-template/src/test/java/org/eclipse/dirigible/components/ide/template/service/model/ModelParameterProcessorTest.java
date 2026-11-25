@@ -232,6 +232,26 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * #8328: the month and week refusals are catalog entries only in a model with such a field, so
+     * every other model's catalog stays as it was.
+     */
+    @Test
+    void monthAndWeekRefusalsAreCatalogEntriesOnlyWhereAFieldIsAMonthOrAWeek() {
+        Map<String, Object> period = property("Period", "VARCHAR");
+        period.put("widgetType", "MONTH");
+        Map<String, Object> sprint = property("Sprint", "VARCHAR");
+        sprint.put("widgetType", "WEEK");
+        Map<String, Object> catalog =
+                ModelTranslations.checkMessages(model(entity("Timesheet", "Timesheets", property("Id", "INTEGER"), period, sprint)));
+
+        assertEquals("The value of '{label}' is not a month of the form YYYY-MM", catalog.get("fieldMonth"));
+        assertEquals("The value of '{label}' is not a week of the form YYYY-Www", catalog.get("fieldWeek"));
+        Map<String, Object> plain = ModelTranslations.checkMessages(model(entity("Stay", "Stays", property("Id", "INTEGER"))));
+        assertFalse(plain.containsKey("fieldMonth"));
+        assertFalse(plain.containsKey("fieldWeek"));
+    }
+
+    /**
      * #8101 / #8700: a refusing single flag's conflict is the shared {@code fieldSingleTaken} sentence
      * - {@code fieldSingleTakenInScope} for a scoped flag, naming the scope by its relation's label -
      * so the flag and the scope are named by their labels' catalog keys like the other field refusals.
@@ -900,7 +920,10 @@ class ModelParameterProcessorTest {
         assertEquals("### ### ### ##0.00", amount.get("formatPattern"));
     }
 
-    /** A float without an authored pattern shows as many decimals as it stores (#8701). */
+    /**
+     * A float without an authored pattern shows as many decimals as it stores (#8701), the ones past
+     * two only when the value has them (#8878).
+     */
     @Test
     void derivesTheFloatDisplayPatternFromTheScale() {
         Map<String, Object> rate = property("Rate", "DECIMAL");
@@ -911,17 +934,20 @@ class ModelParameterProcessorTest {
         amount.put("dataScale", "2");
         Map<String, Object> whole = property("Whole", "DECIMAL");
         whole.put("dataScale", "0");
+        Map<String, Object> tenths = property("Tenths", "DECIMAL");
+        tenths.put("dataScale", "1");
         Map<String, Object> authored = property("Price", "DECIMAL");
         authored.put("dataScale", "4");
         authored.put("widgetPattern", "#,##0.0");
         Map<String, Object> unscaled = property("Ratio", "DOUBLE");
-        ModelParameterProcessor.process(model(entity("Currency", "Currencies", rate, quantity, amount, whole, authored, unscaled)),
+        ModelParameterProcessor.process(model(entity("Currency", "Currencies", rate, quantity, amount, whole, tenths, authored, unscaled)),
                 parameters());
 
-        assertEquals("### ### ### ##0.000000", rate.get("formatPattern"));
-        assertEquals("### ### ### ##0.000", quantity.get("formatPattern"));
+        assertEquals("### ### ### ##0.00####", rate.get("formatPattern"));
+        assertEquals("### ### ### ##0.00#", quantity.get("formatPattern"));
         assertEquals("### ### ### ##0.00", amount.get("formatPattern"));
         assertEquals("### ### ### ##0", whole.get("formatPattern"));
+        assertEquals("### ### ### ##0.0", tenths.get("formatPattern"));
         assertEquals("#,##0.0", authored.get("formatPattern"));
         assertEquals("### ### ### ##0.00", unscaled.get("formatPattern"));
     }
@@ -1042,6 +1068,30 @@ class ModelParameterProcessorTest {
         assertEquals("library.Book.BookReadOnly", role.get("roleRead"));
         assertEquals("library.Book.BookFullAccess", role.get("roleWrite"));
         assertEquals("library.Book.BookReadOnly,Owner,User", entity.get("roleRead"), "the gate itself keeps every role it admits");
+    }
+
+    /**
+     * The gate an intent's {@code additive: true} permission produces (dirigible #8852): the convention
+     * roles first, then the role added for people, then the deployment's extras. Each gate's first role
+     * is the one declared, so the convention pair stays declared and the added role - which the
+     * intent's own {@code .roles} declares - is never declared a second time here.
+     */
+    @Test
+    void aConventionGateARoleWasAddedToDeclaresTheConventionRolesOnly() {
+        Map<String, Object> entity = entity("LeaveType", "LeaveTypes", property("Name", "VARCHAR"));
+        entity.put("generateDefaultRoles", "true");
+        entity.put("roleRead", "hr.LeaveType.LeaveTypeReadOnly,hr.LeaveType.LeaveTypeFullAccess,Employee,Owner,User");
+        entity.put("roleWrite", "hr.LeaveType.LeaveTypeFullAccess,Owner,User");
+        Map<String, Object> parameters = parameters();
+
+        ModelParameterProcessor.process(model(entity), parameters);
+
+        List<Object> roles = ModelValues.asList(parameters.get("roles"));
+        assertEquals(1, roles.size());
+        Map<String, Object> role = ModelValues.asMap(roles.get(0));
+        assertEquals("hr.LeaveType.LeaveTypeReadOnly", role.get("roleRead"));
+        assertEquals("hr.LeaveType.LeaveTypeFullAccess", role.get("roleWrite"));
+        assertFalse(role.containsValue("Employee"), "the added role is the intent's to declare: " + role);
     }
 
     @Test
@@ -1994,7 +2044,7 @@ class ModelParameterProcessorTest {
 
         Map<String, Object> resolved = registerColumn(currency);
         assertEquals(Boolean.TRUE, resolved.get("float"));
-        assertEquals("### ### ### ##0.000000", resolved.get("pattern"));
+        assertEquals("### ### ### ##0.00####", resolved.get("pattern"));
     }
 
     /**

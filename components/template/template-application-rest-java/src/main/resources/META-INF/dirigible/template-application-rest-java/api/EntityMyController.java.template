@@ -515,6 +515,31 @@ public class ${name}MyController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "${personalParent.entity} not found");
         }
     }
+#if($captureUnderMaster)
+
+    /**
+     * The owner's document capture of a ${name} under a ${personalParent.entity} (#8626): only under one
+     * of their own - the same 404 as any write here - and only where this surface takes writes.
+     *
+     * @param parentId the ${personalParent.entity} the capture names
+     */
+    public void requireCaptureMasterMine(${personalParent.fkJavaClass} parentId) {
+#if($personalReadOnly)
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This ${name} is read-only on your personal surface");
+#else
+        requireMyParent(parentId);
+#end
+    }
+
+    /**
+     * The review of a captured ${name} on the personal surface (#8626): only one of the caller's own.
+     *
+     * @param id the ${name}
+     */
+    public void requireCaptureLineMine(Object id) {
+        requireMine(id);
+    }
+#end
 #end
 #if($masterLock)
 
@@ -1194,6 +1219,14 @@ public class ${name}MyController {
 ## The null guard only where the required check above did not already refuse a null (#7696).
         if (#if(!$requiredChecked)entity.${property.name} != null && #{end}entity.${property.name}.length() > ${property.dataLength}) {
             throw org.eclipse.dirigible.sdk.db.FieldRefusals.tooLong(${refusalCatalog}, ${refusalField}, ${property.dataLength});
+        }
+#end
+#if($property.dataTypeJavaClass == "String" && ($property.widgetType == "MONTH" || $property.widgetType == "WEEK"))
+## A month / week field is a string column (#8328): only YYYY-MM with a month 01-12, or an ISO YYYY-Www
+## that exists in its year, is a value - "2026-5" next to "2026-05" would open one month twice under a
+## unique key, and "2026-13" breaks every reader that parses it. Blank is "no value" as for a pattern.
+        if (entity.${property.name} != null#if($property.isRequiredProperty != "true") && !entity.${property.name}.isBlank()#end && !org.eclipse.dirigible.sdk.db.FieldFormats.#if($property.widgetType == "MONTH")isMonth#{else}isWeek#end(entity.${property.name})) {
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.#if($property.widgetType == "MONTH")month#{else}week#end(${refusalCatalog}, ${refusalField});
         }
 #end
 #if($property.inputFormat == "IBAN")

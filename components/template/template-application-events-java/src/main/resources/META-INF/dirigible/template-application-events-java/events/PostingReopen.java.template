@@ -9,9 +9,9 @@ import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 import org.eclipse.dirigible.sdk.utils.Json;
 
 /**
- * Period-reopen sweep for posting ${name}: when a ${periodRegisterEntity} is moved out of a closed
- * status, re-run the posting for the ${sourceEntity} documents that period refused. Generated from the
- * intent postings block - do not edit; it is re-generated with the application.
+ * Period-reopen sweep for ${name}: when a ${periodRegisterEntity} is moved out of a closed status,
+ * re-run ${handlerClassName} for the ${sourceEntity} documents that period refused. Generated from the
+ * intent postings / posts block - do not edit; it is re-generated with the application.
  *
  * Why it exists (#7703): ${targetEntity} declares `immutableInPeriod`, so a post dated inside a closed
  * ${periodRegisterEntity} is refused (#7590). The posting runs on a listener, AFTER its source has
@@ -21,7 +21,7 @@ import org.eclipse.dirigible.sdk.utils.Json;
  * unposted worklist by accident, and the books and the register disagree with nothing saying so.
  *
  * What it does NOT do: it never posts a document the posting itself would not. Each candidate goes
- * through ${className}Posting.post, so the held-status guard, the determination rule, the at-most-once
+ * through ${handlerClassName}.post, so the held-status guard, the determination rule, the at-most-once
  * back-reference and the period check all apply exactly as they do on the event - this only decides
  * WHICH documents are worth offering again.
  */
@@ -32,7 +32,13 @@ public class ${reopenClassName} implements MessageHandler {
 
     @Override
     public String destination() {
+#if($periodRegisterModel != "")
+        // The register belongs to the ${periodRegisterModel} model (#8755): its own topics carry a project
+        // and a perspective this model cannot name, so that model relays every reopening here.
+        return org.eclipse.dirigible.sdk.db.PeriodRegisters.reopenedTopic("${periodRegisterModel}", "${periodRegisterEntity}");
+#else
         return "${projectName}-${periodRegisterPerspective}-${periodRegisterEntity}${reopenTopicSuffix}";
+#end
     }
 
     @Override
@@ -42,6 +48,23 @@ public class ${reopenClassName} implements MessageHandler {
 
     @Override
     public void onMessage(String message) {
+#if($periodRegisterModel != "")
+        // The relay announces only a period standing open again, with its bounds as ISO dates: the
+        // register's entity type is not visible from this model.
+        java.util.Map<?, ?> period = Json.parse(message, java.util.Map.class);
+        if (period == null || period.get("start") == null || period.get("end") == null) {
+            return;
+        }
+        java.time.LocalDate periodStart = java.time.LocalDate.parse(String.valueOf(period.get("start")));
+        java.time.LocalDate periodEnd = java.time.LocalDate.parse(String.valueOf(period.get("end")));
+        Object periodKey = period.get("id");
+#set($periodStartRef = "periodStart")
+#set($periodEndRef = "periodEnd")
+#set($periodKeyRef = "periodKey")
+#else
+#set($periodStartRef = "period.${periodStartProperty}")
+#set($periodEndRef = "period.${periodEndProperty}")
+#set($periodKeyRef = "period.${periodRegisterKeyField}")
         gen.${javaGenFolderName}.data.${periodRegisterJavaPerspective}.${periodRegisterEntity}Entity period =
                 Json.parse(message, gen.${javaGenFolderName}.data.${periodRegisterJavaPerspective}.${periodRegisterEntity}Entity.class);
         if (period == null || period.${periodRegisterKeyField} == null) {
@@ -54,6 +77,7 @@ public class ${reopenClassName} implements MessageHandler {
                 return;
             }
         }
+#end
         Criteria candidates = Criteria.create();
 #if($guardProperty != "")
         // Where the posting HOLDS, not only where it fires (#8243): a ${sourceEntity} refused on its move
@@ -66,14 +90,14 @@ public class ${reopenClassName} implements MessageHandler {
         // into the ${targetEntity}'s ${periodDateProperty}, so this is the same date the lock tested -
         // which is what keeps the sweep to the documents this reopening is about rather than every
         // unposted document ever.
-        candidates.ge("${periodSourceDateProperty}", period.${periodStartProperty})
-                  .le("${periodSourceDateProperty}", period.${periodEndProperty});
+        candidates.ge("${periodSourceDateProperty}", ${periodStartRef})
+                  .le("${periodSourceDateProperty}", ${periodEndRef});
 #else
         // The ${targetEntity}'s ${periodDateProperty} is not a plain copy of a ${sourceEntity} column,
         // so the period cannot be turned into a query here: every document the guard selects is
         // offered, and the posting's own period check decides each one.
 #end
-        ${className}Posting posting = new ${className}Posting();
+        ${handlerClassName} posting = new ${handlerClassName}();
         int reposted = 0;
         for (gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Entity source :
                 new gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Repository().findAll(candidates)) {
@@ -93,12 +117,12 @@ public class ${reopenClassName} implements MessageHandler {
                 // One document that cannot be posted must not stop the rest of the period: the sweep
                 // is a recovery pass, and a refusal here is the same refusal the original event got.
                 LOG.error("Posting ${name}: ${sourceEntity} [{}] still cannot be posted after ${periodRegisterEntity} [{}] reopened",
-                        source.${sourceKeyField}, period.${periodRegisterKeyField}, ex);
+                        source.${sourceKeyField}, ${periodKeyRef}, ex);
             }
         }
         if (reposted > 0) {
             LOG.info("Posting ${name}: ${periodRegisterEntity} [{}] reopened - posted [{}] ${sourceEntity} document(s) it had refused",
-                    period.${periodRegisterKeyField}, reposted);
+                    ${periodKeyRef}, reposted);
         }
     }
 
