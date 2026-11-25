@@ -52,6 +52,13 @@ import ch.qos.logback.core.read.ListAppender;
  * foreign-locked target now gets the same pre-check, through {@code PeriodRegisters.isClosed}: an
  * issued March receipt is left unposted with that warning and no listener failure, and an April
  * receipt still posts.
+ *
+ * <p>
+ * And the same reopen sweep: the journal relays the reopening of its period onto
+ * {@code PeriodRegisters.reopenedTopic}, which the cash model's sweep binds without naming anything
+ * of the journal but its model and register, so reopening March books the waiting receipt. The
+ * flattened {@code posts:} construct gets both halves too (dirigible #8772) - a row into a target
+ * locked by the journal's register, and one into a target locked by a register of its own model.
  */
 class IntentCrossModelPostingPeriodIT extends IntegrationTest {
 
@@ -61,6 +68,9 @@ class IntentCrossModelPostingPeriodIT extends IntegrationTest {
     private static final String PERIODS = api(JOURNAL) + "/fiscalperiod/FiscalPeriodController";
     private static final String RECEIPTS = api(CASH) + "/receipt/ReceiptController";
     private static final String ENTRIES = api(CASH) + "/cashentry/CashEntryController";
+    private static final String BOOK_ROWS = api(CASH) + "/cashbookrow/CashBookRowController";
+    private static final String ADJUSTMENTS = api(JOURNAL) + "/adjustment/AdjustmentController";
+    private static final String ADJUSTMENT_ROWS = api(JOURNAL) + "/adjustmentrow/AdjustmentRowController";
     private static final long TIMEOUT_SECONDS = 90;
 
     private static final String JOURNAL_YAML = """
@@ -83,8 +93,41 @@ class IntentCrossModelPostingPeriodIT extends IntegrationTest {
                 relations:
                   - { name: Status, kind: manyToOne, to: PeriodStatus, function: EntityStatus, init: 1 }
 
+              - name: AdjustmentStatus
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
+
+              - name: Adjustment
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: date,   type: date, required: true }
+                  - { name: amount, type: decimal, precision: 18, scale: 2 }
+                relations:
+                  - { name: Status, kind: manyToOne, to: AdjustmentStatus, function: EntityStatus, init: 1 }
+
+              - name: AdjustmentRow
+                immutableInPeriod: { period: FiscalPeriod, date: date }
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: date,   type: date }
+                  - { name: amount, type: decimal, precision: 18, scale: 2 }
+                relations:
+                  - { name: Adjustment, kind: manyToOne, to: Adjustment }
+
             transitions:
-              - { name: ClosePeriod,  forEntity: FiscalPeriod, from: [1], setStatus: 2, label: Close }
+              - { name: ClosePeriod,     forEntity: FiscalPeriod, from: [1], setStatus: 2, label: Close }
+              - { name: ReopenPeriod,    forEntity: FiscalPeriod, from: [2], setStatus: 1, label: Reopen }
+              - { name: IssueAdjustment, forEntity: Adjustment,   from: [1], setStatus: 2, label: Issue }
+
+            posts:
+              - name: adjustmentPost
+                forEntity: Adjustment
+                event: 2
+                into: AdjustmentRow
+                idempotentBy: Adjustment
+                set: { date: source.date, amount: source.amount }
 
             seeds:
               - name: period-statuses
@@ -92,6 +135,11 @@ class IntentCrossModelPostingPeriodIT extends IntegrationTest {
                 rows:
                   - { id: 1, name: OPEN }
                   - { id: 2, name: CLOSED }
+              - name: adjustment-statuses
+                entity: AdjustmentStatus
+                rows:
+                  - { id: 1, name: DRAFT }
+                  - { id: 2, name: ISSUED }
             """;
 
     private static final String CASH_YAML = """
@@ -128,6 +176,15 @@ class IntentCrossModelPostingPeriodIT extends IntegrationTest {
                 relations:
                   - { name: CashEntry, kind: manyToOne, to: CashEntry, composition: true, required: true }
 
+              - name: CashBookRow
+                immutableInPeriod: { period: FiscalPeriod, model: cppjournal, date: date }
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: date,   type: date }
+                  - { name: amount, type: decimal, precision: 18, scale: 2 }
+                relations:
+                  - { name: Receipt, kind: manyToOne, to: Receipt }
+
             transitions:
               - { name: IssueReceipt, forEntity: Receipt, from: [1], setStatus: 2, label: Issue }
 
@@ -139,6 +196,14 @@ class IntentCrossModelPostingPeriodIT extends IntegrationTest {
                 map: { date: date }
                 items:
                   - { amount: "Amount" }
+
+            posts:
+              - name: receiptBookPost
+                forEntity: Receipt
+                event: 2
+                into: CashBookRow
+                idempotentBy: Receipt
+                set: { date: source.date, amount: source.amount }
 
             seeds:
               - name: receipt-statuses
@@ -158,7 +223,7 @@ class IntentCrossModelPostingPeriodIT extends IntegrationTest {
     private SynchronizationProcessor synchronizationProcessor;
 
     @Test
-    void a_posting_into_a_target_locked_by_another_models_closed_period_waits_without_failing() {
+    void a_posting_into_a_closed_period_waits_without_failing_and_is_booked_when_the_period_reopens() {
         deploy(JOURNAL, JOURNAL_YAML);
         int period = create(PERIODS, "{\"StartDate\":\"2026-03-01\",\"EndDate\":\"2026-03-31\",\"Status\":1}");
         transition(JOURNAL, "ClosePeriod", period);
@@ -166,47 +231,68 @@ class IntentCrossModelPostingPeriodIT extends IntegrationTest {
 
         // The generated handlers log under the applications' root logger, "app." (LogFacade), and that
         // logger may be quieter than WARN: the level is set for the run and restored after it.
-        Logger postingLog = (Logger) LoggerFactory.getLogger("app.gen.events." + CASH);
-        Level previousLevel = postingLog.getLevel();
-        postingLog.setLevel(Level.INFO);
+        Logger cashLog = (Logger) LoggerFactory.getLogger("app.gen.events." + CASH);
+        Logger journalLog = (Logger) LoggerFactory.getLogger("app.gen.events." + JOURNAL);
+        Level previousCashLevel = cashLog.getLevel();
+        Level previousJournalLevel = journalLog.getLevel();
+        cashLog.setLevel(Level.INFO);
+        journalLog.setLevel(Level.INFO);
         ListAppender<ILoggingEvent> captured = new ListAppender<>();
         captured.start();
-        postingLog.addAppender(captured);
+        cashLog.addAppender(captured);
+        journalLog.addAppender(captured);
         try {
             int march = create(RECEIPTS, "{\"Date\":\"2026-03-10\",\"Amount\":10}");
             transition(CASH, "IssueReceipt", march);
-            // Asked before the write: the receipt waits on the closed period, named in a warning, and
-            // the message is acked - no listener failure, no redelivery into the target's refusal.
+            int marchAdjustment = create(ADJUSTMENTS, "{\"Date\":\"2026-03-12\",\"Amount\":3}");
+            transition(JOURNAL, "IssueAdjustment", marchAdjustment);
+            // Asked before the write: the posting (#8755) and both posts: rows (#8772) wait on the closed
+            // period, each named in a warning, and the message is acked - no listener failure, no
+            // redelivery into the target's refusal.
             Awaitility.await()
                       .atMost(Duration.ofSeconds(TIMEOUT_SECONDS))
-                      .until(() -> logged(captured, Level.WARN, "stays unposted"));
+                      .until(() -> count(captured, Level.WARN, "stays unposted") >= 3);
+            assertCount(ENTRIES, 0);
+            assertCount(BOOK_ROWS, 0);
+            assertCount(ADJUSTMENT_ROWS, 0);
 
             // An April receipt is not in the closed period: it posts.
             int april = create(RECEIPTS, "{\"Date\":\"2026-04-02\",\"Amount\":7}");
             transition(CASH, "IssueReceipt", april);
-            restAssuredExecutor.execute(() -> given().when()
-                                                     .get(ENTRIES + "/count")
-                                                     .then()
-                                                     .statusCode(200)
-                                                     .body("count", equalTo(1)),
-                    TIMEOUT_SECONDS);
-            assertTrue(!logged(captured, Level.ERROR, ""), "the closed period must not fail the posting listener: " + messages(captured));
+            assertCount(ENTRIES, 1);
+            assertCount(BOOK_ROWS, 1);
+
+            // Reopening March books what it refused: the journal relays the reopening to the cash model's
+            // sweeps, and its own posts: row is swept off the register's topic.
+            transition(JOURNAL, "ReopenPeriod", period);
+            assertCount(ENTRIES, 2);
+            assertCount(BOOK_ROWS, 2);
+            assertCount(ADJUSTMENT_ROWS, 1);
+            assertTrue(count(captured, Level.ERROR, "") == 0, "the closed period must not fail a posting listener: " + messages(captured));
         } finally {
-            postingLog.detachAppender(captured);
-            postingLog.setLevel(previousLevel);
+            cashLog.detachAppender(captured);
+            journalLog.detachAppender(captured);
+            cashLog.setLevel(previousCashLevel);
+            journalLog.setLevel(previousJournalLevel);
         }
     }
 
-    private static boolean logged(ListAppender<ILoggingEvent> captured, Level level, String text) {
-        for (ILoggingEvent event : snapshot(captured)) {
-            if (event.getLevel()
-                     .equals(level)
-                    && event.getFormattedMessage()
-                            .contains(text)) {
-                return true;
-            }
-        }
-        return false;
+    private void assertCount(String controller, int expected) {
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(controller + "/count")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("count", equalTo(expected)),
+                TIMEOUT_SECONDS);
+    }
+
+    private static long count(ListAppender<ILoggingEvent> captured, Level level, String text) {
+        return snapshot(captured).stream()
+                                 .filter(event -> event.getLevel()
+                                                       .equals(level)
+                                         && event.getFormattedMessage()
+                                                 .contains(text))
+                                 .count();
     }
 
     private static List<String> messages(ListAppender<ILoggingEvent> captured) {

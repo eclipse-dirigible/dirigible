@@ -57,6 +57,18 @@ public final class FieldRefusals {
     /** The default-language sentence refusing a value that is no IBAN (dirigible #8302). */
     public static final String IBAN_TEXT = "The value of '{label}' is not a valid IBAN";
 
+    /** The key, under a catalog's {@code checks}, of the sentence refusing a value that is no month. */
+    public static final String MONTH_KEY = "fieldMonth";
+
+    /** The default-language sentence refusing a value that is no month (dirigible #8328). */
+    public static final String MONTH_TEXT = "The value of '{label}' is not a month of the form YYYY-MM";
+
+    /** The key, under a catalog's {@code checks}, of the sentence refusing a value that is no week. */
+    public static final String WEEK_KEY = "fieldWeek";
+
+    /** The default-language sentence refusing a value that is no ISO week (dirigible #8328). */
+    public static final String WEEK_TEXT = "The value of '{label}' is not a week of the form YYYY-Www";
+
     /** The key, under a catalog's {@code checks}, of the sentence refusing a repeated unique value. */
     public static final String DUPLICATE_KEY = "fieldDuplicate";
 
@@ -162,6 +174,36 @@ public final class FieldRefusals {
      */
     public static ValidationException iban(String catalog, String field, String label, String labelKey) {
         return refusal(CheckMessages.language(), CheckMessages::readCatalog, catalog, IBAN_KEY, IBAN_TEXT, field, label, labelKey);
+    }
+
+    /**
+     * The refusal of a value of a {@code month} field that is not a month of the form {@code YYYY-MM}
+     * (see {@link FieldFormats#isMonth(String)}).
+     *
+     * @param catalog the entity's model catalog ({@code <project>:<catalog prefix>}), or {@code null}
+     * @param field the property
+     * @param label the property's default-language label
+     * @param labelKey the fully qualified catalog key of that label, or {@code null}
+     * @return the exception to throw - mapped to HTTP 400 carrying the key, the parameters and the
+     *         field
+     */
+    public static ValidationException month(String catalog, String field, String label, String labelKey) {
+        return refusal(CheckMessages.language(), CheckMessages::readCatalog, catalog, MONTH_KEY, MONTH_TEXT, field, label, labelKey);
+    }
+
+    /**
+     * The refusal of a value of a {@code week} field that is not an ISO week of the form
+     * {@code YYYY-Www} (see {@link FieldFormats#isWeek(String)}).
+     *
+     * @param catalog the entity's model catalog ({@code <project>:<catalog prefix>}), or {@code null}
+     * @param field the property
+     * @param label the property's default-language label
+     * @param labelKey the fully qualified catalog key of that label, or {@code null}
+     * @return the exception to throw - mapped to HTTP 400 carrying the key, the parameters and the
+     *         field
+     */
+    public static ValidationException week(String catalog, String field, String label, String labelKey) {
+        return refusal(CheckMessages.language(), CheckMessages::readCatalog, catalog, WEEK_KEY, WEEK_TEXT, field, label, labelKey);
     }
 
     /**

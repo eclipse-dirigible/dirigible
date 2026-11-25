@@ -191,9 +191,10 @@ public class GeneratesIntent {
      * <p>
      * It is opt-in and refused where it could never fire (see
      * {@code IntentParser.validateGeneratesReopen}): it requires an {@link #event} to re-fire and
-     * {@link #sourceStatus} to invert, must name a status other than that one, needs a LOCAL target
-     * whose nomenclature classifies a retiring {@code stage:}, and - when the source declares a
-     * {@code lifecycle:} - needs that graph to declare the edge back.
+     * {@link #sourceStatus} to invert, must name a status other than that one, needs a target whose
+     * nomenclature classifies a retiring {@code stage:} - a cross-model target's is its owner's, read
+     * off the owner's {@code .model} at generation (#7954) - and, when the source declares a
+     * {@code lifecycle:}, needs that graph to declare the edge back.
      */
     private Integer sourceStatusOnRetire;
 

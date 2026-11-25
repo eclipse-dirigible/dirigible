@@ -96,6 +96,14 @@ public class TransitionIntent {
      * still succeeds (the status flip is the contract, the mail is its side effect).
      */
     private NotificationIntent notify;
+    /**
+     * Optional input form shown before the move (#7909): each entry names a field or to-one relation of
+     * the record ITSELF - the {@code generates} prompt grammar, minus {@code default:} - and the
+     * answers are written in the same targeted write as the status, so an {@code immutableWhen} lock
+     * does not refuse them and the checks gated on {@link #setStatus} read them. A required one left
+     * out is the field's 400 and the record does not move.
+     */
+    private List<PromptFieldIntent> prompt;
 
     public String getName() {
         return name;
@@ -222,5 +230,18 @@ public class TransitionIntent {
 
     public void setNotify(NotificationIntent notify) {
         this.notify = notify;
+    }
+
+    public List<PromptFieldIntent> getPrompt() {
+        return prompt;
+    }
+
+    public void setPrompt(List<PromptFieldIntent> prompt) {
+        this.prompt = prompt;
+    }
+
+    /** Whether this move declares a {@code prompt:} input form (see {@link #prompt}). */
+    public boolean hasPrompt() {
+        return prompt != null && !prompt.isEmpty();
     }
 }
