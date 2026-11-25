@@ -24,6 +24,7 @@ public class FormIntent {
     private List<String> fields = new ArrayList<>();
     private List<String> editable = new ArrayList<>();
     private List<String> actions = new ArrayList<>();
+    private FormItemsIntent items;
 
     public String getName() {
         return name;
@@ -77,5 +78,17 @@ public class FormIntent {
 
     public void setActions(List<String> actions) {
         this.actions = actions == null ? new ArrayList<>() : actions;
+    }
+
+    /**
+     * The read-only lines table of a BPM task form - the rows of a composition child of
+     * {@link #forEntity} that belong to the task's record. {@code null} (the default) = no table.
+     */
+    public FormItemsIntent getItems() {
+        return items;
+    }
+
+    public void setItems(FormItemsIntent items) {
+        this.items = items;
     }
 }

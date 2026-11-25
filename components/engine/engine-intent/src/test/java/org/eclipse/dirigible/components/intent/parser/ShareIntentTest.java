@@ -179,6 +179,114 @@ class ShareIntentTest {
         assertIssue(YAML.replace("copy: SalesInvoiceCopy", "copy: SalesInvoiceCopy\n      anyone: true"), "anyone");
     }
 
+    /** The fixture with an {@code expiry:} (#8620) under its share:, the given entries one per line. */
+    private static String expiring(String... entries) {
+        StringBuilder block = new StringBuilder("      expiresAfterDays: 30\n      expiry:\n");
+        for (String entry : entries) {
+            block.append("        - ")
+                 .append(entry)
+                 .append('\n');
+        }
+        return YAML.replace("      expiresAfterDays: 30\n", block.toString());
+    }
+
+    @Test
+    void anExpiryByRecordParsesWithItsStatusNamesResolved() {
+        ShareIntent share = invoice(IntentParser.parse(expiring("{ when: \"issuer.email == 'ceo@example.com'\", days: 0 }",
+                "{ when: [\"status == VOIDED\", \"total == null\"], days: 7 }"))).getShare();
+        assertEquals(2, share.getExpiry()
+                             .size());
+        assertEquals("issuer.email == 'ceo@example.com'", share.getExpiry()
+                                                               .get(0)
+                                                               .getWhen());
+        assertEquals(0, share.getExpiry()
+                             .get(0)
+                             .daysOrNull());
+        assertEquals(List.of("status == 3", "total == null"), share.getExpiry()
+                                                                   .get(1)
+                                                                   .getWhen());
+        assertEquals(7, share.getExpiry()
+                             .get(1)
+                             .daysOrNull());
+    }
+
+    @Test
+    void anExpiryTermNamingAnUnknownRelationIsRejected() {
+        assertIssue(expiring("{ when: \"customer.kind == 2\", days: 30 }"),
+                "entity [SalesInvoice] share expiry[1] when [customer.kind] [SalesInvoice] has no to-one relation [customer]");
+        assertIssue(expiring("{ when: \"issuer.kind == 2\", days: 30 }"),
+                "entity [SalesInvoice] share expiry[1] when [issuer.kind] [Employee] has no field or to-one relation [kind]");
+    }
+
+    @Test
+    void anExpiryTermOfTheWrongTypeIsRejected() {
+        assertIssue(expiring("{ when: \"issuer.id == somebody\", days: 30 }"),
+                "entity [SalesInvoice] share expiry[1] when [issuer.id == somebody] compares [issuer.id], a [integer], with [somebody]");
+    }
+
+    @Test
+    void anExpiryEntryNeedsAWhenAndAWholeNumberOfDays() {
+        assertIssue(expiring("{ days: 30 }"), "entity [SalesInvoice] share expiry[1] needs a when");
+        assertIssue(expiring("{ when: \"status == VOIDED\" }"),
+                "entity [SalesInvoice] share expiry[1] days [null] must be a whole number of days from 0 (permanent) to 3650");
+        assertIssue(expiring("{ when: \"status == VOIDED\", days: 3651 }"), "entity [SalesInvoice] share expiry[1] days [3651]");
+        assertIssue(expiring("{ when: \"status == VOIDED\", days: soon }"), "entity [SalesInvoice] share expiry[1] days [soon]");
+    }
+
+    @Test
+    void anEmptyExpiryAndAnUnknownKeyInAnEntryAreRejected() {
+        assertIssue(YAML.replace("      expiresAfterDays: 30\n", "      expiry: []\n"),
+                "entity [SalesInvoice] share expiry must not be an empty list");
+        assertIssue(expiring("{ when: \"status == VOIDED\", days: 7, forever: true }"), "forever");
+    }
+
+    /** A process that mints the copy and then mails, its notify block being the given one. */
+    private static String mailing(String notify) {
+        return YAML + """
+                processes:
+                  - name: InvoiceMail
+                    trigger: { onCreate: SalesInvoice }
+                    steps:
+                      - { name: mint, kind: serviceTask, args: { delegate: gen.events.SalesInvoiceSnapshotGenerator, next: mail } }
+                      - name: mail
+                        kind: serviceTask
+                        args:
+                          notify: %s
+                          next: done
+                      - { name: done, kind: end }
+                """.formatted(notify);
+    }
+
+    @Test
+    void aShareUrlInTheBodyOfAnEntityThatDeclaresShareParses() {
+        IntentParser.parse(mailing("{ to: a@example.com, subject: \"Invoice {id}\", body: \"Read it at {shareUrl}\" }"));
+        IntentParser.parse(
+                mailing("{ to: a@example.com, subject: \"Invoice {id}\", body: \"Read it\", html: \"<a href='{shareUrl}'>here</a>\" }"));
+    }
+
+    @Test
+    void aShareUrlOfAnEntityWithoutShareIsRejected() {
+        assertIssue(YAML + """
+                notifications:
+                  - name: memoNote
+                    event: { onUpdate: Memo }
+                    to: a@example.com
+                    subject: "Memo"
+                    body: "Read it at {shareUrl}"
+                """, "uses {shareUrl}, but [Memo] declares no share:");
+    }
+
+    @Test
+    void aShareUrlInTheSubjectIsRejected() {
+        assertIssue(mailing("{ to: a@example.com, subject: \"Invoice {shareUrl}\", body: \"Read it\" }"), "uses {shareUrl} in its subject");
+    }
+
+    @Test
+    void aShareUrlInAFanOutIsRejected() {
+        assertIssue(mailing("{ forEach: SalesInvoiceItem, to: a@example.com, subject: \"Invoice\", body: \"Read it at {shareUrl}\" }"),
+                "uses {shareUrl} in a forEach");
+    }
+
     private static EntityIntent invoice(IntentModel model) {
         return model.getEntities()
                     .stream()

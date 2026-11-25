@@ -33,8 +33,9 @@ import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
  * The controls of a prompt dialog whose target is NOT a detail of the view the button lives on
  * (issue #7748) - a standalone entity, or one owned by another model. Such a target has no detail
  * registration for the shared {@code customActions} store to type the dialog from, so the action
- * descriptor carries each prompted control itself: its widget, its caption and, for a to-one, the
- * controller its options are read from, its key and its label property.
+ * descriptor carries each prompted control itself: its widget, its caption with the catalog key the
+ * target's own form translates it by (issue #7820) and, for a to-one, the controller its options
+ * are read from, its key and its label property.
  *
  * <p>
  * A {@code call:} action (issue #8090) has no target at all, so its controls are declared inline
@@ -65,19 +66,63 @@ public final class PromptColumns {
         if (target != null && isDetailOf(target, g.getForEntity())) {
             return null;
         }
-        List<Map<String, Object>> columns = new ArrayList<>();
         if (target != null) {
-            for (PromptFieldIntent p : g.getPrompt()) {
-                columns.add(localColumn(p, target, model, context));
-            }
-            return columns;
+            return ofRecord(g.getPrompt(), target, model, context);
         }
+        List<Map<String, Object>> columns = new ArrayList<>();
         UsesIntent uses = uses(model, g.getUses());
         CrossModelSupport.TargetInfo info = CrossModelSupport.resolve(context, uses, g.getTo());
         for (PromptFieldIntent p : g.getPrompt()) {
-            columns.add(crossModelColumn(p, info, uses, context));
+            columns.add(crossModelColumn(p, g.getTo(), info, uses, context));
         }
         return columns;
+    }
+
+    /**
+     * The prompted controls of an entity this model declares, typed from its own fields and relations -
+     * a local create-from target that is no detail of the button's view, or the record a transition
+     * moves (#7909), which no detail registration types either.
+     *
+     * @param prompt the declared inputs
+     * @param entity the entity they name properties of
+     * @param model the model it is declared in
+     * @param context the generation context, for a to-one's lookup
+     * @return the controls
+     */
+    public static List<Map<String, Object>> ofRecord(List<PromptFieldIntent> prompt, EntityIntent entity, IntentModel model,
+            IntentGenerationContext context) {
+        List<Map<String, Object>> columns = new ArrayList<>();
+        for (PromptFieldIntent p : prompt) {
+            columns.add(localColumn(p, entity, model, context));
+        }
+        return columns;
+    }
+
+    /**
+     * The descriptor's {@code prompt} entries (issue #6685): per input its PascalCase property name,
+     * whether it is required and the source property it defaults to, when it declares one (#7748).
+     *
+     * @param prompt the declared inputs
+     * @return the entries, in the shape the shell's prompt dialog reads
+     */
+    public static List<Map<String, Object>> entries(List<PromptFieldIntent> prompt) {
+        List<Map<String, Object>> entries = new ArrayList<>();
+        for (PromptFieldIntent p : prompt) {
+            if (p.getField() == null || p.getField()
+                                         .isBlank()) {
+                continue;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name", IntentNaming.pascalCase(p.getField()));
+            entry.put("required", p.isRequired());
+            if (p.hasDefault()) {
+                // The SOURCE property the input defaults to (issue #7748): the dialog pre-fills it from the
+                // record it is opened on; the controller applies it to an input left empty.
+                entry.put("default", IntentNaming.pascalCase(p.getDefaultFrom()));
+            }
+            entries.add(entry);
+        }
+        return entries;
     }
 
     /**
@@ -101,7 +146,7 @@ public final class PromptColumns {
             case ActionPromptIntent.EMAIL -> "EMAIL";
             default -> widgetOf(input.getType());
         };
-        Map<String, Object> column = column(input.getName(), caption(input.getLabel(), input.getName()), widget,
+        Map<String, Object> column = column(input.getName(), caption(input.getLabel(), input.getName()), null, widget,
                 input.isLookup() ? localLookup(input.getEntity(), model, context) : null);
         if (input.isLookup()) {
             EntityIntent entity = IntentEntities.byName(model)
@@ -174,26 +219,28 @@ public final class PromptColumns {
     private static Map<String, Object> localColumn(PromptFieldIntent p, EntityIntent target, IntentModel model,
             IntentGenerationContext context) {
         String name = IntentNaming.pascalCase(p.getField());
+        String tkey = captionKey(context.getProjectName(), IntentNaming.baseName(context), target.getName(), p.getField());
         for (FieldIntent field : target.getFields()) {
             if (p.getField()
                  .equals(field.getName())) {
-                return column(name, caption(field.getLabel(), p.getField()), widgetOf(field.getType()), null);
+                return column(name, caption(field.getLabel(), p.getField()), tkey, widgetOf(field.getType()), null);
             }
         }
         RelationIntent relation = relation(target, p.getField());
-        return column(name, caption(relation.getLabel(), p.getField()), "DROPDOWN", toOneLookup(relation, model, context));
+        return column(name, caption(relation.getLabel(), p.getField()), tkey, "DROPDOWN", toOneLookup(relation, model, context));
     }
 
-    private static Map<String, Object> crossModelColumn(PromptFieldIntent p, CrossModelSupport.TargetInfo info, UsesIntent uses,
-            IntentGenerationContext context) {
+    private static Map<String, Object> crossModelColumn(PromptFieldIntent p, String target, CrossModelSupport.TargetInfo info,
+            UsesIntent uses, IntentGenerationContext context) {
         String name = IntentNaming.pascalCase(p.getField());
         String caption = IntentNaming.humanize(p.getField());
+        String tkey = captionKey(uses.resolveProject(), uses.getModel(), target, p.getField());
         String related = info.propertyRelations() == null ? null
                 : info.propertyRelations()
                       .get(name);
         if (related != null) {
             UsesIntent owner = CrossModelSupport.owningModel(context, uses, related);
-            return column(name, caption, "DROPDOWN", crossModelLookup(context, owner, related));
+            return column(name, caption, tkey, "DROPDOWN", crossModelLookup(context, owner, related));
         }
         String dataType = info.propertyTypes() == null ? null
                 : info.propertyTypes()
@@ -204,7 +251,7 @@ public final class PromptColumns {
             throw new IntentValidationException(
                     List.of("prompt field [" + p.getField() + "] is not a property of the target in model [" + uses.getModel() + "]"));
         }
-        return column(name, caption, widgetOfJdbcType(dataType), null);
+        return column(name, caption, tkey, widgetOfJdbcType(dataType), null);
     }
 
     private static Map<String, Object> crossModelLookup(IntentGenerationContext context, UsesIntent uses, String entity) {
@@ -213,10 +260,13 @@ public final class PromptColumns {
                 info.keyField(), info.labelField());
     }
 
-    private static Map<String, Object> column(String name, String label, String widget, Map<String, Object> lookup) {
+    private static Map<String, Object> column(String name, String label, String tkey, String widget, Map<String, Object> lookup) {
         Map<String, Object> column = new LinkedHashMap<>();
         column.put("name", name);
         column.put("label", label);
+        if (tkey != null) {
+            column.put("tkey", tkey);
+        }
         column.put("widget", widget);
         if (lookup != null) {
             column.put("lookup", lookup);
@@ -235,6 +285,15 @@ public final class PromptColumns {
     /** The REST base the generated controllers of a model are served under. */
     private static String apiBase(String project, String javaModule) {
         return "/services/java/" + project + "/gen/" + javaModule + "/api";
+    }
+
+    /**
+     * The catalog key a property of an entity is labelled by in the translation catalog of the model
+     * declaring it - {@code <project>:<model>-model.t.<ENTITY>_<PROPERTY>}, the key that entity's own
+     * form and list translate the same caption by (issue #7820).
+     */
+    private static String captionKey(String project, String model, String entity, String property) {
+        return project + ":" + model + "-model.t." + IntentNaming.upperSnake(entity) + "_" + IntentNaming.upperSnake(property);
     }
 
     private static String caption(String label, String field) {

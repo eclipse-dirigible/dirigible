@@ -28,6 +28,7 @@ import org.eclipse.dirigible.components.intent.generator.StatusStepsSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
+import org.eclipse.dirigible.components.intent.model.FormItemsIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
@@ -490,11 +491,65 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                 }
             }
         }
+        if (isTaskForm && entity != null && form.getItems() != null) {
+            EntityIntent child = entitiesByName.get(form.getItems()
+                                                        .getEntity());
+            if (child != null) {
+                controls.add(itemsControl(form.getItems(), child, entity));
+            }
+        }
         List<String> actions = effectiveActions(form, isTaskForm);
         if (!actions.isEmpty()) {
             controls.add(actionRow(actions));
         }
         return controls;
+    }
+
+    /**
+     * The read-only lines table of a task form ({@code items:}, issue #7907) - the form-builder
+     * {@code table} control: {@code headers} name the columns (label + property), {@code model} the
+     * array of rows it renders. Each header also carries its field's control type and number pattern,
+     * so a cell is formatted the way the same value is in the header fields above it.
+     * <p>
+     * The rows are the child's own rows of the task's record, listed by the child's controller with its
+     * master filter. As for a relation picker, this layer emits no path: {@code source} names the
+     * process variable the trigger seeds with the child's controller URL ({@code __<Child>RowsUrl}),
+     * and {@code masterProperty} the child's foreign key to the record - a logical model name. Both the
+     * locator and the rows are {@code __}-prefixed, so a completion never posts them back.
+     */
+    private static Map<String, Object> itemsControl(FormItemsIntent items, EntityIntent child, EntityIntent master) {
+        List<Map<String, Object>> headers = new ArrayList<>();
+        for (String fieldName : items.getFields()) {
+            FieldIntent field = fieldOf(child, fieldName);
+            Control control = pickControl(field);
+            Map<String, Object> header = new LinkedHashMap<>();
+            header.put("label", humanize(fieldName));
+            header.put("value", IntentNaming.pascalCase(fieldName));
+            header.put("controlId", control.controlId);
+            if ("input-number".equals(control.controlId)) {
+                header.put("pattern", numberPattern(field));
+            }
+            headers.add(header);
+        }
+        String masterProperty = null;
+        for (RelationIntent relation : child.getRelations()) {
+            if (relation.isComposition() && master.getName()
+                                                  .equals(relation.getTo())) {
+                masterProperty = IntentNaming.pascalCase(relation.getName());
+                break;
+            }
+        }
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("controlId", "table");
+        map.put("groupId", "fb-display");
+        map.put("id", child.getName() + "Rows");
+        // The heading the document page gives the same lines.
+        map.put("label", IntentNaming.pluralize(IntentNaming.humanize(child.getName())));
+        map.put("headers", headers);
+        map.put("model", "__" + child.getName() + "Rows");
+        map.put("source", "__" + child.getName() + "RowsUrl");
+        map.put("masterProperty", masterProperty);
+        return map;
     }
 
     private static boolean isReadonlyByDefault(FieldIntent field) {

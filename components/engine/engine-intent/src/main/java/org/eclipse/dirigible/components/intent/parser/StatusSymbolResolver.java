@@ -76,6 +76,12 @@ final class StatusSymbolResolver {
 
     private static final Pattern INTEGER = Pattern.compile("-?\\d+");
 
+    /**
+     * A {@code notExists} {@code where:} list term, {@code <property> in [a, b]}, over the trimmed
+     * term.
+     */
+    private static final Pattern TARGET_IN = Pattern.compile("(\\w+)\\s+in\\s*\\[([^\\[\\]]*)\\]");
+
     /** The declarative glue lists carrying an {@code event.when} guard, to the subject naming one. */
     private static final List<Map.Entry<String, String>> GLUE_LISTS = List.of(Map.entry("notifications", "notification"),
             Map.entry("integrations", "integration"), Map.entry("outbound", "outbound"));
@@ -234,8 +240,11 @@ final class StatusSymbolResolver {
                 // other to-one relation (`type == CLOSE`, #8057), which resolves against that relation's
                 // target, as a trigger guard's does. An exists check's `when` takes the same grammar (#8338).
                 String kind = lower(text(check, "kind"));
-                if ("forbidwhen".equals(kind) || "requiredwhen".equals(kind) || "exists".equals(kind)) {
+                if ("forbidwhen".equals(kind) || "requiredwhen".equals(kind) || "exists".equals(kind) || "notexists".equals(kind)) {
                     rewriteForbidWhen(entityName, check, subject + " when");
+                    if ("notexists".equals(kind)) {
+                        rewriteTargetWhere(check, subject + " where");
+                    }
                 } else {
                     rewriteRecordWhen(check, "when", entityName, subject + " when");
                 }
@@ -290,6 +299,16 @@ final class StatusSymbolResolver {
             Map<?, ?> share = asMap(entity.get("share"));
             if (share != null && share.get("when") != null) {
                 rewriteRecordWhen(share, "when", entityName, "entity [" + entityName + "] share when");
+            }
+            // share.expiry[].when (#8620): the record's own property or one hop away (`Customer.Kind == 2`),
+            // so it takes the forbidWhen resolver, which reads a hop's status in the TARGET's terms.
+            int expiryIndex = 0;
+            for (Object ruleNode : share == null ? List.of() : asList(share.get("expiry"))) {
+                expiryIndex++;
+                Map<?, ?> rule = asMap(ruleNode);
+                if (rule != null && rule.get("when") != null) {
+                    rewriteForbidWhen(entityName, rule, "entity [" + entityName + "] share expiry[" + expiryIndex + "] when");
+                }
             }
         }
     }
@@ -1137,6 +1156,43 @@ final class StatusSymbolResolver {
         }
         Integer id = resolveSymbol(name, statusOf(targetEntity), subject);
         return id == null ? term : relationName + "." + field + " " + matcher.group(3) + " " + id;
+    }
+
+    /**
+     * Rewrite the status names of a {@code notExists} check's {@code where:} (dirigible #8002, #8623) -
+     * terms about the TARGET's rows, so a name on the target's status relation resolves against the
+     * TARGET's nomenclature: {@code Status == DRAFT} and {@code Status in [ACCEPTED, ORDERED]}. A
+     * target owned by another model is seeded there; its names are left for the parser to refuse, as
+     * every cross-model status reference is.
+     */
+    private void rewriteTargetWhere(Map<?, ?> check, String subject) {
+        String targetEntity = text(check, "entity");
+        if (targetEntity == null || text(check, "model") != null) {
+            return;
+        }
+        String statusRelation = statusRelationName(targetEntity);
+        if (statusRelation == null) {
+            return;
+        }
+        Target target = statusOf(targetEntity);
+        rewriteTerms(check, "where", term -> {
+            Matcher in = TARGET_IN.matcher(term.trim());
+            if (in.matches() && statusRelation.equalsIgnoreCase(in.group(1))) {
+                List<String> ids = new ArrayList<>();
+                for (String name : in.group(2)
+                                     .split(",", -1)) {
+                    String value = name.trim();
+                    Integer id = INTEGER.matcher(value)
+                                        .matches() ? Integer.valueOf(value) : resolveSymbol(value, target, subject);
+                    if (id == null) {
+                        return term;
+                    }
+                    ids.add(String.valueOf(id));
+                }
+                return in.group(1) + " in [" + String.join(", ", ids) + "]";
+            }
+            return rewriteExpression(term, statusRelation, target, subject);
+        });
     }
 
     /**

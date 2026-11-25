@@ -108,6 +108,8 @@
       "addChild": "Добави подзапис",
       "previous": "Предишна",
       "next": "Следваща",
+      "previousRecord": "Предишен запис",
+      "nextRecord": "Следващ запис",
       "previousPeriod": "Предишен период",
       "nextPeriod": "Следващ период",
       "today": "Днес",

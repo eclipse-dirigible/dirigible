@@ -28,8 +28,10 @@ import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The Class SecurityRoleSynchronizer.
@@ -120,7 +122,30 @@ public class RolesSynchronizer extends BaseSynchronizer<Role, Long> {
             }
             roleIndex++;
         }
+        removeUndeclared(location, Arrays.stream(roles)
+                                         .map(Role::getKey)
+                                         .collect(Collectors.toUnmodifiableSet()));
         return List.of(roles);
+    }
+
+    /**
+     * Removes the roles of a {@code .roles} file that it declared before and declares no more. The
+     * synchronization processor cleans up an artefact only when its source file is gone, so a role
+     * taken out of a file that stays would otherwise stay registered - and, when it was marked
+     * assignable, stay in the roles a tenant's people are offered. Each goes the way of a removed
+     * file's roles, through {@code cleanup}: the database detaches the user assignments of the removed
+     * row. A role of the same name declared in another file keeps that file's row.
+     *
+     * @param location the location of the parsed file
+     * @param declaredKeys the keys of the roles the file declares now
+     */
+    private void removeUndeclared(String location, Set<String> declaredKeys) {
+        retrieve(location).stream()
+                          .filter(registered -> !declaredKeys.contains(registered.getKey()))
+                          .forEach(undeclared -> {
+                              logger.info("Role [{}] is no longer declared in [{}] - removing it", undeclared.getName(), location);
+                              cleanup(undeclared);
+                          });
     }
 
     /**

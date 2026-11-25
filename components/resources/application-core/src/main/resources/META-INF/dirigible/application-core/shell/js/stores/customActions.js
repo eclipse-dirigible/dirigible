@@ -395,6 +395,12 @@ document.addEventListener('alpine:init', () => {
         // input left empty, so a defaulted input is never missing.
         return p.default ? { ...typed, sourceDefault: p.default } : typed;
       });
+      // A caption is keyed in the catalog of the model declaring its property (#7820): a cross-model
+      // target's in its owner's, which this shell need not have loaded (nor its own, where a cross-model
+      // source's view hosts the action). Already loaded namespaces are skipped.
+      if (window.AppI18nAddNamespaces) {
+        AppI18nAddNamespaces([...new Set(this.promptCols.map((c) => (c.tkey || '').split(':')[0]).filter(Boolean))]);
+      }
       this.promptValues = {};
       // Pre-fill the defaults from the record the dialog is opened on, when the view handed it over.
       // A value the dialog's control cannot hold as it is (a date the backend serialised as an array)
@@ -657,7 +663,7 @@ document.addEventListener('alpine:init', () => {
       if (!this.promptAction || this.promptBusy) return;
       const missing = this.promptCols.filter((c) => c.required && !c.sourceDefault && this.isEmptyInput(this.promptValues[c.name]));
       if (missing.length) {
-        this.promptError = missing.map((c) => c.label || c.name).join(', ');
+        this.promptError = missing.map((c) => (c.tkey && window.T ? T(c.tkey, c.label) : c.label) || c.name).join(', ');
         return;
       }
       // An address the forms would refuse is never sent (#8366): its line shows, and Run waits for it.

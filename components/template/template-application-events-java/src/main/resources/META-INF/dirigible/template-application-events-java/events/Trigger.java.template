@@ -199,6 +199,11 @@ public class ${process}Trigger implements MessageHandler, ProcessTrigger {
         variables.put("__${rl.fkProperty}EntityUrl", "${rl.url}");
         variables.put("__${rl.fkProperty}EntityLabel", "${rl.labelField}");
 #end
+#foreach($il in $itemLinks)
+        // Lines locator: a task form showing this record's ${il.entity} lines lists them from here,
+        // filtered on the line's key to this record - the same read-gated list the record's page uses.
+        variables.put("__${il.entity}RowsUrl", "${il.url}");
+#end
 #if($subjectFields && $subjectFields != "")
         // What a task of this process is ABOUT wherever it is listed away from this application (an
         // Inbox row, a notification): the property NAMES only, never their values. The reader

@@ -238,7 +238,10 @@ class IntentRecordPaymentFromInvoiceIT extends IntegrationTest {
      * A run that cannot start says so in its status (#8001): an invoice that does not exist is a 404, a
      * request naming none a 400. Both were answered 200 with an error body, which a client checking
      * {@code response.ok} - the action button included - read as a recorded payment. The body is
-     * asserted too, so the 404 is the create-from's and not a route that is not served yet.
+     * asserted too, so the 404 is the create-from's and not a route that is not served yet. This
+     * create-from declares no {@code fromStatus:}, the shape #7945 reported still answering 200: the
+     * source is looked up for every shape since #8488, and an id that is not a number never reaches
+     * run() - the body binding refuses it with a 400.
      */
     @Test
     void a_run_for_an_invoice_that_does_not_exist_is_a_404_that_writes_nothing() {
@@ -249,7 +252,14 @@ class IntentRecordPaymentFromInvoiceIT extends IntegrationTest {
         int paymentsBefore = count(PAYMENTS);
         assertRunRefused("{\"id\":987654}", 404, "Invoice 987654 does not exist");
         assertRunRefused("{}", 400, "missing source id");
+        assertRunRefused("{\"id\":\"not-a-number\"}", 400, "Failed to parse request body");
         assertEquals(paymentsBefore, count(PAYMENTS), "a refused run must create no payment");
+
+        // The same endpoint still records a payment for an invoice that exists.
+        int customer = create(CUSTOMERS, "{\"Name\":\"missing source\"}");
+        int invoice = create(INVOICES, invoiceBody("2026-10-01", "M-1", 40, customer));
+        recordPayment(invoice, "{\"values\":{\"Amount\":15}}");
+        assertEquals(paymentsBefore + 1, count(PAYMENTS), "a valid run must create exactly one payment");
     }
 
     /**
