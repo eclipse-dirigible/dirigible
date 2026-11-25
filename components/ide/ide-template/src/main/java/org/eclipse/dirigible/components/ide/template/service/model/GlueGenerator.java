@@ -206,6 +206,27 @@ class GlueGenerator {
             context.remove("personalIdentityRepositoryClass");
         }
         context.put("relationLinks", relationLinks(item.get("relationLinks"), parameters));
+        context.put("itemLinks", itemLinks(item.get("itemLinks"), parameters));
+    }
+
+    /**
+     * Assembles the controller URL of each composition child whose lines a task form of the trigger's
+     * process lists (issue #7907). A child lives in its master's model, so the URL is this project's.
+     *
+     * @param raw the declared links
+     * @param parameters the generation parameters
+     * @return the resolved links
+     */
+    private static List<Object> itemLinks(Object raw, Map<String, Object> parameters) {
+        List<Object> links = new ArrayList<>();
+        for (Map<String, Object> link : asMaps(raw)) {
+            Map<String, Object> resolved = new LinkedHashMap<>();
+            resolved.put("entity", link.get("entity"));
+            resolved.put("url", "/services/java/" + str(parameters, "projectName") + "/gen/" + str(parameters, "javaGenFolderName")
+                    + "/api/" + sanitize(link, "perspective") + "/" + str(link, "entity") + "Controller");
+            links.add(resolved);
+        }
+        return links;
     }
 
     /**
