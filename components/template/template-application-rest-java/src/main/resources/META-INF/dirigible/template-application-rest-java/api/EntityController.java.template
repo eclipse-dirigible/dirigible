@@ -361,20 +361,14 @@ public class ${name}Controller {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Sharing documents through a link is switched off");
         }
         // The newest stored copy, and only a stored one: a link never renders the live record.
-        gen.${javaGenFolderName}.data.${share.javaCopyPerspective}.${share.copyEntity}Entity issued = null;
-        for (gen.${javaGenFolderName}.data.${share.javaCopyPerspective}.${share.copyEntity}Entity copy : new gen.${javaGenFolderName}.data.${share.javaCopyPerspective}.${share.copyEntity}Repository().findAll(
-                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${share.copyMasterFk}", id))) {
-            if (copy.StoragePath != null && (issued == null || (copy.Version != null && (issued.Version == null || copy.Version > issued.Version)))) {
-                issued = copy;
-            }
-        }
+        var issued = ${name}Repository.issuedCopy(id);
         if (issued == null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "This ${name} has no issued copy yet - a link serves the stored copy, which is minted when the document is issued");
         }
         org.eclipse.dirigible.sdk.http.Response.setStatus(201);
         return org.eclipse.dirigible.sdk.share.ShareLinks.create(${name}Repository.SHARE_SUBJECT, id, issued.StoragePath, issued.FileName,
-                issued.ContentType, ${share.expiresAfterDays}).toMap();
+                issued.ContentType, ${name}Repository.shareExpiresAfterDays(entity)).toMap();
     }
 
     @Delete("/{id}/share-links/{linkId}")

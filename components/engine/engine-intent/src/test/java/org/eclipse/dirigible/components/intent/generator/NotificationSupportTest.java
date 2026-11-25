@@ -147,6 +147,18 @@ class NotificationSupportTest {
 
         assertTrue(plan.usesRecordUrl());
         assertFalse(plan.usesInboxUrl(), "an unreferenced link must not be declared - a generated class carries no dead local");
+        assertFalse(plan.usesShareUrl(), "a share link is minted only for a message that carries one");
+    }
+
+    @Test
+    void shareUrlResolvesToTheLocalTheTemplateMintsAndIsReported() {
+        Map<String, EntityIntent> byName = libraryModel();
+        NotificationSupport.Plan plan =
+                NotificationSupport.plan(notification("ops@x.com", "Order {id}: {shareUrl}"), byName.get("Order"), byName, Map.of());
+
+        // A bare identifier: the events template mints the link into it, once per message.
+        assertEquals("\"Order \" + entity.Id + \": \" + shareUrl", plan.subjectExpression());
+        assertTrue(plan.usesShareUrl(), "the plan must report the share link so the template mints it");
     }
 
     @Test

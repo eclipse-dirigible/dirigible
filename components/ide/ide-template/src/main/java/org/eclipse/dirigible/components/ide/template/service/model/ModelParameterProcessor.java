@@ -103,7 +103,7 @@ final class ModelParameterProcessor {
             resolveLabelParts(entities);
             resolveRelatedRegisters(entities, parameters);
             resolveBanners(entities, parameters);
-            resolveShare(entities);
+            resolveShare(entities, parameters);
             resolveCollectionColumns(entities, parameters);
             resolveRollupGuards(entities);
             resolveAgreeGuards(entities, parameters);
@@ -2290,11 +2290,14 @@ final class ModelParameterProcessor {
      *
      * <p>
      * A declaration whose condition does not render is refused rather than generated without it: the
-     * guard is what keeps a draft from being handed to an anonymous reader.
+     * guard is what keeps a draft from being handed to an anonymous reader. The same holds for each
+     * {@code expiry} entry (#8620), whose condition decides how long a link lives; the relations its
+     * conditions read are loaded like a check's.
      *
      * @param entities every entity in the model
+     * @param parameters the generation parameters
      */
-    private static void resolveShare(List<Map<String, Object>> entities) {
+    private static void resolveShare(List<Map<String, Object>> entities, Map<String, Object> parameters) {
         for (Map<String, Object> entity : entities) {
             Map<String, Object> share = asMap(entity.get("share"));
             if (share == null) {
@@ -2309,6 +2312,15 @@ final class ModelParameterProcessor {
             share.put("whenTermsJs", termsOrEmpty(str(share, "when")));
             share.put("rolesJavaLiteral", JavaLiterals.escape(strOr(share, "roles", "")));
             share.put("javaCopyPerspective", NamingHelper.sanitizeJavaIdentifier(str(share, "copyPerspective")));
+            for (Map<String, Object> rule : asMaps(share.get("expiry"))) {
+                String condition = JavaLiterals.conditionExpression(asMaps(rule.get("whenTerms")));
+                if (condition == null) {
+                    throw new IllegalStateException("The share: expiry of entity [" + str(entity, "name")
+                            + "] carries a condition that does not render - regenerate the model");
+                }
+                rule.put("whenJavaExpression", condition);
+            }
+            resolveCheckPathLoads(share, parameters);
         }
     }
 

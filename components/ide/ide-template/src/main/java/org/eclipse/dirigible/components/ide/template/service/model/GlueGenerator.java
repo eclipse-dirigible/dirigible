@@ -1976,16 +1976,16 @@ class GlueGenerator {
     }
 
     /**
-     * Binds the deep-link keys every notify call site carries: which of the two reserved link locals
-     * ({@code recordUrl} / {@code inboxUrl}) the message references, plus the entity and key property
-     * the record link is built from. The route itself is assembled in the template, which is the layer
-     * that knows the generated application's URL layout.
+     * Binds the deep-link keys every notify call site carries: which of the reserved link locals
+     * ({@code recordUrl} / {@code inboxUrl} / {@code shareUrl}) the message references, plus the entity
+     * and key property the record link is built from. The route itself is assembled in the template,
+     * which is the layer that knows the generated application's URL layout.
      *
      * @param item the descriptor
      * @param context the template context
      */
     private static void bindDeepLinks(Map<String, Object> item, Map<String, Object> context) {
-        copy(context, item, "usesRecordUrl", "usesInboxUrl", "recordUrlEntity", "recordUrlKeyProperty");
+        copy(context, item, "usesRecordUrl", "usesInboxUrl", "usesShareUrl", "recordUrlEntity", "recordUrlKeyProperty");
     }
 
     /**
