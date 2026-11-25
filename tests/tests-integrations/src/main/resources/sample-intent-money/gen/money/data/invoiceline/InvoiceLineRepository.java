@@ -60,8 +60,9 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
 
     @Override
     public InvoiceLineEntity update(InvoiceLineEntity entity) {
-        // One unit with the header total(s) it moves - see save() (#8096) - and with the row lock the
-        // carried-over system-owned columns are read under (#8109).
+        // One unit with the header total(s) it moves - see save() (#8096) - with the row lock the
+        // carried-over system-owned columns are read under (#8109), and with the lock a gated duplicate
+        // check holds until the write commits (#7750).
         return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updateInUnit(entity));
     }
 
