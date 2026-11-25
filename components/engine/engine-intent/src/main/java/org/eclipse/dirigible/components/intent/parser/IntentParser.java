@@ -2585,8 +2585,8 @@ public final class IntentParser {
                 // latest copies the child `of` value from the row with the greatest `by` date onto the
                 // parent field; `of`+`by` required, `by` must be date/timestamp, and the parent field
                 // should hold the same type as `of` (checked leniently: same logical type).
-                FieldIntent of = fieldByName(child, rollup.getOf());
-                FieldIntent by = fieldByName(child, rollup.getBy());
+                FieldIntent of = rollupChildField(child, rollup.getOf());
+                FieldIntent by = rollupChildField(child, rollup.getBy());
                 if (rollup.getOf() == null || rollup.getOf()
                                                     .isBlank()) {
                     issues.add("rollup [" + name + "] with op latest must declare `of` (the child field to copy)");
@@ -2611,7 +2611,7 @@ public final class IntentParser {
             if (sum) {
                 // sum needs a numeric child field to add up; capacity / balance (optional) are numeric parent
                 // fields and status (optional) a to-one relation of the parent - see the balance/status roll-up.
-                FieldIntent of = fieldByName(child, rollup.getOf());
+                FieldIntent of = rollupChildField(child, rollup.getOf());
                 if (rollup.getOf() == null || rollup.getOf()
                                                     .isBlank()) {
                     issues.add("rollup [" + name + "] with op sum must declare `of` (the child field to sum)");
@@ -3050,6 +3050,38 @@ public final class IntentParser {
             }
         }
         return null;
+    }
+
+    /**
+     * A field a roll-up reads off its child (#7947): a declared one, or a column the EDM generator
+     * injects - a file child's metadata ({@code EdmIntentGenerator.attachmentProperties}, a snapshot's
+     * {@code Version}) and the audit columns of an audited or file child - typed as its column is.
+     * Without these, a roll-up could not mirror the newest upload's path onto its parent.
+     */
+    private static FieldIntent rollupChildField(EntityIntent child, String name) {
+        FieldIntent declared = fieldByName(child, name);
+        if (declared != null || name == null) {
+            return declared;
+        }
+        Map<String, String> injected = new HashMap<>();
+        if (child.isFileChild()) {
+            injected.putAll(
+                    Map.of("filename", "string", "contenttype", "string", "filesize", "long", "storagepath", "string", "uuid", "string"));
+            if (child.isSnapshot()) {
+                injected.put("version", "integer");
+            }
+        }
+        if (child.isFileChild() || child.isAudited()) {
+            injected.putAll(Map.of("createdat", "timestamp", "createdby", "string", "updatedat", "timestamp", "updatedby", "string"));
+        }
+        String type = injected.get(name.toLowerCase(Locale.ROOT));
+        if (type == null) {
+            return null;
+        }
+        FieldIntent column = new FieldIntent();
+        column.setName(name);
+        column.setType(type);
+        return column;
     }
 
     /**
@@ -7571,7 +7603,8 @@ public final class IntentParser {
                 if (condition.getValue() == null) {
                     issues.add("rollup [" + name + "] where-condition on [" + condition.getField() + "] has no value");
                 }
-                if (child != null && !hasPropertyIgnoreCase(child, condition.getField())) {
+                if (child != null && !hasPropertyIgnoreCase(child, condition.getField())
+                        && rollupChildField(child, condition.getField()) == null) {
                     issues.add("rollup [" + name + "] where-condition reads [" + condition.getField()
                             + "], which is not a field or to-one relation of [" + rollup.getEntity() + "]");
                 }
