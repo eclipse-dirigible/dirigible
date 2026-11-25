@@ -900,7 +900,10 @@ class ModelParameterProcessorTest {
         assertEquals("### ### ### ##0.00", amount.get("formatPattern"));
     }
 
-    /** A float without an authored pattern shows as many decimals as it stores (#8701). */
+    /**
+     * A float without an authored pattern shows as many decimals as it stores (#8701), the ones past
+     * two only when the value has them (#8878).
+     */
     @Test
     void derivesTheFloatDisplayPatternFromTheScale() {
         Map<String, Object> rate = property("Rate", "DECIMAL");
@@ -911,17 +914,20 @@ class ModelParameterProcessorTest {
         amount.put("dataScale", "2");
         Map<String, Object> whole = property("Whole", "DECIMAL");
         whole.put("dataScale", "0");
+        Map<String, Object> tenths = property("Tenths", "DECIMAL");
+        tenths.put("dataScale", "1");
         Map<String, Object> authored = property("Price", "DECIMAL");
         authored.put("dataScale", "4");
         authored.put("widgetPattern", "#,##0.0");
         Map<String, Object> unscaled = property("Ratio", "DOUBLE");
-        ModelParameterProcessor.process(model(entity("Currency", "Currencies", rate, quantity, amount, whole, authored, unscaled)),
+        ModelParameterProcessor.process(model(entity("Currency", "Currencies", rate, quantity, amount, whole, tenths, authored, unscaled)),
                 parameters());
 
-        assertEquals("### ### ### ##0.000000", rate.get("formatPattern"));
-        assertEquals("### ### ### ##0.000", quantity.get("formatPattern"));
+        assertEquals("### ### ### ##0.00####", rate.get("formatPattern"));
+        assertEquals("### ### ### ##0.00#", quantity.get("formatPattern"));
         assertEquals("### ### ### ##0.00", amount.get("formatPattern"));
         assertEquals("### ### ### ##0", whole.get("formatPattern"));
+        assertEquals("### ### ### ##0.0", tenths.get("formatPattern"));
         assertEquals("#,##0.0", authored.get("formatPattern"));
         assertEquals("### ### ### ##0.00", unscaled.get("formatPattern"));
     }
@@ -2018,7 +2024,7 @@ class ModelParameterProcessorTest {
 
         Map<String, Object> resolved = registerColumn(currency);
         assertEquals(Boolean.TRUE, resolved.get("float"));
-        assertEquals("### ### ### ##0.000000", resolved.get("pattern"));
+        assertEquals("### ### ### ##0.00####", resolved.get("pattern"));
     }
 
     /**
