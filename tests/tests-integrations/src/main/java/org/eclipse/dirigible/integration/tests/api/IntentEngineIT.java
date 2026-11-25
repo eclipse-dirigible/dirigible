@@ -6042,10 +6042,11 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(index.contains("x-text=\"" + prefix + "Number', 'Number')\""), "a field label should resolve through the catalog");
         assertTrue(index.contains("x-text=\"" + prefix + "Approve', 'Approve')\""),
                 "an action button caption should resolve through the catalog");
-        // The step's `label` stays the untranslated seed name - it is what the record's status value is
-        // matched against - and the displayed `title` is the translated one.
+        // A step is matched on its seed id - the record's status holds the id, its name is a variable of
+        // its own (#8912) - and the displayed `title` is the translated name.
         assertTrue(index.contains("title: " + prefix + "DRAFT', 'DRAFT')"), "a status step should carry its translated title");
-        assertTrue(index.contains("{ label: 'DRAFT'"), "the step label must stay untranslated for the active-status match");
+        assertTrue(index.contains("{ id: '1', label: 'DRAFT'"), "a status step should carry its seed id");
+        assertTrue(index.contains("findIndex(s => s.id === String(model.Status))"), "the active step should be matched on the status id");
         assertTrue(index.contains("x-text=\"step.title\""), "the step indicator should render the translated title");
 
         String formJs = contentOf("gen/ApproveInvoice/forms/ApproveInvoice/form.js");

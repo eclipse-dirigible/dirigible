@@ -234,8 +234,9 @@ public class FormIntentGenerator implements IntentTargetGenerator {
      * statuses THE FLOW THIS FORM BELONGS TO walks - the ones its own process writes
      * ({@link #walkedStatusNames}) plus the entry status - in seed order, dropping the
      * cancel/reject/void-style terminals via {@link StatusStepsSupport#isTerminal}; plus
-     * {@code statusVar}, the model variable holding the current status name (the relation name). The
-     * runtime renders these as a horizontal step indicator with the current status active.
+     * {@code statusVar}, the model variable holding the current status id (the relation name) - each
+     * step carries its seed {@code id}, which is what it is matched on (#8912). The runtime renders
+     * these as a horizontal step indicator with the current status active.
      *
      * <p>
      * A stepper states "this flow goes 1, 2, 3", so it must list what the flow actually walks. The
@@ -269,6 +270,8 @@ public class FormIntentGenerator implements IntentTargetGenerator {
             return; // cross-model status entity: its seeds live in the owner module, not resolvable here
         }
         Set<String> walked = walkedStatusNames(model, entity, statusRel, formName);
+        FieldIntent statusKey = IntentEntities.primaryKeyOf(indexEntities(model).get(statusRel.getTo()));
+        String idField = statusKey == null ? "id" : statusKey.getName();
         List<Map<String, Object>> steps = new ArrayList<>();
         for (SeedIntent seed : model.getSeeds()) {
             if (seed.getLanguage() != null || !statusRel.getTo()
@@ -278,8 +281,9 @@ public class FormIntentGenerator implements IntentTargetGenerator {
             }
             for (Map<String, Object> row : seed.getRows()) {
                 Object name = row.get("name");
-                if (name == null) {
-                    continue;
+                Object id = row.get(idField);
+                if (name == null || id == null) {
+                    continue; // the record's status is matched on the seed id, which a step cannot lack
                 }
                 String label = name.toString();
                 if (!walked.isEmpty() && !walked.contains(label.trim())) {
@@ -289,6 +293,9 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                     continue; // terminal / off-path status - stays the pill, not a step
                 }
                 Map<String, Object> step = new LinkedHashMap<>();
+                // The id is what the record's status holds (#8912); the label stays the seed name the
+                // step's catalog key is built from.
+                step.put("id", String.valueOf(id));
                 step.put("label", label);
                 Object description = row.get("description");
                 if (description != null && !description.toString()
