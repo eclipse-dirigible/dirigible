@@ -73,12 +73,14 @@
    * 2. the NARROW tiles left over share rows of three (4 + 4 + 4);
    * 3. a short last row is never stretched from one narrow tile: two narrow tiles split a row (6 + 6),
    *    and a single one left over takes a partner - from the last row of three (making 6 + 6 twice) or
-   *    from a wide tile's pair (a table's before a chart's), the wide tile then filling a row alone.
-   *    A wide tile with no narrow partner fills a row alone (12).
+   *    from a wide tile's pair (a table's before a chart's), that wide tile then joining step 4;
+   * 4. the wide tiles without a narrow partner share rows two at a time (6 + 6), in order, and an odd
+   *    last one fills a row alone (12).
    *
-   * A wide tile grows by half when it fills a row alone and uses the width; a narrow one would triple
-   * and a pie chart or a two-column table would only gain margins. Rows keep the order of their first
-   * tile, and the tiles in a row keep their given order. A weight other than NARROW counts as WIDE.
+   * A wide tile keeps at least half the row; a narrow one is never stretched to a full row beside
+   * others, where a pie chart or a two-column table would only gain margins. Rows keep the order of
+   * their first tile, and the tiles in a row keep their given order. A weight other than NARROW
+   * counts as WIDE.
    *
    * @param {{weight: number, chart?: boolean}[]} tiles `weight` WIDE (8) or NARROW (4), anything else
    *        is WIDE; `chart` marks a chart (pairing prefers the same kind)
@@ -103,7 +105,6 @@
     }
 
     const rows = pairs.map(pair => pair.map(e => ({ entry: e, span: weightOf(e.tile) })));
-    for (const wide of lone) rows.push([{ entry: wide, span: ROW }]);
 
     const narrowRows = [];
     for (let i = 0; i < narrows.length; i += 3) narrowRows.push(narrows.slice(i, i + 3));
@@ -115,7 +116,8 @@
       } else {
         const breakable = pairs.filter(([, narrow]) => !isChart(narrow)).pop() || pairs[pairs.length - 1];
         if (breakable) {
-          rows.splice(pairs.indexOf(breakable), 1, [{ entry: breakable[0], span: ROW }]);
+          rows.splice(pairs.indexOf(breakable), 1);
+          lone.push(breakable[0]);
           narrowRows[0] = [breakable[1], last[0]];
         }
       }
@@ -123,6 +125,11 @@
     for (const row of narrowRows) {
       const span = row.length === 3 ? NARROW : ROW / row.length;
       rows.push(row.map(e => ({ entry: e, span })));
+    }
+    lone.sort((a, b) => a.index - b.index);
+    for (let i = 0; i < lone.length; i += 2) {
+      const row = lone.slice(i, i + 2);
+      rows.push(row.map(e => ({ entry: e, span: ROW / row.length })));
     }
 
     return rows

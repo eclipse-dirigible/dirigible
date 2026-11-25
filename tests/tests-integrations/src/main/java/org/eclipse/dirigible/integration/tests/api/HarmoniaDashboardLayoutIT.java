@@ -47,7 +47,11 @@ class HarmoniaDashboardLayoutIT {
         assertEquals("[12]", pack("W"));
         assertEquals("[8,4]", pack("WN"));
         assertEquals("[4,8]", pack("NW"), "a row keeps the given order of its tiles");
-        assertEquals("[8,4,12]", pack("WWN"), "a wide tile without a narrow partner fills its row");
+        assertEquals("[8,4,12]", pack("WWN"), "a wide tile without a narrow partner and no other to share with fills its row");
+        assertEquals("[6,6]", pack("WW"), "two wide tiles without a narrow partner share a row");
+        assertEquals("[6,6,12]", pack("WWW"));
+        assertEquals("[6,6,6,6]", pack("WWWW"));
+        assertEquals("[8,4,6,6]", pack("WWWN"), "the narrow tile pairs with the first wide one, the other two share a row");
         assertEquals("[4,8,4,4,4]", pack("NNNNW"));
     }
 
@@ -76,6 +80,8 @@ class HarmoniaDashboardLayoutIT {
         // (P).
         assertEquals("N:0 N:2 W:1 L:3 P:4", order("NWNLP"));
         assertEquals("[6,6,12,8,4]", pack("NWNLP"));
+        assertEquals("W:0 N:2 W:1 N:3 N:4", order("WWNNN"), "the freed wide tile is alone, as it has no wide one to share with");
+        assertEquals("[8,4,12,6,6]", pack("WWNNN"));
     }
 
     @Test
