@@ -63,6 +63,53 @@ public class ${className}Post implements MessageHandler {
         if (source == null) {
             return;
         }
+        book(source);
+    }
+#if($sweeps)
+
+    /**
+     * The post of a ${sourceEntity} already in hand, offered with no event - the period-reopen sweep
+     * (dirigible #8772) hands over the documents a closed ${into} period refused. It runs the same body
+     * as the event path above, so the two cannot drift apart; only what decides that the source is due
+     * differs.
+     *
+     * @param source the ${sourceEntity} to post
+     */
+    public void post(gen.${javaGenFolderName}.data.${sourceJavaPerspective}.${sourceEntity}Entity source) {
+#if(!$isCreate)
+        // Only a ${sourceEntity} standing where this post holds (dirigible #8243): status ${statusValue}, or a
+        // later live status it can only have reached through it. With no event in hand, the status it
+        // stands in is all there is to judge by.
+        if (source == null || !java.util.List.of("${heldStatusValues}".split(","))
+                                              .contains(String.valueOf(source.${statusProperty}))) {
+            return;
+        }
+#else
+        if (source == null) {
+            return;
+        }
+#end
+        book(source);
+    }
+
+    /**
+     * Whether this post already stands for the ${sourceEntity} - asked by the period-reopen sweep, which
+     * re-runs only what is due. The same test the idempotency guard below applies.
+     *
+     * @param source the ${sourceEntity} the sweep offers
+     * @return whether nothing is due for it
+     */
+    boolean posted(gen.${javaGenFolderName}.data.${sourceJavaPerspective}.${sourceEntity}Entity source) {
+        return !new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${into}Repository().findAll(
+                Criteria.create().eq("${backRef}", source.${sourceKeyField})).isEmpty();
+    }
+#end
+
+    /**
+     * Derives the rows of a ${sourceEntity} the caller has decided is due and writes them, at most once
+     * per source.
+     */
+    private void book(gen.${javaGenFolderName}.data.${sourceJavaPerspective}.${sourceEntity}Entity source) {
         gen.${javaGenFolderName}.data.${targetJavaPerspective}.${into}Repository targetRepository =
                 new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${into}Repository();
 #if($backRef != "")
@@ -91,6 +138,19 @@ public class ${className}Post implements MessageHandler {
 #end
             rows.add(row);
         }
+#if($periodRegisterEntity != "")
+        // Asked BEFORE the write (dirigible #8772): the ${into} repository refuses a row dated in a closed
+        // ${periodRegisterEntity}, but from inside this listener, after the source committed - redelivered
+        // against a period that stays closed for days. A row the period refuses holds back the whole
+        // post, which the period-reopen sweep re-runs when that period opens.
+        for (gen.${javaGenFolderName}.data.${targetJavaPerspective}.${into}Entity row : rows) {
+            if (!periodOpen(row.${periodDateProperty})) {
+                LOG.warn("Post ${name}: the ${periodRegisterEntity} covering [{}] is closed - ${sourceEntity} [{}] stays unposted"
+                        + " until it reopens", row.${periodDateProperty}, source.${sourceKeyField});
+                return;
+            }
+        }
+#end
         // ONE transaction for every row this source event derives. Written one save per transaction, a
         // row the repository refused (a validation, a constraint) left the earlier rows durable - and
         // since the guard above reads the back-reference as mere existence, every redelivery afterwards
@@ -111,10 +171,70 @@ public class ${className}Post implements MessageHandler {
 #if($backRef != "")
         row.${backRef} = source.${sourceKeyField};
 #end
+#if($periodRegisterEntity != "")
+        // Asked BEFORE the write (dirigible #8772): the ${into} repository refuses a row dated in a closed
+        // ${periodRegisterEntity}, but from inside this listener, after the source committed - redelivered
+        // against a period that stays closed for days. The period-reopen sweep re-runs it when that
+        // period opens.
+        if (!periodOpen(row.${periodDateProperty})) {
+            LOG.warn("Post ${name}: the ${periodRegisterEntity} covering [{}] is closed - ${sourceEntity} [{}] stays unposted"
+                    + " until it reopens", row.${periodDateProperty}, source.${sourceKeyField});
+            return;
+        }
+#end
         // One row, one repository call - a transaction on its own, so no unit of work is needed here.
         targetRepository.save(row);
 #end
     }
+#if($periodRegisterEntity != "")
+
+    /**
+     * Whether the ${periodRegisterEntity} covering a date is open - the same question the ${into}
+     * repository asks before it writes. A null date, and a date no period covers, are open.
+     *
+     * @param date the date the row would be booked on
+     * @return whether a write dated there would be accepted
+     */
+    private static boolean periodOpen(Object date) {
+        if (date == null) {
+            return true;
+        }
+#if($periodRegisterModel != "")
+        // The register belongs to the ${periodRegisterModel} model (dirigible #8755): asked at runtime by
+        // model and name, as the ${into} repository asks it (#8687) - open while that model is not deployed.
+        java.time.LocalDate day;
+        if (date instanceof java.time.LocalDate local) {
+            day = local;
+        } else if (date instanceof java.sql.Date sql) {
+            day = sql.toLocalDate();
+        } else {
+            String text = String.valueOf(date);
+            try {
+                day = java.time.LocalDate.parse(text.length() > 10 ? text.substring(0, 10) : text);
+            } catch (RuntimeException e) {
+                return true; // not a date this check can read - the target's repository decides
+            }
+        }
+        return !org.eclipse.dirigible.sdk.db.PeriodRegisters.isClosed("${periodRegisterModel}", "${periodRegisterEntity}", day);
+#else
+        for (gen.${javaGenFolderName}.data.${periodRegisterJavaPerspective}.${periodRegisterEntity}Entity period :
+                new gen.${javaGenFolderName}.data.${periodRegisterJavaPerspective}.${periodRegisterEntity}Repository().findAll(
+                        Criteria.create()
+                                .le("${periodStartProperty}", date)
+                                .ge("${periodEndProperty}", date))) {
+            if (period.${periodStatusProperty} == null) {
+                continue;
+            }
+            for (String closed : "${periodClosedValues}".split(",")) {
+                if (closed.equals(String.valueOf(period.${periodStatusProperty}))) {
+                    return false;
+                }
+            }
+        }
+        return true;
+#end
+    }
+#end
 
     @Override
     public void onError(String error) {

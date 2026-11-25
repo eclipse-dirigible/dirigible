@@ -324,8 +324,10 @@ the register is read at generation time: the register's generated repository ans
 name, with the same semantics - 409 on user writes, the repository's refusal on system writes. While
 the owner model is not deployed, the record is not locked. A POSTING into a record locked this way is
 pre-checked the same way before it writes (#8755: it waits with a warning instead of failing into
-its target's refusal), but is not re-run when the period reopens - the sweep listens on the
-register's own topic, which only a local register lets the posting name.
+its target's refusal), and re-run when the period reopens: the register's model relays every
+reopening onto `PeriodRegisters.reopenedTopic(model, register)`, which the posting's sweep binds
+without naming anything of that model but its name. A `posts:` row into a period-locked target
+gets the same pre-check and sweep (#8772).
 
 ## lifecycle - the legal status graph
 
