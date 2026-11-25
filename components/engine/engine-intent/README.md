@@ -517,6 +517,16 @@ included. For logic beyond an expression, a hand-written `CalculatedField` compo
 - { name: number, type: string, calculatedActionOnCreate: SalesInvoiceNumberAction }  # + entity imports:
 ```
 
+A money amount rounds to the minor units of the currency the record is stated in with `roundTo:` - a
+to-one path ending in the currency's integer digits column (#8307 / #8327). Typed, calculated (evaluated
+straight to those digits) and document totals alike, never to more than the column's `scale`, and to the
+`scale` when the record reaches no currency:
+
+```yaml
+- { name: net, type: decimal, scale: 4, roundTo: SalesInvoice.Currency.rounding,   # JPY 3 x 333.33 -> 1000
+    calculatedOnCreate: "Quantity * Price", calculatedOnUpdate: "Quantity * Price" }
+```
+
 ## view - calendar, range, slots
 
 ```yaml

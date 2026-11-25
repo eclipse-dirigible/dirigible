@@ -160,6 +160,7 @@ final class ModelParameterProcessor {
         resolveLifecycleStatusNames(entity);
         resolveDataOrder(entity);
         resolveOrderBy(entity);
+        resolveRoundTo(entity, parameters);
 
         for (Map<String, Object> property : asMaps(entity.get("properties"))) {
             processProperty(property, entity, entities, parameters);
@@ -941,6 +942,47 @@ final class ModelParameterProcessor {
             loads.add(load);
         }
         check.put("pathLoads", loads);
+    }
+
+    /**
+     * Resolves the money fields rounded to their currency's minor units (intent {@code roundTo:}, issue
+     * #8307 / #8327) into what the repository renders: the hops to load, as generated classes (a
+     * cross-model one in its owner's generation folder), and one minor-units read per property, in
+     * property order, each property carrying its index into that list ({@code roundToIndex}). An entity
+     * without the key is left untouched.
+     *
+     * @param entity the entity
+     * @param parameters the generation parameters
+     */
+    private static void resolveRoundTo(Map<String, Object> entity, Map<String, Object> parameters) {
+        List<Object> digits = new ArrayList<>();
+        for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+            String expression = str(property, "roundToExpression");
+            if (expression == null || expression.isBlank()) {
+                continue;
+            }
+            property.put("roundToIndex", String.valueOf(digits.size()));
+            Map<String, Object> read = new LinkedHashMap<>();
+            read.put("property", str(property, "name"));
+            read.put("expression", expression);
+            digits.add(read);
+        }
+        if (digits.isEmpty()) {
+            return;
+        }
+        List<Object> loads = new ArrayList<>();
+        for (Map<String, Object> hop : asMaps(entity.get("roundToLoads"))) {
+            String qualified = generatedClass(hop, parameters);
+            Map<String, Object> load = new LinkedHashMap<>();
+            load.put("local", hop.get("local"));
+            load.put("sourceExpression", hop.get("sourceExpression"));
+            load.put("entityClass", qualified + "Entity");
+            load.put("repositoryClass", qualified + "Repository");
+            loads.add(load);
+        }
+        entity.put("roundToLoads", loads);
+        entity.put("roundToDigits", digits);
+        entity.put("haveRoundTo", "true");
     }
 
     /**
