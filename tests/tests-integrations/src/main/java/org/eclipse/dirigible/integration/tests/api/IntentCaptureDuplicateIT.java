@@ -52,7 +52,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * run: the second upload of the same document is held - 428 listing the warning with the existing
  * record, no record created, the attempt in the ledger - until the request confirms the warning's
  * code, and the confirmed record carries the warning as a flag for its review. A different document
- * is not asked.
+ * is not asked. A capture under a master (#8626) asks the line's own checks the same way: with the
+ * master among the fields a duplicate compares, the same scan under the same batch is held and
+ * under another one it is not.
  */
 class IntentCaptureDuplicateIT extends IntegrationTest {
 
@@ -62,6 +64,8 @@ class IntentCaptureDuplicateIT extends IntegrationTest {
     private static final String BILLS = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api/bill/BillController";
     private static final String CAPTURE = "/services/java/" + PROJECT + "/gen/events/" + PROJECT + "/BillScanCapture";
     private static final String VENDORS = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api/vendor/VendorController";
+    private static final String BATCHES = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api/batch/BatchController";
+    private static final String BATCH_CAPTURE = "/services/java/" + PROJECT + "/gen/events/" + PROJECT + "/BatchBillScanCapture";
     private static final String LEDGER = "BILLRESCAN_BILL_CAPTURES";
     private static final String CODE = "Bill.duplicate.0";
     private static final long TIMEOUT_SECONDS = 90;
@@ -84,6 +88,18 @@ class IntentCaptureDuplicateIT extends IntegrationTest {
                   - { name: vendorNumber, type: string,  length: 50, required: true }
                 relations:
                   - { name: Vendor, kind: manyToOne, to: Vendor }
+              - name: Batch
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string,  length: 50 }
+              - name: BatchBill
+                checks:
+                  - { kind: duplicate, fields: [Batch, vendorNumber] }
+                fields:
+                  - { name: id,           type: integer, primaryKey: true, generated: true }
+                  - { name: vendorNumber, type: string,  length: 50, required: true }
+                relations:
+                  - { name: Batch, kind: manyToOne, to: Batch, composition: true, required: true }
 
             captures:
               - name: billScan
@@ -91,6 +107,10 @@ class IntentCaptureDuplicateIT extends IntegrationTest {
                 fields:
                   - { field: vendorNumber }
                   - { field: Vendor, match: [registrationNumber] }
+              - name: batchBillScan
+                into: BatchBill
+                fields:
+                  - { field: vendorNumber }
             """;
 
     @Autowired
@@ -216,9 +236,39 @@ class IntentCaptureDuplicateIT extends IntegrationTest {
         assertEquals(List.of("CAPTURED -", "REJECTED " + held.get()
                                                              .get("message"),
                 "CAPTURED -", "CAPTURED -"), ledger(), "every attempt is in the ledger, the held one with the warning it waits on");
+
+        // Under a master: the same scan again under the same batch is held, under another it is not.
+        int batch = batch();
+        int otherBatch = batch();
+        assertEquals("CAPTURED", upload(BATCH_CAPTURE + "/upload?Batch=" + batch, scan, null, 200).get("status"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> asked =
+                (List<Map<String, Object>>) upload(BATCH_CAPTURE + "/upload?Batch=" + batch, scan, null, 428).get("warnings");
+        assertEquals("BatchBill.duplicate.0", asked.get(0)
+                                                   .get("code"),
+                "the same scan under the same batch is asked: " + asked);
+        assertEquals(List.of(), upload(BATCH_CAPTURE + "/upload?Batch=" + otherBatch, scan, null, 200).get("flags"),
+                "the same scan under another batch is no duplicate");
+    }
+
+    private int batch() {
+        AtomicReference<Integer> id = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> id.set(given().contentType("application/json")
+                                                        .body("{\"Name\":\"November\"}")
+                                                        .when()
+                                                        .post(BATCHES)
+                                                        .then()
+                                                        .statusCode(200)
+                                                        .extract()
+                                                        .path("Id")));
+        return id.get();
     }
 
     private Map<String, Object> upload(byte[] scan, String confirm, int status) {
+        return upload(CAPTURE + "/upload", scan, confirm, status);
+    }
+
+    private Map<String, Object> upload(String endpoint, byte[] scan, String confirm, int status) {
         AtomicReference<Map<String, Object>> result = new AtomicReference<>();
         restAssuredExecutor.execute(() -> {
             var request = given().multiPart("file", "bill.pdf", scan, "application/pdf");
@@ -226,7 +276,7 @@ class IntentCaptureDuplicateIT extends IntegrationTest {
                 request = request.header("X-Confirm-Warnings", confirm);
             }
             result.set(request.when()
-                              .post(CAPTURE + "/upload")
+                              .post(endpoint)
                               .then()
                               .statusCode(status)
                               .extract()
