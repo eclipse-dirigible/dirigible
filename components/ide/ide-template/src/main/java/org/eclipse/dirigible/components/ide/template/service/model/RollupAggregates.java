@@ -10,6 +10,8 @@
 package org.eclipse.dirigible.components.ide.template.service.model;
 
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.str;
 
@@ -188,7 +190,8 @@ final class RollupAggregates {
                    .append(balanceField)
                    .append(");\n");
             }
-            if (!statusField.isEmpty()) {
+            if (!statusField.isEmpty()
+                    && !(strOrEmpty(rollup, "statusWhenFull").isEmpty() && strOrEmpty(rollup, "statusWhenPartial").isEmpty())) {
                 appendStatus(out, rollup, statusField);
             }
         }
@@ -208,20 +211,43 @@ final class RollupAggregates {
      * document somebody voided or cancelled while partially paid stays voided when its allocation goes.
      *
      * <p>
+     * Either seed may be left out (#7941): the roll-up then owns only the band it names, and a sum in
+     * the other band relinquishes the status exactly as a zero sum does - a fully depreciated asset
+     * whose last depreciation is reversed goes back to the status it had, not left FULLY DEPRECIATED.
+     * Splicing the missing seed in as an empty literal emitted Java that did not compile, which took
+     * the whole client-Java batch down.
+     *
+     * <p>
      * The status is compared with {@code Objects.equals} because the seed ids are emitted as int
      * literals and the property is the boxed FK type.
      *
      * @param out the Java source being built
-     * @param rollup the roll-up descriptor
+     * @param rollup the roll-up descriptor, naming at least one of the two seeds
      * @param statusField the parent status property
      */
     private static void appendStatus(StringBuilder out, Map<String, Object> rollup, String statusField) {
         String displacedField = str(rollup, "statusDisplacedField");
-        String whenFull = str(rollup, "statusWhenFull");
-        String whenPartial = str(rollup, "statusWhenPartial");
-        String owned = "java.util.Objects.equals(parent." + statusField + ", " + whenFull + ") || java.util.Objects.equals(parent."
-                + statusField + ", " + whenPartial + ")";
-        out.append("                if (sum.signum() > 0) {\n");
+        String whenFull = strOrEmpty(rollup, "statusWhenFull");
+        String whenPartial = strOrEmpty(rollup, "statusWhenPartial");
+        String owned = Stream.of(whenFull, whenPartial)
+                             .filter(seed -> !seed.isEmpty())
+                             .map(seed -> "java.util.Objects.equals(parent." + statusField + ", " + seed + ")")
+                             .collect(Collectors.joining(" || "));
+        String band;
+        String target;
+        if (whenPartial.isEmpty()) {
+            band = "sum.signum() > 0 && sum.compareTo(capacity) >= 0";
+            target = whenFull;
+        } else if (whenFull.isEmpty()) {
+            band = "sum.signum() > 0 && sum.compareTo(capacity) < 0";
+            target = whenPartial;
+        } else {
+            band = "sum.signum() > 0";
+            target = "sum.compareTo(capacity) >= 0 ? " + whenFull + " : " + whenPartial;
+        }
+        out.append("                if (")
+           .append(band)
+           .append(") {\n");
         out.append("                    if (!(")
            .append(owned)
            .append(")) {\n");
@@ -238,10 +264,8 @@ final class RollupAggregates {
         out.append("                    }\n");
         out.append("                    parent.")
            .append(statusField)
-           .append(" = sum.compareTo(capacity) >= 0 ? ")
-           .append(whenFull)
-           .append(" : ")
-           .append(whenPartial)
+           .append(" = ")
+           .append(target)
            .append(";\n");
         out.append("                    derived.put(\"")
            .append(statusField)
