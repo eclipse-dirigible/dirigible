@@ -3524,6 +3524,15 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 checkMap.put("rightExpression", right.expression());
                 checkMap.put("leftLabel", left.label());
                 checkMap.put("rightLabel", right.label());
+                // A side that is the record's own to-one (#7631) is the field the person changes to
+                // satisfy the rule, so the refusal names it and the form marks it (#8911). Two sides one
+                // hop away each leave no single field of this record: the banner.
+                for (ResolvePathSupport.Path side : sides) {
+                    if (isOwnSide(side)) {
+                        checkMap.put("field", side.property());
+                        break;
+                    }
+                }
                 checkMap.put("whenNull", check.getWhenNull() == null || check.getWhenNull()
                                                                              .isBlank() ? "skip"
                                                                                      : check.getWhenNull()
@@ -3610,6 +3619,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     continue; // the parser already reported it
                 }
                 checkMap.put("when", when);
+                String field = forbidWhenField(entity, compositionParents, check.getWhen());
+                if (field != null) {
+                    checkMap.put("field", field);
+                }
                 List<Map<String, Object>> pathLoads = pathLoadsOf(walker);
                 if (!pathLoads.isEmpty()) {
                     checkMap.put("pathLoads", pathLoads);
@@ -4068,6 +4081,43 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * @param when the authored condition
      * @return the term descriptors ({@code property}/{@code equal}/{@code value}), or {@code null}
      */
+    /**
+     * The one property of the record a {@code forbidWhen} condition is about (#8911): every term reads
+     * it - the record's own field or to-one, or one hop through that to-one ({@code Store.Status}) - so
+     * changing it is what clears the refusal, and the refusal names it for the form to mark. A
+     * condition over two properties names none, and neither does one over the composition master: a
+     * line's form cannot move the line to another document.
+     *
+     * @param entity the entity the check is declared on
+     * @param compositionParents composition-parent map
+     * @param when the authored condition, already read by {@link CheckSupport#conditionTerms}
+     * @return the PascalCased property, or {@code null} when the condition has no single one
+     */
+    private static String forbidWhenField(EntityIntent entity, Map<String, String> compositionParents, Object when) {
+        String property = null;
+        for (String term : CheckSupport.terms(when)) {
+            CheckSupport.Comparison comparison = CheckSupport.parse(term);
+            if (comparison == null) {
+                return null;
+            }
+            String first = comparison.property()
+                                     .split("\\.", -1)[0];
+            if (property != null && !property.equalsIgnoreCase(first)) {
+                return null;
+            }
+            property = first;
+        }
+        if (property == null) {
+            return null;
+        }
+        RelationIntent relation = toOneOf(entity, property);
+        if (relation != null && relation.getTo()
+                                        .equals(compositionParents.get(entity.getName()))) {
+            return null;
+        }
+        return IntentNaming.pascalCase(property);
+    }
+
     private static List<Map<String, Object>> forbidWhenMasterGuard(EntityIntent entity, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, Object when) {
         String master = compositionParents.get(entity.getName());

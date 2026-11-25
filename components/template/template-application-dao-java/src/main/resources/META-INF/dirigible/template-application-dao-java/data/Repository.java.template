@@ -2000,7 +2000,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
                             hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
 #end
             if (${check.guardJavaExpression}) {
-                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
+                throw #if($check.refusalJava)${check.refusalJava}#{else}org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava})#end;
             }
 #elseif($check.kind == "exists")
             // A row of ANOTHER entity must carry the values the record names (intent `checks: exists`,
