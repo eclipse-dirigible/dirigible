@@ -75,11 +75,11 @@ import org.springframework.beans.factory.annotation.Autowired;
  * The answer is deliberately imperfect, the way a reading of print is: a date that disagrees with
  * the document's QR code, a printed VAT that differs from the calculated one, a registration number
  * nothing matches next to a VAT number that does, and a second line read with low confidence and no
- * price, and a third line without the description a line cannot be saved without. The bill must
- * still be created - with the code's date, the calculated VAT, the vendor the VAT number
- * identifies, both lines and the uploaded file - and each of those is a flag in the capture ledger,
- * served by the review endpoint. A provider that declines creates nothing and is recorded as a
- * failed attempt.
+ * price, a third line without the description a line cannot be saved without, and a fourth line
+ * with a negative price the line entity's own check refuses (#8630). The bill must still be created
+ * - with the code's date, the calculated VAT, the vendor the VAT number identifies, both lines and
+ * the uploaded file - and each of those is a flag in the capture ledger, served by the review
+ * endpoint. A provider that declines creates nothing and is recorded as a failed attempt.
  */
 class IntentCaptureIT extends IntegrationTest {
 
@@ -119,6 +119,8 @@ class IntentCaptureIT extends IntegrationTest {
                 relations:
                   - { name: Vendor, kind: manyToOne, to: Vendor }
               - name: BillLine
+                checks:
+                  - { kind: compare, field: price, op: gt, value: 0, message: "A bill line must carry a positive unit price" }
                 fields:
                   - { name: id,          type: integer, primaryKey: true, generated: true }
                   - { name: description, type: string,  length: 200, required: true }
@@ -165,7 +167,8 @@ class IntentCaptureIT extends IntegrationTest {
              "items":[
               {"description":"Хартия А4","quantity":2,"price":30.00,"confidence":"high"},
               {"description":"Тонер","quantity":1,"price":null,"confidence":"low"},
-              {"description":null,"quantity":3,"price":4.50,"confidence":"high"}]}
+              {"description":null,"quantity":3,"price":4.50,"confidence":"high"},
+              {"description":"Отстъпка","quantity":1,"price":-5.00,"confidence":"high"}]}
             """;
 
     /** A reading without the vendor's number, which a bill cannot be created without. */
@@ -305,8 +308,12 @@ class IntentCaptureIT extends IntegrationTest {
                 "the VAT number identified the vendor the registration number did not");
 
         List<Map<String, Object>> lines = list(LINES + "?Bill=" + recordId.get());
-        assertEquals(2, lines.size(),
-                "every line that can be a row is one; the line without its required description is left out: " + lines);
+        assertEquals(2, lines.size(), "every line that can be a row is one; the line without its required description and the line"
+                + " its own check refuses are left out: " + lines);
+        for (Map<String, Object> line : lines) {
+            assertTrue(line.get("Price") == null || new BigDecimal(String.valueOf(line.get("Price"))).signum() > 0,
+                    "no line the line entity's check refuses is stored: " + lines);
+        }
         List<Map<String, Object>> scans = list(SCANS + "?Bill=" + recordId.get());
         assertEquals(1, scans.size(), "the uploaded file is kept on the bill: " + scans);
         assertEquals("bill.png", scans.get(0)
@@ -314,7 +321,7 @@ class IntentCaptureIT extends IntegrationTest {
 
         // What a person must look at.
         List<String> expected = List.of("billedOn QR_MISMATCH", "items[2] LINE", "items[2].price MISSING", "items[3] LINE_SKIPPED",
-                "items[3].description MISSING", "vat MISMATCH");
+                "items[3].description MISSING", "items[4] LINE_SKIPPED", "vat MISMATCH");
         AtomicReference<List<Map<String, Object>>> flags = new AtomicReference<>();
         restAssuredExecutor.execute(() -> flags.set(given().when()
                                                            .get(CAPTURE + "/review/" + recordId.get())
@@ -325,6 +332,12 @@ class IntentCaptureIT extends IntegrationTest {
                                                            .jsonPath()
                                                            .getList("flags")));
         assertEquals(expected, flagNames(flags.get()), "the review endpoint answers the capture's flags: " + flags.get());
+        assertTrue(flags.get()
+                        .stream()
+                        .anyMatch(flag -> "items[4]".equals(flag.get("field")) && String.valueOf(flag.get("message"))
+                                                                                        .contains(
+                                                                                                "A bill line must carry a positive unit price")),
+                "a line the entity's check refuses is flagged with the authored sentence: " + flags.get());
 
         // A reading without what the record cannot be created without is refused, with what was read.
         answer.set(ANSWER_WITHOUT_NUMBER);

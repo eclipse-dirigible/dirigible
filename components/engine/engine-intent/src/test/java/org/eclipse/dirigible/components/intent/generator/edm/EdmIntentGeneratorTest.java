@@ -1967,6 +1967,64 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * {@code checks: notExists} (#8002, #8623): the gated check carries the target, its match and the
+     * {@code where:} criteria - a literal list, paths on the record and a null test - and a target in a
+     * model this one does not use is late-bound, addressed by model and entity name only.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void notExistsChecksEmitTheCriteriaAndTheTarget() {
+        String yaml = """
+                name: journal
+                entities:
+                  - name: PeriodStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: FiscalPeriod
+                    checks:
+                      - { kind: notExists, entity: JournalEntry, where: ["Status in [1, 3]", "date >= fromDate", "date <= toDate",
+                          "memo != null", "amount > 0"], status: 2, message: "{count} draft entries" }
+                      - { kind: notExists, entity: Quotation, model: quotations, match: { Period: id }, where: "Status == 4",
+                          status: 3, message: "An ordered quotation" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: fromDate, type: date }
+                      - { name: toDate, type: date }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: PeriodStatus, function: EntityStatus }
+                  - name: JournalEntry
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: date, type: date }
+                      - { name: memo, type: string }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: PeriodStatus }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "journal");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "FiscalPeriod").get("checks");
+
+        Map<String, Object> drafts = checks.get(0);
+        assertEquals(List.of(Map.of("property", "Status", "method", "in", "valueJava", "java.util.List.of(1, 3)"),
+                Map.of("property", "Date", "method", "ge", "expression", "entity.FromDate"),
+                Map.of("property", "Date", "method", "le", "expression", "entity.ToDate"),
+                Map.of("property", "Memo", "method", "isNotNull"),
+                Map.of("property", "Amount", "method", "gt", "valueJava", "new java.math.BigDecimal(\"0\")")), drafts.get("where"));
+        assertEquals(List.of(), drafts.get("match"));
+        assertEquals(Map.of("entity", "JournalEntry", "perspective", "JournalEntry", "crossModel", false, "targetModel", ""),
+                drafts.get("target"));
+        assertEquals("2", drafts.get("status"));
+        assertEquals("Status", drafts.get("statusProperty"));
+
+        Map<String, Object> ordered = checks.get(1);
+        assertEquals(Map.of("entity", "Quotation", "lateBound", true, "targetModel", "quotations"), ordered.get("target"),
+                "a model this one does not use is counted by name at runtime");
+        assertEquals(List.of(Map.of("property", "Period", "expression", "entity.Id")), ordered.get("match"));
+        assertEquals(List.of(Map.of("property", "Status", "method", "eq", "valueJava", "4")), ordered.get("where"));
+    }
+
+    /**
      * The parent side of an {@code agree} check (#7589): each record the junction links carries an
      * {@code agreeGuards} entry naming the junction, its foreign key and the agreed property, so the
      * parent's repository can refuse re-pointing that property while a junction row references it -

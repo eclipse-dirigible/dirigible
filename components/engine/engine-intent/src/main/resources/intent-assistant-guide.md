@@ -339,7 +339,8 @@ not as an apology.
 - **`{appUrl}` is the raw origin** (`DIRIGIBLE_APP_BASE_URL`, tenant-overridable, else `DIRIGIBLE_HOST`) - reach for it only
   for a link the two above cannot express, e.g. a page of your own: `"{appUrl}/services/web/..."`.
   All three names are reserved, so an entity must not declare a field literally named `appUrl`,
-  `recordUrl` or `inboxUrl` (it would be shadowed in every notify block).
+  `recordUrl` or `inboxUrl` (it would be shadowed in every notify block) - nor `shareUrl`, the
+  share link of an entity that declares `share:` (see *share*).
 - **A recipient that cannot be resolved is surfaced, not silent.** If `to` names a field/relation that
   does not exist, that notification or schedule is dropped and reported in the generate response's
   `warnings` (as well as the server log) - fix the reference so the glue is emitted.
@@ -481,6 +482,16 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   (an identification status beside the overall one), model it as a PLAIN to-one relation without
   `function:`.
 - `precision` / `scale` - override the DECIMAL default (16, 2): `{ name: rate, type: decimal, precision: 18, scale: 6 }`.
+- `roundTo` (on a `decimal` field, #8307 / #8327) - round a money amount to the minor units of the
+  currency the record is stated in: a path of to-one relations ending in the currency's integer
+  digits column, e.g. `roundTo: Currency.rounding` on a document header, `roundTo:
+  SalesInvoice.Currency.rounding` on its line. The stored value - typed, calculated
+  (`calculatedOnCreate` / `calculatedOnUpdate` evaluate straight to those digits) or a document total -
+  is rounded half up to them before checks and roll-ups read it, never to more than the column's
+  `scale`, and to the `scale` when the record reaches no currency. A yen line of 3 x 333.33 stores
+  1000, not 999.99. Give the money columns a `scale` at least the largest currency's digits (3 for
+  KWD/BHD). Use it instead of a literal precision in `round(x, 2)`: an expression cannot read the
+  currency.
 - `size` (on a field OR a to-one relation) - the form-control width as a 12-column grid span
   (3 = quarter, 4 = third, 6 = half, 12 = full). The generated form maps it to `grid-column: span N`;
   omitted, a control falls back to half width. Use a small span to pack several short controls onto one
@@ -740,7 +751,9 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   `immutableInPeriod: { period: FiscalPeriod, model: journal, date: date }` - for a source document
   whose module the ledger's model uses (so it cannot `uses:` the ledger back). That register is asked
   at runtime by model + name; while its model is not deployed nothing is locked, and a POSTING into
-  such a record is pre-checked the same way (it waits instead of failing) but gets no reopen re-run.
+  such a record is pre-checked the same way (it waits instead of failing) and is re-run when that
+  period reopens, exactly as for a local register. A `posts:` row into a period-locked target gets
+  the same pre-check and re-run.
 - `lifecycle: { edges: [ { from: <status>, to: [<status>, ...] }, ... ] }` (entity-level) - **the
   declarative state machine**: the WHOLE set of legal status moves, declared once and enforced on
   EVERY status write. Without it the status machinery is a set of point constructs - `init:` names
@@ -846,7 +859,9 @@ a `required` text field is refused when it is blank after that trim - spaces alo
 - `leafOnly: true` (on a to-one relation) - restricts the picker to LEAF nodes of its hierarchical
   target (childless nodes), depth-indents the options, and the generated REST validation rejects an
   FK to a node with children (e.g. a journal line references an analytical account, never a
-  synthetic one). The target entity must declare `hierarchy`. Canonical pair:
+  synthetic one). The reverse holds too (#7826): a target row that leafOnly references already point
+  at cannot gain a child (create or re-parent under it is refused with a 400 naming the references),
+  so a referenced leaf never turns into a group. The target entity must declare `hierarchy`. Canonical pair:
     `- { name: Account, kind: manyToOne, to: Account, model: accounts, required: true, leafOnly: true }`
 - `unique:` (entity-level) - **the composite business key**, what a row IS when no single field says
   it: `unique: [{ fields: [ProjectTimesheet, Employee], message: "..." }]`. Each member is an own field
@@ -930,6 +945,21 @@ a `required` text field is refused when it is blank after that trim - spaces alo
     repository when the record is persisted carrying that status ("a claim is submitted only on a
     project its employee is assigned to"). Do not write this rule as a `calculatedActionOnCreate`
     that throws.
+  - `{ kind: notExists, entity: JournalEntry, where: ["Status == DRAFT", "date >= fromDate",
+      "date <= toDate"], status: CLOSED, message: "{count} draft entries are dated in this period" }`
+    (#8002, #8623): the inverse of `exists` - the MOVE into the `status:` gate is refused (400 with
+    the message) WHILE a row of another entity matches. **This is how "a month is not closed while a
+    draft entry is dated inside it" and "a deal is not marked lost while one of its quotations is
+    accepted or ordered" are declared** - not as a transition guard (which reads only the record's
+    own fields) and not as a `calculatedAction*` that throws. `status:` is required. `match:` works
+    as on `exists` - a target's relation to THIS record is matched by its `id`
+    (`match: { Opportunity: id }`) - and `where:` filters the target's rows: `<target property>
+    <op> <value or path on this record>` (op `== != >= <= > <`), `== null`, or `<property> in [a, b]`;
+    a status name there is one of the TARGET's statuses. `{count}` in the message is the number of
+    matching rows. `model:` may name the model that owns the target even when this model does not
+    `uses:` it (the quotation model uses the opportunity model, so the opportunity model cannot use
+    it back): the rows are then counted by name at runtime - use numeric status ids there, since
+    that model's nomenclature is not readable here.
   - `{ kind: requiredWhen, field: vatGround, whenAnyItem: "vatRate == 0", status: ISSUED, message: "..." }`
     (#7560): a header value required when **ANY LINE** satisfies the condition - the legal ground a
     zero-rated line calls for (ЗДДС чл. 114). `whenAnyItem` uses the `when` grammar over the ITEMS
@@ -1684,6 +1714,31 @@ entities:
 `model:` must be listed in `uses:`, and it **cannot** be `composition: true` (a detail cannot be
 owned across models). Generate leaf models (the owners) before their consumers so the dropdown
 resolves. Each project is its own `.intent`; all must be published to the same runtime.
+
+**An optional dependency (`optional: true`, #7979):** a model that one feature needs and the
+application may not ship - billable expense lines need projects, an HR application has none:
+
+```yaml
+uses:
+  - { model: projects, optional: true }
+```
+
+Each Generate decides: with the owner's `.model` in the workspace or published, the model generates
+exactly as with a plain `uses:`. Without it the model generates **without** the owner, and the
+Generate's `warnings` list what it left out:
+- every relation to the owner (no column, no picker) and every list item naming the owner's alias
+  (an `exists` / `notExists` check, a `related:` register, a `generates`, a roll-up, a schedule, a
+  report's union member);
+- what names such a relation by a path from its own entity: the entity's `order:` / `list:` /
+  `subtitle:` entries and **checks** (a `requiredWhen` on it, a `forbidWhen` reading through it), a
+  form's fields, a roll-up `via:` it, and a **report** - the whole report, not just the dimension.
+  The checks after a dropped one keep their translation keys.
+
+Refused at parse: such a relation `required: true`, in a `unique:` key or a number series' `per:` (the
+record cannot exist or be told apart without it), and anything else that depends on the owner - a
+field's `dependsOn` from the relation, say - because the model must also generate without it (the
+refusal reads `without the optional uses [projects]: ...`). Custom code under `custom/` that
+imports the owner's generated classes is not covered: it fails to compile without the owner.
 
 ### related - list the records that REFERENCE this entity (read-only register)
 
@@ -2614,6 +2669,21 @@ paths / relations.
         - { name: identify, kind: userTask, args: { assignee: officer, form: IdentifyDriver } }
         - { name: done, kind: end }
   ```
+- **`items: { entity: <Child>, fields: [...] }` shows the record's LINES** under the fields - a
+  read-only table of the rows of a composition child of `forEntity` that belong to the task's record,
+  so the approver of an invoice sees what is billed, not only the total. `entity` must be a
+  `manyToOne` `composition: true` child of `forEntity`, `fields` are that child's own fields (one
+  column each, formatted like the header fields), and - as for an editable relation - the form must
+  be a task form whose `forEntity` IS the trigger entity of every process that uses it: the lines are
+  listed live through the child's controller, which the trigger hands the form. The approver reads
+  them with their own access, exactly as they read the header: a reviewer who may not read the lines
+  sees no table.
+
+  ```yaml
+  forms:
+    - { name: ApproveSalesInvoice, forEntity: SalesInvoice, fields: [number, date, Customer, total, Status],
+        items: { entity: SalesInvoiceItem, fields: [name, quantity, price, vatRate, total] }, actions: [approve, reject] }
+  ```
 - **The status stepper is the flow's own walk.** When `forEntity` carries a `function: EntityStatus`
   relation, the form renders a read-only step indicator above the fields, and its steps are the
   statuses THIS flow walks: the relation's `init:` status plus every status the owning process writes
@@ -2896,6 +2966,26 @@ transitions:
   - { name: CancelProtocol, forEntity: Protocol, from: [DRAFT], setStatus: CANCELLED }
 ```
 
+`prompt:` makes the move ask for input first - a Void that must record its reason. Each entry names a
+field or to-one relation of the record ITSELF (`field`, `required` - the `generates` prompt grammar,
+without `default:`); the button opens the prompt dialog instead of the plain confirm, and the answers
+are written in the SAME targeted write as `setStatus`, so an `immutableWhen` lock does not refuse them
+and `checks:` gated on `setStatus` read them. A required answer left out is a **400** naming the field
+and the record does not move. Declare the prompted fields `readOnly: true` so only the move writes
+them; a date stamped with the move is the field's `stampOn: { status: ... }`, not a prompt. Refused at
+parse: the status relation, a key / `number:` / `stampOn:` field, a `timestamp`, and `default:`.
+
+```yaml
+transitions:
+  - name: VoidSalesInvoice
+    forEntity: SalesInvoice
+    from: [ISSUED, SENT]
+    setStatus: VOIDED
+    prompt:
+      - { field: voidReason, required: true }   # voidReason: readOnly: true on the entity
+      - { field: ReplacedBy }                   # an optional to-one, readOnly: true
+```
+
 ### generates - create one document from another (create-from)
 
 **Use when:** a record should spawn a new record of another type - often a document in another model:
@@ -2929,6 +3019,8 @@ generates:
         - { field: totalHours, op: gt, value: 0 }       # the rest). Same shape as schedules.where.
       refuse: "Member timesheet is not approved"        # optional: an unqualified row REFUSES the
                                                         # whole run (400) instead of being left out
+      backLink: BilledInvoice      # optional: each consumed row is marked with the created document
+                                   #   and never generated from again (a to-one of `from` to `to`)
       map:
         Description: Description
         Amount: Amount
@@ -2987,6 +3079,33 @@ that was asked for, and it is the harder failure to notice - it exists and count
 billing - so the run answers 400 rather than committing the header. Either refusal is decided before
 the header is saved, so a refused run spends no document number and leaves no history entry. An
 items block with no `where:` keeps exactly the behaviour it had.
+
+**Each source row billed exactly once (`items: backLink:`).** Pass-through billing - the billable
+expense lines of a project, its unbilled timesheet days, consumed materials - must not bill a row a
+second time on the next click. Name a to-one of the items `from:` entity to the target, and every
+row that becomes a line is set to the created document in the same transaction:
+
+```yaml
+generates:
+  - name: invoice-billable-expenses
+    from: Project
+    to: Invoice
+    map: { Project: id }
+    items:
+      from: ExpenseClaimItem       # need not be the source's own lines: selected by its `Project` FK
+      to: InvoiceItem
+      where:
+        - { field: billable, op: eq, value: true }
+      backLink: BilledInvoice      # ExpenseClaimItem: { name: BilledInvoice, kind: manyToOne, to: Invoice,
+                                   #                     whenTargetDeleted: nullify }
+      map: { name: description, amount: amount }
+```
+
+A row already marked is never selected again (no `where:` condition needed), so a second run that
+finds nothing left answers 400 rather than creating an empty invoice. Deleting the generated document
+does to the marks what the relation's `whenTargetDeleted` says: `nullify` frees the rows for the next
+run, the default `restrict` refuses the delete while rows point at it. A voided (retired) document
+does NOT clear them. Not with `items: fromReport:`.
 
 **Lines from a REPORT's result rows (`items: fromReport:` + `undo:`).** A year close books the
 ledger's own balances: one closing journal with a line per result account, taking its year balance
@@ -3340,9 +3459,13 @@ generates:
   the source off the status the button is offered from and the implied `fromStatus` deny then refuses
   the second click, so the source is just as stuck and the declared inverse is the only move back - the
   reopen is emitted for that shape too, without the guard's stage-aware step-over, which belongs to a
-  guard it does not have. the target must be local, with a nomenclature that classifies a retiring `stage:` (a
-  cross-model target is seeded in its owner model, so nothing here can recognise its retirement - keep
-  `button: true` and reissue by hand); `mode: append` is refused (no guard, so no slot to free); and
+  guard it does not have. The target's nomenclature must classify a retiring `stage:`. A CROSS-MODEL
+  target (`uses:`, #7954) is classified in its owner model, which publishes the classification on its
+  `.model`, so the reopen is generated HERE, in the source's module, listening on the owner's topic - a
+  milestone billed into another module's invoice returns when that invoice is voided. The owner must
+  classify its seed rows (`stage: cancelled|void`) and be generated first, and the `map:` must still copy
+  the source's key onto a target property (a plain integer field there - the owner cannot name this
+  module); `mode: append` is refused (no guard, so no slot to free); and
   when the source declares a `lifecycle:`, the graph must declare the edge from `sourceStatus` back to
   it - that is exactly where the source stands when the retirement arrives. Return to a status a PERSON must move on (a `DRAFT`
   for correction) when the reissue should be reviewed rather than immediate: the reopen only publishes
@@ -4482,6 +4605,8 @@ reachable from outside.
       copy: SalesInvoiceCopy        # required - the function: Snapshot child whose stored file is served
       roles: [SalesInvoiceShare]    # required - who may create and revoke links; [] admits nobody
       expiresAfterDays: 0           # optional - 0 (default) = permanent; a tenant can only shorten it
+      expiry:                       # optional - the first entry the record meets sets the link's life
+        - { when: "Customer.Kind == 2", days: 30 }   # a private individual's invoice: 30 days
 ```
 
 Rules to follow when proposing it:
@@ -4498,8 +4623,30 @@ Rules to follow when proposing it:
   A record that leaves the state loses its links for good - a voided invoice is not readable any more.
 - `roles:` lists roles declared under `permissions`. The key is required; do not invent a role - add
   it to `permissions` in the same proposal.
+- **A link to a private individual's document should expire** - it carries a name and a home address.
+  Say so with `expiry:` rather than one short `expiresAfterDays` for everybody: each entry is
+  `{ when, days }`, the first whose `when` the record meets when the link is created wins, and
+  `expiresAfterDays` covers the rest. `when` is a condition like a `forbidWhen`'s - the record's own
+  field, or one hop away (`Customer.Kind == 2`); a cross-model nomenclature is named by its numeric id.
+  `days: 0` is permanent. The life is fixed when the link is created, for a mailed `{shareUrl}` link
+  too, and the tenant's cap still shortens it.
 - Issuing a document does not create a link. A user creates one on the record page (Share links), sees
   how often it was opened, and can revoke it.
+- **To MAIL the link, put `{shareUrl}` in a notify `body:` / `html:`** ("mail the invoice" with a link
+  instead of, or next to, the attachment). The send mints a new link to the record's issued copy -
+  same `when:`, same copy, same expiry as the Share action, recorded as created by the system - and
+  mails its URL. Bind that notify to a step AFTER the snapshot delegate: before the copy exists no
+  link can be made, so the send fails (nothing mailed, `outcome:` stamped). `{shareUrl}` is refused on
+  an entity without `share:`, in a `subject:`, and inside a `forEach`.
+
+  ```yaml
+        - { name: mint, kind: serviceTask, args: { delegate: gen.events.SalesInvoiceSnapshotGenerator, next: mail } }
+        - name: mail
+          kind: serviceTask
+          args:
+            notify: { to: Customer.email, subject: "Invoice {number}", body: "Read it online: {shareUrl}", outcome: mailOutcome }
+            next: end
+  ```
 
 ### schedules - run on a cron and notify or generate records
 
@@ -5370,7 +5517,7 @@ model reads, so a value it could not read is expected and is flagged, never a re
 ```yaml
 captures:
   - name: supplierInvoice
-    into: PurchaseInvoice            # the entity whose record the document becomes (local, not a composition child)
+    into: PurchaseInvoice            # the entity whose record the document becomes (local; a composition child is a line of an existing record, below)
     label: Scan a supplier invoice   # optional: the caption of the button; defaults to the humanized name
     attachment: InvoiceScan          # optional: a `function: Attachment` composition child of `into` that keeps the file
     instructions: "The supplier is the party that issued the document, not the one billed."
@@ -5435,9 +5582,10 @@ takes the code's value, which is exact and wins over the reading; a reading that
 `QR_MISMATCH` and one the code confirms or supplies needs no review. A part that does not convert to
 the field's type is ignored and the reading stands. QR decoding applies to images only, not to a PDF.
 
-**Rules:** unique name; `into` is a local entity with a primary key that is not a composition child and
-extends nothing; `fields:` names at least one field of it, each once, never the primary key and only of
-type string, integer, decimal, date or boolean (a timestamp is refused); `match:` only on a relation,
+**Rules:** unique name; `into` is a local entity with a primary key that extends nothing (a composition
+child is captured as a line of an existing master, below, and then takes no `items:`); `fields:`
+names at least one field of it, each once, never the primary key and only of type string, integer,
+decimal, date or boolean (a timestamp is refused); `match:` only on a relation,
 by string fields of the target; `qr:` only on a header field, naming a declared part, and not with
 `compare:`; the status relation and an item's back-reference are not read; `items.into` is a
 composition child of `into` and is not a file entity; `attachment` is a `function: Attachment` child of
@@ -5461,6 +5609,21 @@ documents. A self-hosted model plugs in as a client `@Component` implementing
 `label:`) on the list, which opens a dialog to pick or photograph the document, uploads it and shows
 what was flagged; and `<label> review` on a record, which shows the kept file beside the flags of the
 capture that created it. The flags are a list beside the document, not marks on the record's form.
+
+**A line of an existing record.** `into:` may be a composition child: a receipt photographed onto an
+expense claim that is already open becomes ONE `ExpenseClaimItem`, not a new claim. The upload names the
+master by the line's back-reference, `POST .../<Name>Capture/upload?ExpenseClaim=<id>`, and a job calls
+`capture(master, fileName, bytes)`. The master is checked before the document is read: no id is a 400,
+an id no record has a 404, and a master a line could not be added to by hand - locked by `immutable`,
+`immutableWhen` or `immutableInPeriod`, its own or an ancestor's - is refused with the line
+controller's own 409; nothing is read, written or recorded then. The line is created under that master
+through its own validation, so the master's totals re-sum. `attachment:` is then a `function:
+Attachment` child of the line, `items:` is refused, and the back-reference is never a read field. The
+capture button sits on the master's record and the review button on the line. When the master has a
+`personal:` owner, the button is on its personal pages too: the owner captures onto their own record
+through `.../<Name>Capture/my/upload` (no role needed; another person's record is a 404, a locked one
+the same 409), and reviews only their own lines. A `personalReadOnly` owner or line composition offers
+no personal capture.
 
 **Not supported in v1:** timestamp fields, nested collections, creating the targets of relations, and
 flag marks on the fields of the record's own form.
@@ -5636,6 +5799,16 @@ rollups:
 `of` is the child field copied, `by` is the child `date`/`timestamp` field that decides "latest", and
 the parent `field` must be the same type as `of`. Recomputes on child create/update/delete; if a
 currency has no rate rows the parent field resets to null.
+
+**Over the columns the generator adds.** `of`, `by` and `where` may also name a column you never
+declare: a `function: Attachment` (or `Snapshot`) child's `FileName`, `ContentType`, `FileSize`,
+`StoragePath`, `Uuid` (and a snapshot's `Version`), and `CreatedAt` / `CreatedBy` / `UpdatedAt` /
+`UpdatedBy` of a file child or an `audit: true` entity. Mirror the newest upload onto its parent - a
+company's logo path, one hop from every document that names the company:
+```yaml
+rollups:
+  - { name: latestLogo, entity: CompanyLogo, via: Company, field: logo, op: latest, of: StoragePath, by: CreatedAt }
+```
 
 **Transitive (chained) roll-ups.** Roll-ups compose across a multi-level composition: if the parent of
 one roll-up is itself the child of another, a change flows all the way up. Declare one roll-up per
@@ -6033,6 +6206,7 @@ or a seeded name.
 | relation `whenMasterDeleted` | `cascade` (default - a delete of the master deletes the children it owns), `refuse` (the master's delete is rejected while children exist); composition relations only |
 | relation `fixedAfterCreate` | `true` - a plain `manyToOne`/`oneToOne` (not an `EntityStatus`, not with `calculatedActionOnUpdate`): editable on create, read-only on edit, a changed value in an update answered 409. A `composition: true` relation is fixed this way by default (#8306) |
 | field `fixedAfterCreate` | `true` - a caller-written field (not the key, `generated`, `uuid`, `number:`, `stampOn:`, `readOnly`, derived, `aggregate`, `dependsOn`, a `timestamp`, nor a translatable string of a `multilingual` entity): editable on create, read-only on edit, a changed value in an update answered 409 |
+| field `roundTo` | a path of to-one relations off the record ending in an integer field (`Currency.rounding`, `SalesInvoice.Currency.rounding`; a cross-model relation only as the last hop), on a `decimal` field that is not the key: the value is rounded half up to that many decimals, at most the column's `scale`, the `scale` when the path reaches nothing |
 | field `fixedWhenReferenced` | `true` - a caller-written field (the same refusals as field `fixedAfterCreate`, and not beside it): editable while no record references the row, a changed value in an update answered 409 once one does |
 | relation `fixedWhenReferenced` | `true` - a plain `manyToOne`/`oneToOne` (the same refusals as relation `fixedAfterCreate`, and not beside it): re-pickable while no record references the row, a changed FK in an update answered 409 once one does |
 | relation `readOnly` | `true` - a plain `manyToOne`/`oneToOne` only the system sets (not an `EntityStatus`, a composition parent, the `personal`/`partner`/`owner` relation, nor beside a calculated action, `fixedAfterCreate` or `fixedWhenReferenced`): no picker on New or Edit, a set value shown in the read-only details, a user create carrying it stored without it, a user update keeps the stored value; repository writers (create-from, postings, delegates, workflow steps) set it |
@@ -6083,6 +6257,7 @@ or a seeded name.
 - "X must be filled in before/when it reaches STATUS (but may be empty while it is a draft)" -> **checks** `requiredWhen` WITH the `status:` gate - a workflow's own status set is a repository write and never reaches a controller
 - "this must not be changed/added once the parent is PAID/CLOSED" -> **checks** `forbidWhen`
 - "only an employee assigned to the project / a member of the team may book it" (a row of a third entity must exist for the pair) -> **checks** `exists`
+- "it must not be closed / marked lost / approved while a draft entry / an accepted quotation / an open task of another entity exists" -> **checks** `notExists` with the `status:` gate
 - "nothing new may be added once the parent is PAID (but a wrong one must still be removable)" -> **checks** `forbidWhen` with `verbs: [create, update]`
 - "warn me / ask before saving when ... (but let me save anyway)" -> **checks** with `severity: warn`; "a record with the same name already exists" -> `duplicate`; "a line has price 0 / a zero-value line" -> `itemsCompare` on the document
 - "auto-expire the offer/request when its validity date passes" -> **processes** (userTask `expire:`)

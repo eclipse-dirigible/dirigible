@@ -443,7 +443,7 @@ public class ${className}Posting implements MessageHandler {
             }
         });
     }
-#if($periodRegisterEntity != "" && $periodRegisterModel == "" && !$followsSource)
+#if($periodRegisterEntity != "" && !$followsSource)
 
     /**
      * Whether this posting already stands for the ${sourceEntity} (#8243) - asked by the period-reopen

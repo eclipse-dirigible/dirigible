@@ -148,27 +148,37 @@ document.addEventListener('alpine:init', () => {
         return crumbs;
       }
 
+      const navKeys = window.__harmoniaNavKeys || {};
+      const entityLabel = (entity) => window.T ? T(navKeys[entity], this.navLabel(this.navLabels[entity] || entity)) : this.navLabel(this.navLabels[entity] || entity);
+      const actionLabel = (last) => last === 'create' ? (window.T ? T('application-core:shell.nav.create', 'Create') : 'Create')
+              : last === 'edit' ? (window.T ? T('application-core:shell.nav.edit', 'Edit') : 'Edit')
+              : last === 'preview' ? (window.T ? T('application-core:shell.nav.preview', 'Preview') : 'Preview')
+              : this.navLabel(last);
+
+      // The personal surface: /my/<Entity> (or /my/<Entity>/list beside a personal calendar) is the
+      // browse page, named as its sidebar entry is ("My Invoices") - there is no page at /my, so "My"
+      // is no crumb of its own - and /create and /:id/edit add the action after it (#7390).
+      if (top === 'my' && segments.length > 1) {
+        const entity = segments[1];
+        const isBrowse = segments.length === 2 || (segments.length === 3 && segments[2] === 'list');
+        crumbs.push({ label: 'My ' + entityLabel(entity), route: isBrowse ? null : '/my/' + entity });
+        if (!isBrowse) crumbs.push({ label: actionLabel(segments[segments.length - 1]), route: null });
+        return crumbs;
+      }
+
       // Entity route: top is the entity name; label it the same way the sidebar does.
       // /<Entity>/:id is the LIST with one of its rows selected - the record opens in a sheet over
       // the table, not on a page of its own - so it is one crumb, the list's. Only the routes that
       // really are their own page (/create, /:id/edit, /:id/preview) add a second one; without this
       // the id fell through to the action branch and the trail read "Expenses > 4".
-      // Held to a KNOWN entity: /my/<Entity> and /partner/<Entity> are two segments as well, and
-      // their second one is the entity, which still earns its own crumb.
+      // Held to a KNOWN entity: /partner/<Entity> is two segments as well, and its second one is the
+      // entity, which still earns its own crumb.
       const knownEntity = Object.prototype.hasOwnProperty.call(this.navLabels, top);
       const isRecordOnList =
               knownEntity && segments.length === 2 && segments[1] !== 'create' && segments[1] !== 'list';
       const isList = segments.length === 1 || isRecordOnList;
-      const navKeys = window.__harmoniaNavKeys || {};
-      crumbs.push({ label: window.T ? T(navKeys[top], this.navLabel(this.navLabels[top] || top)) : this.navLabel(this.navLabels[top] || top), route: isList ? null : '/' + top });
-      if (!isList) {
-        const last = segments[segments.length - 1];
-        const action = last === 'create' ? (window.T ? T('application-core:shell.nav.create', 'Create') : 'Create')
-                : last === 'edit' ? (window.T ? T('application-core:shell.nav.edit', 'Edit') : 'Edit')
-                : last === 'preview' ? (window.T ? T('application-core:shell.nav.preview', 'Preview') : 'Preview')
-                : this.navLabel(last);
-        crumbs.push({ label: action, route: null });
-      }
+      crumbs.push({ label: entityLabel(top), route: isList ? null : '/' + top });
+      if (!isList) crumbs.push({ label: actionLabel(segments[segments.length - 1]), route: null });
       return crumbs;
     },
 

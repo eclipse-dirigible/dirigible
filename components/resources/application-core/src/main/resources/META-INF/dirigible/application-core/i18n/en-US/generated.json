@@ -108,6 +108,8 @@
       "addChild": "Add child",
       "previous": "Previous",
       "next": "Next",
+      "previousRecord": "Previous record",
+      "nextRecord": "Next record",
       "previousPeriod": "Previous period",
       "nextPeriod": "Next period",
       "today": "Today",
