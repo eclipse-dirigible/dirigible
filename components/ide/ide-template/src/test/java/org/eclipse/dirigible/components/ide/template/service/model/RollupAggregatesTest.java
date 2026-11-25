@@ -112,10 +112,13 @@ class RollupAggregatesTest {
                             .contains("parent.DisplacedStatus = null;")
                             .contains("derived.put(\"Status\", parent.Status);")
                             .contains("derived.put(\"DisplacedStatus\", null);");
-        assertThat(rendered).as("a roll-up-owned status with no recorded predecessor is reported, not guessed")
-                            .contains("if (parent.DisplacedStatus == null) {")
-                            .contains("LOG.warn(")
-                            .contains("entity.SalesOrder, parent.Status);");
+        assertThat(rendered).as("with nothing displaced, a FULL status falls back to the partial one (#8312)")
+                            .contains("if (parent.DisplacedStatus == null) {\n"
+                                    + "                        if (java.util.Objects.equals(parent.Status, 3)) {\n"
+                                    + "                            parent.Status = 2;\n"
+                                    + "                            derived.put(\"Status\", parent.Status);\n"
+                                    + "                        }\n" + "                    } else {")
+                            .doesNotContain("LOG.warn(");
     }
 
     @Test
@@ -130,5 +133,63 @@ class RollupAggregatesTest {
 
         assertThat(rendered).doesNotContain("capacity")
                             .doesNotContain("parent. ");
+    }
+
+    /**
+     * A roll-up that owns only the FULL band (#7941): no status is spliced in for the missing partial
+     * one - the emitted {@code Objects.equals(parent.Status, )} / {@code ? 3 : ;} did not compile and
+     * took the whole client-Java batch down. Below the capacity the roll-up owns nothing, so a parent
+     * that drops out of the full band gets back the status it displaced, as at a zero sum.
+     */
+    @Test
+    void aFullOnlyStatusSetsTheFullBandAndRelinquishesBelowIt() {
+        Map<String, Object> rollup = sumRollup("Capacity", "Available", "Status");
+        rollup.put("statusWhenFull", "3");
+
+        String rendered = RollupAggregates.render(rollup, "rows");
+
+        assertThat(rendered).as("no seed id may be left empty")
+                            .doesNotContain(", )")
+                            .doesNotContain(": ;")
+                            .doesNotContain("? ;");
+        assertThat(rendered).contains("if (sum.signum() > 0 && sum.compareTo(capacity) >= 0) {")
+                            .contains("parent.Status = 3;")
+                            .contains("} else if (java.util.Objects.equals(parent.Status, 3)) {")
+                            .contains("parent.Status = parent.DisplacedStatus;");
+        assertThat(rendered).as("a single-seed roll-up has no status of its own to fall back to (#8312)")
+                            .contains("LOG.warn(")
+                            .doesNotContain("parent.Status = 2;");
+    }
+
+    /**
+     * The mirror of the full-only roll-up (#7941): only the partial band is owned, so reaching the
+     * capacity relinquishes the status the same way a zero sum does.
+     */
+    @Test
+    void aPartialOnlyStatusSetsThePartialBandAndRelinquishesOutsideIt() {
+        Map<String, Object> rollup = sumRollup("Capacity", "", "Status");
+        rollup.put("statusWhenPartial", "2");
+
+        String rendered = RollupAggregates.render(rollup, "rows");
+
+        assertThat(rendered).doesNotContain(", )")
+                            .doesNotContain(": ;")
+                            .doesNotContain("? ;");
+        assertThat(rendered).contains("if (sum.signum() > 0 && sum.compareTo(capacity) < 0) {")
+                            .contains("parent.Status = 2;")
+                            .contains("} else if (java.util.Objects.equals(parent.Status, 2)) {");
+    }
+
+    /**
+     * A status relation with no seed at all is refused by the parser; the emitter, handed one anyway,
+     * leaves the status alone rather than emitting a block that cannot compile.
+     */
+    @Test
+    void aStatusWithNoSeedEmitsNoStatusBlock() {
+        String rendered = RollupAggregates.render(sumRollup("Capacity", "Available", "Status"), "rows");
+
+        assertThat(rendered).contains("parent.Available = capacity.subtract(sum);")
+                            .doesNotContain("parent.Status")
+                            .doesNotContain(", )");
     }
 }

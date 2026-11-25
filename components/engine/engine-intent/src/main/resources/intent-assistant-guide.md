@@ -5777,9 +5777,13 @@ to also maintain a `balance` field (= `capacity − sum`) and set a `status` rel
 the status back: the first move into one of its two statuses remembers the status it displaced (a
 hidden `Displaced<Status>` column the generator adds to the parent), and a sum that returns to zero -
 the only allocation deleted, amended to 0, re-parented away - restores it, so the invoice is CONFIRMED
-(or ISSUED, if it was paid from there) again instead of PAID with nothing paid. Only a status the
-roll-up itself set is ever relinquished; a manual void or cancel stays. Declare no `statusWhenEmpty`
-- there is none, the remembered status is always the right one:
+(or ISSUED, if it was paid from there) again instead of PAID with nothing paid. A parent that already
+held `statusWhenPartial` when the sum first moved displaced nothing; at zero its `statusWhenFull` falls
+back to `statusWhenPartial`, so a full status never outlives its sum. Only a status the
+roll-up itself set is ever relinquished; a manual void or cancel stays. Either seed may be left out:
+naming only `statusWhenFull` (or only `statusWhenPartial`) makes the roll-up own just that band, and a
+sum outside it gives the status back as a zero sum does; naming neither is refused. Declare no
+`statusWhenEmpty` - there is none, the remembered status is always the right one:
 ```yaml
 rollups:
   # Invoice.paid = sum of its payment allocations; balance = total − paid; Status -> PAID / PARTIAL.
