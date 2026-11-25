@@ -388,7 +388,8 @@ class IntentCaptureUnderMasterIT extends IntegrationTest {
                                                          .statusCode(200)
                                                          .extract()
                                                          .jsonPath()
-                                                         .using(new JsonPathConfig(NumberReturnType.BIG_DECIMAL))
+                                                         .using(JsonPathConfig.jsonPathConfig()
+                                                                              .numberReturnType(NumberReturnType.BIG_DECIMAL))
                                                          .getMap("$")));
         return row.get();
     }
@@ -401,7 +402,8 @@ class IntentCaptureUnderMasterIT extends IntegrationTest {
                                                           .statusCode(200)
                                                           .extract()
                                                           .jsonPath()
-                                                          .using(new JsonPathConfig(NumberReturnType.BIG_DECIMAL))
+                                                          .using(JsonPathConfig.jsonPathConfig()
+                                                                               .numberReturnType(NumberReturnType.BIG_DECIMAL))
                                                           .getList("$")));
         return rows.get();
     }
