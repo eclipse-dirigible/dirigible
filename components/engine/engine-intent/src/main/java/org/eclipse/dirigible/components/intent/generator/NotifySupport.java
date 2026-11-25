@@ -233,14 +233,17 @@ public final class NotifySupport {
      *
      * @param plan the translated notify block, or {@code null} when nothing is sent
      * @param about the entity the message is about (a fan-out's row)
-     * @return the {@code usesRecordUrl} / {@code usesInboxUrl} / {@code recordUrlEntity} /
-     *         {@code recordUrlKeyProperty} keys
+     * @return the {@code usesRecordUrl} / {@code usesInboxUrl} / {@code usesShareUrl} /
+     *         {@code recordUrlEntity} / {@code recordUrlKeyProperty} keys
      */
     public static Map<String, Object> deepLinkFields(NotificationSupport.Plan plan, EntityIntent about) {
         boolean record = plan != null && plan.usesRecordUrl() && about != null;
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put("usesRecordUrl", String.valueOf(record));
         fields.put("usesInboxUrl", String.valueOf(plan != null && plan.usesInboxUrl()));
+        // {shareUrl} (#8616): the template mints the link through the repository of the record the
+        // message is about, whose share: the parser has required.
+        fields.put("usesShareUrl", String.valueOf(plan != null && plan.usesShareUrl() && about != null));
         fields.put("recordUrlEntity", record ? about.getName() : "");
         fields.put("recordUrlKeyProperty", record ? IntentEntities.keyFieldName(about) : "");
         return fields;

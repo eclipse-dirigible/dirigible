@@ -168,4 +168,41 @@ class GlueTransitionsTest {
                                .containsKey("stampNumbers"),
                 "only the move that declares the stamp issues the number");
     }
+
+    /**
+     * A move that asks for input (#7909) carries each answer's property, its conversion to the field's
+     * type, whether it is required and the label and catalog key it is refused with - the create-from
+     * prompt's entries; a move asking nothing carries none, so its controller is unchanged.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aPromptedTransitionCarriesTheInputsItWrites() {
+        IntentModel model = IntentParser.parse(YAML.replace("    icon: ban\n", """
+                    icon: ban
+                    prompt:
+                      - { field: number, required: true }
+                      - { field: paid }
+                """));
+        Map<String, Object> t = GlueIntentGenerator.buildTransitionsForTest(model)
+                                                   .get(0);
+        List<Map<String, Object>> prompted = GlueRendering.rendered((List<Map<String, Object>>) t.get("promptFields"));
+
+        assertEquals(2, prompted.size());
+        assertEquals("Number", prompted.get(0)
+                                       .get("prop"));
+        assertEquals(true, prompted.get(0)
+                                   .get("required"));
+        assertEquals("String.valueOf(raw)", prompted.get(0)
+                                                    .get("expr"));
+        assertEquals("billing:billing-model.t.INVOICE_NUMBER", prompted.get(0)
+                                                                       .get("labelKey"));
+        assertEquals("new java.math.BigDecimal(String.valueOf(raw))", prompted.get(1)
+                                                                              .get("expr"));
+        assertEquals("billing:billing-model", t.get("refusalCatalog"));
+
+        assertFalse(GlueIntentGenerator.buildTransitionsForTest(IntentParser.parse(YAML))
+                                       .get(0)
+                                       .containsKey("promptFields"),
+                "a move asking nothing carries no inputs");
+    }
 }

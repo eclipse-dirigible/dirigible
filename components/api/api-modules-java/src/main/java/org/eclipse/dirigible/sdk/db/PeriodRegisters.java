@@ -43,4 +43,25 @@ public final class PeriodRegisters {
         }
         return false;
     }
+
+    /**
+     * The topic a register announces on that one of its periods stands open again (dirigible #8755).
+     *
+     * <p>
+     * A posting into a record locked by another model's register leaves a document dated in a closed
+     * period unposted, and must re-run it once that period reopens. The register's own
+     * {@code -transitioned} / {@code -updated} topics carry its project and perspective, which the
+     * posting model cannot name, so the register's model relays every move of a period into a status
+     * that is not closed onto this topic, keyed only by what an {@code immutableInPeriod.model} lock
+     * already names. The message is a JSON object carrying {@code model}, {@code register}, {@code id},
+     * {@code start} and {@code end}, the bounds as ISO dates. Like every application topic it is scoped
+     * to the tenant that published it.
+     *
+     * @param model the model owning the register
+     * @param register the register's entity name
+     * @return the topic, e.g. {@code dirigible-period-journal-FiscalPeriod-reopened}
+     */
+    public static String reopenedTopic(String model, String register) {
+        return "dirigible-period-" + model + "-" + register + "-reopened";
+    }
 }

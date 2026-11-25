@@ -744,11 +744,23 @@
         </div>
 
         <!-- The way back out of the record, where the reference app puts it: one footer control,
-             which Esc and the scrim also do (see the detailsOpen watcher). -->
+             which Esc and the scrim also do (see the detailsOpen watcher). On the right, the way to
+             the record above or below it in the table without leaving the sheet (#8869). -->
         <div x-h-toolbar.footer class="shrink-0">
           <button x-h-button data-variant="transparent" @click="closeDetails()">
             <svg role="presentation" x-h-lucide data-lucide="arrow-left"></svg>
             <span x-text="T('$projectName:${tprefix}.defaults.backToList', 'Back to list')"></span>
+          </button>
+          <div x-h-toolbar-spacer></div>
+          <button x-h-button data-variant="transparent" data-size="icon" data-record-previous :disabled="!hasPreviousRecord" @click="stepRecord(-1)"
+                  :aria-label="T('$projectName:${tprefix}.defaults.previousRecord', 'Previous record')"
+                  :title="T('$projectName:${tprefix}.defaults.previousRecord', 'Previous record')">
+            <svg role="presentation" x-h-lucide data-lucide="chevron-left"></svg>
+          </button>
+          <button x-h-button data-variant="transparent" data-size="icon" data-record-next :disabled="!hasNextRecord" @click="stepRecord(1)"
+                  :aria-label="T('$projectName:${tprefix}.defaults.nextRecord', 'Next record')"
+                  :title="T('$projectName:${tprefix}.defaults.nextRecord', 'Next record')">
+            <svg role="presentation" x-h-lucide data-lucide="chevron-right"></svg>
           </button>
         </div>
       </div>

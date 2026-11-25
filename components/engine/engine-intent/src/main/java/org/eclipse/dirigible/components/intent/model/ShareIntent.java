@@ -21,6 +21,8 @@ import java.util.List;
  *   copy: SalesInvoiceCopy       # required: the function: Snapshot child whose stored file is served
  *   roles: [SalesInvoiceShare]   # required: who may create and revoke links; [] admits nobody
  *   expiresAfterDays: 0          # optional, default 0 = permanent; a tenant can only shorten it
+ *   expiry:                      # optional: the first entry whose when: the record meets sets the days
+ *     - { when: "Customer.Kind == 2", days: 30 }
  * </pre>
  *
  * Without the block no link can exist for the entity - there is no switch anywhere that makes an
@@ -43,6 +45,9 @@ public class ShareIntent {
 
     /** The roles that may create and revoke links; {@code null} when the key is not declared. */
     private List<String> roles;
+
+    /** The life by record (#8620): the first entry whose condition holds, else expiresAfterDays. */
+    private List<Expiry> expiry;
 
     public Object getWhen() {
         return when;
@@ -76,6 +81,14 @@ public class ShareIntent {
         this.roles = roles;
     }
 
+    public List<Expiry> getExpiry() {
+        return expiry;
+    }
+
+    public void setExpiry(List<Expiry> expiry) {
+        this.expiry = expiry;
+    }
+
     /**
      * The declared life as whole days.
      *
@@ -83,13 +96,55 @@ public class ShareIntent {
      *         whole number - the parser reports it
      */
     public Integer expiresAfterDaysOrNull() {
-        if (expiresAfterDays == null) {
-            return 0;
-        }
-        if (expiresAfterDays instanceof Number number && number.doubleValue() == Math.rint(number.doubleValue())
+        return expiresAfterDays == null ? Integer.valueOf(0) : wholeDays(expiresAfterDays);
+    }
+
+    /** A value as whole days, or {@code null} when it is none. */
+    private static Integer wholeDays(Object value) {
+        if (value instanceof Number number && number.doubleValue() == Math.rint(number.doubleValue())
                 && Math.abs(number.doubleValue()) <= Integer.MAX_VALUE) {
             return number.intValue();
         }
         return null;
+    }
+
+    /**
+     * One entry of {@code expiry:} (#8620): a link created while the record meets {@code when} lives
+     * {@code days} - read when the link is created, so the link keeps the life it was given.
+     */
+    public static class Expiry {
+
+        /**
+         * The record condition - its own property or a one-hop {@code Relation.field}, or a list (ANDed).
+         */
+        private Object when;
+
+        /** The life in days, {@code 0} for a permanent link. */
+        private Object days;
+
+        public Object getWhen() {
+            return when;
+        }
+
+        public void setWhen(Object when) {
+            this.when = when;
+        }
+
+        public Object getDays() {
+            return days;
+        }
+
+        public void setDays(Object days) {
+            this.days = days;
+        }
+
+        /**
+         * The declared life as whole days.
+         *
+         * @return the days, or {@code null} when absent or not a whole number - the parser reports it
+         */
+        public Integer daysOrNull() {
+            return wholeDays(days);
+        }
     }
 }

@@ -188,6 +188,72 @@ public final class CheckSupport {
     }
 
     /**
+     * One term of a {@code notExists} check's {@code where:} over the TARGET's rows (#8002, #8623): a
+     * target property, an operator and one operand - matched against the TRIMMED term, so no two
+     * quantifiers compete for the same whitespace.
+     */
+    private static final Pattern TARGET_TERM = Pattern.compile("(\\w+)\\s*(==|!=|>=|<=|>|<)\\s*(\\S(?:.*\\S)?)");
+
+    /**
+     * The list form of a {@code where:} term: {@code <target property> in [a, b]}, over the trimmed
+     * term.
+     */
+    private static final Pattern TARGET_IN_TERM = Pattern.compile("(\\w+)\\s+in\\s*\\[([^\\[\\]]*)\\]");
+
+    /** An operand that is a value rather than a path on the record. */
+    private static final Pattern LITERAL = Pattern.compile("'[^']*'|\"[^\"]*\"|-?\\d+(?:\\.\\d+)?|true|false|null");
+
+    /** The operator of a {@code where:} term in its list form. */
+    public static final String IN = "in";
+
+    /**
+     * One parsed {@code where:} term of a {@code notExists} check.
+     *
+     * @param property the TARGET's property, as authored
+     * @param op the operator - {@code == != >= <= > <} or {@link #IN}
+     * @param operands the operand, or the values of an {@code in} list - each a literal or a path on
+     *        the record
+     */
+    public record TargetTerm(String property, String op, List<String> operands) {
+    }
+
+    /**
+     * Parses one {@code where:} term of a {@code notExists} check.
+     *
+     * @param term the authored term
+     * @return the parsed term, or {@code null} when it does not have the shape
+     */
+    public static TargetTerm targetTerm(String term) {
+        if (term == null) {
+            return null;
+        }
+        String trimmed = term.trim();
+        Matcher in = TARGET_IN_TERM.matcher(trimmed);
+        if (in.matches()) {
+            List<String> values = new ArrayList<>();
+            for (String value : in.group(2)
+                                  .split(",", -1)) {
+                values.add(value.trim());
+            }
+            return new TargetTerm(in.group(1), IN, values);
+        }
+        Matcher matcher = TARGET_TERM.matcher(trimmed);
+        return matcher.matches() ? new TargetTerm(matcher.group(1), matcher.group(2), List.of(matcher.group(3))) : null;
+    }
+
+    /**
+     * Whether a {@code where:} operand is a value - a number, a quoted string, a boolean or
+     * {@code null} - rather than a path on the record.
+     *
+     * @param operand the authored operand
+     * @return whether it is a literal
+     */
+    public static boolean isLiteral(String operand) {
+        return operand != null && LITERAL.matcher(operand)
+                                         .matches();
+    }
+
+    /**
      * Parses one comparison.
      *
      * @param term the authored comparison
