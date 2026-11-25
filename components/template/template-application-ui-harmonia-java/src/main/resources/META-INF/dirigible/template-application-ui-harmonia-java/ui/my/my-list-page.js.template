@@ -196,7 +196,7 @@ document.addEventListener('alpine:init', () => {
     goCalendar() { this.navigate('/my/${name}'); },
 #end
     newEntity() { this.navigate('/my/${name}/create'); },
-    openEntity(row) { this.navigate('/my/${name}/' + row.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end + '/edit'); },
+    openEntity(row) { this.navigate('/my/${name}/' + row.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end + '/preview'); },
     // A click on a row opens it - except one that started in the row's own "..." menu, which acts on
     // its own. Not @click.stop on the menu: that would keep the click from the document, where
     // Harmonia closes an open menu (#8259).

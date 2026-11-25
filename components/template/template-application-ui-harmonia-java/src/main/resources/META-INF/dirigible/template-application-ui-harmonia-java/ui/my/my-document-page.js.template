@@ -10,11 +10,21 @@
  * reuses the item COLUMN metadata that detail-register already published (App.detailsFor), but reads
  * and writes item DATA through the personal items controller so ownership + sensitive-field stripping
  * are enforced server-side. Sensitive fields never arrive; the owner is forced by the server.
+ * Laid out as the power document (#7390): preview / edit / create, one primary action.
  */
 #set($statusProp = "")
 #foreach($property in $properties)
 #if($property.widgetType == "DOCUMENT_STATUS")#set($statusProp = $property.name)#end
 #end
+#set($skipOwnerFk = "$!{personalProperty}")
+#set($skipParentFk = "__none__")
+## The document's own label (#8370): its Number, else its Name.
+#set($recordLabelProperty = "")
+#foreach($property in $properties)#if($recordLabelProperty == "" && $property.widgetType == "DOCUMENT_NUMBER")#set($recordLabelProperty = $property.name)#end#end
+#if($recordLabelProperty == "")#foreach($property in $properties)#if($recordLabelProperty == "" && $property.name == "Name")#set($recordLabelProperty = "Name")#end#end#end
+## How a value is printed (the manage form's macros): the widget fieldDisplay formats by, a float's pattern.
+#macro(displayWidget $p)#if($p.numberStampOnIssue)DOCUMENT_NUMBER#elseif($p.isDateType && $p.widgetType == "DATE")DATE#elseif($p.isDateType)DATETIME-LOCAL#else$!{p.widgetType}#end#end
+#macro(displayPattern $p)#if($p.isFloatType)$!{p.formatPattern}#end#end
 ## A relation labelled by a number: { stampOn: issue } field shows the draft marker, never its UUID
 ## placeholder (#7722): labelOf reads one row's label, labelRows hands a helper rows already marked.
 #macro(labelOf $dnProp $dnRow)#if($dnProp.widgetDropDownDocumentNumber)window.HarmoniaFormat.documentNumber(${dnRow}.${dnProp.widgetDropDownValue})#else${dnRow}.${dnProp.widgetDropDownValue}#end#end
@@ -23,6 +33,7 @@ document.addEventListener('alpine:init', () => {
   Alpine.data('${name}MyDocumentPage', () => ({
     ...basePage(),
     state: 'loading',
+    // 'preview' | 'edit' | 'create', from the route: /my/${name}/:id/preview, /:id/edit, /create.
     mode: 'create',
     id: null,
     error: null,
@@ -52,6 +63,15 @@ document.addEventListener('alpine:init', () => {
     caView: '${name}',
     // Whether init() wired the re-read after a document action - init() runs again on the guard's Discard.
     actionDoneWired: false,
+    // Whether this surface writes ${name} at all: a personalReadOnly or application-written entity is
+    // read here, never edited (its controller refuses every write with 403).
+    writable: #if(!$personalReadOnly && !$systemWritten)true#{else}false#end,
+    // Record action bar (#7491): below 1024px the page narrows, below 768px the actions pin to the
+    // bottom of the screen and the secondary folds into the overflow menu.
+    isNarrow: false,
+    isWide: true,
+    // Whether init() registered the breakpoint listeners - init() runs again on the guard's Discard.
+    viewportWatched: false,
 
     // Role-scoped line-item columns withheld from this caller (see init).
     itemRestricted: [],
@@ -63,6 +83,12 @@ document.addEventListener('alpine:init', () => {
     // authoritative; the pre-check fails OPEN (an outage must not lock the UI).
     mutable: true,
 #end
+
+    get isPreview() { return this.mode === 'preview'; },
+    // The document may be changed here: the surface writes, and the document is not locked.
+    get canEdit() {
+      return this.writable#if($immutableStatusProperty || $immutableAlways || $periodLock) && this.mutable#end;
+    },
 
     // Items state (the ${documentItemsEntity} line items, rendered inline).
     itemsDef: null,        // column metadata reused from detail-register (App.detailsFor)
@@ -129,9 +155,18 @@ document.addEventListener('alpine:init', () => {
         }
       }
       await this.loadOwnerName();
+      if (!this.viewportWatched) {
+        this.viewportWatched = true;
+        this.watchViewport();
+      }
+      // Read the live hash, not PineconeRouter.context.path: Pinecone can fire pinecone:end before
+      // the context is assigned, but the hash is already updated.
       const params = (window.PineconeRouter.context && window.PineconeRouter.context.params) || {};
       this.id = params.id || null;
-      this.mode = this.id ? 'edit' : 'create';
+      const routePath = (window.location.hash || '').split('?')[0];
+      this.mode = !this.id ? 'create' : (routePath.endsWith('/preview') ? 'preview' : 'edit');
+      // A document this surface may not write opens in preview even on /edit.
+      if (this.mode === 'edit' && !this.writable) this.mode = 'preview';
       if (this.id) {
         try {
           const record = await App.services.api.get(this.apiPath + '/' + this.id);
@@ -144,6 +179,8 @@ document.addEventListener('alpine:init', () => {
           } catch (e) {
             console.error('[${name}MyDocumentPage] mutable pre-check failed', e);
           }
+          // A locked document opened on /edit renders as preview, as if Preview had been chosen.
+          if (!this.mutable && this.mode === 'edit') this.mode = 'preview';
 #end
           for (const key of Object.keys(this.form)) {
             if (record[key] !== undefined && record[key] !== null) this.form[key] = record[key];
@@ -232,11 +269,12 @@ document.addEventListener('alpine:init', () => {
 
     // ----- The document's own actions on the personal surface (#8406) ----------------------------
     // Only those contributed for this surface - their endpoints are scoped to the caller's own
-    // records - and only once the stored document is on screen: the store fails OPEN on a status it
+    // records - in preview only (an action acts on the STORED document, which an edit in progress does
+    // not match), and only once the stored document is on screen: the store fails OPEN on a status it
     // does not have, so an action offered while the document loads could be refused when clicked.
     personalActions() {
       const store = Alpine.store('customActions');
-      if (!store || this.mode !== 'edit' || this.state !== 'default') return [];
+      if (!store || !this.isPreview || this.state !== 'default') return [];
       return store.getActions(this.caView, 'entity', this.record, 'my');
     },
     recordActions() {
@@ -249,6 +287,117 @@ document.addEventListener('alpine:init', () => {
     runRecordAction(action) {
       Alpine.store('customActions').trigger(action, this.id, this.record);
     },
+
+    // ----- Record action bar (#7491) ---------------------------------------------------------------
+    // At most ONE filled button, decided here: a contributed action declared primary (#8119), else Edit,
+    // else none - a record its owner may not change offers no button that would 403.
+    get primaryCustomAction() {
+      return this.recordActions().find((a) => a.primary) || null;
+    },
+    get primaryAction() {
+      if (this.primaryCustomAction) return 'action';
+      return this.canEdit ? 'edit' : 'none';
+    },
+    // Edit steps down to the outlined slot when an action holds the filled one, and folds into the
+    // overflow menu on a narrow viewport.
+    get showsSecondaryEdit() { return this.primaryAction === 'action' && this.canEdit && !this.isNarrow; },
+    get editInMenu() { return this.primaryAction === 'action' && this.canEdit && this.isNarrow; },
+    // The overflow menu's record actions: all but the one in the filled slot and the destructive ones.
+    get menuRecordActions() {
+      const primary = this.primaryAction === 'action' ? this.primaryCustomAction : null;
+      return this.recordActions().filter((a) => a !== primary);
+    },
+    get menuHasDelete() { return Boolean(this.id) && this.canEdit; },
+    // The trigger shows only when the menu would carry something.
+    get hasOverflowMenu() {
+      return this.menuRecordActions.length > 0 || this.editInMenu || this.destructiveRecordActions().length > 0 || this.menuHasDelete;
+    },
+    runPrimaryAction() {
+      const action = this.primaryCustomAction;
+      if (action) this.runRecordAction(action);
+    },
+    primaryActionLabel() {
+      const a = this.primaryCustomAction;
+      if (!a) return '';
+      return a.translation && a.translation.key ? T(a.translation.key, a.label, a.translation.options || {}) : a.label;
+    },
+
+    // Preview -> the editable form of the same record (returnTo carried over).
+    goEdit() {
+      const ret = this.queryParam('returnTo');
+      this.navigate('/my/${name}/' + encodeURIComponent(this.id) + '/edit' + (ret ? '?returnTo=' + encodeURIComponent(ret) : ''));
+    },
+
+    // Ctrl/Cmd+S saves from anywhere on the form, under the same guard the Save button carries.
+    saveShortcut() {
+      if (this.isPreview || !this.writable || this.saving || this.state !== 'default') return;
+      if (this.mode === 'edit' && !this.isDirty()) return;
+      this.save();
+    },
+    // Escape leaves a preview the way Close does - never while one of the dialogs is open.
+    escapeDismiss() {
+      if (!this.isPreview || this.leaveOpen || this.deleteOpen) return;
+      this.goBack();
+    },
+    // The two thresholds above, bound in JS: Harmonia ships no md:/lg: variants for the rail's border,
+    // padding and width, or for the bar's position.
+    watchViewport() {
+      if (!window.Harmonia || typeof Harmonia.getBreakpointListener !== 'function') return;
+      Harmonia.getBreakpointListener((narrow) => { this.isNarrow = !!narrow; }, 768);
+      Harmonia.getBreakpointListener((narrow) => { this.isWide = !narrow; }, 1024);
+    },
+
+    // ----- Record header (#8370) -------------------------------------------------------------------
+    // The document's own label - its Number (read as the draft marker while unstamped, #7722), else its
+    // Name - or '' when it has none. Never the id.
+    headerLabel() {
+#if($recordLabelProperty != "")
+      const label = this.record ? this.record.${recordLabelProperty} : null;
+      if (this.mode !== 'create' && label != null && String(label).trim() !== '') return String(window.HarmoniaFormat.documentNumber(label));
+#end
+      return '';
+    },
+    // Titled with the record's label once it has one, the caption above it then saying what the record
+    // is; otherwise the entity name in preview, "Update ..." in edit, "Create ..." on a new record.
+    headerTitle() { return this.headerLabel() || this.headerKind(); },
+    headerCaption() {
+      const owner = this.ownerName ? T('$projectName:${tprefix}.defaults.for', 'for') + ' ' + this.ownerName : '';
+      if (this.headerLabel()) return this.headerKind() + (owner ? ' ' + owner : '');
+      return owner;
+    },
+    headerKind() {
+      const name = T('$projectName:${tprefix}.t.${dataName}', '${documentLabel}');
+      if (this.isPreview) return name;
+      return this.mode === 'edit'
+        ? T('$projectName:${tprefix}.defaults.formHeadUpdate', 'Update {{name}}', { name: name })
+        : T('$projectName:${tprefix}.defaults.formHeadCreate', 'Create {{name}}', { name: name });
+    },
+    // The line under the title in preview (intent `subtitle:`, #8370): the declared values, in order,
+    // printed as every other surface prints them, each with its field's label for the tooltip. An empty
+    // value is skipped, and so is a field this surface does not serve.
+    subtitleParts() {
+      if (this.mode === 'create' || this.state !== 'default') return [];
+      const parts = [];
+#foreach($property in $subtitleProperties)
+#if(!$property.sensitiveProperty && $property.name != $skipOwnerFk && $property.name != $skipParentFk)
+#if($property.widgetLabel)#set($slabel = $property.widgetLabelJs)#else#set($slabel = $property.name)#end
+#if($property.roleRead)
+      if (this.canSee('${property.name}')) {
+#end
+      this.pushSummary(parts, this.record.${property.name}, '#displayWidget($property)', '#displayPattern($property)', #if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT")this.options['${property.name}']#{else}null#end, T('$projectName:${tprefix}.t.${property.dataName}', '${slabel}'));
+#if($property.roleRead)
+      }
+#end
+#end
+#end
+      return parts;
+    },
+    pushSummary(parts, value, widget, pattern, options, title) {
+      if (Array.isArray(value) && !value.length) return;
+      const text = this.fieldDisplay(value, widget, pattern, options);
+      if (text !== '' && text !== null && text !== undefined) parts.push({ text: String(text), title: title });
+    },
+
 
     queryParam(name) {
       const search = (window.location.hash.split('?')[1] || '');
@@ -412,7 +561,7 @@ document.addEventListener('alpine:init', () => {
     // A see-only items panel (the personal surface, or the items child's own personalReadOnly) - or an
     // immutable document - still SHOWS the calendar; it just never opens the item dialog from it.
     itemsEditable() {
-      return #if($documentItemsReadOnly)false#{else}#if($immutableStatusProperty || $immutableAlways || $periodLock)this.mutable === true#{else}true#end#end;
+      return #if($documentItemsReadOnly)false#{else}!this.isPreview#if($immutableStatusProperty || $immutableAlways || $periodLock) && this.mutable === true#end#end;
     },
 
     onItemsEventClick(e) {
@@ -475,6 +624,8 @@ document.addEventListener('alpine:init', () => {
     // Harmonia closes an open menu, so a menu open elsewhere stayed open (#8259).
     itemRowClicked(event, row) {
       if (event.target.closest('[data-row-control]')) return;
+      // In preview the lines are read, not edited - as on the power document.
+      if (this.isPreview) return;
 #if($immutableStatusProperty || $immutableAlways || $periodLock)
       if (!this.mutable) return;
 #end
@@ -484,6 +635,7 @@ document.addEventListener('alpine:init', () => {
     // `preset` seeds a CREATE draft with values the caller already knows (the day clicked on the items
     // calendar).
     async openItem(row, preset) {
+      if (this.isPreview) return;
       // A line is saved on its own, against the header as the server holds it - so starting one with
       // an unsaved header leaves the user believing the whole document was saved (issue #7359).
       if (this.isDirty()) { this.confirmLeave(() => this.openItem(row, preset), 'continue'); return; }
@@ -744,8 +896,24 @@ document.addEventListener('alpine:init', () => {
     },
 
     // A document with unsaved header edits asks before it is abandoned (issue #7359); a clean one
-    // leaves silently, as before.
-    goBack() { this.guardExit(() => this.navigate('/my/${name}')); },
+    // leaves silently, as before. An edit of a stored document returns to its preview; a preview or a
+    // new document leaves for the list.
+    goBack() { this.guardExit(() => this.navigate(this.mode === 'edit' ? this.previewRoute() : '/my/${name}')); },
+
+    // The record's own preview, returnTo carried over: where an edit of a stored record ends - saved or
+    // discarded - rather than the list it was opened from.
+    previewRoute() {
+      const ret = this.queryParam('returnTo');
+      return '/my/${name}/' + encodeURIComponent(this.id) + '/preview' + (ret ? '?returnTo=' + encodeURIComponent(ret) : '');
+    },
+
+    // The header's Save: the document - edited or just created - ends in its preview once the save
+    // landed; its lines are added from Edit. save() itself stays put - the guard's "Save and continue"
+    // saves before opening a line, which needs the editable page.
+    async saveAndPreview() {
+      await this.save();
+      if (this.id && !this.error && !this.isDirty()) this.navigate(this.previewRoute());
+    },
 #set($docChildren = [])
 #if($myChildren)
 #foreach($child in $myChildren)
@@ -856,22 +1024,25 @@ document.addEventListener('alpine:init', () => {
       return String(v);
     },
 
+    // A child opens in its own preview and comes back here, to the document it was opened from - in
+    // the mode this page is in.
+    returnHere() { return '/my/${name}/' + this.id + (this.isPreview ? '/preview' : '/edit'); },
     addChild(child) {
       if (child.readOnly) return;
       this.guardExit(() => this.navigate('/my/' + child.name + '/create?' + encodeURIComponent(child.fkProperty) + '='
-          + encodeURIComponent(this.id) + '&returnTo=' + encodeURIComponent('/my/${name}/' + this.id + '/edit')));
+          + encodeURIComponent(this.id) + '&returnTo=' + encodeURIComponent(this.returnHere())));
     },
-    editChild(child, id) {
-      this.guardExit(() => this.navigate('/my/' + child.name + '/' + id + '/edit?returnTo=' + encodeURIComponent('/my/${name}/' + this.id + '/edit')));
+    openChild(child, id) {
+      this.guardExit(() => this.navigate('/my/' + child.name + '/' + id + '/preview?returnTo=' + encodeURIComponent(this.returnHere())));
     },
     onChildEventClick(child, e) {
       const id = e && e.detail && e.detail.event ? e.detail.event.id : null;
-      if (id) this.editChild(child, id);
+      if (id) this.openChild(child, id);
     },
     onChildDateClick(child, e) {
       if (child.readOnly) return;
       let q = '?' + encodeURIComponent(child.fkProperty) + '=' + encodeURIComponent(this.id)
-            + '&returnTo=' + encodeURIComponent('/my/${name}/' + this.id + '/edit');
+            + '&returnTo=' + encodeURIComponent(this.returnHere());
       const d = e && e.detail ? e.detail.date : null;
       if (d instanceof Date && !isNaN(d.getTime())) {
         const p = n => String(n).padStart(2, '0');
