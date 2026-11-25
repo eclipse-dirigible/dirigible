@@ -1482,6 +1482,21 @@ public class ${name}Controller {
 #end
 
 #end
+#if($captureUnderMaster)
+    /**
+     * The lock create() applies to the ${masterEntity} a new ${name} is filed under, for the document
+     * capture that creates one there (#8626): it asks before the document is read, so a scan under a
+     * locked ${masterEntity} is refused with this controller's own answer and costs no reading.
+     *
+     * @param masterId the ${masterEntity} the capture names
+     */
+    public void requireCaptureMasterMutable(${masterEntityIdJavaClass} masterId) {
+#if($masterLock)
+        requireMasterMutable(masterId);
+#end
+    }
+
+#end
 #if($masterLock)
     // Inherited immutability: this ${name} is a line of a ${masterLock.entity}, and its writes
     // recompute that document's totals - so while the document is locked its lines are locked with it,
