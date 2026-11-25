@@ -47,6 +47,15 @@ public final class Tenant {
         return current().getName();
     }
 
+    /**
+     * Whether the current tenant is the default one - the tenant a single-tenant deployment runs as.
+     *
+     * @return {@code true} for the default tenant
+     */
+    public static boolean isDefault() {
+        return current().isDefault();
+    }
+
     private static org.eclipse.dirigible.components.base.tenant.Tenant current() {
         TenantContext context = Beans.get(TenantContext.class);
         return context.isInitialized() ? context.getCurrentTenant() : Beans.get(org.eclipse.dirigible.components.base.tenant.Tenant.class);
