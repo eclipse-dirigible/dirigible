@@ -141,6 +141,40 @@
           <label x-h-label for="$el.id"#tlabel($el)>$!el.label</label>
           <input x-h-input type="color" id="$el.id" x-model="model.$el.model"#if($el.readonly) readonly#end />
         </div>
+#elseif($el.controlId == "table")
+        <!-- A read-only table of rows (the form-builder table: headers = the columns, model = the rows).
+             On a task form it is the record's lines (intent forms[].items): form.js lists them from the
+             controller the trigger seeded, so the table shows once they arrive - and stays hidden when
+             they cannot be read, as the header fields keep their snapshot then. Cells are formatted
+             like the header fields: a number with its pattern, a date in the instance format. -->
+        <div class="vbox gap-2 sm:col-span-2" x-show="Array.isArray(model.$el.model)">
+#if($el.label)
+          <span x-h-text.muted class="text-xs"#tlabel($el)>$!el.label</span>
+#end
+          <div x-h-table-container>
+          <table x-h-table data-borders="rows" class="w-full">
+            <thead x-h-table-header>
+              <tr x-h-table-row>
+#foreach($h in $el.headers)
+                <th x-h-table-head scope="col"#if($h.controlId == "input-number") class="text-right"#end#tlabel($h)>$!h.label</th>
+#end
+              </tr>
+            </thead>
+            <tbody x-h-table-body>
+              <template x-for="(row, i) in (model.$el.model || [])" :key="i">
+                <tr x-h-table-row>
+#foreach($h in $el.headers)
+                  <td x-h-table-cell#if($h.controlId == "input-number") class="text-right"#end x-text="cell(row['$h.value'], '$!h.controlId', '$!h.pattern')"></td>
+#end
+                </tr>
+              </template>
+              <tr x-h-table-row x-show="!(model.$el.model || []).length">
+                <td x-h-table-cell colspan="$el.headers.size()" class="text-center">—</td>
+              </tr>
+            </tbody>
+          </table>
+          </div>
+        </div>
 #elseif($el.controlId == "button")
         <button x-h-button#if($buttonVariantAliases.containsKey($el.type)) data-variant="$buttonVariantAliases.get($el.type)"#elseif($buttonVariants.contains($el.type)) data-variant="$el.type"#end type="button"#if($el.callback) @click="run('$el.callback')"#elseif($el.isSubmit) @click="submit()"#end#tlabel($el)>$!el.label</button>
 #else
@@ -165,6 +199,13 @@
 #macro(relationMeta $el)
 #if($el.controlId == "input-select" && $el.options && !$el.readonly)
         { model: '$el.model', urlVar: '$el.options', labelVar: '$el.optionLabel', valueProperty: '$el.optionValue' },
+#end
+#end
+## A table that lists its rows from a locator (a task form's lines): the process variable holding the
+## controller URL, and the rows' key to the task's record. form.js lists them into the table's model.
+#macro(tableMeta $el)
+#if($el.controlId == "table" && $el.source && $el.masterProperty)
+        { model: '$el.model', source: '$el.source', masterProperty: '$el.masterProperty' },
 #end
 #end
 <!DOCTYPE html>
@@ -312,6 +353,15 @@
 #else
 #relationMeta($element)
 #end
+#end
+      ];
+    </script>
+    <!-- Tables that list the task record's lines (intent forms[].items): the process variable that locates
+         the rows' controller and the rows' key to the record. form.js lists them into each table's model. -->
+    <script>
+      window.__harmoniaTables = [
+#foreach($element in $form)
+#tableMeta($element)
 #end
       ];
     </script>

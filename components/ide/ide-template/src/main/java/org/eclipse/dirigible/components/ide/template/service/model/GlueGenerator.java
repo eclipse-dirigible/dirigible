@@ -55,7 +55,7 @@ class GlueGenerator {
             "inboundMessages", "inboundFiles", "imports", "captures", "outbound", "exports", "stepEvents", "rollups", "expansions",
             "expansionCleanups", "settlements", "settlementListeners", "settlementCleanups", "generates", "generateEvents",
             "generateReopens", "transitions", "personalTransitions", "sends", "posts", "aggregates", "postings", "postingReopens",
-            "printFeeders", "snapshots", "numbering", "resolves");
+            "postReopens", "periodReopenNotices", "printFeeders", "snapshots", "numbering", "resolves");
 
     /** The renderer. */
     private final ModelTemplateRenderer renderer;
@@ -133,6 +133,10 @@ class GlueGenerator {
             case "personalTransitions" -> each(collection, source, content, model, parameters, GlueGenerator::bindPersonalTransition);
             case "sends" -> each(collection, source, content, model, parameters, GlueGenerator::bindSend);
             case "posts" -> each(collection, source, content, model, parameters, GlueGenerator::bindPost);
+            // A posts: row's reopen sweep (#8772) renders the posting's sweep template, bound from the
+            // row's descriptor in the posting's vocabulary.
+            case "postReopens" -> each(collection, source, content, model, parameters, GlueGenerator::bindPostReopen);
+            case "periodReopenNotices" -> each(collection, source, content, model, parameters, GlueGenerator::bindPeriodReopenNotice);
             // The reopen sweep renders from the posting it re-runs (#7703), so the two cannot
             // disagree about which documents qualify.
             case "postings", "postingReopens" -> each(collection, source, content, model, parameters, GlueGenerator::bindPosting);
@@ -206,6 +210,27 @@ class GlueGenerator {
             context.remove("personalIdentityRepositoryClass");
         }
         context.put("relationLinks", relationLinks(item.get("relationLinks"), parameters));
+        context.put("itemLinks", itemLinks(item.get("itemLinks"), parameters));
+    }
+
+    /**
+     * Assembles the controller URL of each composition child whose lines a task form of the trigger's
+     * process lists (issue #7907). A child lives in its master's model, so the URL is this project's.
+     *
+     * @param raw the declared links
+     * @param parameters the generation parameters
+     * @return the resolved links
+     */
+    private static List<Object> itemLinks(Object raw, Map<String, Object> parameters) {
+        List<Object> links = new ArrayList<>();
+        for (Map<String, Object> link : asMaps(raw)) {
+            Map<String, Object> resolved = new LinkedHashMap<>();
+            resolved.put("entity", link.get("entity"));
+            resolved.put("url", "/services/java/" + str(parameters, "projectName") + "/gen/" + str(parameters, "javaGenFolderName")
+                    + "/api/" + sanitize(link, "perspective") + "/" + str(link, "entity") + "Controller");
+            links.add(resolved);
+        }
+        return links;
     }
 
     /**
@@ -900,6 +925,10 @@ class GlueGenerator {
             tablePrefix = tablePrefix + "_";
         }
         context.put("table", tablePrefix + str(item, "table"));
+        // A line captured under an existing record (#8626), named by the line's key to it - also by its
+        // owner from the personal surface when the record is `personal:`.
+        copy(context, item, "hasMaster", "masterEntity", "masterBackRef", "masterKeyJavaClass", "hasPersonalMaster", "keyJavaClass");
+        context.put("javaMasterPerspective", truthy(item, "hasMaster") ? sanitize(item, "masterPerspective") : "");
     }
 
     /** Whether any of a capture's fields or relations is one its row cannot be inserted without. */
@@ -1144,16 +1173,7 @@ class GlueGenerator {
         context.put("fieldAssignments", assignments(item.get("fieldAssignments")));
         context.put("itemFieldAssignments", assignments(item.get("itemFieldAssignments")));
         context.put("itemLines", rows(item.get("itemLines")));
-        // A prompt field's source default (issue #7748); one written before the key existed has none.
-        List<Map<String, Object>> promptFields = assignments(item.get("promptFields"));
-        promptFields.forEach(field -> field.putIfAbsent("defaultProp", ""));
-        // A missing required input is refused as a field refusal (#8646), naming the input by its label.
-        // A .glue written before the label existed names it by its humanized name, with no catalog key.
-        promptFields.forEach(field -> {
-            field.put("labelJava", javaString(strOr(field, "label", NamingHelper.humanizeName(str(field, "prop")))));
-            field.put("labelKeyJava", javaStringOrNull(strOr(field, "labelKey", "")));
-        });
-        context.put("promptFields", promptFields);
+        bindPromptFields(item, context);
         // The topic the listener binds is the glue's to state and the template's to emit verbatim - but
         // a .glue written before the step axis (issue #6800) carries no suffix at all, and a bare
         // reference renders as its own literal into a destination nothing ever publishes on. An absent
@@ -1181,9 +1201,8 @@ class GlueGenerator {
         context.put("toGenFolder", truthy(item, "crossModel") ? sanitize(item, "toModel") : str(parameters, "javaGenFolderName"));
         context.put("toJavaPerspective", sanitize(item, "toPerspective"));
         // The project publishing the TARGET's "-transitioned" topic, which only the reopen listener
-        // binds. A reopen is refused for a cross-model target - its retiring statuses are classified in
-        // the owner model and unresolvable here - so the target's project is always this one.
-        context.put("toProjectName", str(parameters, "projectName"));
+        // binds: the owner's for a cross-model target (#7954), as for a cross-model source above.
+        context.put("toProjectName", truthy(item, "crossModel") ? str(item, "toProject") : str(parameters, "projectName"));
         // A primary source item that is not a composition child lives outside the source document's
         // perspective, which the intent layer resolves; for the common case it is the same one.
         context.put("fromItemJavaPerspective",
@@ -1199,6 +1218,12 @@ class GlueGenerator {
         context.put("itemWhere", item.containsKey("itemCriteria") ? JavaLiterals.criteriaChain(asMaps(item.get("itemCriteria")))
                 : strOr(item, "itemWhere", ""));
         context.put("itemRefuse", strOr(item, "itemRefuse", ""));
+        // The mark each consumed source row receives (issue #7956), and the clause that leaves a marked row
+        // out of every item query. A .glue written before the key existed marks nothing and selects as
+        // before.
+        String itemBackLink = strOr(item, "itemBackLink", "");
+        context.put("itemBackLink", itemBackLink);
+        context.put("itemUnconsumed", itemBackLink.isEmpty() ? "" : ".isNull(\"" + JavaLiterals.escape(itemBackLink) + "\")");
         // The refusal is written into a Java string literal, so a quote or a backslash in the authored
         // message would end that literal and fail the compile of the whole generated module (#7241).
         context.put("itemRefuseJavaLiteral", JavaLiterals.escape(strOr(item, "itemRefuse", "")));
@@ -1318,6 +1343,25 @@ class GlueGenerator {
     }
 
     /**
+     * Binds the {@code prompt:} inputs of a create-from (issue #6685) or a transition (#7909): each
+     * input's conversion rendered from the type it carries, its source default (#7748; one written
+     * before the key existed has none), and the label and catalog key a missing required input is
+     * refused with (#8646) - a .glue written before the label existed names it by its humanized name.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     */
+    private static void bindPromptFields(Map<String, Object> item, Map<String, Object> context) {
+        List<Map<String, Object>> promptFields = assignments(item.get("promptFields"));
+        promptFields.forEach(field -> {
+            field.putIfAbsent("defaultProp", "");
+            field.put("labelJava", javaString(strOr(field, "label", NamingHelper.humanizeName(str(field, "prop")))));
+            field.put("labelKeyJava", javaStringOrNull(strOr(field, "labelKey", "")));
+        });
+        context.put("promptFields", promptFields);
+    }
+
+    /**
      * Binds an on-demand transition - the controller that validates the guards and flips only the
      * status column, optionally notifying afterwards.
      *
@@ -1352,6 +1396,9 @@ class GlueGenerator {
             stampNumbers.add(bound);
         }
         context.put("stampNumbers", stampNumbers);
+        // The record's own inputs, written with the status (#7909); a .glue without the key asks none.
+        bindPromptFields(item, context);
+        context.put("refusalCatalogJava", javaStringOrNull(strOr(item, "refusalCatalog", "")));
         context.put("personalSurface", "false");
     }
 
@@ -1407,6 +1454,61 @@ class GlueGenerator {
         context.put("sourceJavaPerspective", sanitize(item, "sourcePerspective"));
         context.put("itemsJavaPerspective", sanitize(item, "itemsPerspective"));
         context.put("targetJavaPerspective", sanitize(item, "targetPerspective"));
+        // The target's period lock (#8772), as a posting carries it - empty for a row that writes
+        // nothing locked, and for a .glue written before the key existed.
+        bindPeriodLock(item, context);
+        context.put("heldStatusValues", strOr(item, "heldStatusValues", strOr(item, "statusValue", "")));
+        context.put("sweeps", !str(context, "periodRegisterEntity").isEmpty() && !str(context, "backRef").isEmpty());
+    }
+
+    /**
+     * Binds the period-reopen sweep of a {@code posts:} row (#8772) onto the posting's sweep template:
+     * the row's source, target and status guard under the names that template reads, and the post
+     * handler as the one it re-runs.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindPostReopen(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        bindPost(item, context, parameters);
+        context.put("handlerClassName", str(item, "className") + "Post");
+        context.put("targetEntity", item.get("into"));
+        context.put("guardProperty", strOr(item, "statusProperty", ""));
+        context.put("guardValue", strOr(item, "statusValue", ""));
+        context.put("sourceJavaGenFolder", str(parameters, "javaGenFolderName"));
+    }
+
+    /**
+     * Binds the reopening relay of a period register (#8755): the handler that re-announces a period
+     * standing open again on the model-agnostic topic a posting of another model listens to.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindPeriodReopenNotice(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        copy(context, item, "name", "className", "perspective", "keyField", "startProperty", "endProperty", "statusProperty",
+                "closedValues", "topicSuffix");
+        context.put("javaPerspective", sanitize(item, "perspective"));
+    }
+
+    /**
+     * Binds the period lock a posting or a {@code posts:} row carries from its target (#7703, #8772).
+     * Every key defaults to the EMPTY STRING rather than being left out, because the templates gate on
+     * it - an absent reference renders as its own literal and would read as "there is a lock" for every
+     * entry of a .glue written before the key existed.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     */
+    private static void bindPeriodLock(Map<String, Object> item, Map<String, Object> context) {
+        for (String key : new String[] {"periodRegisterEntity", "periodRegisterPerspective", "periodRegisterKeyField",
+                "periodStartProperty", "periodEndProperty", "periodStatusProperty", "periodClosedValues", "periodDateProperty",
+                "periodSourceDateProperty", "reopenClassName", "reopenTopicSuffix", "periodRegisterModel"}) {
+            context.put(key, strOr(item, key, ""));
+        }
+        context.put("periodRegisterJavaPerspective", sanitize(item, "periodRegisterPerspective"));
     }
 
     /**
@@ -1422,16 +1524,9 @@ class GlueGenerator {
                 "guardValue", "targetEntity", "targetPk", "itemsEntity", "itemsFk", "backRefProperty", "stornoProperty",
                 "stornoFilterProperty", "hasRule", "ruleEntity", "ruleMatchProperty", "ruleMatchValueJava", "usedRuleColumns");
         // The target's period lock (#7703): the handler asks the register before it writes, and the
-        // sweep re-runs what a closed period refused. Every key defaults to the EMPTY STRING rather
-        // than being left out, because the templates gate on it - an absent reference renders as its
-        // own literal and would read as "there is a lock" for every posting in a .glue written before
-        // the key existed.
-        for (String key : new String[] {"periodRegisterEntity", "periodRegisterPerspective", "periodRegisterKeyField",
-                "periodStartProperty", "periodEndProperty", "periodStatusProperty", "periodClosedValues", "periodDateProperty",
-                "periodSourceDateProperty", "reopenClassName", "reopenTopicSuffix", "periodRegisterModel"}) {
-            context.put(key, strOr(item, key, ""));
-        }
-        context.put("periodRegisterJavaPerspective", sanitize(item, "periodRegisterPerspective"));
+        // sweep re-runs what a closed period refused.
+        bindPeriodLock(item, context);
+        context.put("handlerClassName", str(item, "className") + "Posting");
         // The statuses the posting holds in (#8243). A .glue written before it holds the guard status
         // alone - exactly what that shape's handler and sweep tested.
         context.put("heldStatusValues", strOr(item, "heldStatusValues", strOr(item, "guardValue", "")));
@@ -1976,16 +2071,16 @@ class GlueGenerator {
     }
 
     /**
-     * Binds the deep-link keys every notify call site carries: which of the two reserved link locals
-     * ({@code recordUrl} / {@code inboxUrl}) the message references, plus the entity and key property
-     * the record link is built from. The route itself is assembled in the template, which is the layer
-     * that knows the generated application's URL layout.
+     * Binds the deep-link keys every notify call site carries: which of the reserved link locals
+     * ({@code recordUrl} / {@code inboxUrl} / {@code shareUrl}) the message references, plus the entity
+     * and key property the record link is built from. The route itself is assembled in the template,
+     * which is the layer that knows the generated application's URL layout.
      *
      * @param item the descriptor
      * @param context the template context
      */
     private static void bindDeepLinks(Map<String, Object> item, Map<String, Object> context) {
-        copy(context, item, "usesRecordUrl", "usesInboxUrl", "recordUrlEntity", "recordUrlKeyProperty");
+        copy(context, item, "usesRecordUrl", "usesInboxUrl", "usesShareUrl", "recordUrlEntity", "recordUrlKeyProperty");
     }
 
     /**

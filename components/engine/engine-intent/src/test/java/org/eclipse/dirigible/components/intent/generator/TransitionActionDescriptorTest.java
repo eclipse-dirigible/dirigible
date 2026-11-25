@@ -108,6 +108,24 @@ class TransitionActionDescriptorTest {
         assertFalse(plain.contains("\"destructive\""), plain);
     }
 
+    /**
+     * A move that asks for input (#7909) carries the prompt the shell's dialog opens with - the
+     * create-from prompt's entries - and its controls, typed from the record's own fields, since no
+     * detail registration types them; a move asking nothing carries neither.
+     */
+    @Test
+    void aPromptedTransitionCarriesItsInputsAndTheirControls() {
+        String prompted = compact(descriptor(YAML.replace("setStatus: 6", """
+                setStatus: 6
+                    prompt:
+                      - { field: total, required: true }
+                """.stripTrailing())));
+        assertTrue(prompted.contains("\"prompt\":[{\"name\":\"Total\",\"required\":true}]"), prompted);
+        assertTrue(prompted.contains("\"promptColumns\":[{\"name\":\"Total\",\"label\":\"Total\",\"widget\":\"NUMBER\"}]"), prompted);
+        String plain = compact(descriptor(YAML));
+        assertFalse(plain.contains("\"prompt"), plain);
+    }
+
     /** An invoice its customer owns through a personal relation, so its transition may be personal. */
     private static final String PERSONAL_YAML = """
             name: billing

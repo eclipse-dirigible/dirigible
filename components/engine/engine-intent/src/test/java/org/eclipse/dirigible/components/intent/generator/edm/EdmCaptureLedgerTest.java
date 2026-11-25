@@ -53,6 +53,31 @@ class EdmCaptureLedgerTest {
         assertNull(entity(entities, "PurchaseInvoice").get("importLedger"), "the two ledgers are independent");
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void a_line_captured_under_its_master_carries_the_ledger_and_the_under_master_flag() {
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(YAML.replace("""
+                captures:
+                  - { name: supplierInvoice, into: PurchaseInvoice, fields: [{ field: number }] }
+                """, """
+                  - name: PurchaseInvoiceItem
+                    fields:
+                      - { name: id,    type: integer, primaryKey: true, generated: true }
+                      - { name: price, type: decimal }
+                    relations:
+                      - { name: PurchaseInvoice, kind: manyToOne, to: PurchaseInvoice, composition: true, required: true }
+                captures:
+                  - { name: receipt, into: PurchaseInvoiceItem, fields: [{ field: price }] }
+                """)), "purchasing");
+        List<Map<String, Object>> entities = (List<Map<String, Object>>) ((Map<String, Object>) model.get("model")).get("entities");
+
+        Map<String, Object> line = entity(entities, "PurchaseInvoiceItem");
+        assertEquals("true", line.get("captureLedger"));
+        assertEquals("true", line.get("captureUnderMaster"), "the line's controller lends the capture its master lock (#8626)");
+        assertNull(entity(entities, "PurchaseInvoice").get("captureLedger"));
+        assertNull(entity(entities, "PurchaseInvoice").get("captureUnderMaster"));
+    }
+
     private static Map<String, Object> entity(List<Map<String, Object>> entities, String name) {
         return entities.stream()
                        .filter(entity -> name.equals(entity.get("name")))
