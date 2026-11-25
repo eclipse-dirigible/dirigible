@@ -365,11 +365,48 @@ public final class IntentParser {
      * @throws IntentValidationException if structural problems are found in the model
      */
     public static IntentModel parse(String yaml) {
-        if (yaml == null || yaml.isBlank()) {
-            return new IntentModel();
+        IntentModel model = parseTree(load(yaml));
+        Set<String> optional = OptionalUses.aliases(model);
+        if (!optional.isEmpty()) {
+            // An optional uses: may be absent where the model is generated (#7979): the model must stand
+            // without it too, so what the absent case could not generate is refused here, not there.
+            try {
+                parseWithout(yaml, optional, new ArrayList<>());
+            } catch (IntentValidationException e) {
+                List<String> issues = new ArrayList<>();
+                e.getIssues()
+                 .forEach(issue -> issues.add("without the optional uses " + optional + ": " + issue));
+                issues.add("an optional uses: model may be absent - its relations, the checks, order/list/subtitle and form entries,"
+                        + " roll-ups and reports that name them, and every list item naming the model (generates, rollups, schedules,"
+                        + " related, report union members, exists checks) are then left out; nothing else may depend on it");
+                throw new IntentValidationException(issues);
+            }
         }
-        Yaml loader = new Yaml(new SafeConstructor(new LoaderOptions()));
-        Object tree = loader.load(yaml);
+        return model;
+    }
+
+    /**
+     * Parse the given YAML as it is generated where some of its optional {@code uses:} models are
+     * absent (dirigible #7979): everything depending on them is taken out first - see
+     * {@code OptionalUses}.
+     *
+     * @param yaml the raw YAML content of an {@code .intent} file
+     * @param absent the optional {@code uses:} aliases whose models are absent
+     * @param dropped collects what was taken out, one entry per construct
+     * @return the typed model without them
+     * @throws IntentValidationException if the model does not stand without them
+     */
+    public static IntentModel parseWithout(String yaml, Set<String> absent, List<String> dropped) {
+        Object tree = load(yaml);
+        dropped.addAll(OptionalUses.strip(tree, absent));
+        return parseTree(tree);
+    }
+
+    private static Object load(String yaml) {
+        return yaml == null || yaml.isBlank() ? null : new Yaml(new SafeConstructor(new LoaderOptions())).load(yaml);
+    }
+
+    private static IntentModel parseTree(Object tree) {
         if (tree == null) {
             return new IntentModel();
         }
@@ -508,6 +545,7 @@ public final class IntentParser {
         // runs (#8506), so every validator and generator sees two ordinary parameters.
         expandReportPeriods(model, issues);
         Set<String> usesAliases = validateUses(model, issues);
+        OptionalUses.validate(model, issues);
         Set<String> entityNames = validateEntities(model, usesAliases, issues);
         validateFunctions(model, issues);
         validateViews(model, issues);

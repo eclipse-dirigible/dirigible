@@ -1685,6 +1685,31 @@ entities:
 owned across models). Generate leaf models (the owners) before their consumers so the dropdown
 resolves. Each project is its own `.intent`; all must be published to the same runtime.
 
+**An optional dependency (`optional: true`, #7979):** a model that one feature needs and the
+application may not ship - billable expense lines need projects, an HR application has none:
+
+```yaml
+uses:
+  - { model: projects, optional: true }
+```
+
+Each Generate decides: with the owner's `.model` in the workspace or published, the model generates
+exactly as with a plain `uses:`. Without it the model generates **without** the owner, and the
+Generate's `warnings` list what it left out:
+- every relation to the owner (no column, no picker) and every list item naming the owner's alias
+  (an `exists` / `notExists` check, a `related:` register, a `generates`, a roll-up, a schedule, a
+  report's union member);
+- what names such a relation by a path from its own entity: the entity's `order:` / `list:` /
+  `subtitle:` entries and **checks** (a `requiredWhen` on it, a `forbidWhen` reading through it), a
+  form's fields, a roll-up `via:` it, and a **report** - the whole report, not just the dimension.
+  The checks after a dropped one keep their translation keys.
+
+Refused at parse: such a relation `required: true`, in a `unique:` key or a number series' `per:` (the
+record cannot exist or be told apart without it), and anything else that depends on the owner - a
+field's `dependsOn` from the relation, say - because the model must also generate without it (the
+refusal reads `without the optional uses [projects]: ...`). Custom code under `custom/` that
+imports the owner's generated classes is not covered: it fails to compile without the owner.
+
 ### related - list the records that REFERENCE this entity (read-only register)
 
 **Use when:** an entity is the *target* of an association and its own page should show the records
