@@ -283,6 +283,29 @@ public class JavaEntityManager implements DisposableBean {
     }
 
     /**
+     * Look up a GENERATED entity by the model that generates it and its name - its class is
+     * {@code gen.<model>.data.<perspective>.<Entity>Entity}, and the perspective is the owner model's
+     * own choice, which a model that cannot read the owner's {@code .model} does not know (a
+     * {@code notExists} check on a model the target's model uses, dirigible #8623).
+     *
+     * @param genFolder the owner model's generated folder name
+     * @param entity the entity's name
+     * @return the registered entry, or empty when that model is not deployed or declares no such entity
+     */
+    public Optional<RegisteredEntity> findGenerated(String genFolder, String entity) {
+        String prefix = "gen." + genFolder + ".data.";
+        String suffix = "." + entity + "Entity";
+        for (RegisteredEntity r : registered.values()) {
+            String name = r.entityClass()
+                           .getName();
+            if (name.startsWith(prefix) && name.endsWith(suffix) && name.indexOf('.', prefix.length()) == name.length() - suffix.length()) {
+                return Optional.of(r);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
      * Look up by the fully-qualified name of the entity class, for a caller that names an entity it
      * does not compile against - a to-one reference to a record another model generates (#8100).
      *

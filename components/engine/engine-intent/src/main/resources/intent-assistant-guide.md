@@ -941,6 +941,21 @@ a `required` text field is refused when it is blank after that trim - spaces alo
     repository when the record is persisted carrying that status ("a claim is submitted only on a
     project its employee is assigned to"). Do not write this rule as a `calculatedActionOnCreate`
     that throws.
+  - `{ kind: notExists, entity: JournalEntry, where: ["Status == DRAFT", "date >= fromDate",
+      "date <= toDate"], status: CLOSED, message: "{count} draft entries are dated in this period" }`
+    (#8002, #8623): the inverse of `exists` - the MOVE into the `status:` gate is refused (400 with
+    the message) WHILE a row of another entity matches. **This is how "a month is not closed while a
+    draft entry is dated inside it" and "a deal is not marked lost while one of its quotations is
+    accepted or ordered" are declared** - not as a transition guard (which reads only the record's
+    own fields) and not as a `calculatedAction*` that throws. `status:` is required. `match:` works
+    as on `exists` - a target's relation to THIS record is matched by its `id`
+    (`match: { Opportunity: id }`) - and `where:` filters the target's rows: `<target property>
+    <op> <value or path on this record>` (op `== != >= <= > <`), `== null`, or `<property> in [a, b]`;
+    a status name there is one of the TARGET's statuses. `{count}` in the message is the number of
+    matching rows. `model:` may name the model that owns the target even when this model does not
+    `uses:` it (the quotation model uses the opportunity model, so the opportunity model cannot use
+    it back): the rows are then counted by name at runtime - use numeric status ids there, since
+    that model's nomenclature is not readable here.
   - `{ kind: requiredWhen, field: vatGround, whenAnyItem: "vatRate == 0", status: ISSUED, message: "..." }`
     (#7560): a header value required when **ANY LINE** satisfies the condition - the legal ground a
     zero-rated line calls for (ЗДДС чл. 114). `whenAnyItem` uses the `when` grammar over the ITEMS
@@ -6229,6 +6244,7 @@ or a seeded name.
 - "X must be filled in before/when it reaches STATUS (but may be empty while it is a draft)" -> **checks** `requiredWhen` WITH the `status:` gate - a workflow's own status set is a repository write and never reaches a controller
 - "this must not be changed/added once the parent is PAID/CLOSED" -> **checks** `forbidWhen`
 - "only an employee assigned to the project / a member of the team may book it" (a row of a third entity must exist for the pair) -> **checks** `exists`
+- "it must not be closed / marked lost / approved while a draft entry / an accepted quotation / an open task of another entity exists" -> **checks** `notExists` with the `status:` gate
 - "nothing new may be added once the parent is PAID (but a wrong one must still be removable)" -> **checks** `forbidWhen` with `verbs: [create, update]`
 - "warn me / ask before saving when ... (but let me save anyway)" -> **checks** with `severity: warn`; "a record with the same name already exists" -> `duplicate`; "a line has price 0 / a zero-value line" -> `itemsCompare` on the document
 - "auto-expire the offer/request when its validity date passes" -> **processes** (userTask `expire:`)

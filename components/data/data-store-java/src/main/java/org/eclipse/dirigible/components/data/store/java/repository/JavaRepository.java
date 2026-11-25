@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -503,6 +504,26 @@ public abstract class JavaRepository<T> {
         if (!exists) {
             throw new ValidationException(relation + " " + targetId + " does not exist");
         }
+    }
+
+    /**
+     * Counts the rows of an entity another model generates and this one does not compile against (a
+     * {@code notExists} check on a model that uses this one, dirigible #8623): the entity is named by
+     * its owner's generated folder and its name. A model that is not deployed holds no rows, so it
+     * counts zero.
+     *
+     * @param genFolder the owner model's generated folder name
+     * @param entity the entity's name
+     * @param criteria the rows to count
+     * @return the number of matching rows; {@code 0} when the entity is not registered
+     */
+    protected long countRowsOf(String genFolder, String entity, Criteria criteria) {
+        OptionalLong rows = store().countGenerated(genFolder, entity, criteria);
+        if (rows.isEmpty()) {
+            LOGGER.debug("{} counts no {}.{} rows - that model is not deployed", label(), genFolder, entity);
+            return 0L;
+        }
+        return rows.getAsLong();
     }
 
     /**
