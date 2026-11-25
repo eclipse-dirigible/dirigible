@@ -145,6 +145,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> postings = buildPostings(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> postingReopens = buildPostingReopens(postings);
         List<Map<String, Object>> posts = buildPosts(model, byName, compositionParents);
+        List<Map<String, Object>> postReopens = buildPostReopens(posts);
+        List<Map<String, Object>> periodReopenNotices = buildPeriodReopenNotices(model, compositionParents);
         List<Map<String, Object>> aggregates = buildAggregates(model, byName, compositionParents);
         List<Map<String, Object>> resolves = buildResolves(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> printFeeders = PrintFeederSupport.buildPrintFeeders(model, byName, compositionParents, settings, context);
@@ -158,7 +160,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 && inboundMessages.isEmpty() && inboundFiles.isEmpty() && imports.isEmpty() && captures.isEmpty() && outbound.isEmpty()
                 && exports.isEmpty() && stepEvents.isEmpty() && rollups.isEmpty() && expansions.isEmpty() && settlements.isEmpty()
                 && generates.isEmpty() && transitions.isEmpty() && printFeeders.isEmpty() && postings.isEmpty() && snapshots.isEmpty()
-                && numbering.isEmpty() && posts.isEmpty() && aggregates.isEmpty() && sends.isEmpty() && resolves.isEmpty()) {
+                && numbering.isEmpty() && posts.isEmpty() && aggregates.isEmpty() && sends.isEmpty() && resolves.isEmpty()
+                && periodReopenNotices.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -225,6 +228,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("postings", postings);
         glue.put("postingReopens", postingReopens);
         glue.put("posts", posts);
+        // The posts: sweeps (#8772) and the register relays (#8755) are emitted only when used, so
+        // every other intent's descriptor stays byte-identical.
+        if (!postReopens.isEmpty()) {
+            glue.put("postReopens", postReopens);
+        }
+        if (!periodReopenNotices.isEmpty()) {
+            glue.put("periodReopenNotices", periodReopenNotices);
+        }
         glue.put("aggregates", aggregates);
         glue.put("resolves", resolves);
         glue.put("printFeeders", printFeeders);
@@ -2746,9 +2757,103 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 assigns.add(pair);
             }
             e.put("assigns", assigns);
+            // The target's period lock (#8772): a row dated in a closed period is refused by the
+            // target's repository inside this listener, after the source committed - redelivered
+            // against a period that stays closed, and never offered again once it reopens. The same
+            // keys a posting carries (#7703, #8755): the handler asks before it writes, and a sweep
+            // re-runs the source when the period reopens. A post that writes nothing locked carries
+            // none of them, so its descriptor is unchanged.
+            putPostingPeriodLock(e, target, byName, compositionParents, model, assigns, "field");
+            if (e.containsKey("periodRegisterEntity")) {
+                // Where the post HOLDS, as for a posting (#8243): the status it fires on, then every
+                // later `live` one - a source issued into a closed period may have moved on by the time
+                // the period reopens.
+                RelationIntent status = LifecycleStages.statusRelation(source);
+                List<Integer> live = status == null || status.isCrossModel() ? List.of()
+                        : LifecycleStages.stagesOf(model, status.getTo())
+                                         .getOrDefault(LifecycleStages.LIVE, List.of());
+                e.put("heldStatusValues",
+                        heldStatusValues(statusProperty, statusValue == null ? "" : String.valueOf(statusValue), statusProperty, live));
+            }
             out.add(e);
         }
         return out;
+    }
+
+    /**
+     * The period-reopen sweeps of the {@code posts:} rows (#8772): one per row whose target carries
+     * {@code immutableInPeriod} and whose rows back-reference their source - two for a register of this
+     * model (its {@code -transitioned} and {@code -updated} channels), one for a register of another
+     * model (the topic its model relays a reopening on). A row with no {@code idempotentBy} gets the
+     * pre-check but no sweep: nothing would tell an offered source that is already posted from one that
+     * is not, and a sweep would book it again on every reopening.
+     *
+     * @param posts the {@code posts:} descriptors
+     * @return the descriptors that also render a sweep, in rule order
+     */
+    private static List<Map<String, Object>> buildPostReopens(List<Map<String, Object>> posts) {
+        List<Map<String, Object>> reopens = new ArrayList<>();
+        for (Map<String, Object> post : posts) {
+            if (post.get("periodRegisterEntity") == null || String.valueOf(post.get("backRef"))
+                                                                  .isEmpty()) {
+                continue;
+            }
+            String className = String.valueOf(post.get("className"));
+            if (post.get("periodRegisterModel") != null) {
+                reopens.add(reopen(post, className + "PostReopen", ""));
+            } else {
+                reopens.add(reopen(post, className + "PostReopen", "-transitioned"));
+                reopens.add(reopen(post, className + "PostReopenOnUpdate", "-updated"));
+            }
+        }
+        return reopens;
+    }
+
+    /** Test hook: the {@code posts:} rows that also render a period-reopen sweep. */
+    static List<Map<String, Object>> buildPostReopensForTest(IntentModel model) {
+        return buildPostReopens(buildPostsForTest(model));
+    }
+
+    /**
+     * The reopening relays of this model's period registers (#8755): two per register - one on its
+     * {@code -transitioned}, one on its {@code -updated} channel - re-announcing every move of a period
+     * into a status that is not closed on {@code PeriodRegisters.reopenedTopic}. A posting of ANOTHER
+     * model whose target this register locks cannot name the register's own topics, nor read its typed
+     * payload, and cannot {@code uses:} this model back; the relay is what lets its sweep hear the
+     * reopening at all.
+     *
+     * @param model the intent
+     * @param compositionParents composition-parent map
+     * @return one descriptor per register and channel, in entity order
+     */
+    private static List<Map<String, Object>> buildPeriodReopenNotices(IntentModel model, Map<String, String> compositionParents) {
+        List<Map<String, Object>> notices = new ArrayList<>();
+        for (EntityIntent register : model.getEntities()) {
+            PeriodIntent period = register.getPeriod();
+            RelationIntent status = LifecycleStages.statusRelation(register);
+            if (period == null || status == null || period.getStart() == null || period.getEnd() == null) {
+                continue; // not a register, or one the parser already refused
+            }
+            for (String[] channel : new String[][] {{"PeriodReopened", "-transitioned"}, {"PeriodReopenedOnUpdate", "-updated"}}) {
+                Map<String, Object> e = new LinkedHashMap<>();
+                e.put("name", register.getName());
+                e.put("className", IntentNaming.pascalIdentifier(register.getName()) + channel[0]);
+                e.put("perspective", IntentEntities.resolvePerspective(register.getName(), compositionParents, model));
+                e.put("keyField", IntentEntities.keyFieldName(register));
+                e.put("startProperty", IntentNaming.pascalCase(period.getStart()));
+                e.put("endProperty", IntentNaming.pascalCase(period.getEnd()));
+                e.put("statusProperty", IntentNaming.pascalCase(status.getName()));
+                e.put("closedValues", closedStatusIds(period.getClosedWhen()));
+                e.put("topicSuffix", channel[1]);
+                notices.add(e);
+            }
+        }
+        return notices;
+    }
+
+    /** Test hook: the reopening relays of the model's period registers. */
+    static List<Map<String, Object>> buildPeriodReopenNoticesForTest(IntentModel model) {
+        return buildPeriodReopenNotices(model, IntentEntities.compositionParents(model));
     }
 
     /** Test hook: build the {@code posts} glue collection without a repository. */
@@ -3376,7 +3481,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 }
             }
             e.put("headerAssignments", headerAssignments);
-            putPostingPeriodLock(e, creates, byName, compositionParents, model, headerAssignments);
+            putPostingPeriodLock(e, creates, byName, compositionParents, model, headerAssignments, "targetProp");
             // Item rows: rule(...) refs read the rule row; expressions run through Calc on the source. Each
             // cell and each row guard is a READING (issue #7425) the template layer renders.
             List<Map<String, Object>> itemRows = new ArrayList<>();
@@ -4013,7 +4118,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * posting: the handler asks before it writes and says what it skipped, and the reopen sweep built
      * from the same keys re-runs it. A register of ANOTHER model ({@code immutableInPeriod.model},
      * #8687) travels as its model and name only ({@code periodRegisterModel}): the handler asks it at
-     * runtime through {@code PeriodRegisters.isClosed} (#8755), and no sweep is built.
+     * runtime through {@code PeriodRegisters.isClosed}, and the sweep binds the topic the register's
+     * model relays a reopening on, {@code PeriodRegisters.reopenedTopic} (#8755). The same keys serve a
+     * {@code posts:} row (#8772).
      *
      * <p>
      * {@code periodSourceDateProperty} is the source column the locked date is copied FROM, emitted
@@ -4026,21 +4133,23 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * @param byName all local entities by name
      * @param compositionParents composition-parent map
      * @param model the intent
-     * @param headerAssignments the header cells, already built
+     * @param assignments the cells assigned on the target, already built
+     * @param targetKey the key naming each cell's target property ({@code targetProp} for a posting's
+     *        header, {@code field} for a {@code posts:} row)
      */
     private static void putPostingPeriodLock(Map<String, Object> e, EntityIntent creates, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, IntentModel model, List<Map<String, Object>> headerAssignments) {
+            Map<String, String> compositionParents, IntentModel model, List<Map<String, Object>> assignments, String targetKey) {
         PeriodLockIntent lock = creates == null ? null : creates.getImmutableInPeriod();
         if (lock != null && lock.getModel() != null && lock.getPeriod() != null && lock.getDate() != null) {
             // A register of another model (#8687, #8755): its facts are not readable from here, so the
             // posting asks it at runtime by model and name (PeriodRegisters.isClosed), exactly as the
-            // target's own repository does. No reopen sweep: it would have to subscribe to the
-            // register's topic, which this model cannot name.
+            // target's own repository does, and its sweep binds the model-agnostic topic the register's
+            // model relays a reopening on (PeriodRegisters.reopenedTopic).
             String dateProperty = IntentNaming.pascalCase(lock.getDate());
             e.put("periodRegisterEntity", lock.getPeriod());
             e.put("periodRegisterModel", lock.getModel());
             e.put("periodDateProperty", dateProperty);
-            e.put("periodSourceDateProperty", sourceCopyOf(headerAssignments, dateProperty));
+            e.put("periodSourceDateProperty", sourceCopyOf(assignments, targetKey, dateProperty));
             return;
         }
         EntityIntent register = lock == null ? null : byName.get(lock.getPeriod());
@@ -4058,7 +4167,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         e.put("periodStatusProperty", IntentNaming.pascalCase(status.getName()));
         e.put("periodClosedValues", closedStatusIds(period.getClosedWhen()));
         e.put("periodDateProperty", dateProperty);
-        e.put("periodSourceDateProperty", sourceCopyOf(headerAssignments, dateProperty));
+        e.put("periodSourceDateProperty", sourceCopyOf(assignments, targetKey, dateProperty));
     }
 
     /**
@@ -4110,13 +4219,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The SOURCE property a header cell copies verbatim into the given target column, or the empty
-     * string when the cell is anything else - a literal, a template, an expression. Only a plain copy
-     * can be asked of the source as a query.
+     * The SOURCE property a cell copies verbatim into the given target column, or the empty string when
+     * the cell is anything else - a literal, a template, an expression, an item's column. Only a plain
+     * copy can be asked of the source as a query.
      */
-    private static String sourceCopyOf(List<Map<String, Object>> headerAssignments, String targetProperty) {
-        for (Map<String, Object> assignment : headerAssignments) {
-            if (!targetProperty.equals(assignment.get("targetProp"))) {
+    private static String sourceCopyOf(List<Map<String, Object>> assignments, String targetKey, String targetProperty) {
+        for (Map<String, Object> assignment : assignments) {
+            if (!targetProperty.equals(assignment.get(targetKey))) {
                 continue;
             }
             if (assignment.get("reading") instanceof Map<?, ?> reading && "read".equals(reading.get("kind"))
@@ -4146,10 +4255,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     private static List<Map<String, Object>> buildPostingReopens(List<Map<String, Object>> postings) {
         List<Map<String, Object>> reopens = new ArrayList<>();
         for (Map<String, Object> posting : postings) {
-            if (posting.get("periodRegisterEntity") == null || posting.get("periodRegisterModel") != null
-                    || Boolean.TRUE.equals(posting.get("followsSource"))) {
-                // ...and no sweep for a register of another model (#8755): its status moves on that
-                // model's topic, which nothing here can name.
+            if (posting.get("periodRegisterEntity") == null || Boolean.TRUE.equals(posting.get("followsSource"))) {
+                continue;
+            }
+            String className = String.valueOf(posting.get("className"));
+            if (posting.get("periodRegisterModel") != null) {
+                // A register of another model (#8755) moves on that model's topics, which nothing here
+                // can name: its model relays every reopening onto ONE topic keyed by the model and the
+                // register (PeriodRegisters.reopenedTopic), whichever channel moved it.
+                reopens.add(reopen(posting, className + "PostingReopen", ""));
                 continue;
             }
             // BOTH channels a register's status moves on, because the two are disjoint: a
@@ -4158,7 +4272,6 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // One sweep per channel, from the one descriptor (the settlementListeners fan-out), so
             // neither can drift; the sweep is a store-driven recompute, so a period edit that is not
             // a reopening costs one query and nothing else.
-            String className = String.valueOf(posting.get("className"));
             reopens.add(reopen(posting, className + "PostingReopen", "-transitioned"));
             reopens.add(reopen(posting, className + "PostingReopenOnUpdate", "-updated"));
         }

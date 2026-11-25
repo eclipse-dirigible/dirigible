@@ -1881,6 +1881,14 @@ public class ${name}Controller {
             throw org.eclipse.dirigible.sdk.db.FieldRefusals.tooLong(${refusalCatalog}, ${refusalField}, ${property.dataLength});
         }
 #end
+#if($property.dataTypeJavaClass == "String" && ($property.widgetType == "MONTH" || $property.widgetType == "WEEK"))
+## A month / week field is a string column (#8328): only YYYY-MM with a month 01-12, or an ISO YYYY-Www
+## that exists in its year, is a value - "2026-5" next to "2026-05" would open one month twice under a
+## unique key, and "2026-13" breaks every reader that parses it. Blank is "no value" as for a pattern.
+        if (entity.${property.name} != null#if($property.isRequiredProperty != "true") && !entity.${property.name}.isBlank()#end && !org.eclipse.dirigible.sdk.db.FieldFormats.#if($property.widgetType == "MONTH")isMonth#{else}isWeek#end(entity.${property.name})) {
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.#if($property.widgetType == "MONTH")month#{else}week#end(${refusalCatalog}, ${refusalField});
+        }
+#end
 #if($property.inputFormat == "IBAN")
 ## format: iban (#8302): the shape AND the ISO 7064 check digits, which a regex cannot check - so a
 ## value whose check digits fail is refused like one off the shape, and blank is "no value" as above.

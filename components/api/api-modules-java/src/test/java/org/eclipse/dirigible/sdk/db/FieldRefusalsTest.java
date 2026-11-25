@@ -138,6 +138,24 @@ class FieldRefusalsTest {
                              .getMessage());
     }
 
+    /**
+     * dirigible #8328: a value of a {@code month} or {@code week} field off its shape names the field.
+     */
+    @Test
+    void aValueThatIsNoMonthOrWeekNamesTheField() {
+        ValidationException month =
+                FieldRefusals.refusal(null, CATALOGS, CATALOG, FieldRefusals.MONTH_KEY, FieldRefusals.MONTH_TEXT, "Period", "Period", null);
+        ValidationException week =
+                FieldRefusals.refusal(null, CATALOGS, CATALOG, FieldRefusals.WEEK_KEY, FieldRefusals.WEEK_TEXT, "Sprint", "Sprint", null);
+
+        assertEquals("The value of 'Period' is not a month of the form YYYY-MM", month.getMessage());
+        assertEquals(CATALOG + ".checks.fieldMonth", month.getMessageKey());
+        assertEquals("Period", month.getField());
+        assertEquals("The value of 'Sprint' is not a week of the form YYYY-Www", week.getMessage());
+        assertEquals(CATALOG + ".checks.fieldWeek", week.getMessageKey());
+        assertEquals("Sprint", week.getField());
+    }
+
     /** A sentence the language's catalog does not carry keeps its default-language text. */
     @Test
     void anUntranslatedSentenceFallsBackToTheDefaultText() {

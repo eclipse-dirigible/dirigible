@@ -167,10 +167,11 @@ class GluePostingPeriodTest {
 
     /**
      * A target locked by ANOTHER model's register (#8755) carries the register's model and name, which
-     * is all the handler needs to ask it at runtime - and builds no sweep, whose topic it cannot name.
+     * is all the handler needs to ask it at runtime - and ONE sweep, on the topic the register's model
+     * relays a reopening on, since the register's own topics cannot be named from here.
      */
     @Test
-    void aTargetLockedByAnotherModelsRegisterIsPreCheckedButNotSwept() {
+    void aTargetLockedByAnotherModelsRegisterIsPreCheckedAndSweptOnTheRelayedTopic() {
         String yaml = YAML.replace("immutableInPeriod: { period: AccountingPeriod, date: entryDate }",
                 "immutableInPeriod: { period: FiscalPeriod, model: journal, date: entryDate }");
         Map<String, Object> posting = GlueIntentGenerator.buildPostingsForTest(IntentParser.parse(yaml))
@@ -179,10 +180,14 @@ class GluePostingPeriodTest {
         assertEquals("FiscalPeriod", posting.get("periodRegisterEntity"));
         assertEquals("journal", posting.get("periodRegisterModel"));
         assertEquals("EntryDate", posting.get("periodDateProperty"), "the TARGET column the lock tests");
+        assertEquals("Date", posting.get("periodSourceDateProperty"), "the sweep narrows to the reopened period");
         assertNull(posting.get("periodStatusProperty"), "another model's register is not read here");
-        assertTrue(GlueIntentGenerator.buildPostingReopensForTest(IntentParser.parse(yaml))
-                                      .isEmpty(),
-                "no sweep: the register's status moves on its own model's topic");
+        List<Map<String, Object>> reopens = GlueIntentGenerator.buildPostingReopensForTest(IntentParser.parse(yaml));
+        assertEquals(1, reopens.size(), "one relayed topic, whichever channel moved the register");
+        assertEquals("SalesInvoicePostingPostingReopen", reopens.get(0)
+                                                                .get("reopenClassName"));
+        assertEquals("", reopens.get(0)
+                                .get("reopenTopicSuffix"));
     }
 
     @Test
@@ -269,5 +274,109 @@ class GluePostingPeriodTest {
                                   .filter(posting -> name.equals(posting.get("name")))
                                   .findFirst()
                                   .orElseThrow();
+    }
+
+    /** A posts: row into a locked target (#8772): the same lock keys a posting carries. */
+    private static final String POSTS = YAML.replace("""
+            postings:
+              - name: salesInvoicePosting
+                event: { onTransition: SalesInvoice, when: "Status == 2" }
+                creates: JournalEntry
+                backReference: SalesInvoice
+                map: { entryDate: date }
+                items:
+                  - { debit: "Net" }
+            """, """
+            posts:
+              - name: salesInvoicePost
+                forEntity: SalesInvoice
+                event: 2
+                into: JournalEntry
+                idempotentBy: SalesInvoice
+                set: { entryDate: source.date }
+            """);
+
+    @Test
+    void aPostIntoALockedTargetCarriesTheRegisterAndIsSweptOnBothChannels() {
+        Map<String, Object> post = GlueIntentGenerator.buildPostsForTest(IntentParser.parse(POSTS))
+                                                      .get(0);
+
+        assertEquals("AccountingPeriod", post.get("periodRegisterEntity"));
+        assertEquals("EntryDate", post.get("periodDateProperty"));
+        assertEquals("Date", post.get("periodSourceDateProperty"), "a plain source.<column> copy narrows the sweep");
+        assertEquals("Status", post.get("periodStatusProperty"));
+        assertEquals("2", post.get("periodClosedValues"));
+        assertEquals("2", post.get("heldStatusValues"), "an unclassified nomenclature holds the status it fires on alone");
+        List<Map<String, Object>> reopens = GlueIntentGenerator.buildPostReopensForTest(IntentParser.parse(POSTS));
+        assertEquals(2, reopens.size());
+        assertEquals("SalesInvoicePostPostReopen", reopens.get(0)
+                                                          .get("reopenClassName"));
+        assertEquals("-transitioned", reopens.get(0)
+                                             .get("reopenTopicSuffix"));
+        assertEquals("SalesInvoicePostPostReopenOnUpdate", reopens.get(1)
+                                                                  .get("reopenClassName"));
+    }
+
+    @Test
+    void aPostIntoATargetLockedByAnotherModelsRegisterIsSweptOnTheRelayedTopic() {
+        String yaml = POSTS.replace("immutableInPeriod: { period: AccountingPeriod, date: entryDate }",
+                "immutableInPeriod: { period: FiscalPeriod, model: journal, date: entryDate }");
+        Map<String, Object> post = GlueIntentGenerator.buildPostsForTest(IntentParser.parse(yaml))
+                                                      .get(0);
+
+        assertEquals("journal", post.get("periodRegisterModel"));
+        List<Map<String, Object>> reopens = GlueIntentGenerator.buildPostReopensForTest(IntentParser.parse(yaml));
+        assertEquals(1, reopens.size());
+        assertEquals("", reopens.get(0)
+                                .get("reopenTopicSuffix"));
+    }
+
+    /** Without a back-reference nothing tells a posted source from an unposted one: no sweep. */
+    @Test
+    void aPostWithoutBackReferenceIsPreCheckedButNotSwept() {
+        String yaml = POSTS.replace("    idempotentBy: SalesInvoice\n", "");
+        assertEquals("AccountingPeriod", GlueIntentGenerator.buildPostsForTest(IntentParser.parse(yaml))
+                                                            .get(0)
+                                                            .get("periodRegisterEntity"));
+        assertTrue(GlueIntentGenerator.buildPostReopensForTest(IntentParser.parse(yaml))
+                                      .isEmpty());
+    }
+
+    @Test
+    void aPostIntoAnUnlockedTargetIsUnchanged() {
+        String yaml = POSTS.replace("    immutableInPeriod: { period: AccountingPeriod, date: entryDate }\n", "");
+        assertNull(GlueIntentGenerator.buildPostsForTest(IntentParser.parse(yaml))
+                                      .get(0)
+                                      .get("periodRegisterEntity"));
+        assertNull(GlueIntentGenerator.buildPostsForTest(IntentParser.parse(yaml))
+                                      .get(0)
+                                      .get("heldStatusValues"));
+    }
+
+    /**
+     * A period register relays every move into an open status onto the model-agnostic topic (#8755),
+     * once per channel its status moves on.
+     */
+    @Test
+    void aPeriodRegisterRelaysItsReopeningsOnBothChannels() {
+        List<Map<String, Object>> notices = GlueIntentGenerator.buildPeriodReopenNoticesForTest(IntentParser.parse(YAML));
+
+        assertEquals(2, notices.size());
+        assertEquals("AccountingPeriodPeriodReopened", notices.get(0)
+                                                              .get("className"));
+        assertEquals("-transitioned", notices.get(0)
+                                             .get("topicSuffix"));
+        assertEquals("AccountingPeriodPeriodReopenedOnUpdate", notices.get(1)
+                                                                      .get("className"));
+        assertEquals("-updated", notices.get(1)
+                                        .get("topicSuffix"));
+        assertEquals("StartDate", notices.get(0)
+                                         .get("startProperty"));
+        assertEquals("EndDate", notices.get(0)
+                                       .get("endProperty"));
+        assertEquals("Status", notices.get(0)
+                                      .get("statusProperty"));
+        assertEquals("2", notices.get(0)
+                                 .get("closedValues"));
     }
 }

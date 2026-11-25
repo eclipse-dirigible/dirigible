@@ -232,6 +232,26 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * #8328: the month and week refusals are catalog entries only in a model with such a field, so
+     * every other model's catalog stays as it was.
+     */
+    @Test
+    void monthAndWeekRefusalsAreCatalogEntriesOnlyWhereAFieldIsAMonthOrAWeek() {
+        Map<String, Object> period = property("Period", "VARCHAR");
+        period.put("widgetType", "MONTH");
+        Map<String, Object> sprint = property("Sprint", "VARCHAR");
+        sprint.put("widgetType", "WEEK");
+        Map<String, Object> catalog =
+                ModelTranslations.checkMessages(model(entity("Timesheet", "Timesheets", property("Id", "INTEGER"), period, sprint)));
+
+        assertEquals("The value of '{label}' is not a month of the form YYYY-MM", catalog.get("fieldMonth"));
+        assertEquals("The value of '{label}' is not a week of the form YYYY-Www", catalog.get("fieldWeek"));
+        Map<String, Object> plain = ModelTranslations.checkMessages(model(entity("Stay", "Stays", property("Id", "INTEGER"))));
+        assertFalse(plain.containsKey("fieldMonth"));
+        assertFalse(plain.containsKey("fieldWeek"));
+    }
+
+    /**
      * #8101 / #8700: a refusing single flag's conflict is the shared {@code fieldSingleTaken} sentence
      * - {@code fieldSingleTakenInScope} for a scoped flag, naming the scope by its relation's label -
      * so the flag and the scope are named by their labels' catalog keys like the other field refusals.

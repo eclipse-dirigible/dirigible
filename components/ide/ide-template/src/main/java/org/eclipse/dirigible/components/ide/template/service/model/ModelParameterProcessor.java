@@ -160,6 +160,7 @@ final class ModelParameterProcessor {
         resolveLifecycleStatusNames(entity);
         resolveDataOrder(entity);
         resolveOrderBy(entity);
+        resolveRoundTo(entity, parameters);
 
         for (Map<String, Object> property : asMaps(entity.get("properties"))) {
             processProperty(property, entity, entities, parameters);
@@ -455,6 +456,12 @@ final class ModelParameterProcessor {
         entity.put("rowChecks", rowChecks);
         entity.put("guardChecks", guardChecks);
         entity.put("documentChecks", documentChecks);
+        // A notExists check refuses a status move while a row of another entity matches (#8002, #8623):
+        // the repository runs every write that can carry that move in ONE unit, so the row lock its count
+        // takes holds until the move commits.
+        entity.put("hasNotExistsChecks", documentChecks.stream()
+                                                       .anyMatch(check -> check instanceof Map<?, ?> map
+                                                               && "notExists".equals(map.get("kind"))));
         entity.put("forbidWhenGuards", forbidWhenGuards);
         entity.put("deleteChecks", deleteChecks);
         entity.put("warningChecks", warningChecks);
@@ -921,9 +928,14 @@ final class ModelParameterProcessor {
      * @param parameters the generation parameters
      */
     private static void resolveCheckPathLoads(Map<String, Object> check, Map<String, Object> parameters) {
-        // An exists check's target (#8338) carries a hop's coordinates, so it resolves the same way.
+        // An exists check's target (#8338) carries a hop's coordinates, so it resolves the same way -
+        // unless
+        // it is a notExists target counted by name at runtime (#8623), which has no class to resolve.
         Map<String, Object> target = asMap(check.get("target"));
-        if (target != null) {
+        if (target != null && truthy(target, "lateBound")) {
+            check.put("targetGenFolder", NamingHelper.sanitizeJavaIdentifier(str(target, "targetModel")));
+            check.put("targetEntity", str(target, "entity"));
+        } else if (target != null) {
             check.put("targetRepositoryClass", generatedClass(target, parameters) + "Repository");
         }
         List<Map<String, Object>> hops = asMaps(check.get("pathLoads"));
@@ -941,6 +953,47 @@ final class ModelParameterProcessor {
             loads.add(load);
         }
         check.put("pathLoads", loads);
+    }
+
+    /**
+     * Resolves the money fields rounded to their currency's minor units (intent {@code roundTo:}, issue
+     * #8307 / #8327) into what the repository renders: the hops to load, as generated classes (a
+     * cross-model one in its owner's generation folder), and one minor-units read per property, in
+     * property order, each property carrying its index into that list ({@code roundToIndex}). An entity
+     * without the key is left untouched.
+     *
+     * @param entity the entity
+     * @param parameters the generation parameters
+     */
+    private static void resolveRoundTo(Map<String, Object> entity, Map<String, Object> parameters) {
+        List<Object> digits = new ArrayList<>();
+        for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+            String expression = str(property, "roundToExpression");
+            if (expression == null || expression.isBlank()) {
+                continue;
+            }
+            property.put("roundToIndex", String.valueOf(digits.size()));
+            Map<String, Object> read = new LinkedHashMap<>();
+            read.put("property", str(property, "name"));
+            read.put("expression", expression);
+            digits.add(read);
+        }
+        if (digits.isEmpty()) {
+            return;
+        }
+        List<Object> loads = new ArrayList<>();
+        for (Map<String, Object> hop : asMaps(entity.get("roundToLoads"))) {
+            String qualified = generatedClass(hop, parameters);
+            Map<String, Object> load = new LinkedHashMap<>();
+            load.put("local", hop.get("local"));
+            load.put("sourceExpression", hop.get("sourceExpression"));
+            load.put("entityClass", qualified + "Entity");
+            load.put("repositoryClass", qualified + "Repository");
+            loads.add(load);
+        }
+        entity.put("roundToLoads", loads);
+        entity.put("roundToDigits", digits);
+        entity.put("haveRoundTo", "true");
     }
 
     /**

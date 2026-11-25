@@ -324,8 +324,10 @@ the register is read at generation time: the register's generated repository ans
 name, with the same semantics - 409 on user writes, the repository's refusal on system writes. While
 the owner model is not deployed, the record is not locked. A POSTING into a record locked this way is
 pre-checked the same way before it writes (#8755: it waits with a warning instead of failing into
-its target's refusal), but is not re-run when the period reopens - the sweep listens on the
-register's own topic, which only a local register lets the posting name.
+its target's refusal), and re-run when the period reopens: the register's model relays every
+reopening onto `PeriodRegisters.reopenedTopic(model, register)`, which the posting's sweep binds
+without naming anything of that model but its name. A `posts:` row into a period-locked target
+gets the same pre-check and sweep (#8772).
 
 ## lifecycle - the legal status graph
 
@@ -449,6 +451,11 @@ A cross-model source declares its phases in its own model, so the name cannot be
 - { name: Account, kind: manyToOne, to: Account, model: accounts, leafOnly: true }
 ```
 
+A node that leaf-only references already point at cannot gain a child (#7826): the child would turn
+the referenced leaf into a group with the references still on it, so a create or re-parent under it
+is refused with a 400 naming the referencing records (catalog key `checks.leafReferenced`). The
+referencing side contributes the count, so a leaf-only relation of another model counts too.
+
 The list renders as a tree-table - the list's own columns, the first one indented under an expand
 chevron - and as the flat table while no record has a parent, for a search or a filter, or when the
 user picks Table on the toolbar toggle. Each record's row menu and its sheet offer **Add child**,
@@ -515,6 +522,16 @@ included. For logic beyond an expression, a hand-written `CalculatedField` compo
 - { name: days, type: decimal, readOnly: true,
     calculatedOnCreate: "businessDaysBetween(FromDate, ToDate)" }     # also daysBetween, monthsBetween
 - { name: number, type: string, calculatedActionOnCreate: SalesInvoiceNumberAction }  # + entity imports:
+```
+
+A money amount rounds to the minor units of the currency the record is stated in with `roundTo:` - a
+to-one path ending in the currency's integer digits column (#8307 / #8327). Typed, calculated (evaluated
+straight to those digits) and document totals alike, never to more than the column's `scale`, and to the
+`scale` when the record reaches no currency:
+
+```yaml
+- { name: net, type: decimal, scale: 4, roundTo: SalesInvoice.Currency.rounding,   # JPY 3 x 333.33 -> 1000
+    calculatedOnCreate: "Quantity * Price", calculatedOnUpdate: "Quantity * Price" }
 ```
 
 ## view - calendar, range, slots

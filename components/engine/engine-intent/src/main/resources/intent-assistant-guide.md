@@ -482,6 +482,16 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   (an identification status beside the overall one), model it as a PLAIN to-one relation without
   `function:`.
 - `precision` / `scale` - override the DECIMAL default (16, 2): `{ name: rate, type: decimal, precision: 18, scale: 6 }`.
+- `roundTo` (on a `decimal` field, #8307 / #8327) - round a money amount to the minor units of the
+  currency the record is stated in: a path of to-one relations ending in the currency's integer
+  digits column, e.g. `roundTo: Currency.rounding` on a document header, `roundTo:
+  SalesInvoice.Currency.rounding` on its line. The stored value - typed, calculated
+  (`calculatedOnCreate` / `calculatedOnUpdate` evaluate straight to those digits) or a document total -
+  is rounded half up to them before checks and roll-ups read it, never to more than the column's
+  `scale`, and to the `scale` when the record reaches no currency. A yen line of 3 x 333.33 stores
+  1000, not 999.99. Give the money columns a `scale` at least the largest currency's digits (3 for
+  KWD/BHD). Use it instead of a literal precision in `round(x, 2)`: an expression cannot read the
+  currency.
 - `size` (on a field OR a to-one relation) - the form-control width as a 12-column grid span
   (3 = quarter, 4 = third, 6 = half, 12 = full). The generated form maps it to `grid-column: span N`;
   omitted, a control falls back to half width. Use a small span to pack several short controls onto one
@@ -741,7 +751,9 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   `immutableInPeriod: { period: FiscalPeriod, model: journal, date: date }` - for a source document
   whose module the ledger's model uses (so it cannot `uses:` the ledger back). That register is asked
   at runtime by model + name; while its model is not deployed nothing is locked, and a POSTING into
-  such a record is pre-checked the same way (it waits instead of failing) but gets no reopen re-run.
+  such a record is pre-checked the same way (it waits instead of failing) and is re-run when that
+  period reopens, exactly as for a local register. A `posts:` row into a period-locked target gets
+  the same pre-check and re-run.
 - `lifecycle: { edges: [ { from: <status>, to: [<status>, ...] }, ... ] }` (entity-level) - **the
   declarative state machine**: the WHOLE set of legal status moves, declared once and enforced on
   EVERY status write. Without it the status machinery is a set of point constructs - `init:` names
@@ -847,7 +859,9 @@ a `required` text field is refused when it is blank after that trim - spaces alo
 - `leafOnly: true` (on a to-one relation) - restricts the picker to LEAF nodes of its hierarchical
   target (childless nodes), depth-indents the options, and the generated REST validation rejects an
   FK to a node with children (e.g. a journal line references an analytical account, never a
-  synthetic one). The target entity must declare `hierarchy`. Canonical pair:
+  synthetic one). The reverse holds too (#7826): a target row that leafOnly references already point
+  at cannot gain a child (create or re-parent under it is refused with a 400 naming the references),
+  so a referenced leaf never turns into a group. The target entity must declare `hierarchy`. Canonical pair:
     `- { name: Account, kind: manyToOne, to: Account, model: accounts, required: true, leafOnly: true }`
 - `unique:` (entity-level) - **the composite business key**, what a row IS when no single field says
   it: `unique: [{ fields: [ProjectTimesheet, Employee], message: "..." }]`. Each member is an own field
@@ -931,6 +945,21 @@ a `required` text field is refused when it is blank after that trim - spaces alo
     repository when the record is persisted carrying that status ("a claim is submitted only on a
     project its employee is assigned to"). Do not write this rule as a `calculatedActionOnCreate`
     that throws.
+  - `{ kind: notExists, entity: JournalEntry, where: ["Status == DRAFT", "date >= fromDate",
+      "date <= toDate"], status: CLOSED, message: "{count} draft entries are dated in this period" }`
+    (#8002, #8623): the inverse of `exists` - the MOVE into the `status:` gate is refused (400 with
+    the message) WHILE a row of another entity matches. **This is how "a month is not closed while a
+    draft entry is dated inside it" and "a deal is not marked lost while one of its quotations is
+    accepted or ordered" are declared** - not as a transition guard (which reads only the record's
+    own fields) and not as a `calculatedAction*` that throws. `status:` is required. `match:` works
+    as on `exists` - a target's relation to THIS record is matched by its `id`
+    (`match: { Opportunity: id }`) - and `where:` filters the target's rows: `<target property>
+    <op> <value or path on this record>` (op `== != >= <= > <`), `== null`, or `<property> in [a, b]`;
+    a status name there is one of the TARGET's statuses. `{count}` in the message is the number of
+    matching rows. `model:` may name the model that owns the target even when this model does not
+    `uses:` it (the quotation model uses the opportunity model, so the opportunity model cannot use
+    it back): the rows are then counted by name at runtime - use numeric status ids there, since
+    that model's nomenclature is not readable here.
   - `{ kind: requiredWhen, field: vatGround, whenAnyItem: "vatRate == 0", status: ISSUED, message: "..." }`
     (#7560): a header value required when **ANY LINE** satisfies the condition - the legal ground a
     zero-rated line calls for (ЗДДС чл. 114). `whenAnyItem` uses the `when` grammar over the ITEMS
@@ -6168,6 +6197,7 @@ or a seeded name.
 | relation `whenMasterDeleted` | `cascade` (default - a delete of the master deletes the children it owns), `refuse` (the master's delete is rejected while children exist); composition relations only |
 | relation `fixedAfterCreate` | `true` - a plain `manyToOne`/`oneToOne` (not an `EntityStatus`, not with `calculatedActionOnUpdate`): editable on create, read-only on edit, a changed value in an update answered 409. A `composition: true` relation is fixed this way by default (#8306) |
 | field `fixedAfterCreate` | `true` - a caller-written field (not the key, `generated`, `uuid`, `number:`, `stampOn:`, `readOnly`, derived, `aggregate`, `dependsOn`, a `timestamp`, nor a translatable string of a `multilingual` entity): editable on create, read-only on edit, a changed value in an update answered 409 |
+| field `roundTo` | a path of to-one relations off the record ending in an integer field (`Currency.rounding`, `SalesInvoice.Currency.rounding`; a cross-model relation only as the last hop), on a `decimal` field that is not the key: the value is rounded half up to that many decimals, at most the column's `scale`, the `scale` when the path reaches nothing |
 | field `fixedWhenReferenced` | `true` - a caller-written field (the same refusals as field `fixedAfterCreate`, and not beside it): editable while no record references the row, a changed value in an update answered 409 once one does |
 | relation `fixedWhenReferenced` | `true` - a plain `manyToOne`/`oneToOne` (the same refusals as relation `fixedAfterCreate`, and not beside it): re-pickable while no record references the row, a changed FK in an update answered 409 once one does |
 | relation `readOnly` | `true` - a plain `manyToOne`/`oneToOne` only the system sets (not an `EntityStatus`, a composition parent, the `personal`/`partner`/`owner` relation, nor beside a calculated action, `fixedAfterCreate` or `fixedWhenReferenced`): no picker on New or Edit, a set value shown in the read-only details, a user create carrying it stored without it, a user update keeps the stored value; repository writers (create-from, postings, delegates, workflow steps) set it |
@@ -6218,6 +6248,7 @@ or a seeded name.
 - "X must be filled in before/when it reaches STATUS (but may be empty while it is a draft)" -> **checks** `requiredWhen` WITH the `status:` gate - a workflow's own status set is a repository write and never reaches a controller
 - "this must not be changed/added once the parent is PAID/CLOSED" -> **checks** `forbidWhen`
 - "only an employee assigned to the project / a member of the team may book it" (a row of a third entity must exist for the pair) -> **checks** `exists`
+- "it must not be closed / marked lost / approved while a draft entry / an accepted quotation / an open task of another entity exists" -> **checks** `notExists` with the `status:` gate
 - "nothing new may be added once the parent is PAID (but a wrong one must still be removable)" -> **checks** `forbidWhen` with `verbs: [create, update]`
 - "warn me / ask before saving when ... (but let me save anyway)" -> **checks** with `severity: warn`; "a record with the same name already exists" -> `duplicate`; "a line has price 0 / a zero-value line" -> `itemsCompare` on the document
 - "auto-expire the offer/request when its validity date passes" -> **processes** (userTask `expire:`)
