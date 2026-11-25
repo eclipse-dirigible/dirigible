@@ -92,12 +92,14 @@ class EdmReportManifestTest {
         assertEquals("list", widget.get("kind"));
         List<?> columns = (List<?>) open.get("columns");
         assertFalse(columns.isEmpty(), "a list tile shows the report's columns, so they travel with the widget");
+        assertEquals(columns.size(), open.get("columnCount"), "the count is the number of selected columns");
 
         Map<String, Object> revenue = reports.get(1);
         assertEquals(Boolean.FALSE, revenue.get("dashboard"));
         assertEquals("bar", revenue.get("chart"));
         assertFalse(revenue.containsKey("widget"), "a report without a widget carries none: " + revenue);
         assertFalse(revenue.containsKey("columns"), "nor the columns only a widget tile reads: " + revenue);
+        assertTrue(((Number) revenue.get("columnCount")).intValue() > 0, "but every report carries how many columns it shows: " + revenue);
         assertFalse(revenue.containsKey("description"), "an absent description is not written as an empty one");
         assertFalse(open.containsKey("drill"), "a report that does not count records carries no drill: " + open);
 
