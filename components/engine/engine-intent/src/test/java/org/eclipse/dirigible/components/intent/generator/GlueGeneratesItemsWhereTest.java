@@ -221,6 +221,49 @@ class GlueGeneratesItemsWhereTest {
                 "the failure must name the shape mismatch: " + failure.getMessage());
     }
 
+    /** The timesheet names the invoice it was billed on (issue #7956). */
+    private static final String BACK_LINK_YAML = YAML.replace("""
+                  - { name: Status, kind: manyToOne, to: TimesheetStatus, function: EntityStatus, init: 1 }
+            """, """
+                  - { name: Status, kind: manyToOne, to: TimesheetStatus, function: EntityStatus, init: 1 }
+                  - { name: BilledInvoice, kind: manyToOne, to: SalesInvoice, whenTargetDeleted: nullify }
+            """)
+                                                     .replace("""
+                                                                   map:
+                                                                     Name: employeeName
+                                                             """, """
+                                                                   backLink: BilledInvoice
+                                                                   map:
+                                                                     Name: employeeName
+                                                             """);
+
+    /**
+     * {@code backLink:} marks each consumed row with the created document (issue #7956): the descriptor
+     * carries the property the template writes and selects the unmarked rows by. An items block without
+     * it carries the empty string, which renders the selection it always had.
+     */
+    @Test
+    void aBackLinkIsCarriedOntoTheDescriptor() {
+        assertEquals("BilledInvoice", GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(BACK_LINK_YAML))
+                                                         .get(0)
+                                                         .get("itemBackLink"));
+        assertEquals("", GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(YAML))
+                                            .get(0)
+                                            .get("itemBackLink"));
+    }
+
+    /** The mark names the document the row became a line of, so it must point at the target. */
+    @Test
+    void aBackLinkThatIsNotAToOneToTheTargetIsRefused() {
+        IntentValidationException failure = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(BACK_LINK_YAML.replace("backLink: BilledInvoice", "backLink: Status")));
+
+        assertTrue(failure.getMessage()
+                          .contains(
+                                  "items backLink [Status] must be a manyToOne/oneToOne of [EmployeeTimesheet] to the target [SalesInvoice]"),
+                "the failure must name the relation and the target: " + failure.getMessage());
+    }
+
     /**
      * A delivery note generated from another model's goods issue, its lines from the issue's lines -
      * the cross-model SOURCE shape ({@code fromUses:}), whose items are owned by the owner model too.

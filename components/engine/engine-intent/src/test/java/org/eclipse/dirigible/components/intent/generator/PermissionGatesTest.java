@@ -244,6 +244,97 @@ class PermissionGatesTest {
         }
     }
 
+    /**
+     * An {@code additive: true} entry is bound apart from the others (issue #8852): the resource it
+     * names is not covered - its convention roles stay - and the role is added by the gate methods.
+     */
+    @Test
+    void anAdditiveGrantLeavesTheResourceUncoveredAndIsAddedToItsGates() {
+        PermissionSupport.Gates gates =
+                PermissionSupport.gates(IntentParser.parse(ADDITIVE), settings(Map.of("extraRoles", List.of("Owner"))));
+
+        assertFalse(gates.covers("Customer"), "an additive token must not displace the convention roles");
+        assertNull(gates.readRoles("Customer"));
+        assertTrue(gates.reaches("Customer", "Customer"));
+        assertEquals("sales.Customer.CustomerReadOnly,sales.Customer.CustomerFullAccess,Clerk,Owner",
+                gates.readGate("sales", "Customer", "Customer"));
+        assertEquals("sales.Customer.CustomerFullAccess,Owner", gates.writeGate("sales", "Customer", "Customer"));
+        assertTrue(gates.issues()
+                        .isEmpty(),
+                gates.issues()
+                     .toString());
+    }
+
+    @Test
+    void anAdditiveGrantOnAReportKeepsItsConventionReadRole() {
+        PermissionSupport.Gates gates =
+                PermissionSupport.gates(IntentParser.parse(ADDITIVE), settings(Map.of("extraRoles", List.of("Owner"))));
+
+        assertNull(gates.readRoles("OrderTotals"), "the report's convention role must stay declared");
+        assertEquals("sales.Report.OrderTotalsReadOnly,Clerk,Owner", gates.readGate("OrderTotals", "sales.Report.OrderTotalsReadOnly"));
+        // Beside a non-additive grant the convention role is replaced, as it always was.
+        PermissionSupport.Gates mixed =
+                PermissionSupport.gates(
+                        IntentParser.parse(ADDITIVE.replace("{ role: SalesViewer, can: [Order:read] }",
+                                "{ role: SalesViewer, can: [Order:read, OrderTotals:read] }")),
+                        settings(Map.of("extraRoles", List.of("Owner"))));
+        assertEquals("SalesViewer,Clerk,Owner", mixed.readGate("OrderTotals", "sales.Report.OrderTotalsReadOnly"));
+    }
+
+    /**
+     * The intent's {@code .roles} gains the additive role only: the convention roles it keeps are
+     * declared by the template layer, without the {@code assignable} mark, so they are not offered to a
+     * tenant's people - the point of issue #8852.
+     */
+    @Test
+    void anAdditiveGrantDeclaresItsRoleAndNoConventionRole() {
+        String roles = written(ADDITIVE, settings(Map.of("extraRoles", List.of("Owner"))), "/sales.roles");
+        List<String> names = new java.util.ArrayList<>();
+        for (JsonElement element : JsonParser.parseString(roles)
+                                             .getAsJsonArray()) {
+            JsonObject role = element.getAsJsonObject();
+            names.add(role.get("name")
+                          .getAsString());
+            assertTrue(role.get("assignable")
+                           .getAsBoolean(),
+                    roles);
+        }
+        assertEquals(List.of("SalesAdmin", "SalesViewer", "Clerk", "Owner"), names, roles);
+    }
+
+    @Test
+    void theAccessConstraintsOfAnAdditiveResourceAdmitItsConventionRolesToo() {
+        String access = written(ADDITIVE, settings(Map.of("generate", true, "extraRoles", List.of("Owner"))), "/sales.access");
+        Map<String, String> rolesByPath = new LinkedHashMap<>();
+        for (JsonElement constraint : JsonParser.parseString(access)
+                                                .getAsJsonObject()
+                                                .getAsJsonArray("constraints")) {
+            rolesByPath.put(constraint.getAsJsonObject()
+                                      .get("path")
+                                      .getAsString(),
+                    constraint.getAsJsonObject()
+                              .get("roles")
+                              .toString());
+        }
+        // The constraint has no write gate to fall back on, so a FullAccess holder must be named.
+        assertEquals("[\"proj.Customer.CustomerReadOnly\",\"proj.Customer.CustomerFullAccess\",\"Clerk\",\"Owner\"]",
+                rolesByPath.get("/services/java/proj/gen/sales/api/customer/CustomerController/**"), access);
+        assertEquals("[\"proj.Report.OrderTotalsReadOnly\",\"Clerk\",\"Owner\"]",
+                rolesByPath.get("/services/java/proj/gen/ordertotals/api/reports/OrderTotalsController/**"), access);
+        assertEquals("[\"SalesAdmin\",\"SalesViewer\",\"Owner\"]",
+                rolesByPath.get("/services/java/proj/gen/sales/api/order/OrderController/**"), "an authored gate is constrained as before");
+    }
+
+    /** {@link #YAML} with a report and an additive role on an entity and on the report. */
+    private static final String ADDITIVE = YAML + """
+              - { role: Clerk, can: [Customer:read, OrderTotals:read], additive: true }
+            reports:
+              - name: OrderTotals
+                source: Order
+                dimensions: [id]
+                measures: ["sum(total)"]
+            """;
+
     /** The written {@code .access} document, or null when the pass wrote none. */
     private static String access(boolean optIn) {
         return written(YAML, settings(optIn), "/sales.access");

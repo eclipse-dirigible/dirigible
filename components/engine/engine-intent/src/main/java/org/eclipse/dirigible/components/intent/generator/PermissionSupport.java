@@ -56,6 +56,14 @@ import org.eclipse.dirigible.components.intent.model.ReportIntent;
  * </ul>
  * A token whose resource half names nothing the intent declares is an ISSUE (a typo that would gate
  * nothing), and a malformed token is refused by the parser before generation runs.
+ *
+ * <p>
+ * An entry's tokens REPLACE the convention roles of the resources they name
+ * ({@code <project>.<perspective>.<Entity>ReadOnly} / {@code FullAccess}), unless the entry is
+ * {@code additive: true} (issue #8852): its role is then ADDED to the gate, after the roles the
+ * gate has without it - the convention roles, or the roles other entries author - and before the
+ * deployment's extras. An additive entry never removes anything: whether a resource keeps its
+ * convention roles, and whether it takes the extras, is decided by the other entries alone.
  */
 public final class PermissionSupport {
 
@@ -74,8 +82,10 @@ public final class PermissionSupport {
      * The authored gates of one intent: per resource name, the roles that may read it and the roles
      * that may change it, plus what could not be bound.
      *
-     * @param read resource name to the roles granted its read gate (insertion-ordered)
-     * @param write resource name to the roles granted its write gate (insertion-ordered)
+     * @param read resource name to the roles granted its read gate in place of its convention role
+     *        (insertion-ordered)
+     * @param write resource name to the roles granted its write gate in place of its convention role
+     *        (insertion-ordered)
      * @param issues actionable problems - a token naming an undeclared resource
      * @param advisories observations - a token whose action maps to no generated gate
      * @param extraRead the deployment's roles every read gate admits besides its own ({@code .settings}
@@ -84,23 +94,84 @@ public final class PermissionSupport {
      *        ({@code .settings} {@code access.extraRoles})
      * @param exclusive the resources an {@code exclusive: true} permission binds: their gates are the
      *        module's roles only, the deployment's extras never appended (issue #8112)
+     * @param additiveRead resource name to the roles an {@code additive: true} permission adds to its
+     *        read gate, whatever else that gate holds (issue #8852)
+     * @param additiveWrite resource name to the roles an {@code additive: true} permission adds to its
+     *        write gate
      */
     public record Gates(Map<String, Set<String>> read, Map<String, Set<String>> write, List<String> issues, List<String> advisories,
-            List<String> extraRead, List<String> extraWrite, Set<String> exclusive) {
+            List<String> extraRead, List<String> extraWrite, Set<String> exclusive, Map<String, Set<String>> additiveRead,
+            Map<String, Set<String>> additiveWrite) {
 
-        /** Whether any {@code can:} token named this resource, i.e. whether it has authored gates. */
+        /**
+         * Whether a {@code can:} token of a non-additive entry named this resource, i.e. whether authored
+         * roles take the place of its convention roles. A resource only {@code additive} entries name is
+         * not covered: its convention roles stay its gate and stay declared.
+         */
         public boolean covers(String resource) {
             return read.containsKey(resource) || write.containsKey(resource);
         }
 
-        /** The comma-separated read roles of a resource, or {@code null} when none are authored. */
+        /**
+         * The comma-separated roles granted a resource's read gate in place of its convention role, or
+         * {@code null} when none are.
+         */
         public String readRoles(String resource) {
             return join(read.get(resource));
         }
 
-        /** The comma-separated write roles of a resource, or {@code null} when none are authored. */
+        /**
+         * The comma-separated roles granted a resource's write gate in place of its convention role, or
+         * {@code null} when none are.
+         */
         public String writeRoles(String resource) {
             return join(write.get(resource));
+        }
+
+        /**
+         * Every role a {@code can:} token grants the read gate of a resource that has no convention role to
+         * keep (an export): the roles of the non-additive entries, then those of the additive ones.
+         *
+         * @param resource the resource's declared name
+         * @return the comma-separated roles, or {@code null} when no token names the resource
+         */
+        public String grantedRead(String resource) {
+            Set<String> granted = new LinkedHashSet<>(read.getOrDefault(resource, Set.of()));
+            granted.addAll(additiveRead.getOrDefault(resource, Set.of()));
+            return join(granted);
+        }
+
+        /**
+         * The read gate of a resource whose convention gate is ONE role (a report): the roles a
+         * {@code can:} token grants in place of it, else that convention role; then the roles the
+         * {@code additive} entries add; then the deployment's extra read roles, unless a grant on the
+         * resource is {@code exclusive}.
+         *
+         * @param resource the resource's declared name
+         * @param conventionRole the role that gates it when no non-additive token names it
+         * @return the comma-separated read roles
+         */
+        public String readGate(String resource, String conventionRole) {
+            Set<String> gate = new LinkedHashSet<>(read.getOrDefault(resource, Set.of()));
+            if (gate.isEmpty()) {
+                gate.add(conventionRole);
+            }
+            gate.addAll(additiveRead.getOrDefault(resource, Set.of()));
+            return String.join(",", appendRead(resource, gate));
+        }
+
+        /**
+         * Whether any {@code can:} token, additive or not, reaches the gates of an entity - its own, or for
+         * a composition child its root's - i.e. whether the entity's gate differs from the bare convention
+         * one.
+         *
+         * @param rolePerspective the entity's composition root (the entity itself when it is one)
+         * @param entity the entity's declared name
+         * @return whether a token names the entity or the root it inherits from
+         */
+        public boolean reaches(String rolePerspective, String entity) {
+            String gateName = covers(entity) ? entity : rolePerspective;
+            return covers(gateName) || !added(additiveRead, gateName, entity).isEmpty();
         }
 
         /**
@@ -150,10 +221,11 @@ public final class PermissionSupport {
         /**
          * The write gate of an entity as every generated surface checks it: the roles a {@code can:} token
          * authors for the entity (or, for a composition child without its own, for its composition root),
-         * else the convention role {@code <project>.<root>.<Entity>FullAccess} - and the deployment's extra
-         * write roles after either, unless that grant is {@code exclusive}. The entity's REST controller
-         * and anything else that writes its rows on a user's behalf (a file import's upload) must agree on
-         * it.
+         * else the convention role {@code <project>.<root>.<Entity>FullAccess}; then the roles an
+         * {@code additive} entry grants write on it (its own and, when it inherits, its root's); and the
+         * deployment's extra write roles after those, unless that grant is {@code exclusive}. The entity's
+         * REST controller and anything else that writes its rows on a user's behalf (a file import's
+         * upload) must agree on it.
          *
          * @param projectName the project the convention role is prefixed with
          * @param rolePerspective the entity's composition root (the entity itself when it is one)
@@ -162,16 +234,30 @@ public final class PermissionSupport {
          */
         public String writeGate(String projectName, String rolePerspective, String entity) {
             String gateName = covers(entity) ? entity : rolePerspective;
-            String authored = covers(gateName) ? writeRoles(gateName) : null;
-            return appendWrite(gateName, authored != null ? authored : projectName + "." + rolePerspective + "." + entity + "FullAccess");
+            Set<String> gate = new LinkedHashSet<>();
+            if (covers(gateName)) {
+                gate.addAll(write.getOrDefault(gateName, Set.of()));
+            }
+            Set<String> added = added(additiveWrite, gateName, entity);
+            if (!covers(gateName) || (gate.isEmpty() && added.isEmpty())) {
+                // The convention gate - or, for a covered entity nobody may write, a gate no declared role
+                // satisfies, which is what a read-only allow-list says.
+                gate.add(projectName + "." + rolePerspective + "." + entity + "FullAccess");
+            }
+            gate.addAll(added);
+            return appendWrite(gateName, String.join(",", gate));
         }
 
         /**
          * The read gate of an entity as the EDM emits it ({@code roleRead}): the roles a {@code can:} token
          * grants read on the entity (or, for a composition child without its own, on its composition root),
-         * else the convention role {@code <project>.<root>.<Entity>ReadOnly} - and the deployment's extra
-         * read roles after either, unless that grant is {@code exclusive}. The generated controller admits
-         * the write gate on a read as well.
+         * else the convention role {@code <project>.<root>.<Entity>ReadOnly}; then the roles an
+         * {@code additive} entry grants on it (its own and, when it inherits, its root's); and the
+         * deployment's extra read roles after those, unless that grant is {@code exclusive}. The generated
+         * controller admits the write gate on a read as well, which is why a bare convention gate names
+         * {@code ReadOnly} alone; a convention gate an additive role joins also names the convention
+         * {@code FullAccess}, so the gate lists everyone who may read - what the {@code .access}
+         * constraint, which has no write gate to fall back on, is built from.
          *
          * @param projectName the project the convention role is prefixed with
          * @param rolePerspective the entity's composition root (the entity itself when it is one)
@@ -180,8 +266,33 @@ public final class PermissionSupport {
          */
         public String readGate(String projectName, String rolePerspective, String entity) {
             String gateName = covers(entity) ? entity : rolePerspective;
-            String authored = covers(gateName) ? readRoles(gateName) : null;
-            return appendRead(gateName, authored != null ? authored : projectName + "." + rolePerspective + "." + entity + "ReadOnly");
+            Set<String> gate = new LinkedHashSet<>();
+            if (covers(gateName)) {
+                gate.addAll(read.getOrDefault(gateName, Set.of()));
+            }
+            Set<String> added = added(additiveRead, gateName, entity);
+            if (gate.isEmpty()) {
+                // The convention roles stay FIRST: the template layer declares a gate's first role.
+                String convention = projectName + "." + rolePerspective + "." + entity;
+                gate.add(convention + "ReadOnly");
+                if (!added.isEmpty()) {
+                    gate.add(convention + "FullAccess");
+                }
+            }
+            gate.addAll(added);
+            return appendRead(gateName, String.join(",", gate));
+        }
+
+        /**
+         * The roles the {@code additive} entries add to an entity's gate: those naming the resource its
+         * gate is bound to and those naming the entity itself. The two are one resource unless the entity
+         * is a composition child inheriting its root's gate - which then takes the root's additive roles
+         * and its own.
+         */
+        private static Set<String> added(Map<String, Set<String>> additive, String gateName, String entity) {
+            Set<String> added = new LinkedHashSet<>(additive.getOrDefault(gateName, Set.of()));
+            added.addAll(additive.getOrDefault(entity, Set.of()));
+            return added;
         }
 
         private static List<String> append(Collection<String> roles, List<String> extras) {
@@ -224,14 +335,20 @@ public final class PermissionSupport {
         Set<String> declared = declaredResources(model);
         Set<String> actionBound = actionBoundTokens(model);
         Set<String> exclusive = new LinkedHashSet<>();
+        Map<String, Set<String>> additiveRead = new LinkedHashMap<>();
+        Map<String, Set<String>> additiveWrite = new LinkedHashMap<>();
         for (PermissionIntent permission : model.getPermissions()) {
             String role = permission.getRole();
             if (role == null || role.isBlank()) {
                 continue;
             }
+            // An additive entry is bound apart from the others: its roles join a gate, and what that gate
+            // holds besides them (convention roles or authored ones, extras or none) is not its to change.
+            boolean additive = permission.isAdditive();
             for (String token : permission.getCan()) {
-                String bound = bind(role.trim(), token, gateBearing, declared, actionBound, read, write, issues, advisories);
-                if (bound != null && permission.isExclusive()) {
+                String bound = bind(role.trim(), token, gateBearing, declared, actionBound, additive ? additiveRead : read,
+                        additive ? additiveWrite : write, issues, advisories);
+                if (bound != null && permission.isExclusive() && !additive) {
                     exclusive.add(bound);
                 }
             }
@@ -239,7 +356,8 @@ public final class PermissionSupport {
         List<String> extraWrite = settings == null ? List.of() : settings.extraRoles();
         List<String> extraRead = settings == null ? List.of() : Gates.append(extraWrite, settings.extraRolesReadOnly());
         return new Gates(Collections.unmodifiableMap(read), Collections.unmodifiableMap(write), Collections.unmodifiableList(issues),
-                Collections.unmodifiableList(advisories), extraRead, extraWrite, Collections.unmodifiableSet(exclusive));
+                Collections.unmodifiableList(advisories), extraRead, extraWrite, Collections.unmodifiableSet(exclusive),
+                Collections.unmodifiableMap(additiveRead), Collections.unmodifiableMap(additiveWrite));
     }
 
     /** Binds one token into the gates; returns the resource it bound, or null when it bound none. */

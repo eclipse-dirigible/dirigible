@@ -150,4 +150,53 @@ class SecurityRolesSynchronizerTest {
         assertFalse(convention.isAssignable());
         assertNull(convention.getLabel());
     }
+
+    /**
+     * A role taken out of a {@code .roles} file that stays is removed when the file is parsed again
+     * (#8854); the roles it still declares keep their rows, and a role of the same name declared in
+     * another file keeps that file's row.
+     *
+     * @throws ParseException the parse exception
+     */
+    @Test
+    public void testRoleNoLongerDeclaredIsRemoved() throws ParseException {
+        String before = "[{\"name\":\"Accountant\",\"assignable\":true},{\"name\":\"acme.Invoices.InvoiceReadOnly\",\"assignable\":true},"
+                + "{\"name\":\"acme.Invoices.InvoiceFullAccess\"}]";
+        rolesSynchronizer.parse("/acme/app.roles", before.getBytes(StandardCharsets.UTF_8));
+        rolesSynchronizer.parse("/acme/default-roles.roles",
+                "[{\"name\":\"acme.Invoices.InvoiceReadOnly\"}]".getBytes(StandardCharsets.UTF_8));
+
+        String after = "[{\"name\":\"Accountant\",\"assignable\":true},{\"name\":\"acme.Invoices.InvoiceFullAccess\"}]";
+        rolesSynchronizer.parse("/acme/app.roles", after.getBytes(StandardCharsets.UTF_8));
+
+        assertEquals(List.of("Accountant", "acme.Invoices.InvoiceFullAccess"), namesAt("/acme/app.roles"));
+        assertEquals(List.of("acme.Invoices.InvoiceReadOnly"), namesAt("/acme/default-roles.roles"));
+        assertFalse(rolesSynchronizer.getService()
+                                     .findByKey("role:/acme/default-roles.roles:acme.Invoices.InvoiceReadOnly")
+                                     .isAssignable());
+    }
+
+    /**
+     * A {@code .roles} file that declares nothing any more leaves no role of its own behind, and the
+     * roles of other files are not touched.
+     *
+     * @throws ParseException the parse exception
+     */
+    @Test
+    public void testFileDeclaringNothingKeepsNoRole() throws ParseException {
+        rolesSynchronizer.parse("/acme/app.roles", "[{\"name\":\"Accountant\"}]".getBytes(StandardCharsets.UTF_8));
+
+        rolesSynchronizer.parse("/acme/app.roles", "[]".getBytes(StandardCharsets.UTF_8));
+
+        assertTrue(namesAt("/acme/app.roles").isEmpty());
+        assertEquals(List.of("test1"), namesAt("/a/b/c/test1.access"));
+    }
+
+    private List<String> namesAt(String location) {
+        return rolesSynchronizer.retrieve(location)
+                                .stream()
+                                .map(Role::getName)
+                                .sorted()
+                                .toList();
+    }
 }

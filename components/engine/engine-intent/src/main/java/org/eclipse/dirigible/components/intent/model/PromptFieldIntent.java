@@ -20,6 +20,10 @@ import com.google.gson.annotations.SerializedName;
  * set on the target after {@code map:} / {@code defaults:}. It reaches a post-issue child record (a
  * manual payment allocation on an immutable invoice) as well, since an action button is not gated
  * on mutability the way the document's own panels are.
+ *
+ * <p>
+ * On a transition (issue #7909) an entry names a property of the record being moved, written with
+ * its status; there it takes no {@code default:}.
  */
 public class PromptFieldIntent {
 

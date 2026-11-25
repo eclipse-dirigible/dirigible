@@ -131,15 +131,41 @@ class HarmoniaFieldDisplayIT {
 
     /**
      * A decimal shows the decimals of its scale (#8701): the generator derives the pattern from it, so
-     * a scale-6 rate keeps all six and a scale-2 amount stays at two.
+     * a scale-6 rate keeps all six and a scale-2 amount stays at two. Past two they are optional
+     * (#8878): a scale-6 quantity of 10 reads 10.00, not 10.000000.
      */
     @Test
     void aDecimalShowsTheDecimalsOfItsScale() {
         try (Context context = load()) {
-            assertEquals("1.955834", display(context, "1.955834, 'NUMBER', '### ### ### ##0.000000', null"));
-            assertEquals("1.955830", display(context, "1.95583, 'NUMBER', '### ### ### ##0.000000', null"));
+            assertEquals("1.955834", display(context, "1.955834, 'NUMBER', '### ### ### ##0.00####', null"));
             assertEquals("1.96", display(context, "1.955834, 'NUMBER', '### ### ### ##0.00', null"));
             assertEquals("2", display(context, "1.5, 'NUMBER', '### ### ### ##0', null"));
+            assertEquals("1.955830", display(context, "1.95583, 'NUMBER', '### ### ### ##0.000000', null"),
+                    "an authored pattern's mandatory digits stay mandatory");
+        }
+    }
+
+    /**
+     * The optional decimals of a scale-6 decimal (#8878), with the English and the Bulgarian
+     * separators.
+     */
+    @Test
+    void aDecimalShowsTwoDecimalsAndTheRestOnlyWhenPresent() {
+        String scale6 = "'NUMBER', '### ### ### ##0.00####', null";
+        try (Context context = load("dd.MM.yyyy HH:mm", "#,##0.00")) {
+            assertEquals("10.00", display(context, "10, " + scale6));
+            assertEquals("1.25", display(context, "1.25, " + scale6));
+            assertEquals("1.955834", display(context, "1.955834, " + scale6));
+            assertEquals("0.00125", display(context, "0.00125, " + scale6));
+            assertEquals("12,345.50", display(context, "12345.5, " + scale6));
+            assertEquals("-0.10", display(context, "-0.1, " + scale6));
+        }
+        try (Context context = load("dd.MM.yyyy HH:mm", "# ##0,00")) {
+            assertEquals("10,00", display(context, "10, " + scale6));
+            assertEquals("1,25", display(context, "1.25, " + scale6));
+            assertEquals("1,955834", display(context, "1.955834, " + scale6));
+            assertEquals("0,00125", display(context, "0.00125, " + scale6));
+            assertEquals("12 345,50", display(context, "12345.5, " + scale6));
         }
     }
 
@@ -238,6 +264,10 @@ class HarmoniaFieldDisplayIT {
     }
 
     private static Context load(String dateTimePattern) {
+        return load(dateTimePattern, "#,##0.00");
+    }
+
+    private static Context load(String dateTimePattern, String numberPattern) {
         Context context = Context.newBuilder("js")
                                  .allowAllAccess(true)
                                  // The interpreter-only notice is written straight to the native stream,
@@ -246,7 +276,7 @@ class HarmoniaFieldDisplayIT {
                                  .build();
         context.eval("js",
                 "var window = this; var __stored = { 'codbex.harmonia.format.date': 'dd.MM.yyyy'," + " 'codbex.harmonia.format.datetime': '"
-                        + dateTimePattern + "', 'codbex.harmonia.format.number': '#,##0.00' };"
+                        + dateTimePattern + "', 'codbex.harmonia.format.number': '" + numberPattern + "' };"
                         + " var localStorage = { getItem: function (k) { return __stored[k] || null; } };");
         for (String script : List.of("services/format.js", "components/pages/basePage.js")) {
             try {

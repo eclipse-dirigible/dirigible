@@ -121,6 +121,35 @@ class JavaRepositoryDeleteRefusalTest {
         assertEquals("products:products-model.checks.deleteReferencedByOthers", refusal.getMessageKey());
     }
 
+    /**
+     * dirigible #7826: a record that leafOnly relations reference may not gain a child - the refusal
+     * names every referencing kind, and the parent is locked before it is counted.
+     */
+    @Test
+    void aLeafReferencedRecordMayNotGainAChild() {
+        when(store.isInUnitOfWork()).thenReturn(true);
+        when(costs.countLeafReferences(TARGET, 2)).thenReturn(3);
+        ProductRepository repository = new ProductRepository(store, "products:products-model", "products:products-model.t.PRODUCT");
+
+        org.eclipse.dirigible.sdk.db.ValidationException refusal =
+                assertThrows(org.eclipse.dirigible.sdk.db.ValidationException.class, () -> repository.requireMayGainChild(2));
+
+        assertEquals("This Product is referenced as a leaf by 3 Product Cost record(s) and cannot be given a child", refusal.getMessage());
+        assertEquals("products:products-model.checks.leafReferenced", refusal.getMessageKey());
+        verify(store).lockForUpdate(Product.class, 2);
+    }
+
+    /** No leaf-only reference - and no parent at all - lets the child through. */
+    @Test
+    void anUnreferencedRecordMayGainAChild() {
+        ProductRepository repository = new ProductRepository(store, null, null);
+
+        repository.requireMayGainChild(2);
+        repository.requireMayGainChild(null);
+
+        verify(costs).countLeafReferences(TARGET, 2);
+    }
+
     private static TargetDeleteRule rule(String label, String labelKey, int count) {
         TargetDeleteRule rule = mock(TargetDeleteRule.class);
         when(rule.countRestricting(TARGET, 2)).thenReturn(count);

@@ -4058,9 +4058,10 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     /**
      * The report's read gate. A {@code permissions[].can: [<Report>:read]} token names the roles that
      * may open it, in which case the convention role is neither the gate nor declared; a report no
-     * token names keeps the convention {@code <project>.Report.<Report>ReadOnly}. Either gate also
-     * admits the deployment's extra roles ({@code .settings} {@code access.extraRoles}), appended after
-     * its own. A report has no write gate - it is a query.
+     * token names keeps the convention {@code <project>.Report.<Report>ReadOnly} - and so does one only
+     * {@code additive: true} entries name, whose roles are added after it (issue #8852). Either gate
+     * also admits the deployment's extra roles ({@code .settings} {@code access.extraRoles}), appended
+     * after its own. A report has no write gate - it is a query.
      *
      * @param context the generation context
      * @param reportName the report's declared name
@@ -4073,8 +4074,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         security.put("generateDefaultRoles", authoredRead != null ? "false" : "true");
         String project = context.getProjectName();
         String prefix = project == null || project.isEmpty() ? IntentNaming.baseName(context) : project;
-        security.put("roleRead",
-                gates.appendRead(reportName, authoredRead != null ? authoredRead : prefix + ".Report." + reportName + "ReadOnly"));
+        security.put("roleRead", gates.readGate(reportName, prefix + ".Report." + reportName + "ReadOnly"));
         return security;
     }
 

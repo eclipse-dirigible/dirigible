@@ -47,6 +47,11 @@ public class ConfigGroupsTest {
         assertEquals(ConfigGroup.MAIL, ConfigGroups.resolve("DIRIGIBLE_FLOWABLE_MAIL_SERVER_HOST"));
         assertEquals(ConfigGroups.SUBGROUP_PROCESS, ConfigGroups.subgroup("DIRIGIBLE_FLOWABLE_MAIL_SERVER_HOST"));
         assertEquals(ConfigGroup.BPM, ConfigGroups.resolve("DIRIGIBLE_FLOWABLE_DATABASE_URL"));
+        // The engine's job lock times sit in the process subgroup of the BPM group (#8871).
+        assertEquals(ConfigGroup.BPM, ConfigGroups.resolve("DIRIGIBLE_FLOWABLE_ASYNC_JOB_LOCK_TIME_SECONDS"));
+        assertEquals(ConfigGroups.SUBGROUP_PROCESS, ConfigGroups.subgroup("DIRIGIBLE_FLOWABLE_ASYNC_JOB_LOCK_TIME_SECONDS"));
+        assertEquals(ConfigGroup.BPM, ConfigGroups.resolve("DIRIGIBLE_FLOWABLE_TIMER_JOB_LOCK_TIME_SECONDS"));
+        assertEquals(ConfigGroups.SUBGROUP_PROCESS, ConfigGroups.subgroup("DIRIGIBLE_FLOWABLE_TIMER_JOB_LOCK_TIME_SECONDS"));
         assertEquals(ConfigGroup.DEVTOOLS, ConfigGroups.resolve("DIRIGIBLE_JAVASCRIPT_GRAALVM_DEBUGGER_PORT"));
         assertEquals(ConfigGroup.RUNTIMES, ConfigGroups.resolve("DIRIGIBLE_JAVASCRIPT_HANDLER_CLASS_NAME"));
         assertEquals(ConfigGroup.WEB, ConfigGroups.resolve("DIRIGIBLE_SECURITY_FRAME_OPTIONS"));

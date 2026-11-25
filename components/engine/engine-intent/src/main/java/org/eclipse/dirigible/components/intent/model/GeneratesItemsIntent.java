@@ -75,6 +75,17 @@ public class GeneratesItemsIntent {
     private String refuse;
 
     /**
+     * Optional to-one relation of {@link #from} to the TARGET document (issue #7956): every source row
+     * that becomes a line has it set to the created target, in the run's own unit of work - the per-row
+     * twin of {@link GeneratesIntent#getSourceStatus()}, and the {@code reversals: backLink:} write
+     * applied to each consumed row. A row already carrying it is never selected again, so a second run
+     * bills nothing twice: a source left with no unmarked qualifying row is refused like any other run
+     * no row qualifies for. What a delete of the target does to the marks is the relation's own
+     * {@code whenTargetDeleted} ({@code nullify} frees the rows for the next run).
+     */
+    private String backLink;
+
+    /**
      * Optional report whose RESULT ROWS become the lines, instead of the rows of {@link #from} (issue
      * #8329): a {@code kind: balance} report run for the source record - one line per row passing
      * {@link #where}, its cells read from the row's columns by {@link #map}. A year close books the
@@ -182,5 +193,18 @@ public class GeneratesItemsIntent {
     /** Whether an unqualified source row refuses the whole create-from (see {@link #refuse}). */
     public boolean hasRefuse() {
         return refuse != null && !refuse.isBlank();
+    }
+
+    public String getBackLink() {
+        return backLink;
+    }
+
+    public void setBackLink(String backLink) {
+        this.backLink = backLink;
+    }
+
+    /** Whether each consumed source row is marked with the created target (see {@link #backLink}). */
+    public boolean hasBackLink() {
+        return backLink != null && !backLink.isBlank();
     }
 }

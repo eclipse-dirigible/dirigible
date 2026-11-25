@@ -66,6 +66,13 @@ public class FieldIntent {
     private Integer precision;
     /** Override for the default DECIMAL scale (2) - the digits after the decimal point. */
     private Integer scale;
+    /**
+     * The decimal places a money field is rounded to, read off the record ({@code roundTo:
+     * Invoice.Currency.rounding}, dirigible #8307 / #8327): a path of to-one relations ending in an
+     * integer field - its currency's minor units. The value is rounded half up to those digits, never
+     * to more than the column's {@link #scale}, and to the scale when the record reaches no currency.
+     */
+    private String roundTo;
     private String defaultValue;
     private String description;
     /**
@@ -425,6 +432,14 @@ public class FieldIntent {
 
     public void setScale(Integer scale) {
         this.scale = scale;
+    }
+
+    public String getRoundTo() {
+        return roundTo;
+    }
+
+    public void setRoundTo(String roundTo) {
+        this.roundTo = roundTo;
     }
 
     public String getCalculatedOnCreate() {
