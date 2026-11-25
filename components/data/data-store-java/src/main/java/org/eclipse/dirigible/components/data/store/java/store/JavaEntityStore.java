@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
@@ -987,6 +988,25 @@ public class JavaEntityStore implements WriteTransaction {
             Long result = query.getSingleResult();
             return result == null ? 0L : result;
         });
+    }
+
+    /**
+     * Count the rows of a GENERATED entity matching a {@link Criteria}, the entity named by its owner
+     * model and its name rather than typed - for a repository whose model cannot compile against the
+     * owner's classes (a {@code notExists} check, dirigible #8623). Inside a unit of work it sees the
+     * unit's own uncommitted rows.
+     *
+     * @param genFolder the owner model's generated folder name
+     * @param entity the entity's name
+     * @param criteria the query criteria
+     * @return the number of matching rows, or empty when no such entity is registered - its model is
+     *         not deployed
+     */
+    public OptionalLong countGenerated(String genFolder, String entity, Criteria criteria) {
+        Optional<RegisteredEntity> meta = entityManager.findGenerated(genFolder, entity);
+        return meta.isPresent() ? OptionalLong.of(count(meta.get()
+                                                            .entityClass(),
+                criteria)) : OptionalLong.empty();
     }
 
     /**

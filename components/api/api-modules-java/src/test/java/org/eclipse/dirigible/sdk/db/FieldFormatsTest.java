@@ -22,7 +22,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * dirigible #8302: {@code format: iban} checks the ISO 7064 MOD 97-10 check digits, not only the
- * shape.
+ * shape. dirigible #8328: a {@code month} field holds a real {@code YYYY-MM}, a {@code week} field
+ * a real ISO {@code YYYY-Www}.
  */
 class FieldFormatsTest {
 
@@ -65,6 +66,38 @@ class FieldFormatsTest {
         assertEquals(34, iban.length());
         assertTrue(FieldFormats.isIban(iban));
         assertFalse(FieldFormats.isIban("XK" + (checkDigits.equals("02") ? "03" : "02") + bban));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"2026-05", "2026-01", "2026-12", "0001-06", "9999-12"})
+    void aMonthOfTheFormYearDashMonthIsAccepted(String month) {
+        assertTrue(FieldFormats.isMonth(month));
+    }
+
+    /** The values of #8328 - one calendar month spelled three ways, a thirteenth month, and junk. */
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"2026-5", "202605", "abc", "2026-13", "2026-00", "2026/05", "26-05", " 2026-05", "2026-05 ", "2026-05-01",
+            "２０２６-05", "2026-W05"})
+    void aValueThatIsNoMonthIsRefused(String value) {
+        assertFalse(FieldFormats.isMonth(value));
+    }
+
+    /**
+     * 2026 and 2020 have a 53rd ISO week (a year starting on a Thursday, a leap year on a Wednesday).
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"2026-W01", "2026-W22", "2025-W52", "2026-W53", "2020-W53", "2015-W53"})
+    void anIsoWeekOfTheFormYearDashWeekIsAccepted(String week) {
+        assertTrue(FieldFormats.isWeek(week));
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"2026-W5", "2026W05", "2026-w05", "2026-W00", "2026-W54", "2025-W53", "2024-W53", "abc", "2026-05", "2026-W05 ",
+            "2026-W5a"})
+    void aValueThatIsNoIsoWeekIsRefused(String value) {
+        assertFalse(FieldFormats.isWeek(value));
     }
 
     private static BigInteger expand(String value) {

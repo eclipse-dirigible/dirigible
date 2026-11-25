@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -20,7 +21,9 @@ import java.util.Set;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.ide.template.service.model.ModelGenerationService;
 import org.eclipse.dirigible.components.intent.LoggedValue;
+import org.eclipse.dirigible.components.intent.generator.edm.CrossModelSupport;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
 import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.eclipse.dirigible.repository.api.ICollection;
@@ -148,8 +151,13 @@ public class IntentGenerationService {
     public GenerationResult generate(String yaml, String projectRoot, String projectName, String workspaceName, String fallbackName,
             boolean bootstrap) {
         IntentModel model = IntentParser.parse(yaml);
+        List<String> leftOut = new ArrayList<>();
+        model = withoutAbsentOptionalUses(yaml, model,
+                new IntentGenerationContext(model, projectRoot, projectName, workspaceName, fallbackName, repository, false, bootstrap),
+                leftOut);
         IntentGenerationContext context =
                 new IntentGenerationContext(model, projectRoot, projectName, workspaceName, fallbackName, repository, false, bootstrap);
+        leftOut.forEach(context::addAdvisory);
         context.setSettings(loadOrScaffoldSettings(context));
         LOGGER.info("Generating model files for intent [{}] under [{}] via {} generator(s)", LoggedValue.of(IntentNaming.baseName(context)),
                 LoggedValue.of(projectRoot), generators.size());
@@ -224,6 +232,9 @@ public class IntentGenerationService {
      */
     public List<String> dryRun(String yaml, String projectRoot, String projectName, String workspaceName, String fallbackName) {
         IntentModel model = IntentParser.parse(yaml);
+        model = withoutAbsentOptionalUses(yaml, model,
+                new IntentGenerationContext(model, projectRoot, projectName, workspaceName, fallbackName, repository, true),
+                new ArrayList<>());
         IntentGenerationContext context =
                 new IntentGenerationContext(model, projectRoot, projectName, workspaceName, fallbackName, repository, true);
         context.setSettings(loadSettingsReadOnly(context));
@@ -250,6 +261,37 @@ public class IntentGenerationService {
      */
     public List<String> dryRun(String yaml) {
         return dryRun(yaml, null, null, null, "app");
+    }
+
+    /**
+     * The model this pass generates (dirigible #7979): an optional {@code uses:} whose owner model is
+     * neither in the workspace nor published is ABSENT here, so the model is generated without it -
+     * what depends on it is left out, and said so, rather than generated against a model that is not
+     * there. With every owner present it is the parsed model itself.
+     *
+     * @param yaml the raw {@code .intent} document
+     * @param model the parsed model
+     * @param probe a context over the parsed model, asked where the owner models are
+     * @param leftOut collects one advisory per absent model, naming what was left out
+     * @return the model to generate
+     */
+    private static IntentModel withoutAbsentOptionalUses(String yaml, IntentModel model, IntentGenerationContext probe,
+            List<String> leftOut) {
+        Set<String> absent = new LinkedHashSet<>();
+        for (UsesIntent uses : model.getUses()) {
+            if (uses.isOptional() && !CrossModelSupport.ownerModelExists(probe, uses)) {
+                absent.add(uses.getModel());
+            }
+        }
+        if (absent.isEmpty()) {
+            return model;
+        }
+        List<String> dropped = new ArrayList<>();
+        IntentModel without = IntentParser.parseWithout(yaml, absent, dropped);
+        leftOut.add(
+                "uses " + absent + " is optional and its model is neither in this workspace nor published, so it is generated without it"
+                        + (dropped.isEmpty() ? "" : " - left out: " + String.join(", ", dropped)));
+        return without;
     }
 
     /**

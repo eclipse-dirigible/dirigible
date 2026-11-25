@@ -77,10 +77,24 @@ class GeneratesPromptDescriptorTest {
         String descriptor = descriptor(LOCAL, Map.of());
         assertTrue(descriptor.contains("\"name\": \"Amount\",\n      \"required\": true,\n      \"default\": \"Balance\""), descriptor);
         assertTrue(descriptor.contains("\"promptColumns\""), descriptor);
-        assertTrue(descriptor.contains("\"label\": \"Amount paid\",\n      \"widget\": \"NUMBER\""), descriptor);
+        assertTrue(descriptor.contains("\"label\": \"Amount paid\""), descriptor);
+        assertTrue(descriptor.contains("\"widget\": \"NUMBER\""), descriptor);
         assertTrue(descriptor.contains("\"widget\": \"DATE\""), descriptor);
         assertTrue(descriptor.contains("\"url\": \"/services/java/proj/gen/sales/api/paymentmethod/PaymentMethodController\""), descriptor);
         assertTrue(descriptor.contains("\"text\": \"Name\""), descriptor);
+    }
+
+    /**
+     * Each caption carries the key the target's own form labels the property by (#7820) - the model
+     * catalog's {@code t.<ENTITY>_<PROPERTY>} - so the dialog reads in the user's language, the
+     * authored label staying the fallback.
+     */
+    @Test
+    void aStandaloneTargetsCaptionsCarryTheirCatalogKeys() {
+        String descriptor = descriptor(LOCAL, Map.of());
+        assertTrue(descriptor.contains("\"tkey\": \"proj:sales-model.t.CUSTOMER_PAYMENT_AMOUNT\""), descriptor);
+        assertTrue(descriptor.contains("\"tkey\": \"proj:sales-model.t.CUSTOMER_PAYMENT_METHOD\""), descriptor);
+        assertTrue(descriptor.contains("\"tkey\": \"proj:sales-model.t.CUSTOMER_PAYMENT_DATE\""), descriptor);
     }
 
     /** A create-from prompt's controls are untouched by the call prompt's input types (#8366). */
@@ -96,11 +110,13 @@ class GeneratesPromptDescriptorTest {
                 {
                   "name": "Amount",
                   "label": "Amount paid",
+                  "tkey": "proj:sales-model.t.CUSTOMER_PAYMENT_AMOUNT",
                   "widget": "NUMBER"
                 },
                 {
                   "name": "Method",
                   "label": "Method",
+                  "tkey": "proj:sales-model.t.CUSTOMER_PAYMENT_METHOD",
                   "widget": "DROPDOWN",
                   "lookup": {
                     "url": "/services/java/proj/gen/sales/api/paymentmethod/PaymentMethodController",
@@ -111,6 +127,7 @@ class GeneratesPromptDescriptorTest {
                 {
                   "name": "Date",
                   "label": "Date",
+                  "tkey": "proj:sales-model.t.CUSTOMER_PAYMENT_DATE",
                   "widget": "DATE"
                 }
               ]""";
@@ -179,6 +196,10 @@ class GeneratesPromptDescriptorTest {
                 descriptor.contains("\"url\": \"/services/java/payment-methods/gen/payment_methods/api/settings/PaymentMethodController\""),
                 descriptor);
         assertTrue(descriptor.contains("\"default\": \"Balance\""), descriptor);
+        // The captions are keyed in the OWNER's catalog, where its own form's labels live (#7820) - the
+        // method too, although its options are read from the third model.
+        assertTrue(descriptor.contains("\"tkey\": \"customer-payments:customer-payments-model.t.CUSTOMER_PAYMENT_AMOUNT\""), descriptor);
+        assertTrue(descriptor.contains("\"tkey\": \"customer-payments:customer-payments-model.t.CUSTOMER_PAYMENT_METHOD\""), descriptor);
     }
 
     private static String descriptor(String yaml, Map<String, String> models) {

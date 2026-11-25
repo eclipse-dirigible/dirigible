@@ -28,6 +28,7 @@ import org.eclipse.dirigible.components.intent.generator.edm.CrossModelSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.EscalateIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
+import org.eclipse.dirigible.components.intent.model.FormIntent;
 import org.eclipse.dirigible.components.intent.model.GenerateChildIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesItemsIntent;
@@ -50,6 +51,7 @@ import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleConditionIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.eclipse.dirigible.components.intent.model.SettlementIntent;
+import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.eclipse.dirigible.components.intent.model.UniqueKeyIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
@@ -143,6 +145,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> postings = buildPostings(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> postingReopens = buildPostingReopens(postings);
         List<Map<String, Object>> posts = buildPosts(model, byName, compositionParents);
+        List<Map<String, Object>> postReopens = buildPostReopens(posts);
+        List<Map<String, Object>> periodReopenNotices = buildPeriodReopenNotices(model, compositionParents);
         List<Map<String, Object>> aggregates = buildAggregates(model, byName, compositionParents);
         List<Map<String, Object>> resolves = buildResolves(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> printFeeders = PrintFeederSupport.buildPrintFeeders(model, byName, compositionParents, settings, context);
@@ -156,7 +160,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 && inboundMessages.isEmpty() && inboundFiles.isEmpty() && imports.isEmpty() && captures.isEmpty() && outbound.isEmpty()
                 && exports.isEmpty() && stepEvents.isEmpty() && rollups.isEmpty() && expansions.isEmpty() && settlements.isEmpty()
                 && generates.isEmpty() && transitions.isEmpty() && printFeeders.isEmpty() && postings.isEmpty() && snapshots.isEmpty()
-                && numbering.isEmpty() && posts.isEmpty() && aggregates.isEmpty() && sends.isEmpty() && resolves.isEmpty()) {
+                && numbering.isEmpty() && posts.isEmpty() && aggregates.isEmpty() && sends.isEmpty() && resolves.isEmpty()
+                && periodReopenNotices.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -223,6 +228,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("postings", postings);
         glue.put("postingReopens", postingReopens);
         glue.put("posts", posts);
+        // The posts: sweeps (#8772) and the register relays (#8755) are emitted only when used, so
+        // every other intent's descriptor stays byte-identical.
+        if (!postReopens.isEmpty()) {
+            glue.put("postReopens", postReopens);
+        }
+        if (!periodReopenNotices.isEmpty()) {
+            glue.put("periodReopenNotices", periodReopenNotices);
+        }
         glue.put("aggregates", aggregates);
         glue.put("resolves", resolves);
         glue.put("printFeeders", printFeeders);
@@ -277,6 +290,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // Per to-one relation: enough to build the target controller URL so the task form can resolve
             // each FK to a display name (the form falls back to the raw id when a URL is missing).
             trigger.put("relationLinks", buildRelationLinks(byName.get(entity), model, byName, compositionParents, context));
+            // Per lines table a task form of this process shows (forms[].items, #7907): the controller the
+            // form lists the record's lines from. Absent when no form shows one.
+            List<Map<String, Object>> itemLinks = buildItemLinks(process, entity, model, compositionParents);
+            if (!itemLinks.isEmpty()) {
+                trigger.put("itemLinks", itemLinks);
+            }
             // What a task of this process is ABOUT, wherever it is listed away from its own
             // application: the property names the reader resolves live against the record (#7077).
             trigger.put("subjectFields", TaskSubjectSupport.subjectFields(byName.get(entity)));
@@ -542,6 +561,40 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 link.put("targetPerspective", IntentEntities.resolvePerspective(relation.getTo(), compositionParents, model));
                 link.put("labelField", nameField(target));
             }
+            links.add(link);
+        }
+        return links;
+    }
+
+    /**
+     * One link per composition child a {@code userTask} form of the process lists as its {@code items:}
+     * (issue #7907): the child and its perspective, from which the events template assembles the
+     * child's controller URL - the task form lists the record's lines through it, filtered on the
+     * line's master key. Only a form bound to the trigger entity counts (the parser refuses any other).
+     */
+    private static List<Map<String, Object>> buildItemLinks(ProcessIntent process, String entity, IntentModel model,
+            Map<String, String> compositionParents) {
+        Set<String> taskForms = new LinkedHashSet<>();
+        for (StepIntent step : process.getSteps()) {
+            if ("userTask".equals(step.getKind()) && step.getArgs() != null && step.getArgs()
+                                                                                   .get("form") != null) {
+                taskForms.add(String.valueOf(step.getArgs()
+                                                 .get("form")));
+            }
+        }
+        Set<String> children = new LinkedHashSet<>();
+        for (FormIntent form : model.getForms()) {
+            if (taskForms.contains(form.getName()) && entity.equals(form.getForEntity()) && form.getItems() != null && form.getItems()
+                                                                                                                           .getEntity() != null) {
+                children.add(form.getItems()
+                                 .getEntity());
+            }
+        }
+        List<Map<String, Object>> links = new ArrayList<>();
+        for (String child : children) {
+            Map<String, Object> link = new LinkedHashMap<>();
+            link.put("entity", child);
+            link.put("perspective", IntentEntities.resolvePerspective(child, compositionParents, model));
             links.add(link);
         }
         return links;
@@ -1258,13 +1311,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("eventOnly", !g.hasButton());
             putGeneratesEvent(g, e, fromPk, source, context);
             putWithdrawnSource(g, e, model, source, sourceInfo);
-            putSupersededTarget(g, e, model, crossModel ? null : byName.get(g.getTo()), context);
+            putSupersededTarget(g, e, model, crossModel ? null : byName.get(g.getTo()), target, context);
             // Cross-model source: the gen folder and the project that owns the source's topics/views.
             e.put("crossModelSource", crossModelSource);
             e.put("fromModel", crossModelSource ? g.getFromUses() : "");
             e.put("fromProject", crossModelSource ? fromUses.resolveProject() : "");
             e.put("toEntity", g.getTo());
             e.put("toModel", crossModel ? g.getUses() : "");
+            // The project publishing a cross-model target's topics - the one its reopen listens on (#7954).
+            e.put("toProject", crossModel ? uses.resolveProject() : "");
             e.put("toPerspective", toPerspective);
             e.put("toPk", toPk);
             // The role gate of the click (issue #7913): run() changes the source (its sourceStatus flip, a
@@ -1420,6 +1475,18 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 // nothing and therefore runs the query this always ran.
                 e.put("itemCriteria", ScheduleSupport.conditions(items.getWhere()));
                 e.put("itemRefuse", items.hasWhere() && items.hasRefuse() ? items.getRefuse() : "");
+                // The mark each consumed source row receives (issue #7956): the template writes the created
+                // target's key into it in the run's unit and selects only the rows still unmarked. A
+                // cross-model source's item is read off the owner .model, where the parser could not look.
+                String itemBackLink = items.hasBackLink() ? IntentNaming.pascalCase(items.getBackLink()) : "";
+                if (!itemBackLink.isEmpty() && itemSource != null && itemSource.propertyNames() != null && !itemSource.propertyNames()
+                                                                                                                      .contains(
+                                                                                                                              itemBackLink)) {
+                    throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(
+                            List.of("generates [" + g.getName() + "] items backLink [" + items.getBackLink() + "] is not a property of ["
+                                    + items.getFrom() + "], which belongs to model [" + g.getFromUses() + "]"));
+                }
+                e.put("itemBackLink", itemBackLink);
             } else if (hasItemLines) {
                 // The synthetic lines write into the TARGET document's composition line-items child,
                 // resolved automatically (never named in the intent): same-model from this model,
@@ -1458,6 +1525,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("itemFieldAssignments", new ArrayList<>());
                 e.put("itemWhere", "");
                 e.put("itemRefuse", "");
+                e.put("itemBackLink", "");
                 // Cell expressions are written over the SOURCE record, so the known-property set comes
                 // from wherever the source is defined - locally, or the owner .model for a cross-model
                 // source (an unresolved owner yields an empty set, i.e. no local name check).
@@ -1476,6 +1544,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("itemLines", new ArrayList<>());
                 e.put("itemWhere", "");
                 e.put("itemRefuse", "");
+                e.put("itemBackLink", "");
             }
             putRefusalNames(g, e, model, context, projectName, crossModelSource, crossModel);
             if (g.readsReport()) {
@@ -1828,11 +1897,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * say it is deliberate - two vocabularies for "this row no longer counts" could only drift.
      *
      * <p>
-     * Nothing is emitted when the create-from appends (there is no guard to make state-aware), when the
-     * target carries no lifecycle at all (there is no state to read), or for a cross-model target,
-     * whose seeds live in its owner model so no classification is resolvable here. A target that DOES
-     * carry a lifecycle whose nomenclature nobody classified gets the warning - that combination is the
-     * silent one, where the guard looks state-aware and is not.
+     * Nothing is emitted when the create-from appends (there is no guard to make state-aware) or when
+     * the target carries no lifecycle at all (there is no state to read). A cross-model target's seeds
+     * live in its owner model, which publishes their classification on the status property of its
+     * {@code .model} ({@code statusStages}, #8243) - read here exactly as the local one is (#7954). A
+     * target that DOES carry a lifecycle whose nomenclature nobody classified gets the warning - that
+     * combination is the silent one, where the guard looks state-aware and is not - and a reopen of a
+     * cross-model target that cannot be recognised as retired is refused, the parser having had no
+     * owner model to refuse it against.
      *
      * <p>
      * The SAME resolution also drives the declared reopen (issue #6868), which reads the classification
@@ -1845,10 +1917,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * @param e the glue entry being built
      * @param model the model being generated
      * @param target the local target entity, {@code null} for a cross-model target
+     * @param crossModelTarget the cross-model target as its owner's {@code .model} describes it,
+     *        {@code null} for a local one
      * @param context the generation context collecting the warnings, may be {@code null}
      */
     private static void putSupersededTarget(GeneratesIntent g, Map<String, Object> e, IntentModel model, EntityIntent target,
-            IntentGenerationContext context) {
+            CrossModelSupport.TargetInfo crossModelTarget, IntentGenerationContext context) {
         e.put("hasRetiredStatus", false);
         e.put("retiredStatusProperty", "");
         e.put("retiredStatusCondition", "");
@@ -1871,22 +1945,50 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         if (!guarded && !g.hasReopen()) {
             return; // a plain button create-from: no guard to make stage-aware, no reopen to emit
         }
-        RelationIntent status = LifecycleStages.statusRelation(target);
-        if (status == null || status.getTo() == null) {
-            return;
+        String property;
+        String nomenclature;
+        Map<String, List<Integer>> stages;
+        if (crossModelTarget != null) {
+            property = crossModelTarget.statusProperty();
+            if (property == null) {
+                if (g.hasReopen()) {
+                    throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(List.of("generates [" + g.getName()
+                            + "] declares sourceStatusOnRetire but its cross-model target [" + g.getTo() + "] (model [" + g.getUses()
+                            + "]) declares no function: EntityStatus relation in its owner's .model - it can never be"
+                            + " retired, so the reopen could never fire"));
+                }
+                return;
+            }
+            // The owner's nomenclature, in the `model:Entity` form a cross-model reference is written in.
+            nomenclature = g.getUses() + ":" + crossModelTarget.propertyRelations()
+                                                               .getOrDefault(property, property);
+            stages = crossModelTarget.statusStages();
+        } else {
+            RelationIntent status = LifecycleStages.statusRelation(target);
+            if (status == null || status.getTo() == null) {
+                return;
+            }
+            property = IntentNaming.pascalCase(status.getName());
+            nomenclature = status.getTo();
+            stages = status.isCrossModel() ? Map.of() : LifecycleStages.stagesOf(model, status.getTo());
         }
-        Map<String, List<Integer>> stages = status.isCrossModel() ? Map.of() : LifecycleStages.stagesOf(model, status.getTo());
         List<Integer> retired = new ArrayList<>(stages.getOrDefault(LifecycleStages.CANCELLED, List.of()));
         retired.addAll(stages.getOrDefault(LifecycleStages.VOID, List.of()));
+        if (retired.isEmpty() && crossModelTarget != null && g.hasReopen()) {
+            throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(
+                    List.of("generates [" + g.getName() + "] declares sourceStatusOnRetire but no seed row of [" + nomenclature
+                            + "] is classified `stage: cancelled` or `stage: void` - that classification is what makes a [" + g.getTo()
+                            + "] retired; classify those seed rows with `stage:` in model [" + g.getUses() + "] and generate it first"));
+        }
         if (retired.isEmpty()) {
             String warning = "generates [" + g.getName() + "] " + (guarded ? "is event-driven" : "declares sourceStatusOnRetire")
-                    + " and its target [" + g.getTo() + "] carries a lifecycle status [" + status.getName() + "], but no seed row of ["
-                    + status.getTo() + "] is classified with `stage:` - "
+                    + " and its target [" + g.getTo() + "] carries a lifecycle status [" + property + "], but no seed row of ["
+                    + nomenclature + "] is classified with `stage:` - "
                     + (guarded
                             ? "the at-most-once guard can only ask whether a [" + g.getTo()
                                     + "] exists, so a cancelled or voided one blocks its replacement forever."
                             : "nothing here can tell a retired [" + g.getTo() + "] from a live one, so the source is never returned.")
-                    + " Classify the seed rows of [" + status.getTo()
+                    + " Classify the seed rows of [" + nomenclature
                     + "] with `stage:` (draft/live/cancelled/void) so a retired target can be superseded.";
             LOGGER.warn(LoggedValue.of(warning));
             if (context != null) {
@@ -1894,7 +1996,6 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             }
             return;
         }
-        String property = IntentNaming.pascalCase(status.getName());
         e.put("hasRetiredStatus", guarded);
         e.put("retiredStatusProperty", property);
         // Rendered against the template's loop variable: a retired candidate is stepped over, the first
@@ -2021,49 +2122,62 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             if (field == null || field.isBlank()) {
                 continue; // parser already reported it
             }
-            String prop = IntentNaming.pascalCase(field);
-            String type;
-            // The input's label and its catalog key, the ones a missing required input is refused with
-            // (dirigible #8646). A cross-model target's labels are in its own model's catalog, which this
-            // one cannot name: the input is named by its humanized name.
-            String label = IntentNaming.humanize(field);
-            String labelKey = "";
             if (target != null) {
-                FieldIntent targetField = fieldNamed(target, field);
-                RelationIntent relation = targetField == null ? toOneRelation(target, field) : null;
-                if (targetField == null && relation == null) {
-                    continue; // parser already reported it
+                Map<String, Object> entry = localPromptField(p, target, catalog);
+                if (entry != null) {
+                    out.add(entry);
                 }
-                type = targetField == null ? "relation" : targetField.getType();
-                String authored = targetField != null ? targetField.getLabel() : relation.getLabel();
-                if (authored != null && !authored.isBlank()) {
-                    label = authored.trim();
-                }
-                labelKey = catalog + ".t." + IntentNaming.upperSnake(target.getName()) + "_"
-                        + IntentNaming.upperSnake(targetField != null ? targetField.getName() : relation.getName());
-            } else {
-                type = crossModelPromptType(g, field, prop, crossModelTarget, problems);
-                if (type == null) {
-                    continue;
-                }
-                if (p.hasDefault() && source != null) {
-                    checkCrossModelPromptDefault(g, p, prop, type, crossModelTarget, source, problems);
-                }
+                continue;
             }
-            Map<String, Object> entry = new LinkedHashMap<>();
-            entry.put("prop", prop);
-            entry.put("required", p.isRequired());
-            // The conversion of the posted value to the field's type, as a reading (issue #7425).
-            entry.put("reading", Readings.convert(type));
-            entry.put("defaultProp", p.hasDefault() ? IntentNaming.pascalCase(p.getDefaultFrom()) : "");
-            entry.put("label", label);
-            entry.put("labelKey", labelKey);
-            out.add(entry);
+            String prop = IntentNaming.pascalCase(field);
+            String type = crossModelPromptType(g, field, prop, crossModelTarget, problems);
+            if (type == null) {
+                continue;
+            }
+            if (p.hasDefault() && source != null) {
+                checkCrossModelPromptDefault(g, p, prop, type, crossModelTarget, source, problems);
+            }
+            // A cross-model target's labels are in its own model's catalog, which this one cannot name:
+            // the input is named by its humanized name.
+            out.add(promptField(p, prop, type, IntentNaming.humanize(field), ""));
         }
         if (!problems.isEmpty()) {
             throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(problems);
         }
         return out;
+    }
+
+    /**
+     * One prompted property of an entity this model declares - a create-from's local target, or the
+     * record a transition moves (#7909) - or {@code null} when it names neither a field nor a to-one
+     * relation (the parser already reported it). Its label and catalog key are the ones a missing
+     * required input is refused with (dirigible #8646).
+     */
+    private static Map<String, Object> localPromptField(org.eclipse.dirigible.components.intent.model.PromptFieldIntent p,
+            EntityIntent entity, String catalog) {
+        FieldIntent field = fieldNamed(entity, p.getField());
+        RelationIntent relation = field == null ? toOneRelation(entity, p.getField()) : null;
+        if (field == null && relation == null) {
+            return null;
+        }
+        String authored = field != null ? field.getLabel() : relation.getLabel();
+        String label = authored != null && !authored.isBlank() ? authored.trim() : IntentNaming.humanize(p.getField());
+        String labelKey = catalog + ".t." + IntentNaming.upperSnake(entity.getName()) + "_"
+                + IntentNaming.upperSnake(field != null ? field.getName() : relation.getName());
+        return promptField(p, IntentNaming.pascalCase(p.getField()), field == null ? "relation" : field.getType(), label, labelKey);
+    }
+
+    private static Map<String, Object> promptField(org.eclipse.dirigible.components.intent.model.PromptFieldIntent p, String prop,
+            String type, String label, String labelKey) {
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("prop", prop);
+        entry.put("required", p.isRequired());
+        // The conversion of the posted value to the field's type, as a reading (issue #7425).
+        entry.put("reading", Readings.convert(type));
+        entry.put("defaultProp", p.hasDefault() ? IntentNaming.pascalCase(p.getDefaultFrom()) : "");
+        entry.put("label", label);
+        entry.put("labelKey", labelKey);
+        return entry;
     }
 
     /**
@@ -2193,6 +2307,20 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // process step authors. Fail-soft in the generated controller: the flip is the contract.
             e.putAll(notifyFields(t.getNotify(), entity, model, byName, compositionParents, context,
                     "Transition [" + t.getName() + "] notify"));
+            if (t.hasPrompt()) {
+                // The record's own inputs (#7909), written with the status: converted and refused exactly as
+                // a create-from's prompt is, in the model catalog's language.
+                String catalog = refusalCatalog(model, context, projectName);
+                List<Map<String, Object>> prompted = new ArrayList<>();
+                for (org.eclipse.dirigible.components.intent.model.PromptFieldIntent p : t.getPrompt()) {
+                    Map<String, Object> field = p.getField() == null ? null : localPromptField(p, entity, catalog);
+                    if (field != null) {
+                        prompted.add(field);
+                    }
+                }
+                e.put("promptFields", prompted);
+                e.put("refusalCatalog", catalog);
+            }
             if (t.stampsNumber()) {
                 // The move issues the document (#8493): its stampOn: issue number is drawn and written
                 // with the status, as the NumberStamp delegate draws it at a process's issue step.
@@ -2629,9 +2757,103 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 assigns.add(pair);
             }
             e.put("assigns", assigns);
+            // The target's period lock (#8772): a row dated in a closed period is refused by the
+            // target's repository inside this listener, after the source committed - redelivered
+            // against a period that stays closed, and never offered again once it reopens. The same
+            // keys a posting carries (#7703, #8755): the handler asks before it writes, and a sweep
+            // re-runs the source when the period reopens. A post that writes nothing locked carries
+            // none of them, so its descriptor is unchanged.
+            putPostingPeriodLock(e, target, byName, compositionParents, model, assigns, "field");
+            if (e.containsKey("periodRegisterEntity")) {
+                // Where the post HOLDS, as for a posting (#8243): the status it fires on, then every
+                // later `live` one - a source issued into a closed period may have moved on by the time
+                // the period reopens.
+                RelationIntent status = LifecycleStages.statusRelation(source);
+                List<Integer> live = status == null || status.isCrossModel() ? List.of()
+                        : LifecycleStages.stagesOf(model, status.getTo())
+                                         .getOrDefault(LifecycleStages.LIVE, List.of());
+                e.put("heldStatusValues",
+                        heldStatusValues(statusProperty, statusValue == null ? "" : String.valueOf(statusValue), statusProperty, live));
+            }
             out.add(e);
         }
         return out;
+    }
+
+    /**
+     * The period-reopen sweeps of the {@code posts:} rows (#8772): one per row whose target carries
+     * {@code immutableInPeriod} and whose rows back-reference their source - two for a register of this
+     * model (its {@code -transitioned} and {@code -updated} channels), one for a register of another
+     * model (the topic its model relays a reopening on). A row with no {@code idempotentBy} gets the
+     * pre-check but no sweep: nothing would tell an offered source that is already posted from one that
+     * is not, and a sweep would book it again on every reopening.
+     *
+     * @param posts the {@code posts:} descriptors
+     * @return the descriptors that also render a sweep, in rule order
+     */
+    private static List<Map<String, Object>> buildPostReopens(List<Map<String, Object>> posts) {
+        List<Map<String, Object>> reopens = new ArrayList<>();
+        for (Map<String, Object> post : posts) {
+            if (post.get("periodRegisterEntity") == null || String.valueOf(post.get("backRef"))
+                                                                  .isEmpty()) {
+                continue;
+            }
+            String className = String.valueOf(post.get("className"));
+            if (post.get("periodRegisterModel") != null) {
+                reopens.add(reopen(post, className + "PostReopen", ""));
+            } else {
+                reopens.add(reopen(post, className + "PostReopen", "-transitioned"));
+                reopens.add(reopen(post, className + "PostReopenOnUpdate", "-updated"));
+            }
+        }
+        return reopens;
+    }
+
+    /** Test hook: the {@code posts:} rows that also render a period-reopen sweep. */
+    static List<Map<String, Object>> buildPostReopensForTest(IntentModel model) {
+        return buildPostReopens(buildPostsForTest(model));
+    }
+
+    /**
+     * The reopening relays of this model's period registers (#8755): two per register - one on its
+     * {@code -transitioned}, one on its {@code -updated} channel - re-announcing every move of a period
+     * into a status that is not closed on {@code PeriodRegisters.reopenedTopic}. A posting of ANOTHER
+     * model whose target this register locks cannot name the register's own topics, nor read its typed
+     * payload, and cannot {@code uses:} this model back; the relay is what lets its sweep hear the
+     * reopening at all.
+     *
+     * @param model the intent
+     * @param compositionParents composition-parent map
+     * @return one descriptor per register and channel, in entity order
+     */
+    private static List<Map<String, Object>> buildPeriodReopenNotices(IntentModel model, Map<String, String> compositionParents) {
+        List<Map<String, Object>> notices = new ArrayList<>();
+        for (EntityIntent register : model.getEntities()) {
+            PeriodIntent period = register.getPeriod();
+            RelationIntent status = LifecycleStages.statusRelation(register);
+            if (period == null || status == null || period.getStart() == null || period.getEnd() == null) {
+                continue; // not a register, or one the parser already refused
+            }
+            for (String[] channel : new String[][] {{"PeriodReopened", "-transitioned"}, {"PeriodReopenedOnUpdate", "-updated"}}) {
+                Map<String, Object> e = new LinkedHashMap<>();
+                e.put("name", register.getName());
+                e.put("className", IntentNaming.pascalIdentifier(register.getName()) + channel[0]);
+                e.put("perspective", IntentEntities.resolvePerspective(register.getName(), compositionParents, model));
+                e.put("keyField", IntentEntities.keyFieldName(register));
+                e.put("startProperty", IntentNaming.pascalCase(period.getStart()));
+                e.put("endProperty", IntentNaming.pascalCase(period.getEnd()));
+                e.put("statusProperty", IntentNaming.pascalCase(status.getName()));
+                e.put("closedValues", closedStatusIds(period.getClosedWhen()));
+                e.put("topicSuffix", channel[1]);
+                notices.add(e);
+            }
+        }
+        return notices;
+    }
+
+    /** Test hook: the reopening relays of the model's period registers. */
+    static List<Map<String, Object>> buildPeriodReopenNoticesForTest(IntentModel model) {
+        return buildPeriodReopenNotices(model, IntentEntities.compositionParents(model));
     }
 
     /** Test hook: build the {@code posts} glue collection without a repository. */
@@ -3259,7 +3481,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 }
             }
             e.put("headerAssignments", headerAssignments);
-            putPostingPeriodLock(e, creates, byName, compositionParents, model, headerAssignments);
+            putPostingPeriodLock(e, creates, byName, compositionParents, model, headerAssignments, "targetProp");
             // Item rows: rule(...) refs read the rule row; expressions run through Calc on the source. Each
             // cell and each row guard is a READING (issue #7425) the template layer renders.
             List<Map<String, Object>> itemRows = new ArrayList<>();
@@ -3896,7 +4118,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * posting: the handler asks before it writes and says what it skipped, and the reopen sweep built
      * from the same keys re-runs it. A register of ANOTHER model ({@code immutableInPeriod.model},
      * #8687) travels as its model and name only ({@code periodRegisterModel}): the handler asks it at
-     * runtime through {@code PeriodRegisters.isClosed} (#8755), and no sweep is built.
+     * runtime through {@code PeriodRegisters.isClosed}, and the sweep binds the topic the register's
+     * model relays a reopening on, {@code PeriodRegisters.reopenedTopic} (#8755). The same keys serve a
+     * {@code posts:} row (#8772).
      *
      * <p>
      * {@code periodSourceDateProperty} is the source column the locked date is copied FROM, emitted
@@ -3909,21 +4133,23 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * @param byName all local entities by name
      * @param compositionParents composition-parent map
      * @param model the intent
-     * @param headerAssignments the header cells, already built
+     * @param assignments the cells assigned on the target, already built
+     * @param targetKey the key naming each cell's target property ({@code targetProp} for a posting's
+     *        header, {@code field} for a {@code posts:} row)
      */
     private static void putPostingPeriodLock(Map<String, Object> e, EntityIntent creates, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, IntentModel model, List<Map<String, Object>> headerAssignments) {
+            Map<String, String> compositionParents, IntentModel model, List<Map<String, Object>> assignments, String targetKey) {
         PeriodLockIntent lock = creates == null ? null : creates.getImmutableInPeriod();
         if (lock != null && lock.getModel() != null && lock.getPeriod() != null && lock.getDate() != null) {
             // A register of another model (#8687, #8755): its facts are not readable from here, so the
             // posting asks it at runtime by model and name (PeriodRegisters.isClosed), exactly as the
-            // target's own repository does. No reopen sweep: it would have to subscribe to the
-            // register's topic, which this model cannot name.
+            // target's own repository does, and its sweep binds the model-agnostic topic the register's
+            // model relays a reopening on (PeriodRegisters.reopenedTopic).
             String dateProperty = IntentNaming.pascalCase(lock.getDate());
             e.put("periodRegisterEntity", lock.getPeriod());
             e.put("periodRegisterModel", lock.getModel());
             e.put("periodDateProperty", dateProperty);
-            e.put("periodSourceDateProperty", sourceCopyOf(headerAssignments, dateProperty));
+            e.put("periodSourceDateProperty", sourceCopyOf(assignments, targetKey, dateProperty));
             return;
         }
         EntityIntent register = lock == null ? null : byName.get(lock.getPeriod());
@@ -3941,7 +4167,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         e.put("periodStatusProperty", IntentNaming.pascalCase(status.getName()));
         e.put("periodClosedValues", closedStatusIds(period.getClosedWhen()));
         e.put("periodDateProperty", dateProperty);
-        e.put("periodSourceDateProperty", sourceCopyOf(headerAssignments, dateProperty));
+        e.put("periodSourceDateProperty", sourceCopyOf(assignments, targetKey, dateProperty));
     }
 
     /**
@@ -3993,13 +4219,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The SOURCE property a header cell copies verbatim into the given target column, or the empty
-     * string when the cell is anything else - a literal, a template, an expression. Only a plain copy
-     * can be asked of the source as a query.
+     * The SOURCE property a cell copies verbatim into the given target column, or the empty string when
+     * the cell is anything else - a literal, a template, an expression, an item's column. Only a plain
+     * copy can be asked of the source as a query.
      */
-    private static String sourceCopyOf(List<Map<String, Object>> headerAssignments, String targetProperty) {
-        for (Map<String, Object> assignment : headerAssignments) {
-            if (!targetProperty.equals(assignment.get("targetProp"))) {
+    private static String sourceCopyOf(List<Map<String, Object>> assignments, String targetKey, String targetProperty) {
+        for (Map<String, Object> assignment : assignments) {
+            if (!targetProperty.equals(assignment.get(targetKey))) {
                 continue;
             }
             if (assignment.get("reading") instanceof Map<?, ?> reading && "read".equals(reading.get("kind"))
@@ -4029,10 +4255,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     private static List<Map<String, Object>> buildPostingReopens(List<Map<String, Object>> postings) {
         List<Map<String, Object>> reopens = new ArrayList<>();
         for (Map<String, Object> posting : postings) {
-            if (posting.get("periodRegisterEntity") == null || posting.get("periodRegisterModel") != null
-                    || Boolean.TRUE.equals(posting.get("followsSource"))) {
-                // ...and no sweep for a register of another model (#8755): its status moves on that
-                // model's topic, which nothing here can name.
+            if (posting.get("periodRegisterEntity") == null || Boolean.TRUE.equals(posting.get("followsSource"))) {
+                continue;
+            }
+            String className = String.valueOf(posting.get("className"));
+            if (posting.get("periodRegisterModel") != null) {
+                // A register of another model (#8755) moves on that model's topics, which nothing here
+                // can name: its model relays every reopening onto ONE topic keyed by the model and the
+                // register (PeriodRegisters.reopenedTopic), whichever channel moved it.
+                reopens.add(reopen(posting, className + "PostingReopen", ""));
                 continue;
             }
             // BOTH channels a register's status moves on, because the two are disjoint: a
@@ -4041,7 +4272,6 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // One sweep per channel, from the one descriptor (the settlementListeners fan-out), so
             // neither can drift; the sweep is a store-driven recompute, so a period edit that is not
             // a reopening costs one query and nothing else.
-            String className = String.valueOf(posting.get("className"));
             reopens.add(reopen(posting, className + "PostingReopen", "-transitioned"));
             reopens.add(reopen(posting, className + "PostingReopenOnUpdate", "-updated"));
         }

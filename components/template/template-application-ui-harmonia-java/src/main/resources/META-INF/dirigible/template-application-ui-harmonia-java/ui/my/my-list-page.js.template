@@ -189,7 +189,10 @@ document.addEventListener('alpine:init', () => {
     },
 
 #if($calendarView)
-    // Switch to the additional personal calendar page, which owns /my/${name}.
+    // The view switch (x-h-button-group, #7837): this page is the table; picking the calendar opens
+    // the additional personal calendar page, which owns /my/${name}.
+    get viewChoice() { return 'table'; },
+    set viewChoice(value) { if (value === 'calendar') this.goCalendar(); },
     goCalendar() { this.navigate('/my/${name}'); },
 #end
     newEntity() { this.navigate('/my/${name}/create'); },

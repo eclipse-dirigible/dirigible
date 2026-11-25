@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -517,6 +518,26 @@ public abstract class JavaRepository<T> {
     }
 
     /**
+     * Counts the rows of an entity another model generates and this one does not compile against (a
+     * {@code notExists} check on a model that uses this one, dirigible #8623): the entity is named by
+     * its owner's generated folder and its name. A model that is not deployed holds no rows, so it
+     * counts zero.
+     *
+     * @param genFolder the owner model's generated folder name
+     * @param entity the entity's name
+     * @param criteria the rows to count
+     * @return the number of matching rows; {@code 0} when the entity is not registered
+     */
+    protected long countRowsOf(String genFolder, String entity, Criteria criteria) {
+        OptionalLong rows = store().countGenerated(genFolder, entity, criteria);
+        if (rows.isEmpty()) {
+            LOGGER.debug("{} counts no {}.{} rows - that model is not deployed", label(), genFolder, entity);
+            return 0L;
+        }
+        return rows.getAsLong();
+    }
+
+    /**
      * Refuses the delete of a record while a record referencing it through a relation that RESTRICTS
      * its delete still exists (intent {@code whenTargetDeleted: restrict}, the default for a to-one,
      * dirigible #7547). Every delete runs it before anything is written; a generated repository whose
@@ -632,6 +653,45 @@ public abstract class JavaRepository<T> {
             rules.forEach(rule -> rule.release(target, id));
             delete.run();
         });
+    }
+
+    /**
+     * Refuses to give a tree record a child while a record references it through a relation that
+     * accepts only a leaf (intent {@code hierarchy:} with an inbound {@code leafOnly: true}, dirigible
+     * #7826): the child would turn the referenced leaf into a group, and the references - a journal
+     * line's account, say - would stay on it. The generated repository of a tree entity runs it when a
+     * create or an update names a parent it did not have.
+     *
+     * <p>
+     * As for a delete, the rules come from the REFERENCING side, so a referencing entity of another
+     * model is asked too. Inside a unit of work the parent is locked for update BEFORE its references
+     * are counted: a leaf-only reference being written holds a share lock on it until it commits, so
+     * the count waits for that commit and sees it, and a reference written later waits for this child
+     * and then finds the parent no longer a leaf.
+     *
+     * @param parentId the primary key of the record about to gain a child; {@code null} asks nothing
+     * @throws ValidationException naming every kind of record that references it as a leaf
+     */
+    protected void requireMayGainChild(Object parentId) {
+        List<TargetDeleteRule> rules = deleteRules();
+        if (parentId == null || rules.isEmpty()) {
+            return;
+        }
+        JavaEntityStore store = store();
+        if (store.isInUnitOfWork()) {
+            store.lockForUpdate(entityClass, parentId);
+        }
+        String target = entityClass.getName();
+        List<DeleteRefusals.Reference> references = new ArrayList<>();
+        for (TargetDeleteRule rule : rules) {
+            int referencing = rule.countLeafReferences(target, parentId);
+            if (referencing > 0) {
+                references.add(new DeleteRefusals.Reference(rule.referencingLabel(), rule.referencingLabelKey(), referencing));
+            }
+        }
+        if (!references.isEmpty()) {
+            throw DeleteRefusals.leafReferenced(messageCatalog(), label(), labelCatalogKey(), references);
+        }
     }
 
     /**

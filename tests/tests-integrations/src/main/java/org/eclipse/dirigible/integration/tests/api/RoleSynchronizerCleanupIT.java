@@ -26,11 +26,12 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * Regression test for the {@code RolesSynchronizer} → {@code UserService} cleanup chain. When a
- * {@code .roles} artefact is removed from the registry, the synchronizer's {@code cleanupImpl} must
- * publish a {@code RoleDeletionEvent} before issuing the role-row delete; otherwise any existing
- * {@code DIRIGIBLE_USER_ROLE_ASSIGNMENTS} that reference the role trip the FK
- * {@code FK...DIRIGIBLE_USER_ROLE_ASSIGNMENTS → DIRIGIBLE_SECURITY_ROLES} and the role row survives
- * in the DB, out of sync with its missing source file.
+ * {@code .roles} artefact is removed from the registry, the synchronizer's {@code cleanupImpl}
+ * deletes the role row and the database detaches the user assignments of that row: the FK
+ * {@code FK...DIRIGIBLE_USER_ROLE_ASSIGNMENTS → DIRIGIBLE_SECURITY_ROLES} is emitted with
+ * {@code ON DELETE CASCADE} ({@code UserRoleAssignment.role}). Without it any existing assignment
+ * tripped the FK and the role row survived in the DB, out of sync with its missing source file. A
+ * role taken out of a file that stays goes the same way: {@code RoleSynchronizerUndeclaredRoleIT}.
  */
 class RoleSynchronizerCleanupIT extends IntegrationTest {
 

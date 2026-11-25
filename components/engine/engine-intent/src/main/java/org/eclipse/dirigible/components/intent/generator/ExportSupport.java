@@ -653,8 +653,11 @@ public final class ExportSupport {
         }
         entry.put("loads", loadList);
         entry.put("fileNameReading", fileNameReading(export));
-        if (gates.covers(export.getName())) {
-            entry.put("roles", gates.appendRead(export.getName(), gates.readRoles(export.getName())));
+        // An export has no convention role, so an additive grant has nothing to keep beside it: the
+        // roles of every entry naming the export are its gate (#8852).
+        String granted = gates.grantedRead(export.getName());
+        if (granted != null) {
+            entry.put("roles", gates.appendRead(export.getName(), granted));
         }
         return entry;
     }

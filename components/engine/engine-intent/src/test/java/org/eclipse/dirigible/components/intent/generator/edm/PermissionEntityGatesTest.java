@@ -144,6 +144,132 @@ class PermissionEntityGatesTest {
         assertEquals("sales.Customer.CustomerFullAccess,Owner,User", customer.get("roleWrite"), "a resource it does not name keeps them");
     }
 
+    /**
+     * An {@code additive: true} entry adds its role to the gates of what it names and leaves the
+     * convention roles there, first and declared (issue #8852): a role for people beside the roles the
+     * integration clients hold, with nothing re-declared by hand.
+     */
+    @Test
+    void anAdditiveGrantJoinsTheConventionGateWhichStaysDeclared() {
+        String yaml = YAML + "  - { role: Clerk, can: [Customer:read], additive: true }\n";
+        Map<String, Object> customer = entity(yaml, "Customer");
+        assertEquals("sales.Customer.CustomerReadOnly,sales.Customer.CustomerFullAccess,Clerk", customer.get("roleRead"),
+                "the convention roles stay first - the template layer declares a gate's first role");
+        assertEquals("sales.Customer.CustomerFullAccess", customer.get("roleWrite"), "a read token grants no write");
+        assertEquals("true", customer.get("generateDefaultRoles"), "the convention roles must stay declared");
+
+        Map<String, Object> withExtras = entity(yaml, "Customer", EXTRA_ROLES);
+        assertEquals("sales.Customer.CustomerReadOnly,sales.Customer.CustomerFullAccess,Clerk,Owner,User,Auditor",
+                withExtras.get("roleRead"), "the deployment's extras come after the added role");
+        assertEquals("sales.Customer.CustomerFullAccess,Owner,User", withExtras.get("roleWrite"));
+
+        Map<String, Object> order = entity(yaml, "Order");
+        assertEquals("SalesAdmin,SalesViewer", order.get("roleRead"), "a resource the entry does not name is untouched");
+    }
+
+    @Test
+    void anAdditiveWriteGrantJoinsTheWriteGateAndTheReadGate() {
+        for (String action : List.of("write", "*")) {
+            Map<String, Object> customer =
+                    entity(YAML + "  - { role: Clerk, can: [\"Customer:" + action + "\"], additive: true }\n", "Customer", EXTRA_ROLES);
+            assertEquals("sales.Customer.CustomerReadOnly,sales.Customer.CustomerFullAccess,Clerk,Owner,User,Auditor",
+                    customer.get("roleRead"), action);
+            assertEquals("sales.Customer.CustomerFullAccess,Clerk,Owner,User", customer.get("roleWrite"), action);
+            assertEquals("true", customer.get("generateDefaultRoles"), action);
+        }
+    }
+
+    /**
+     * An additive entry never removes anything: beside a non-additive entry on the same resource, that
+     * entry's roles replace the convention roles as they always did and the additive role joins them -
+     * wherever the additive entry is declared.
+     */
+    @Test
+    void anAdditiveGrantBesideAnAuthoredOneIsAppendedToTheAuthoredRoles() {
+        String yaml = YAML.replace("permissions:\n", "permissions:\n  - { role: Clerk, can: [Order:read], additive: true }\n");
+        Map<String, Object> order = entity(yaml, "Order");
+        assertEquals("SalesAdmin,SalesViewer,Clerk", order.get("roleRead"));
+        assertEquals("SalesAdmin", order.get("roleWrite"));
+        assertEquals("false", order.get("generateDefaultRoles"), "the non-additive entries still replace the convention roles");
+    }
+
+    @Test
+    void anAdditiveWriterOfAReadOnlyAllowListIsTheOneWhoMayWrite() {
+        String yaml = YAML.replace("can: [Order:read, Order:create, Order:delete]", "can: [Order:read]")
+                + "  - { role: Clerk, can: [Order:write], additive: true }\n";
+        Map<String, Object> order = entity(yaml, "Order");
+        assertEquals("SalesAdmin,SalesViewer,Clerk", order.get("roleRead"));
+        assertEquals("Clerk", order.get("roleWrite"), "the never-declared placeholder is for a gate nobody may pass");
+    }
+
+    /**
+     * An {@code exclusive} entry of another role decides the resource as before - convention roles
+     * replaced, the deployment's extras kept off - and the additive role is added to that gate.
+     */
+    @Test
+    void anAdditiveGrantOnAnExclusiveResourceIsAddedAndTheExtrasStayOff() {
+        String yaml = YAML.replace("{ role: SalesAdmin,  can: [Order:read, Order:create, Order:delete] }",
+                "{ role: SalesAdmin,  can: [Order:read, Order:create, Order:delete], exclusive: true }")
+                + "  - { role: Clerk, can: [Order:read], additive: true }\n";
+        Map<String, Object> order = entity(yaml, "Order", EXTRA_ROLES);
+        assertEquals("SalesAdmin,SalesViewer,Clerk", order.get("roleRead"));
+        assertEquals("SalesAdmin", order.get("roleWrite"));
+        assertEquals("false", order.get("generateDefaultRoles"));
+        Map<String, Object> item = entity(yaml, "OrderItem", EXTRA_ROLES);
+        assertEquals("SalesAdmin,SalesViewer,Clerk", item.get("roleRead"), "a composition child is gated as its master is");
+    }
+
+    @Test
+    void aCompositionChildTakesItsMastersAdditiveRolesBesideItsOwnConventionRoles() {
+        String yaml = YAML.substring(0, YAML.indexOf("permissions:")) + """
+                permissions:
+                  - { role: Clerk, can: [Order:write], additive: true }
+                """;
+        Map<String, Object> item = entity(yaml, "OrderItem", EXTRA_ROLES);
+        assertEquals("sales.Order.OrderItemReadOnly,sales.Order.OrderItemFullAccess,Clerk,Owner,User,Auditor", item.get("roleRead"));
+        assertEquals("sales.Order.OrderItemFullAccess,Clerk,Owner,User", item.get("roleWrite"));
+        assertEquals("true", item.get("generateDefaultRoles"));
+    }
+
+    /**
+     * An additive entry naming the child itself adds to whatever the child had: it does not stop the
+     * child inheriting its master's gate, authored or additive.
+     */
+    @Test
+    void anAdditiveGrantOnACompositionChildDoesNotStopItInheritingItsMastersGate() {
+        Map<String, Object> underAuthored = entity(YAML + "  - { role: Packer, can: [OrderItem:write], additive: true }\n", "OrderItem");
+        assertEquals("SalesAdmin,SalesViewer,Packer", underAuthored.get("roleRead"));
+        assertEquals("SalesAdmin,Packer", underAuthored.get("roleWrite"));
+        assertEquals("false", underAuthored.get("generateDefaultRoles"));
+        assertEquals("SalesAdmin",
+                entity(YAML + "  - { role: Packer, can: [OrderItem:write], additive: true }\n", "Order").get("roleWrite"),
+                "the child's entry adds nothing to the master");
+
+        String additiveOnly = YAML.substring(0, YAML.indexOf("permissions:")) + """
+                permissions:
+                  - { role: Clerk,  can: [Order:read], additive: true }
+                  - { role: Packer, can: [OrderItem:read], additive: true }
+                """;
+        assertEquals("sales.Order.OrderItemReadOnly,sales.Order.OrderItemFullAccess,Clerk,Packer",
+                entity(additiveOnly, "OrderItem").get("roleRead"));
+    }
+
+    /**
+     * The same intent with and without an additive entry that names another resource: nothing but that
+     * resource's gates may differ.
+     */
+    @Test
+    void anAdditiveEntryChangesOnlyTheGatesOfWhatItNames() {
+        String yaml = YAML + "  - { role: Clerk, can: [Customer:read], additive: true }\n";
+        for (String name : List.of("Order", "OrderItem")) {
+            Map<String, Object> before = entity(YAML, name, EXTRA_ROLES);
+            Map<String, Object> after = entity(yaml, name, EXTRA_ROLES);
+            assertEquals(before.get("roleRead"), after.get("roleRead"), name);
+            assertEquals(before.get("roleWrite"), after.get("roleWrite"), name);
+            assertEquals(before.get("generateDefaultRoles"), after.get("generateDefaultRoles"), name);
+        }
+    }
+
     private static final IntentSettings EXTRA_ROLES =
             IntentSettings.parse("{\"access\": {\"extraRoles\": [\"Owner\", \" User \", \"\"], \"extraRolesReadOnly\": [\"Auditor\"]}}");
 
