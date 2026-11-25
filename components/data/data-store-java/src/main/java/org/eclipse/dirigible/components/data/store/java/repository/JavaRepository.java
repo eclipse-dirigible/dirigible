@@ -645,6 +645,45 @@ public abstract class JavaRepository<T> {
     }
 
     /**
+     * Refuses to give a tree record a child while a record references it through a relation that
+     * accepts only a leaf (intent {@code hierarchy:} with an inbound {@code leafOnly: true}, dirigible
+     * #7826): the child would turn the referenced leaf into a group, and the references - a journal
+     * line's account, say - would stay on it. The generated repository of a tree entity runs it when a
+     * create or an update names a parent it did not have.
+     *
+     * <p>
+     * As for a delete, the rules come from the REFERENCING side, so a referencing entity of another
+     * model is asked too. Inside a unit of work the parent is locked for update BEFORE its references
+     * are counted: a leaf-only reference being written holds a share lock on it until it commits, so
+     * the count waits for that commit and sees it, and a reference written later waits for this child
+     * and then finds the parent no longer a leaf.
+     *
+     * @param parentId the primary key of the record about to gain a child; {@code null} asks nothing
+     * @throws ValidationException naming every kind of record that references it as a leaf
+     */
+    protected void requireMayGainChild(Object parentId) {
+        List<TargetDeleteRule> rules = deleteRules();
+        if (parentId == null || rules.isEmpty()) {
+            return;
+        }
+        JavaEntityStore store = store();
+        if (store.isInUnitOfWork()) {
+            store.lockForUpdate(entityClass, parentId);
+        }
+        String target = entityClass.getName();
+        List<DeleteRefusals.Reference> references = new ArrayList<>();
+        for (TargetDeleteRule rule : rules) {
+            int referencing = rule.countLeafReferences(target, parentId);
+            if (referencing > 0) {
+                references.add(new DeleteRefusals.Reference(rule.referencingLabel(), rule.referencingLabelKey(), referencing));
+            }
+        }
+        if (!references.isEmpty()) {
+            throw DeleteRefusals.leafReferenced(messageCatalog(), label(), labelCatalogKey(), references);
+        }
+    }
+
+    /**
      * Whether another record references this one through a to-one relation, of this model or another
      * (intent {@code fixedWhenReferenced: true}, dirigible #8194). Asks the same
      * {@link TargetDeleteRule} contributions a delete asks - only the referencing side knows that it

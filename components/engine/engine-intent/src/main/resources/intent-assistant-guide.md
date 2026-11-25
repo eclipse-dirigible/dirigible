@@ -859,7 +859,9 @@ a `required` text field is refused when it is blank after that trim - spaces alo
 - `leafOnly: true` (on a to-one relation) - restricts the picker to LEAF nodes of its hierarchical
   target (childless nodes), depth-indents the options, and the generated REST validation rejects an
   FK to a node with children (e.g. a journal line references an analytical account, never a
-  synthetic one). The target entity must declare `hierarchy`. Canonical pair:
+  synthetic one). The reverse holds too (#7826): a target row that leafOnly references already point
+  at cannot gain a child (create or re-parent under it is refused with a 400 naming the references),
+  so a referenced leaf never turns into a group. The target entity must declare `hierarchy`. Canonical pair:
     `- { name: Account, kind: manyToOne, to: Account, model: accounts, required: true, leafOnly: true }`
 - `unique:` (entity-level) - **the composite business key**, what a row IS when no single field says
   it: `unique: [{ fields: [ProjectTimesheet, Employee], message: "..." }]`. Each member is an own field
