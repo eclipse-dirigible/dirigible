@@ -121,7 +121,8 @@ class TransitionActionDescriptorTest {
                       - { field: total, required: true }
                 """.stripTrailing())));
         assertTrue(prompted.contains("\"prompt\":[{\"name\":\"Total\",\"required\":true}]"), prompted);
-        assertTrue(prompted.contains("\"promptColumns\":[{\"name\":\"Total\",\"label\":\"Total\",\"widget\":\"NUMBER\"}]"), prompted);
+        assertTrue(prompted.contains("\"promptColumns\":[{\"name\":\"Total\",\"label\":\"Total\","
+                + "\"tkey\":\"proj:billing-model.t.INVOICE_TOTAL\",\"widget\":\"NUMBER\"}]"), prompted);
         String plain = compact(descriptor(YAML));
         assertFalse(plain.contains("\"prompt"), plain);
     }
