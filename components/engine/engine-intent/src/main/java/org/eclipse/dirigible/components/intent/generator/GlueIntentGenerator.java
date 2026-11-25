@@ -148,7 +148,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> postReopens = buildPostReopens(posts);
         List<Map<String, Object>> periodReopenNotices = buildPeriodReopenNotices(model, compositionParents);
         List<Map<String, Object>> aggregates = buildAggregates(model, byName, compositionParents);
-        List<Map<String, Object>> resolves = buildResolves(model, byName, compositionParents, settings, context);
+        List<Map<String, Object>> resolves = buildResolves(model, byName, compositionParents, settings, context, true);
         List<Map<String, Object>> printFeeders = PrintFeederSupport.buildPrintFeeders(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> snapshots =
                 SnapshotSupport.buildSnapshots(model, byName, compositionParents, crossModelLookup(model, context));
@@ -2945,7 +2945,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * one.
      */
     private static List<Map<String, Object>> buildResolves(IntentModel model, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
+            Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context, boolean report) {
         List<Map<String, Object>> out = new ArrayList<>();
         for (org.eclipse.dirigible.components.intent.model.ResolveIntent resolve : model.getResolves()) {
             if (resolve.getName() == null || resolve.getName()
@@ -2987,7 +2987,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                          .entrySet()) {
                 ResolvePathSupport.Path path = operand(pair.getValue(), walker);
                 if (path == null) {
-                    reportDroppedGlue(context, "resolve [" + resolve.getName() + "] match value [" + pair.getValue()
+                    reportDroppedGlue(report ? context : null, "resolve [" + resolve.getName() + "] match value [" + pair.getValue()
                             + "] is not a resolvable path off [" + record.getName() + "] - the lookup was NOT generated");
                     pathsResolved = false;
                     break;
@@ -3006,8 +3006,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                             .get("value"),
                     walker);
             if (period == null) {
-                reportDroppedGlue(context, "resolve [" + resolve.getName() + "] between.value [" + resolve.getBetween()
-                                                                                                          .get("value")
+                reportDroppedGlue(report ? context : null, "resolve [" + resolve.getName() + "] between.value [" + resolve.getBetween()
+                                                                                                                          .get("value")
                         + "] is not a resolvable path off [" + record.getName() + "] - the lookup was NOT generated");
                 continue;
             }
@@ -3190,7 +3190,41 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     /** Test hook: build the {@code resolves} glue collection without a repository. */
     static List<Map<String, Object>> buildResolvesForTest(IntentModel model) {
         return buildResolves(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
-                null);
+                null, true);
+    }
+
+    /**
+     * The {@code resolves:} lookups that declare a {@code copy:}, by the record entity they copy onto -
+     * the write-time half (#7911) the record's generated repository runs before it stores the record,
+     * and the form asks before it shows a value. Built from the SAME descriptors the handler is, so the
+     * two cannot disagree about the keys, the period or the register; trimmed to what the repository
+     * reads. Nothing is reported from here - the glue pass reports a lookup it could not generate.
+     *
+     * @param model the intent model
+     * @param settings the project settings
+     * @param context the generation context, or {@code null} in a unit test
+     * @return the copying lookups per record entity name
+     */
+    public static Map<String, List<Map<String, Object>>> resolveCopies(IntentModel model, IntentSettings settings,
+            IntentGenerationContext context) {
+        Map<String, List<Map<String, Object>>> byRecord = new LinkedHashMap<>();
+        for (Map<String, Object> resolve : buildResolves(model, IntentEntities.byName(model), IntentEntities.compositionParents(model),
+                settings, context, false)) {
+            if (!"true".equals(resolve.get("hasCopies"))) {
+                continue;
+            }
+            Map<String, Object> lookup = new LinkedHashMap<>();
+            for (String key : List.of("name", "className", "guardTerms", "registerEntity", "registerPerspective", "matches", "filters",
+                    "startProperty", "endProperty", "valueProperty", "valueExpression", "pathLoads", "copies")) {
+                lookup.put(key, resolve.get(key));
+            }
+            // The event the lookup is bound to: a create-bound one fills the create, an update-bound one the
+            // update.
+            lookup.put("event", "-updated".equals(resolve.get("topicSuffix")) ? "onUpdate" : "onCreate");
+            byRecord.computeIfAbsent((String) resolve.get("entity"), entity -> new ArrayList<>())
+                    .add(lookup);
+        }
+        return byRecord;
     }
 
     /**

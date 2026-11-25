@@ -1238,8 +1238,8 @@ document.addEventListener('alpine:init', () => {
           // Conditional source (intent valueFrom: { by, cases, default }): the property to copy is
           // picked by the classifier; a plain valueFrom copies its one fixed property.
           const prop = col.dependsOn.valueBy ? await this.resolveDependsOnSource(col.dependsOn.valueBy, this.draft) : col.dependsOn.valueFrom;
-          if (prop == null) continue;
-          const from = rec == null ? null : rec[prop];
+          if (prop == null && !col.resolved) continue;
+          const from = rec == null || prop == null ? null : rec[prop];
           if (col.widget === 'DROPDOWN' && col.lookup) {
             if (from == null || from === '') continue;
             const conditions = [{ propertyName: col.dependsOn.filterBy, operator: 'EQ', value: from }];
@@ -1251,8 +1251,10 @@ document.addEventListener('alpine:init', () => {
               const pickable = this.draftOptions[col.name].filter(o => !o.disabled);
               this.draft[col.name] = pickable.length === 1 ? String(pickable[0].value) : '';
             }
-          } else if (from != null) {
-            this.draft[col.name] = col.date ? this.toDateInput(from, col.widget) : from;
+          } else {
+            const value = col.resolved ? await this.resolvedDraftValue(col.name, from) : from;
+            if (value == null) continue;
+            this.draft[col.name] = col.date ? this.toDateInput(value, col.widget) : value;
             this.recalcDraft();
           }
         } catch (e) {
@@ -1275,14 +1277,32 @@ document.addEventListener('alpine:init', () => {
         try {
           const rec = await App.services.api.get(col.dependsOn.url + '/' + encodeURIComponent(value), { baseUrl: '' });
           const prop = col.dependsOn.valueBy ? await this.resolveDependsOnSource(col.dependsOn.valueBy, this.draft) : col.dependsOn.valueFrom;
-          if (prop == null) continue;
-          const from = rec == null ? null : rec[prop];
-          if (from == null) continue;
-          this.draft[col.name] = col.date ? this.toDateInput(from, col.widget) : from;
+          if (prop == null && !col.resolved) continue;
+          const from = rec == null || prop == null ? null : rec[prop];
+          const value = col.resolved ? await this.resolvedDraftValue(col.name, from) : from;
+          if (value == null) continue;
+          this.draft[col.name] = col.date ? this.toDateInput(value, col.widget) : value;
           this.recalcDraft();
         } catch (e) {
           console.error('[${name}DocumentPage] header dependsOn refresh failed for ' + col.name, e);
         }
+      }
+    },
+
+    // A column a `resolves:` lookup copies (#7911) - a price from the price list in force for the line -
+    // takes what the server's lookup answers for the line as the dialog holds it, asked with the column
+    // emptied so the Depends-On value does not stand in for the register's. The create fills the column
+    // from the same lookup, so the price shown is the price stored. No covering row (or no answer)
+    // keeps the Depends-On value.
+    async resolvedDraftValue(column, fallback) {
+      try {
+        const body = this.draftPayload();
+        body[column] = null;
+        const answer = await App.services.api.post(this.itemsDef.apiPath + '/resolve', body);
+        return answer != null && answer[column] != null ? answer[column] : fallback;
+      } catch (e) {
+        console.error('[${name}DocumentPage] the line lookup failed for ' + column, e);
+        return fallback;
       }
     },
 

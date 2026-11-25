@@ -483,6 +483,26 @@ public class ${name}Controller {
         return repository.findOne(saved.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end).orElse(saved);
 #end
     }
+#if($resolveCopies && $resolveCopies.size() > 0)
+
+    /**
+     * What this record's {@code resolves:} lookups copy onto a ${name} not yet written (#7911) - the price
+     * a price list names for the line being entered. The form asks before it shows the value, so the
+     * price the user sees and saves is the list's; the create fills the same fields from the same lookup
+     * when the payload leaves them empty. Only empty fields are answered, and nothing is stored.
+     *
+     * @param entity the record as the form holds it
+     * @return the record with the looked-up fields filled
+     */
+    @Post("/resolve")
+    @Documentation("Resolve the looked-up fields of a ${name}")
+    public ${name}Entity resolve(@Body ${name}Entity entity) {
+#if($needsRoles)
+        checkPermissions("write");
+#end
+        return repository.resolveCopies(entity, null);
+    }
+#end
 #if($duplicable && !$systemWritten && !$attachmentReadOnly)
 ## The server-side Duplicate (intent `duplicable`, #8752): the copy the document page's duplicate() built
 ## from a GET and a create, made in ONE unit of work. The predicate below is the page's clone-strip list

@@ -57,7 +57,9 @@ import java.util.Map;
  * {@code copy} copies scalars of the found row onto fields of the record - the price the price-list
  * row names, the rate a contract names. Only the single covering row is copied from, and only into
  * a field the record does not already carry a value in: the same never-overwrite rule the resolved
- * relation has, so a manual correction stands.
+ * relation has, so a manual correction stands. The copy is made on the record's own write, before
+ * its calculated fields and checks read it, and the form asks the same lookup before it shows the
+ * field (#7911).
  */
 public class ResolveIntent {
 
@@ -111,8 +113,9 @@ public class ResolveIntent {
     /**
      * Optional scalar copies from the single covering row: {@code <register field>: <record field>}.
      * Written only on {@code found}, and only into a record field that is still empty - the
-     * never-overwrite rule the resolved relation has. The resolved relation itself is {@link #set};
-     * this is for the values that hang off the found row rather than point at it.
+     * never-overwrite rule the resolved relation has - by the record's repository on the write itself.
+     * The resolved relation itself is {@link #set}; this is for the values that hang off the found row
+     * rather than point at it.
      */
     private Map<String, String> copy = new LinkedHashMap<>();
 
