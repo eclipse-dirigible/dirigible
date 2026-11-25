@@ -2990,6 +2990,8 @@ generates:
         - { field: totalHours, op: gt, value: 0 }       # the rest). Same shape as schedules.where.
       refuse: "Member timesheet is not approved"        # optional: an unqualified row REFUSES the
                                                         # whole run (400) instead of being left out
+      backLink: BilledInvoice      # optional: each consumed row is marked with the created document
+                                   #   and never generated from again (a to-one of `from` to `to`)
       map:
         Description: Description
         Amount: Amount
@@ -3048,6 +3050,33 @@ that was asked for, and it is the harder failure to notice - it exists and count
 billing - so the run answers 400 rather than committing the header. Either refusal is decided before
 the header is saved, so a refused run spends no document number and leaves no history entry. An
 items block with no `where:` keeps exactly the behaviour it had.
+
+**Each source row billed exactly once (`items: backLink:`).** Pass-through billing - the billable
+expense lines of a project, its unbilled timesheet days, consumed materials - must not bill a row a
+second time on the next click. Name a to-one of the items `from:` entity to the target, and every
+row that becomes a line is set to the created document in the same transaction:
+
+```yaml
+generates:
+  - name: invoice-billable-expenses
+    from: Project
+    to: Invoice
+    map: { Project: id }
+    items:
+      from: ExpenseClaimItem       # need not be the source's own lines: selected by its `Project` FK
+      to: InvoiceItem
+      where:
+        - { field: billable, op: eq, value: true }
+      backLink: BilledInvoice      # ExpenseClaimItem: { name: BilledInvoice, kind: manyToOne, to: Invoice,
+                                   #                     whenTargetDeleted: nullify }
+      map: { name: description, amount: amount }
+```
+
+A row already marked is never selected again (no `where:` condition needed), so a second run that
+finds nothing left answers 400 rather than creating an empty invoice. Deleting the generated document
+does to the marks what the relation's `whenTargetDeleted` says: `nullify` frees the rows for the next
+run, the default `restrict` refuses the delete while rows point at it. A voided (retired) document
+does NOT clear them. Not with `items: fromReport:`.
 
 **Lines from a REPORT's result rows (`items: fromReport:` + `undo:`).** A year close books the
 ledger's own balances: one closing journal with a line per result account, taking its year balance

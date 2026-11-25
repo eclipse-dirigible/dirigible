@@ -1464,6 +1464,18 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 // nothing and therefore runs the query this always ran.
                 e.put("itemCriteria", ScheduleSupport.conditions(items.getWhere()));
                 e.put("itemRefuse", items.hasWhere() && items.hasRefuse() ? items.getRefuse() : "");
+                // The mark each consumed source row receives (issue #7956): the template writes the created
+                // target's key into it in the run's unit and selects only the rows still unmarked. A
+                // cross-model source's item is read off the owner .model, where the parser could not look.
+                String itemBackLink = items.hasBackLink() ? IntentNaming.pascalCase(items.getBackLink()) : "";
+                if (!itemBackLink.isEmpty() && itemSource != null && itemSource.propertyNames() != null && !itemSource.propertyNames()
+                                                                                                                      .contains(
+                                                                                                                              itemBackLink)) {
+                    throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(
+                            List.of("generates [" + g.getName() + "] items backLink [" + items.getBackLink() + "] is not a property of ["
+                                    + items.getFrom() + "], which belongs to model [" + g.getFromUses() + "]"));
+                }
+                e.put("itemBackLink", itemBackLink);
             } else if (hasItemLines) {
                 // The synthetic lines write into the TARGET document's composition line-items child,
                 // resolved automatically (never named in the intent): same-model from this model,
@@ -1502,6 +1514,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("itemFieldAssignments", new ArrayList<>());
                 e.put("itemWhere", "");
                 e.put("itemRefuse", "");
+                e.put("itemBackLink", "");
                 // Cell expressions are written over the SOURCE record, so the known-property set comes
                 // from wherever the source is defined - locally, or the owner .model for a cross-model
                 // source (an unresolved owner yields an empty set, i.e. no local name check).
@@ -1520,6 +1533,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("itemLines", new ArrayList<>());
                 e.put("itemWhere", "");
                 e.put("itemRefuse", "");
+                e.put("itemBackLink", "");
             }
             putRefusalNames(g, e, model, context, projectName, crossModelSource, crossModel);
             if (g.readsReport()) {
