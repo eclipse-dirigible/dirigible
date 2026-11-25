@@ -9,9 +9,12 @@
   (description = label, title = value, action = the icon in an avatar, footer = hint) and, for
   everything that carries content of its own - a top-N table, an embedded report preview - the
   table-card shape (title over its description, a border-b header, flush content; both the title -
-  a button inside it - and a "View all" button open the report). The blocks carry no headings or page title: every tile names itself and the
-  shell's breadcrumb names the page. Scalars and lists get their own grids because one grid holding
-  both leaves holes around the wide tiles.
+  a button inside it - and a "View all" button open the report). The blocks carry no headings or page
+  title: every tile names itself and the shell's breadcrumb names the page. The page is two 12-column
+  grids (at lg; one column below), laid out as the generated app's dashboard is, by application-core's
+  DashboardLayout: the number tiles in rows of up to four that fill the row evenly, then ONE grid of
+  content tiles (top-N lists, report previews) where each tile is wide (8) or narrow (4) by what it
+  shows, packed into full rows - a chart beside a chart, a table beside a table.
 -->
 <div class="vbox size-full overflow-auto">
   <div class="vbox gap-4 p-4">
@@ -21,11 +24,10 @@
 
     <!-- Key Indicators: report-attached KPI widgets (reports[].widget) aggregated from every published
          app. Clicking a number tile opens the full report. Values come from the shared reports store. -->
-    <section class="vbox gap-4" x-show="dashKpiReports().length > 0" x-cloak>
-      <!-- Scalars: one compact number tile each. -->
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" x-show="summaryKpis().length > 0">
-        <template x-for="r in summaryKpis()" :key="r.name">
-          <div x-h-card role="button" tabindex="0" class="cursor-pointer"
+    <section class="vbox" x-show="summaryKpis().length > 0" x-cloak>
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-12">
+        <template x-for="(r, i) in summaryKpis()" :key="r.url">
+          <div x-h-card role="button" tabindex="0" class="cursor-pointer" :class="dashKpiSpans()[i]"
                @click="openReport(r)" @keydown.enter.prevent="openReport(r)">
             <div x-h-card-header>
               <div x-h-card-description x-text="$store.reports.tileWidgetLabel(r)"></div>
@@ -40,89 +42,98 @@
             </div>
             <!-- x-if, not x-show: the header pads its own bottom only while nothing but a <template>
                  follows it (last-rendered:pb-6 is :not(:has(~:not(template)))), so a hidden-but-present
-                 spacer or footer would leave a tile with no hint sitting on its bottom edge. -->
+                 spacer or footer would leave a tile with no hint sitting on its bottom edge. The hint is
+                 one line (the footer is a flex slot, so the clamp sits on the text inside it), the whole
+                 of it in the title. -->
             <template x-if="r.description"><div class="flex-1" aria-hidden="true"></div></template>
             <template x-if="r.description">
-              <div x-h-card-footer class="pt-4 text-sm text-muted-foreground" x-text="$store.reports.displayDescription(r)"></div>
+              <div x-h-card-footer class="pt-4 text-sm text-muted-foreground" :title="$store.reports.displayDescription(r)">
+                <span class="line-clamp-1" x-text="$store.reports.displayDescription(r)"></span>
+              </div>
             </template>
-          </div>
-        </template>
-      </div>
-
-      <!-- Top-N lists: a table each, edge to edge (x-h-card-content.flush is a directive modifier, not
-           a class). Column alignment and number formatting come from the .report's own column metadata. -->
-      <div class="grid grid-cols-1 gap-4 lg:grid-cols-2" x-show="listKpis().length > 0" x-cloak>
-        <template x-for="r in listKpis()" :key="r.name">
-          <div x-h-card class="overflow-hidden">
-            <div x-h-card-header class="border-b">
-              <div x-h-card-title><button type="button" class="cursor-pointer text-left" @click="openReport(r)" x-text="$store.reports.tileWidgetLabel(r)"></button></div>
-              <div x-h-card-description x-show="r.description" x-text="$store.reports.displayDescription(r)"></div>
-              <div x-h-card-action>
-                <button x-h-button data-variant="outline" @click="openReport(r)"
-                        :aria-label="T('application-core:shell.dashboard.viewAllOf', 'Open the {{name}} report', { name: $store.reports.tileWidgetLabel(r) })"
-                        x-text="T('application-core:shell.dashboard.viewAll', 'View all')"></button>
-              </div>
-            </div>
-            <div x-h-card-content.flush>
-              <template x-if="!$store.reports.widgetState(r).loaded"><div class="p-4"><div x-h-skeleton class="h-9 w-full"></div></div></template>
-              <div x-show="$store.reports.widgetState(r).error" x-h-text.muted class="p-4">—</div>
-              <div x-show="$store.reports.widgetState(r).loaded && !$store.reports.widgetState(r).error" x-h-table-container>
-                <table x-h-table>
-                  <caption class="sr-only" x-text="$store.reports.tileWidgetLabel(r)"></caption>
-                  <thead x-h-table-header>
-                    <tr x-h-table-row>
-                      <template x-for="c in $store.reports.widgetColumns(r)" :key="c.alias">
-                        <th x-h-table-head scope="col" :class="$store.reports.widgetAlignClass(c)" x-text="$store.reports.widgetColumnLabel(r, c)"></th>
-                      </template>
-                    </tr>
-                  </thead>
-                  <tbody x-h-table-body>
-                    <template x-for="(row, i) in $store.reports.widgetRows(r)" :key="i">
-                      <tr x-h-table-row data-hoverable="true">
-                        <template x-for="c in $store.reports.widgetColumns(r)" :key="c.alias">
-                          <td x-h-table-cell :class="$store.reports.widgetAlignClass(c)" x-text="$store.reports.widgetCellText(r, row, c)"></td>
-                        </template>
-                      </tr>
-                    </template>
-                  </tbody>
-                </table>
-              </div>
-            </div>
           </div>
         </template>
       </div>
     </section>
 
-    <!-- Reports without a KPI widget: a simplified preview of the report itself, embedded from its own
-         generated page. The full report opens from the title (a button) or the "View all" button. The
-         tile takes the shape of what the embedded page renders: a chart report is the padded borderless
-         card, a rows report the bordered full-bleed table card. -->
-    <section class="vbox" x-show="dashPreviewReports().length > 0" x-cloak>
-      <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <template x-for="r in dashPreviewReports()" :key="r.url">
-          <div x-h-card :class="r.chart ? '' : 'overflow-hidden'">
-            <div x-h-card-header :class="r.chart ? '' : 'border-b'">
-              <div x-h-card-title><button type="button" class="cursor-pointer text-left" @click="openReport(r)" x-text="$store.reports.tileLabel(r)"></button></div>
-              <div x-h-card-description x-show="r.description" x-text="$store.reports.displayDescription(r)"></div>
-              <div x-h-card-action>
-                <button x-h-button data-variant="outline" @click="openReport(r)"
-                        :aria-label="T('application-core:shell.dashboard.viewAllOf', 'Open the {{name}} report', { name: $store.reports.tileLabel(r) })"
-                        x-text="T('application-core:shell.dashboard.viewAll', 'View all')"></button>
-              </div>
-            </div>
-            <!-- flush is a directive modifier, not a class, so the two shapes are two elements behind an
-                 x-if. The taller chart frame is not cosmetic: the report page sizes its chart in vh, which
-                 inside an iframe resolves against the FRAME's height. -->
-            <template x-if="r.chart">
-              <div x-h-card-content>
-                <iframe :src="r.url + '?preview=1'" title="Report preview" loading="lazy"
-                        style="width:100%; height:18rem; border:0;"></iframe>
+    <!-- Content tiles: the top-N tables and the report previews in one grid, each cell spanning what
+         dashContentTiles packed it to. Each cell is the grid item; its card fills it (h-full), so the
+         tiles of a row are equally tall. -->
+    <section class="vbox" x-show="dashContentTiles().length > 0" x-cloak>
+      <div class="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <template x-for="p in dashContentTiles()" :key="p.tile.key">
+          <div :class="p.span" x-data="{ get r() { return p.tile.item } }">
+
+            <!-- Top-N list: a table edge to edge (x-h-card-content.flush is a directive modifier, not a
+                 class). Column alignment and number formatting come from the .report's own column metadata. -->
+            <template x-if="p.tile.type === 'list'">
+              <div x-h-card class="h-full overflow-hidden">
+                <div x-h-card-header class="border-b">
+                  <div x-h-card-title><button type="button" class="cursor-pointer text-left" @click="openReport(r)" x-text="$store.reports.tileWidgetLabel(r)"></button></div>
+                  <div x-h-card-description x-show="r.description" x-text="$store.reports.displayDescription(r)"></div>
+                  <div x-h-card-action>
+                    <button x-h-button data-variant="outline" @click="openReport(r)"
+                            :aria-label="T('application-core:shell.dashboard.viewAllOf', 'Open the {{name}} report', { name: $store.reports.tileWidgetLabel(r) })"
+                            x-text="T('application-core:shell.dashboard.viewAll', 'View all')"></button>
+                  </div>
+                </div>
+                <div x-h-card-content.flush>
+                  <template x-if="!$store.reports.widgetState(r).loaded"><div class="p-4"><div x-h-skeleton class="h-9 w-full"></div></div></template>
+                  <div x-show="$store.reports.widgetState(r).error" x-h-text.muted class="p-4">—</div>
+                  <div x-show="$store.reports.widgetState(r).loaded && !$store.reports.widgetState(r).error" x-h-table-container>
+                    <table x-h-table>
+                      <caption class="sr-only" x-text="$store.reports.tileWidgetLabel(r)"></caption>
+                      <thead x-h-table-header>
+                        <tr x-h-table-row>
+                          <template x-for="c in $store.reports.widgetColumns(r)" :key="c.alias">
+                            <th x-h-table-head scope="col" :class="$store.reports.widgetAlignClass(c)" x-text="$store.reports.widgetColumnLabel(r, c)"></th>
+                          </template>
+                        </tr>
+                      </thead>
+                      <tbody x-h-table-body>
+                        <template x-for="(row, i) in $store.reports.widgetRows(r)" :key="i">
+                          <tr x-h-table-row data-hoverable="true">
+                            <template x-for="c in $store.reports.widgetColumns(r)" :key="c.alias">
+                              <td x-h-table-cell :class="$store.reports.widgetAlignClass(c)" x-text="$store.reports.widgetCellText(r, row, c)"></td>
+                            </template>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             </template>
-            <template x-if="!r.chart">
-              <div x-h-card-content.flush>
-                <iframe :src="r.url + '?preview=1'" title="Report preview" loading="lazy"
-                        style="width:100%; height:220px; border:0;"></iframe>
+
+            <!-- Report preview: a report without a KPI widget, embedded from its own generated page. The
+                 tile takes the shape of what the embedded page renders: a chart report is the padded
+                 borderless card, a rows report the bordered full-bleed table card. -->
+            <template x-if="p.tile.type === 'report'">
+              <div x-h-card class="h-full" :class="r.chart ? '' : 'overflow-hidden'">
+                <div x-h-card-header :class="r.chart ? '' : 'border-b'">
+                  <div x-h-card-title><button type="button" class="cursor-pointer text-left" @click="openReport(r)" x-text="$store.reports.tileLabel(r)"></button></div>
+                  <div x-h-card-description x-show="r.description" x-text="$store.reports.displayDescription(r)"></div>
+                  <div x-h-card-action>
+                    <button x-h-button data-variant="outline" @click="openReport(r)"
+                            :aria-label="T('application-core:shell.dashboard.viewAllOf', 'Open the {{name}} report', { name: $store.reports.tileLabel(r) })"
+                            x-text="T('application-core:shell.dashboard.viewAll', 'View all')"></button>
+                  </div>
+                </div>
+                <!-- flush is a directive modifier, not a class, so the two shapes are two elements behind an
+                     x-if. The taller chart frame is not cosmetic: the report page sizes its chart in vh, which
+                     inside an iframe resolves against the FRAME's height. -->
+                <template x-if="r.chart">
+                  <div x-h-card-content>
+                    <iframe :src="r.url + '?preview=1'" title="Report preview" loading="lazy"
+                            style="width:100%; height:18rem; border:0;"></iframe>
+                  </div>
+                </template>
+                <template x-if="!r.chart">
+                  <div x-h-card-content.flush>
+                    <iframe :src="r.url + '?preview=1'" title="Report preview" loading="lazy"
+                            style="width:100%; height:220px; border:0;"></iframe>
+                  </div>
+                </template>
               </div>
             </template>
           </div>

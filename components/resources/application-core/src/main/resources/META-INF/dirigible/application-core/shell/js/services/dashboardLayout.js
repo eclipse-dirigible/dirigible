@@ -20,6 +20,9 @@
  *   pack(tiles)      - the content tiles (list, page, report preview): each weighs WIDE (8 columns) or
  *                      NARROW (4); a wide tile takes a narrow partner of its kind (chart or table),
  *                      the other narrow tiles share rows, and no row is left short.
+ *   reportWeight(r)  - a report preview's weight (chart type, else column count); tableWeight(n) a table's.
+ *
+ * Used by the generated application's dashboard and the application shell's, so both size a tile alike.
  */
 (function () {
   'use strict';
@@ -28,6 +31,7 @@
   const NARROW = 4;
   const ROW = 12;
   const MAX_KPIS_PER_ROW = 4;
+  const COMPACT_CHARTS = ['pie', 'doughnut', 'polararea', 'radar'];
 
   // Span class by number of columns.
   const SPAN = {
@@ -128,6 +132,30 @@
       .map(cell => ({ tile: cell.entry.tile, span: SPAN[cell.span] }));
   }
 
+  /**
+   * The weight of a table tile: up to three columns read in a third of the row, more need two thirds.
+   * An unknown count (a manifest written before it carried one) is WIDE, because a wide table in a
+   * narrow cell scrolls sideways.
+   *
+   * @param {number} [columnCount] the columns the table shows
+   * @returns {number} WIDE or NARROW
+   */
+  function tableWeight(columnCount) {
+    return typeof columnCount === 'number' && columnCount >= 1 && columnCount <= 3 ? NARROW : WIDE;
+  }
+
+  /**
+   * The weight of a report preview tile: a part-to-whole chart (pie, doughnut, polar area, radar) is
+   * compact, any other chart needs width, and a table goes by its column count.
+   *
+   * @param {{chart?: string, columnCount?: number}} report a reports-store item
+   * @returns {number} WIDE or NARROW
+   */
+  function reportWeight(report) {
+    if (report.chart) return COMPACT_CHARTS.includes(String(report.chart).toLowerCase()) ? NARROW : WIDE;
+    return tableWeight(report.columnCount);
+  }
+
   function weightOf(tile) {
     return tile.weight === NARROW ? NARROW : WIDE;
   }
@@ -136,5 +164,5 @@
     return entry.tile.chart === true;
   }
 
-  window.DashboardLayout = { WIDE, NARROW, kpiSpans, pack };
+  window.DashboardLayout = { WIDE, NARROW, kpiSpans, pack, tableWeight, reportWeight };
 })();

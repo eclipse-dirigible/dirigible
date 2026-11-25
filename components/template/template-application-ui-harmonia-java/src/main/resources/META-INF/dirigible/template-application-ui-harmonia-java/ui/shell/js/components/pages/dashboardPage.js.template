@@ -98,19 +98,10 @@ document.addEventListener('alpine:init', () => {
       const L = window.DashboardLayout;
       return L.pack([
         ...this.listKpis.map(r => ({ type: 'list', key: 'list:' + r.name, item: r,
-          weight: this.kpiColumns(r).length >= 4 ? L.WIDE : L.NARROW })),
+          weight: L.tableWeight(this.kpiColumns(r).length) })),
         ...this.customPages.map(w => ({ type: 'page', key: 'page:' + w.name, item: w, weight: L.WIDE })),
-        ...this.reports.map(r => ({ type: 'report', key: 'report:' + r.url, item: r, weight: this.reportWeight(r), chart: !!r.chart })),
+        ...this.reports.map(r => ({ type: 'report', key: 'report:' + r.url, item: r, weight: L.reportWeight(r), chart: !!r.chart })),
       ]);
-    },
-
-    // A report preview: a part-to-whole chart is compact; any other chart needs width. A table is
-    // narrow up to three columns. A report without a count (a manifest from before it existed) is
-    // wide, because a wide table in a narrow cell scrolls sideways.
-    reportWeight(r) {
-      const L = window.DashboardLayout;
-      if (r.chart) return ['pie', 'doughnut', 'polararea', 'radar'].includes(String(r.chart).toLowerCase()) ? L.NARROW : L.WIDE;
-      return (typeof r.columnCount === 'number' && r.columnCount >= 1 && r.columnCount <= 3) ? L.NARROW : L.WIDE;
     },
 
     // Custom widgets, split by how they render: number tiles (kpi) vs embedded pages. A KPI whose

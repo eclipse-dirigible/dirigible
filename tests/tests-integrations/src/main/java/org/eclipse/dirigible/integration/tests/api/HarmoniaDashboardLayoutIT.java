@@ -89,6 +89,21 @@ class HarmoniaDashboardLayoutIT {
     }
 
     @Test
+    void aTileWeighsWhatItShows() {
+        try (Context context = load()) {
+            assertEquals(
+                    "4,8,4,8,8", context
+                                        .eval("js",
+                                                "[{chart: 'Doughnut'}, {chart: 'line'}, {columnCount: 3}, {columnCount: 7}, {}]"
+                                                        + ".map(r => DashboardLayout.reportWeight(r)).join()")
+                                        .asString(),
+                    "a part-to-whole chart and a table of up to three columns are narrow, an unknown count wide");
+            assertEquals("8,4,8", context.eval("js", "[0, 2, 4].map(n => DashboardLayout.tableWeight(n)).join()")
+                                         .asString());
+        }
+    }
+
+    @Test
     void theSpansAreLiteralClassStrings() {
         try (Context context = load()) {
             assertEquals("lg:col-span-4", context.eval("js", "DashboardLayout.kpiSpans(3)[0]")

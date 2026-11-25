@@ -134,6 +134,13 @@ class ReportsAggregator {
         return reports;
     }
 
+    /** The columns a report shows: those it does not mark {@code "select": false}. */
+    private static int selectedColumnCount(List<?> columns) {
+        return (int) columns.stream()
+                            .filter(column -> !(column instanceof Map<?, ?> map) || !Boolean.FALSE.equals(map.get("select")))
+                            .count();
+    }
+
     /**
      * The manifest entry of one report page. The URLs follow the generated layout: the page under its
      * gen folder, the controller under the Java package that folder's name sanitizes to.
@@ -145,7 +152,11 @@ class ReportsAggregator {
         for (String key : DISPLAY_KEYS) {
             Contributions.putIfPresent(entry, key, definition.get(key));
         }
-        // Only a KPI tile reads the columns (a list widget shows the report's selected ones).
+        // The dashboard sizes a table preview by how many columns it shows; only a KPI tile reads the
+        // columns themselves (a list widget shows the report's selected ones).
+        if (definition.get("columns") instanceof List<?> columns) {
+            entry.put("columnCount", selectedColumnCount(columns));
+        }
         if (definition.get("widget") != null) {
             entry.put("widget", definition.get("widget"));
             entry.put("columns", definition.get("columns") instanceof List<?> columns ? columns : List.of());
