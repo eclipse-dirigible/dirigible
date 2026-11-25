@@ -12740,9 +12740,10 @@ public final class IntentParser {
      * over a retired target (issue #6814) and frees the source's slot, and if nothing can refill it the
      * author is left with a model that reads as automatic and is not. So the hook must exist to be
      * inverted, the inverse must be a different status, the map must copy the source's key onto the
-     * back-reference the reopen reads the source through, the target must be one whose retirement is
-     * recognisable HERE (a local target whose nomenclature classifies a retiring {@code stage:}), and
-     * an appending create-from - which keeps no guard and no slot - is refused outright.
+     * back-reference the reopen reads the source through, a local target must be one whose nomenclature
+     * classifies a retiring {@code stage:} (a cross-model target's classification is its owner's, read
+     * off the owner's {@code .model} at generation - #7954), and an appending create-from - which keeps
+     * no guard and no slot - is refused outright.
      *
      * <p>
      * The remaining check is the source's own state machine, and it lives with the other status writes
@@ -12793,9 +12794,9 @@ public final class IntentParser {
                     + " }`) - the reopen reaches the source it returns through that back-reference");
         }
         if (crossModel) {
-            issues.add(subject + " cannot reopen for a cross-model target (uses [" + g.getUses() + "]) - what RETIRES a [" + g.getTo()
-                    + "] is the `stage:` classification of its status nomenclature, seeded in the owner model and not resolvable here;"
-                    + " author the create-from in [" + g.getUses() + "], or keep a button (button: true) to reissue by hand");
+            // What retires a cross-model target is the `stage:` classification its owner seeds and
+            // publishes on the target's status property in its .model (#7954) - read, and refused when
+            // it classifies no retiring stage, by the generator.
             return;
         }
         EntityIntent target = g.getTo() == null ? null : byName.get(g.getTo());

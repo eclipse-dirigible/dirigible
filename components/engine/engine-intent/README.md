@@ -757,8 +757,10 @@ targeted write carrying the source's `-transitioned` - so the ordinary trigger r
 replacement. It fires only while the source still stands at `sourceStatus` and no target of it still
 counts, so a redelivered retirement is a no-op. Without it, a source flipped by `sourceStatus:` can never re-qualify and only a shared
 `button: true` can reissue. It needs an `event:` to re-fire, `sourceStatus:` (a different
-status), a local target whose nomenclature classifies a retiring stage, `mode: once`, and - when the
-source declares a `lifecycle:` - the edge back.
+status), a target whose nomenclature classifies a retiring stage, `mode: once`, and - when the
+source declares a `lifecycle:` - the edge back. A cross-model target (#7954) is classified in its
+owner model, read off the `statusStages` its `.model` publishes: the reopen is generated in the
+source's module and binds the owner project's `-transitioned` topic.
 
 `prompt:` (#6685) declares a small input form shown before the target is created - the values the
 source cannot derive (which payment, how much). Entries name fields / to-one relations of the

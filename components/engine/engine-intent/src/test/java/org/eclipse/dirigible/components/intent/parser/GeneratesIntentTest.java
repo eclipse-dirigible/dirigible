@@ -1319,49 +1319,70 @@ class GeneratesIntentTest {
     }
 
     /**
-     * A cross-model target is seeded in its owner model, so no {@code stage:} classification is
-     * resolvable at the consumer - the same limit a report {@code scope:} has, and the guard's own.
+     * A milestone billed into ANOTHER module's invoice (#7954): what retires the invoice is classified
+     * in its owner model, which publishes the classification on its {@code .model} - so the parser no
+     * longer refuses the reopen and leaves the target's half to the generator. The source half is local
+     * and resolved here, names and all.
      */
     @Test
-    void rejectsAReopenForACrossModelTarget() {
-        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse("""
-                name: timesheets
-                uses:
-                  - { model: sales }
-                entities:
-                  - name: TimesheetStatus
-                    function: Setting
-                    fields:
-                      - { name: id,   type: integer, primaryKey: true, generated: true }
-                      - { name: name, type: string }
-                  - name: Timesheet
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                    relations:
-                      - { name: Status, kind: manyToOne, to: TimesheetStatus, function: EntityStatus, init: 1 }
-                seeds:
-                  - name: timesheet-statuses
-                    entity: TimesheetStatus
-                    rows:
-                      - { id: 1, name: OPEN }
-                      - { id: 2, name: APPROVED }
-                      - { id: 3, name: INVOICED }
-                generates:
-                  - name: invoice-from-timesheet
-                    from: Timesheet
-                    to: SalesInvoice
-                    uses: sales
-                    forEntity: Timesheet
-                    event: { onTransition: Timesheet, when: "Status == APPROVED" }
-                    map: { Timesheet: id }
-                    sourceStatus: INVOICED
-                    sourceStatusOnRetire: APPROVED
-                """));
+    void acceptsAReopenForACrossModelTarget() {
+        GeneratesIntent g = IntentParser.parse(CROSS_MODEL_REOPEN)
+                                        .getGenerates()
+                                        .get(0);
+        assertEquals(3, g.getSourceStatus());
+        assertEquals(2, g.getSourceStatusOnRetire());
+    }
+
+    /**
+     * The back-reference rule holds for a cross-model target as for a local one: the reopen reaches the
+     * milestone through the target property its map copies the milestone's key onto.
+     */
+    @Test
+    void aCrossModelReopenStillNeedsItsBackReference() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(CROSS_MODEL_REOPEN.replace("      milestone: id\n", "")));
         assertTrue(ex.getIssues()
                      .stream()
-                     .anyMatch(i -> i.contains("cross-model target") && i.contains("stage:")),
+                     .anyMatch(i -> i.contains("sourceStatusOnRetire") && i.contains("back-reference")),
                 "got: " + ex.getIssues());
     }
+
+    private static final String CROSS_MODEL_REOPEN = """
+            name: projects
+            uses:
+              - { model: sales-invoices }
+            entities:
+              - name: MilestoneStatus
+                function: Setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Milestone
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string }
+                relations:
+                  - { name: Status, kind: manyToOne, to: MilestoneStatus, function: EntityStatus, init: 1 }
+            seeds:
+              - name: milestone-statuses
+                entity: MilestoneStatus
+                rows:
+                  - { id: 1, name: PLANNED }
+                  - { id: 2, name: REACHED }
+                  - { id: 3, name: INVOICED }
+            generates:
+              - name: invoice-from-milestone
+                from: Milestone
+                to: SalesInvoice
+                uses: sales-invoices
+                forEntity: Milestone
+                map:
+                  reference: number
+                  milestone: id
+                fromStatus: [REACHED]
+                sourceStatus: INVOICED
+                sourceStatusOnRetire: REACHED
+            """;
 
     /**
      * The source stands at the completion status when the retirement arrives, so the graph is asked for

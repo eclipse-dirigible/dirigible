@@ -3401,9 +3401,13 @@ generates:
   the source off the status the button is offered from and the implied `fromStatus` deny then refuses
   the second click, so the source is just as stuck and the declared inverse is the only move back - the
   reopen is emitted for that shape too, without the guard's stage-aware step-over, which belongs to a
-  guard it does not have. the target must be local, with a nomenclature that classifies a retiring `stage:` (a
-  cross-model target is seeded in its owner model, so nothing here can recognise its retirement - keep
-  `button: true` and reissue by hand); `mode: append` is refused (no guard, so no slot to free); and
+  guard it does not have. The target's nomenclature must classify a retiring `stage:`. A CROSS-MODEL
+  target (`uses:`, #7954) is classified in its owner model, which publishes the classification on its
+  `.model`, so the reopen is generated HERE, in the source's module, listening on the owner's topic - a
+  milestone billed into another module's invoice returns when that invoice is voided. The owner must
+  classify its seed rows (`stage: cancelled|void`) and be generated first, and the `map:` must still copy
+  the source's key onto a target property (a plain integer field there - the owner cannot name this
+  module); `mode: append` is refused (no guard, so no slot to free); and
   when the source declares a `lifecycle:`, the graph must declare the edge from `sourceStatus` back to
   it - that is exactly where the source stands when the retirement arrives. Return to a status a PERSON must move on (a `DRAFT`
   for correction) when the reissue should be reviewed rather than immediate: the reopen only publishes
