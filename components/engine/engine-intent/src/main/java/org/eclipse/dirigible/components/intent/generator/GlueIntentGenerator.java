@@ -2063,49 +2063,62 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             if (field == null || field.isBlank()) {
                 continue; // parser already reported it
             }
-            String prop = IntentNaming.pascalCase(field);
-            String type;
-            // The input's label and its catalog key, the ones a missing required input is refused with
-            // (dirigible #8646). A cross-model target's labels are in its own model's catalog, which this
-            // one cannot name: the input is named by its humanized name.
-            String label = IntentNaming.humanize(field);
-            String labelKey = "";
             if (target != null) {
-                FieldIntent targetField = fieldNamed(target, field);
-                RelationIntent relation = targetField == null ? toOneRelation(target, field) : null;
-                if (targetField == null && relation == null) {
-                    continue; // parser already reported it
+                Map<String, Object> entry = localPromptField(p, target, catalog);
+                if (entry != null) {
+                    out.add(entry);
                 }
-                type = targetField == null ? "relation" : targetField.getType();
-                String authored = targetField != null ? targetField.getLabel() : relation.getLabel();
-                if (authored != null && !authored.isBlank()) {
-                    label = authored.trim();
-                }
-                labelKey = catalog + ".t." + IntentNaming.upperSnake(target.getName()) + "_"
-                        + IntentNaming.upperSnake(targetField != null ? targetField.getName() : relation.getName());
-            } else {
-                type = crossModelPromptType(g, field, prop, crossModelTarget, problems);
-                if (type == null) {
-                    continue;
-                }
-                if (p.hasDefault() && source != null) {
-                    checkCrossModelPromptDefault(g, p, prop, type, crossModelTarget, source, problems);
-                }
+                continue;
             }
-            Map<String, Object> entry = new LinkedHashMap<>();
-            entry.put("prop", prop);
-            entry.put("required", p.isRequired());
-            // The conversion of the posted value to the field's type, as a reading (issue #7425).
-            entry.put("reading", Readings.convert(type));
-            entry.put("defaultProp", p.hasDefault() ? IntentNaming.pascalCase(p.getDefaultFrom()) : "");
-            entry.put("label", label);
-            entry.put("labelKey", labelKey);
-            out.add(entry);
+            String prop = IntentNaming.pascalCase(field);
+            String type = crossModelPromptType(g, field, prop, crossModelTarget, problems);
+            if (type == null) {
+                continue;
+            }
+            if (p.hasDefault() && source != null) {
+                checkCrossModelPromptDefault(g, p, prop, type, crossModelTarget, source, problems);
+            }
+            // A cross-model target's labels are in its own model's catalog, which this one cannot name:
+            // the input is named by its humanized name.
+            out.add(promptField(p, prop, type, IntentNaming.humanize(field), ""));
         }
         if (!problems.isEmpty()) {
             throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(problems);
         }
         return out;
+    }
+
+    /**
+     * One prompted property of an entity this model declares - a create-from's local target, or the
+     * record a transition moves (#7909) - or {@code null} when it names neither a field nor a to-one
+     * relation (the parser already reported it). Its label and catalog key are the ones a missing
+     * required input is refused with (dirigible #8646).
+     */
+    private static Map<String, Object> localPromptField(org.eclipse.dirigible.components.intent.model.PromptFieldIntent p,
+            EntityIntent entity, String catalog) {
+        FieldIntent field = fieldNamed(entity, p.getField());
+        RelationIntent relation = field == null ? toOneRelation(entity, p.getField()) : null;
+        if (field == null && relation == null) {
+            return null;
+        }
+        String authored = field != null ? field.getLabel() : relation.getLabel();
+        String label = authored != null && !authored.isBlank() ? authored.trim() : IntentNaming.humanize(p.getField());
+        String labelKey = catalog + ".t." + IntentNaming.upperSnake(entity.getName()) + "_"
+                + IntentNaming.upperSnake(field != null ? field.getName() : relation.getName());
+        return promptField(p, IntentNaming.pascalCase(p.getField()), field == null ? "relation" : field.getType(), label, labelKey);
+    }
+
+    private static Map<String, Object> promptField(org.eclipse.dirigible.components.intent.model.PromptFieldIntent p, String prop,
+            String type, String label, String labelKey) {
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("prop", prop);
+        entry.put("required", p.isRequired());
+        // The conversion of the posted value to the field's type, as a reading (issue #7425).
+        entry.put("reading", Readings.convert(type));
+        entry.put("defaultProp", p.hasDefault() ? IntentNaming.pascalCase(p.getDefaultFrom()) : "");
+        entry.put("label", label);
+        entry.put("labelKey", labelKey);
+        return entry;
     }
 
     /**
@@ -2235,6 +2248,20 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // process step authors. Fail-soft in the generated controller: the flip is the contract.
             e.putAll(notifyFields(t.getNotify(), entity, model, byName, compositionParents, context,
                     "Transition [" + t.getName() + "] notify"));
+            if (t.hasPrompt()) {
+                // The record's own inputs (#7909), written with the status: converted and refused exactly as
+                // a create-from's prompt is, in the model catalog's language.
+                String catalog = refusalCatalog(model, context, projectName);
+                List<Map<String, Object>> prompted = new ArrayList<>();
+                for (org.eclipse.dirigible.components.intent.model.PromptFieldIntent p : t.getPrompt()) {
+                    Map<String, Object> field = p.getField() == null ? null : localPromptField(p, entity, catalog);
+                    if (field != null) {
+                        prompted.add(field);
+                    }
+                }
+                e.put("promptFields", prompted);
+                e.put("refusalCatalog", catalog);
+            }
             if (t.stampsNumber()) {
                 // The move issues the document (#8493): its stampOn: issue number is drawn and written
                 // with the status, as the NumberStamp delegate draws it at a process's issue step.

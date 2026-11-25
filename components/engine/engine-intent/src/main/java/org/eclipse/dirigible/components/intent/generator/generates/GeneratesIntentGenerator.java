@@ -9,7 +9,6 @@
  */
 package org.eclipse.dirigible.components.intent.generator.generates;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,7 +23,6 @@ import org.eclipse.dirigible.components.intent.generator.ReportItemsSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
-import org.eclipse.dirigible.components.intent.model.PromptFieldIntent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
@@ -188,23 +186,7 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
             // names) - control types, lookups and dependsOn metadata are resolved AT RUNTIME from the
             // target's own detail registration (App.detailsFor(view)); any other target carries its
             // controls in promptColumns below.
-            List<Map<String, Object>> prompt = new ArrayList<>();
-            for (PromptFieldIntent p : g.getPrompt()) {
-                if (p.getField() == null || p.getField()
-                                             .isBlank()) {
-                    continue;
-                }
-                Map<String, Object> entry = new LinkedHashMap<>();
-                entry.put("name", IntentNaming.pascalCase(p.getField()));
-                entry.put("required", p.isRequired());
-                if (p.hasDefault()) {
-                    // The SOURCE property the input defaults to (issue #7748): the dialog pre-fills it from
-                    // the record it is opened on; the controller applies it to an input left empty.
-                    entry.put("default", IntentNaming.pascalCase(p.getDefaultFrom()));
-                }
-                prompt.add(entry);
-            }
-            view.put("prompt", prompt);
+            view.put("prompt", PromptColumns.entries(g.getPrompt()));
             view.put("promptEntity", g.getTo());
             if (promptColumns != null) {
                 // A target that is not a detail of this view - a standalone or a cross-model one (issue

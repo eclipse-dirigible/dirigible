@@ -66,19 +66,63 @@ public final class PromptColumns {
         if (target != null && isDetailOf(target, g.getForEntity())) {
             return null;
         }
-        List<Map<String, Object>> columns = new ArrayList<>();
         if (target != null) {
-            for (PromptFieldIntent p : g.getPrompt()) {
-                columns.add(localColumn(p, target, model, context));
-            }
-            return columns;
+            return ofRecord(g.getPrompt(), target, model, context);
         }
+        List<Map<String, Object>> columns = new ArrayList<>();
         UsesIntent uses = uses(model, g.getUses());
         CrossModelSupport.TargetInfo info = CrossModelSupport.resolve(context, uses, g.getTo());
         for (PromptFieldIntent p : g.getPrompt()) {
             columns.add(crossModelColumn(p, g.getTo(), info, uses, context));
         }
         return columns;
+    }
+
+    /**
+     * The prompted controls of an entity this model declares, typed from its own fields and relations -
+     * a local create-from target that is no detail of the button's view, or the record a transition
+     * moves (#7909), which no detail registration types either.
+     *
+     * @param prompt the declared inputs
+     * @param entity the entity they name properties of
+     * @param model the model it is declared in
+     * @param context the generation context, for a to-one's lookup
+     * @return the controls
+     */
+    public static List<Map<String, Object>> ofRecord(List<PromptFieldIntent> prompt, EntityIntent entity, IntentModel model,
+            IntentGenerationContext context) {
+        List<Map<String, Object>> columns = new ArrayList<>();
+        for (PromptFieldIntent p : prompt) {
+            columns.add(localColumn(p, entity, model, context));
+        }
+        return columns;
+    }
+
+    /**
+     * The descriptor's {@code prompt} entries (issue #6685): per input its PascalCase property name,
+     * whether it is required and the source property it defaults to, when it declares one (#7748).
+     *
+     * @param prompt the declared inputs
+     * @return the entries, in the shape the shell's prompt dialog reads
+     */
+    public static List<Map<String, Object>> entries(List<PromptFieldIntent> prompt) {
+        List<Map<String, Object>> entries = new ArrayList<>();
+        for (PromptFieldIntent p : prompt) {
+            if (p.getField() == null || p.getField()
+                                         .isBlank()) {
+                continue;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name", IntentNaming.pascalCase(p.getField()));
+            entry.put("required", p.isRequired());
+            if (p.hasDefault()) {
+                // The SOURCE property the input defaults to (issue #7748): the dialog pre-fills it from the
+                // record it is opened on; the controller applies it to an input left empty.
+                entry.put("default", IntentNaming.pascalCase(p.getDefaultFrom()));
+            }
+            entries.add(entry);
+        }
+        return entries;
     }
 
     /**
