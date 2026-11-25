@@ -78,6 +78,7 @@ import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.EscalateIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
+import org.eclipse.dirigible.components.intent.model.FormItemsIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesItemsIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesLinkIntent;
@@ -365,11 +366,48 @@ public final class IntentParser {
      * @throws IntentValidationException if structural problems are found in the model
      */
     public static IntentModel parse(String yaml) {
-        if (yaml == null || yaml.isBlank()) {
-            return new IntentModel();
+        IntentModel model = parseTree(load(yaml));
+        Set<String> optional = OptionalUses.aliases(model);
+        if (!optional.isEmpty()) {
+            // An optional uses: may be absent where the model is generated (#7979): the model must stand
+            // without it too, so what the absent case could not generate is refused here, not there.
+            try {
+                parseWithout(yaml, optional, new ArrayList<>());
+            } catch (IntentValidationException e) {
+                List<String> issues = new ArrayList<>();
+                e.getIssues()
+                 .forEach(issue -> issues.add("without the optional uses " + optional + ": " + issue));
+                issues.add("an optional uses: model may be absent - its relations, the checks, order/list/subtitle and form entries,"
+                        + " roll-ups and reports that name them, and every list item naming the model (generates, rollups, schedules,"
+                        + " related, report union members, exists checks) are then left out; nothing else may depend on it");
+                throw new IntentValidationException(issues);
+            }
         }
-        Yaml loader = new Yaml(new SafeConstructor(new LoaderOptions()));
-        Object tree = loader.load(yaml);
+        return model;
+    }
+
+    /**
+     * Parse the given YAML as it is generated where some of its optional {@code uses:} models are
+     * absent (dirigible #7979): everything depending on them is taken out first - see
+     * {@code OptionalUses}.
+     *
+     * @param yaml the raw YAML content of an {@code .intent} file
+     * @param absent the optional {@code uses:} aliases whose models are absent
+     * @param dropped collects what was taken out, one entry per construct
+     * @return the typed model without them
+     * @throws IntentValidationException if the model does not stand without them
+     */
+    public static IntentModel parseWithout(String yaml, Set<String> absent, List<String> dropped) {
+        Object tree = load(yaml);
+        dropped.addAll(OptionalUses.strip(tree, absent));
+        return parseTree(tree);
+    }
+
+    private static Object load(String yaml) {
+        return yaml == null || yaml.isBlank() ? null : new Yaml(new SafeConstructor(new LoaderOptions())).load(yaml);
+    }
+
+    private static IntentModel parseTree(Object tree) {
         if (tree == null) {
             return new IntentModel();
         }
@@ -508,6 +546,7 @@ public final class IntentParser {
         // runs (#8506), so every validator and generator sees two ordinary parameters.
         expandReportPeriods(model, issues);
         Set<String> usesAliases = validateUses(model, issues);
+        OptionalUses.validate(model, issues);
         Set<String> entityNames = validateEntities(model, usesAliases, issues);
         validateFunctions(model, issues);
         validateViews(model, issues);
@@ -1944,7 +1983,8 @@ public final class IntentParser {
      * the source row has no target to load. Name a direct field of the row.</li>
      * <li><b>The {@code recordUrl} deep link.</b> The route it composes is this application's; the
      * record it would link lives in the owner's. A message that needs to point at it says so with
-     * {@code appUrl} plus the owner's own path.</li>
+     * {@code appUrl} plus the owner's own path. The {@code shareUrl} share link likewise: only the
+     * owner declares the record's {@code share:} and generates the code that mints it.</li>
      * <li><b>{@code attach: print} / {@code recordPrint}.</b> The rendered document's print feeder is
      * generated in the model that owns the entity, so only the owner can attach the source's own
      * document. A report ({@code attach: { report, bind }}) is this model's and is the point of the
@@ -1989,6 +2029,10 @@ public final class IntentParser {
             issues.add(subject + " uses {" + NotificationSupport.RECORD_URL_TOKEN
                     + "}, which links a record of THIS application - the cross-model source [" + sourceEntity
                     + "] is a record of its own owner's application, so compose that link with {appUrl} and the owner's path");
+        }
+        if (paths.containsValue(NotificationSupport.SHARE_URL_TOKEN)) {
+            issues.add(subject + " uses {" + NotificationSupport.SHARE_URL_TOKEN + "} on the cross-model source [" + sourceEntity
+                    + "] - a share link is minted by the model that owns the record and declares its share:; keep the schedule there");
         }
         String outcome = notify.getOutcome();
         if (outcome != null && !outcome.isBlank()) {
@@ -2541,8 +2585,8 @@ public final class IntentParser {
                 // latest copies the child `of` value from the row with the greatest `by` date onto the
                 // parent field; `of`+`by` required, `by` must be date/timestamp, and the parent field
                 // should hold the same type as `of` (checked leniently: same logical type).
-                FieldIntent of = fieldByName(child, rollup.getOf());
-                FieldIntent by = fieldByName(child, rollup.getBy());
+                FieldIntent of = rollupChildField(child, rollup.getOf());
+                FieldIntent by = rollupChildField(child, rollup.getBy());
                 if (rollup.getOf() == null || rollup.getOf()
                                                     .isBlank()) {
                     issues.add("rollup [" + name + "] with op latest must declare `of` (the child field to copy)");
@@ -2567,7 +2611,7 @@ public final class IntentParser {
             if (sum) {
                 // sum needs a numeric child field to add up; capacity / balance (optional) are numeric parent
                 // fields and status (optional) a to-one relation of the parent - see the balance/status roll-up.
-                FieldIntent of = fieldByName(child, rollup.getOf());
+                FieldIntent of = rollupChildField(child, rollup.getOf());
                 if (rollup.getOf() == null || rollup.getOf()
                                                     .isBlank()) {
                     issues.add("rollup [" + name + "] with op sum must declare `of` (the child field to sum)");
@@ -3006,6 +3050,38 @@ public final class IntentParser {
             }
         }
         return null;
+    }
+
+    /**
+     * A field a roll-up reads off its child (#7947): a declared one, or a column the EDM generator
+     * injects - a file child's metadata ({@code EdmIntentGenerator.attachmentProperties}, a snapshot's
+     * {@code Version}) and the audit columns of an audited or file child - typed as its column is.
+     * Without these, a roll-up could not mirror the newest upload's path onto its parent.
+     */
+    private static FieldIntent rollupChildField(EntityIntent child, String name) {
+        FieldIntent declared = fieldByName(child, name);
+        if (declared != null || name == null) {
+            return declared;
+        }
+        Map<String, String> injected = new HashMap<>();
+        if (child.isFileChild()) {
+            injected.putAll(
+                    Map.of("filename", "string", "contenttype", "string", "filesize", "long", "storagepath", "string", "uuid", "string"));
+            if (child.isSnapshot()) {
+                injected.put("version", "integer");
+            }
+        }
+        if (child.isFileChild() || child.isAudited()) {
+            injected.putAll(Map.of("createdat", "timestamp", "createdby", "string", "updatedat", "timestamp", "updatedby", "string"));
+        }
+        String type = injected.get(name.toLowerCase(Locale.ROOT));
+        if (type == null) {
+            return null;
+        }
+        FieldIntent column = new FieldIntent();
+        column.setName(name);
+        column.setType(type);
+        return column;
     }
 
     /**
@@ -4027,6 +4103,7 @@ public final class IntentParser {
         }
         validateRecordScope(notify, subject, fansOut, anchorEntity, model, issues);
         validateNotifyPaths(notify, subject, aboutEntity, model, issues);
+        validateShareUrl(notify, subject, fansOut, aboutEntity, model, issues);
         // The delivery outcome is stamped on the record the message is ABOUT - the ROW inside a
         // fan-out, which is the record that carries the recipient and therefore the one whose delivery
         // succeeded or failed. Validated here, after the fan-out has moved `aboutEntity`.
@@ -4299,6 +4376,49 @@ public final class IntentParser {
         if (body == null || body.isBlank()) {
             issues.add(subject + " declares html without body - body is required, html is only its marked-up alternative"
                     + " (a text-only client reads the body)");
+        }
+    }
+
+    /**
+     * The reserved {@code {shareUrl}} placeholder (#8616): the generated sender mints a share link to
+     * the issued copy of the record the message is about and mails it. A link is a bearer credential,
+     * so it exists only for an entity that declares {@code share:} - the same opt-in a user's Share
+     * action needs - and it travels in the body or the marked-up alternative, never in the subject
+     * every mail list and preview shows. A fan-out is refused rather than given a meaning: there the
+     * message is about the ROW, while the document a fan-out mails belongs to its anchor.
+     *
+     * @param notify the block
+     * @param subject the message prefix identifying the call site
+     * @param fansOut whether the block declares a {@code forEach}
+     * @param aboutEntity the entity the message is about, or {@code null} when it is unknown (already
+     *        reported, or a cross-model source - refused on its own)
+     * @param model the parsed model
+     * @param issues the collected issues
+     */
+    private static void validateShareUrl(NotificationIntent notify, String subject, boolean fansOut, String aboutEntity, IntentModel model,
+            List<String> issues) {
+        String token = "{" + NotificationSupport.SHARE_URL_TOKEN + "}";
+        if (notify.getSubject() != null && notify.getSubject()
+                                                 .contains(token)) {
+            issues.add(subject + " uses " + token + " in its subject - a share link is a bearer credential, and a subject is shown in"
+                    + " every mail list and preview; carry it in the body");
+        }
+        boolean used = notify.getBody() != null && notify.getBody()
+                                                         .contains(token)
+                || notify.getHtml() != null && notify.getHtml()
+                                                     .contains(token);
+        if (!used) {
+            return;
+        }
+        if (fansOut) {
+            issues.add(subject + " uses " + token + " in a forEach - each message there is about a row, while the document belongs to"
+                    + " the record the rows hang off; mail the link from a notify without forEach");
+            return;
+        }
+        EntityIntent about = aboutEntity == null ? null : entityByName(model, aboutEntity);
+        if (about != null && about.getShare() == null) {
+            issues.add(subject + " uses " + token + ", but [" + aboutEntity + "] declares no share: - a link to a record's issued copy"
+                    + " exists only for an entity that declares one");
         }
     }
 
@@ -5231,6 +5351,37 @@ public final class IntentParser {
     }
 
     /** The declared entity with that exact name, or {@code null}. */
+    /**
+     * A money field rounded to its currency's minor units ({@code roundTo: Invoice.Currency.rounding},
+     * #8307 / #8327): a decimal, not the key, and the path a walk of to-one relations off the record to
+     * an integer field. A terminal on a cross-model target is not known here and is trusted, as for
+     * every other path; the generator reads it as a number either way.
+     */
+    private static void validateRoundTo(EntityIntent entity, FieldIntent field, java.util.Map<String, EntityIntent> byName, String subject,
+            List<String> issues) {
+        if (!"decimal".equalsIgnoreCase(field.getType())) {
+            issues.add(subject + " roundTo applies to a decimal field - got type [" + field.getType() + "]");
+            return;
+        }
+        if (field.isPrimaryKey()) {
+            issues.add(subject + " is the primary key so it cannot declare roundTo");
+            return;
+        }
+        ResolvePathSupport.Path path = ResolvePathSupport.walker(entity, byName, java.util.Map.of(), null)
+                                                         .resolve(field.getRoundTo()
+                                                                       .trim());
+        if (!path.resolved()) {
+            issues.add(subject + " roundTo " + path.failure());
+        } else if (path.terminalType() != null && !Set.of("integer", "int", "long")
+                                                      .contains(path.terminalType()
+                                                                    .toLowerCase(java.util.Locale.ROOT))) {
+            issues.add(subject + " roundTo [" + field.getRoundTo() + "] must end in an integer field - the currency's minor units"
+                    + " (e.g. `Currency.rounding`) - got "
+                    + (ResolvePathSupport.RELATION_TERMINAL.equals(path.terminalType()) ? "a to-one relation"
+                            : "type [" + path.terminalType() + "]"));
+        }
+    }
+
     private static EntityIntent entityByName(IntentModel model, String name) {
         for (EntityIntent entity : model.getEntities()) {
             if (name.equals(entity.getName())) {
@@ -5421,6 +5572,9 @@ public final class IntentParser {
                 }
                 if (field.isFixedAfterCreate()) {
                     validateFixedField(entity, field, "fixedAfterCreate", issues);
+                }
+                if (field.getRoundTo() != null) {
+                    validateRoundTo(entity, field, byName, "entity [" + name + "] field [" + field.getName() + "]", issues);
                 }
                 if (field.isFixedWhenReferenced()) {
                     validateFixedField(entity, field, "fixedWhenReferenced", issues);
@@ -6144,10 +6298,53 @@ public final class IntentParser {
             issues.add(subject + " expiresAfterDays [" + share.getExpiresAfterDays()
                     + "] must be a whole number of days from 0 (permanent) to " + ShareIntent.MAX_EXPIRES_AFTER_DAYS);
         }
+        validateShareExpiry(entity, share, byName, subject, issues);
         String personal = personalScope(entity, byName);
         if (personal != null) {
             issues.add(subject + " is not allowed on a personal entity - " + personal + ", and a link is a bearer credential: whoever holds"
                     + " it reads the document. A personal document stays behind sign-in; a notification may carry {recordUrl}");
+        }
+    }
+
+    /**
+     * The {@code expiry:} of a {@code share:} (#8620) - a link's life by record, the first entry whose
+     * {@code when} holds when the link is created. Each condition is read like a {@code forbidWhen}'s:
+     * the record's own property or a one-hop {@code Relation.field} (the customer's kind), so a term
+     * the generator could not compile - an unknown relation, a literal of the wrong type - is refused
+     * here rather than leaving a private individual's link permanent while looking authored.
+     */
+    private static void validateShareExpiry(EntityIntent entity, ShareIntent share, Map<String, EntityIntent> byName, String subject,
+            List<String> issues) {
+        if (share.getExpiry() == null) {
+            return;
+        }
+        if (share.getExpiry()
+                 .isEmpty()) {
+            issues.add(subject + " expiry must not be an empty list - leave it out, and every link lives expiresAfterDays");
+        }
+        int index = 0;
+        for (ShareIntent.Expiry rule : share.getExpiry()) {
+            index++;
+            String ruleSubject = subject + " expiry[" + index + "]";
+            if (rule == null || rule.getWhen() == null) {
+                issues.add(ruleSubject + " needs a when - the record condition that gives a link this life, e.g."
+                        + " `{ when: \"Customer.Kind == 2\", days: 30 }`");
+            } else if (!(rule.getWhen() instanceof String) && !(rule.getWhen() instanceof List<?>)) {
+                issues.add(ruleSubject + " when must be a condition string or a list of them");
+            } else {
+                List<String> terms = CheckSupport.terms(rule.getWhen());
+                if (terms.isEmpty()) {
+                    issues.add(ruleSubject + " when must not be an empty list");
+                }
+                for (String term : terms) {
+                    validateForbidWhenTerm(entity, byName, term, ruleSubject, issues);
+                }
+            }
+            Integer days = rule == null ? null : rule.daysOrNull();
+            if (days == null || days < 0 || days > ShareIntent.MAX_EXPIRES_AFTER_DAYS) {
+                issues.add(ruleSubject + " days [" + (rule == null ? null : rule.getDays())
+                        + "] must be a whole number of days from 0 (permanent) to " + ShareIntent.MAX_EXPIRES_AFTER_DAYS);
+            }
         }
     }
 
@@ -6529,7 +6726,9 @@ public final class IntentParser {
      * halves are bound to the generated gates by {@code PermissionSupport}, which reports an undeclared
      * resource and an action outside the read/write vocabulary at Generate, where the entity and report
      * inventory is the one the generators actually emit. A malformed token belongs here instead,
-     * because there is nothing to bind it to and no reading of it that could be right.
+     * because there is nothing to bind it to and no reading of it that could be right. So does an entry
+     * that is both {@code additive} and {@code exclusive}: the one keeps the convention roles of its
+     * resources and the other gates them by the authored roles only (issue #8852).
      *
      * @param model the typed model
      * @param issues the issues collected so far, appended to
@@ -6540,6 +6739,11 @@ public final class IntentParser {
             if (isBlank(role)) {
                 issues.add("permission has no role name");
                 continue;
+            }
+            if (permission.isAdditive() && permission.isExclusive()) {
+                issues.add("permission [" + role.trim() + "] declares both additive and exclusive - additive keeps the convention roles"
+                        + " of the resources it names and exclusive gates them by the authored roles only, so an entry is one or the"
+                        + " other (split the tokens into two entries of the role)");
             }
             for (String token : permission.getCan()) {
                 String subject = "permission [" + role.trim() + "] can [" + token + "]";
@@ -7433,7 +7637,8 @@ public final class IntentParser {
                 if (condition.getValue() == null) {
                     issues.add("rollup [" + name + "] where-condition on [" + condition.getField() + "] has no value");
                 }
-                if (child != null && !hasPropertyIgnoreCase(child, condition.getField())) {
+                if (child != null && !hasPropertyIgnoreCase(child, condition.getField())
+                        && rollupChildField(child, condition.getField()) == null) {
                     issues.add("rollup [" + name + "] where-condition reads [" + condition.getField()
                             + "], which is not a field or to-one relation of [" + rollup.getEntity() + "]");
                 }
@@ -7590,7 +7795,7 @@ public final class IntentParser {
             validateAgreeCheck(entity, check, byName, subject, issues);
             return;
         }
-        if ("exists".equals(kind)) {
+        if ("exists".equals(kind) || "notExists".equals(kind)) {
             validateExistsCheck(entity, check, byName, usesAliases, subject, issues);
             return;
         }
@@ -7633,9 +7838,8 @@ public final class IntentParser {
             }
             return;
         }
-        issues.add(
-                subject + " has unknown kind - expected exactlyOne, compare, agree, requiredWhen, forbidWhen, exists, guard, itemsSumEqual,"
-                        + " itemsMin, duplicate or itemsCompare");
+        issues.add(subject + " has unknown kind - expected exactlyOne, compare, agree, requiredWhen, forbidWhen, exists, notExists, guard,"
+                + " itemsSumEqual, itemsMin, duplicate or itemsCompare");
     }
 
     /** The verbs a {@code forbidWhen} scope may name (#7710). */
@@ -7940,16 +8144,28 @@ public final class IntentParser {
      */
     private static void validateExistsCheck(EntityIntent entity, CheckIntent check, java.util.Map<String, EntityIntent> byName,
             Set<String> usesAliases, String subject, List<String> issues) {
+        boolean inverse = "notExists".equals(check.getKind());
         if (isBlank(check.getMessage())) {
             issues.add(subject + " requires `message`: the reason the write is refused, shown to the user");
         }
+        if (inverse && check.getStatus() == null) {
+            issues.add(subject + " requires a `status` gate: a notExists check refuses the MOVE into that status while a matching"
+                    + " row exists - name the status it guards (status: CLOSED)");
+        }
+        if (!inverse && check.getWhere() != null) {
+            issues.add(subject + " carries `where` - only a notExists check filters the target's rows; an exists check names them"
+                    + " by `match`");
+        }
         if (isBlank(check.getEntity())) {
-            issues.add(subject + " requires `entity`: the entity a matching row must exist in");
+            issues.add(subject + " requires `entity`: the entity a matching row must " + (inverse ? "not " : "") + "exist in");
             return;
         }
         EntityIntent target = null;
         if (!isBlank(check.getModel())) {
-            if (!usesAliases.contains(check.getModel())) {
+            // A notExists may name a model this one does not use (#8623): the target's model usually uses
+            // THIS one - a quotation names its opportunity - so it cannot be used back; its rows are
+            // counted by name at runtime, and none are counted while it is not deployed.
+            if (!inverse && !usesAliases.contains(check.getModel())) {
                 issues.add(subject + " references undeclared model [" + check.getModel() + "] - add it to uses:");
             }
         } else {
@@ -7964,11 +8180,17 @@ public final class IntentParser {
                         + "] - an update always matches the row it writes; name another entity");
             }
         }
-        if (check.getMatch() == null || check.getMatch()
-                                             .isEmpty()) {
+        boolean noMatch = check.getMatch() == null || check.getMatch()
+                                                           .isEmpty();
+        List<String> whereTerms = CheckSupport.terms(check.getWhere());
+        if (inverse && noMatch && whereTerms.isEmpty()) {
+            issues.add(subject + " requires `match` and/or `where`: the rows of " + check.getEntity()
+                    + " that refuse the move - with neither, any row at all would");
+        } else if (!inverse && noMatch) {
             issues.add(subject + " requires `match`: { <property of " + check.getEntity() + ">: <path on this record> }");
-        } else {
-            ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, java.util.Map.of(), null);
+        }
+        ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, java.util.Map.of(), null);
+        if (!noMatch) {
             for (Map.Entry<String, String> pair : check.getMatch()
                                                        .entrySet()) {
                 ResolvePathSupport.Path path = walker.resolve(pair.getValue());
@@ -7980,9 +8202,15 @@ public final class IntentParser {
                     continue; // a cross-model target is read from its owner's .model at generation
                 }
                 FieldIntent field = CheckSupport.field(target, pair.getKey());
-                if (field == null && CheckSupport.toOne(target, pair.getKey()) == null) {
+                RelationIntent toOne = field == null ? CheckSupport.toOne(target, pair.getKey()) : null;
+                if (field == null && toOne == null) {
                     issues.add(subject + " match [" + pair.getKey() + "] is not a field or to-one relation of [" + target.getName() + "]");
                     continue;
+                }
+                if (toOne != null && entity.getName()
+                                           .equals(toOne.getTo())
+                        && isOwnPrimaryKey(entity, pair.getValue())) {
+                    continue; // the target's reference to THIS record, matched by the record's own key (#8623)
                 }
                 String keyType = field == null ? ResolvePathSupport.RELATION_TERMINAL : CheckSupport.guardType(field.getType());
                 String valueType = path.terminalType() == null || ResolvePathSupport.RELATION_TERMINAL.equals(path.terminalType())
@@ -7992,6 +8220,14 @@ public final class IntentParser {
                     issues.add(subject + " match [" + pair.getKey() + "] compares a [" + keyType + "] with [" + pair.getValue() + "], a ["
                             + valueType + "] - both sides must be the same kind of value, or no row ever matches");
                 }
+            }
+        }
+        if (check.getWhere() != null && whereTerms.isEmpty()) {
+            issues.add(subject + " where must not be an empty list");
+        }
+        if (inverse) {
+            for (String term : whereTerms) {
+                validateNotExistsWhereTerm(target, walker, term, subject, issues);
             }
         }
         List<String> terms = CheckSupport.terms(check.getWhen());
@@ -8004,6 +8240,102 @@ public final class IntentParser {
         if (check.getStatus() != null && entityStatusRelationOf(entity) == null) {
             issues.add(subject + " carries a `status` gate but [" + entity.getName()
                     + "] declares no `function: EntityStatus` relation to read it from");
+        }
+    }
+
+    /** Whether a match path names the record's own primary key ({@code id}). */
+    private static boolean isOwnPrimaryKey(EntityIntent entity, String path) {
+        FieldIntent field = path == null || path.contains(".") ? null : CheckSupport.field(entity, path);
+        return field != null && field.isPrimaryKey();
+    }
+
+    /**
+     * One {@code where:} term of a {@code notExists} check (dirigible #8002, #8623): a property of the
+     * TARGET compared with a literal or with a path on the record ({@code date >= fromDate}), or an
+     * {@code in [..]} list of literals. A local target's property is checked here: an ordering needs a
+     * date, a timestamp or a number on both sides, and a literal must read as the property's type; a
+     * cross-model target's properties are its owner's, checked at generation when that model is read.
+     */
+    private static void validateNotExistsWhereTerm(EntityIntent target, ResolvePathSupport.Walker walker, String term, String subject,
+            List<String> issues) {
+        CheckSupport.TargetTerm parsed = CheckSupport.targetTerm(term);
+        if (parsed == null) {
+            issues.add(subject + " where [" + term + "] is not `<property of the target> <op> <value or path on this record>` (op one of"
+                    + " == != >= <= > <) nor `<property> in [<value>, ...]`");
+            return;
+        }
+        boolean ordering = !"==".equals(parsed.op()) && !"!=".equals(parsed.op()) && !CheckSupport.IN.equals(parsed.op());
+        FieldIntent field = target == null ? null : CheckSupport.field(target, parsed.property());
+        if (target != null && field == null && CheckSupport.toOne(target, parsed.property()) == null) {
+            issues.add(subject + " where [" + term + "] names [" + parsed.property() + "], which is not a field or to-one relation of ["
+                    + target.getName() + "]");
+            return;
+        }
+        String family = field == null ? null : CheckSupport.compareFamily(CheckSupport.guardType(field.getType()));
+        if (target != null && ordering && family == null) {
+            issues.add(subject + " where [" + term + "] orders [" + parsed.property()
+                    + "], which is not a date, a timestamp or a number - compare it with == or !=");
+            return;
+        }
+        for (String operand : parsed.operands()) {
+            if (CheckSupport.isLiteral(operand)) {
+                validateNotExistsLiteral(target != null, field, parsed, operand, ordering, family, term, subject, issues);
+                continue;
+            }
+            if (CheckSupport.IN.equals(parsed.op())) {
+                issues.add(subject + " where [" + term + "] lists [" + operand + "], which is not a value - an `in` list holds numbers,"
+                        + " quoted strings or booleans");
+                continue;
+            }
+            ResolvePathSupport.Path path = walker.resolve(operand);
+            if (!path.resolved()) {
+                issues.add(subject + " where [" + term + "] " + path.failure()
+                        + (target == null ? " (a status of another model is named by its numeric seed id)" : ""));
+                continue;
+            }
+            if (field == null || path.terminalType() == null || ResolvePathSupport.RELATION_TERMINAL.equals(path.terminalType())) {
+                continue;
+            }
+            String valueType = CheckSupport.guardType(path.terminalType());
+            boolean comparable = ordering ? family.equals(CheckSupport.compareFamily(valueType))
+                    : CheckSupport.guardType(field.getType())
+                                  .equals(valueType);
+            if (!comparable) {
+                issues.add(subject + " where [" + term + "] compares a [" + CheckSupport.guardType(field.getType()) + "] with [" + operand
+                        + "], a [" + valueType + "] - both sides must be the same kind of value, or no row ever matches");
+            }
+        }
+    }
+
+    /**
+     * A literal operand of a {@code notExists} {@code where:} term, read against the target property.
+     */
+    private static void validateNotExistsLiteral(boolean localTarget, FieldIntent field, CheckSupport.TargetTerm parsed, String operand,
+            boolean ordering, String family, String term, String subject, List<String> issues) {
+        if ("null".equals(operand)) {
+            if (!"==".equals(parsed.op()) && !"!=".equals(parsed.op())) {
+                issues.add(subject + " where [" + term + "] uses null with [" + parsed.op() + "] - only == null and != null test for"
+                        + " an empty value");
+            }
+            return;
+        }
+        if (ordering) {
+            if (field != null && !"number".equals(family)) {
+                issues.add(subject + " where [" + term + "] orders a [" + CheckSupport.guardType(field.getType())
+                        + "] against a literal - compare it with a path on this record (date >= fromDate)");
+            } else if (!operand.matches("-?\\d+(\\.\\d+)?")) {
+                issues.add(subject + " where [" + term + "] orders against [" + operand + "], which is not a number");
+            }
+            return;
+        }
+        if (field != null && CheckSupport.javaLiteral(CheckSupport.guardType(field.getType()), operand) == null) {
+            issues.add(subject + " where [" + term + "] compares a [" + CheckSupport.guardType(field.getType()) + "] with [" + operand
+                    + "], which is not a value of that type");
+        } else if (localTarget && field == null && !operand.matches("-?\\d+")) {
+            // A to-one is compared by its key - a status by its seed id, resolved from its name when the
+            // nomenclature is this model's.
+            issues.add(subject + " where [" + term + "] compares the relation [" + parsed.property() + "] with [" + operand
+                    + "] - a relation is compared by its numeric key");
         }
     }
 
@@ -11412,7 +11744,69 @@ public final class IntentParser {
             }
             validateFormRelationFields(form, bound, byName, issues);
             validateFormEditable(form, bound, taskFormTriggers, issues);
+            validateFormItems(form, bound, byName, taskFormTriggers, issues);
         }
+    }
+
+    /**
+     * A task form's {@code items:} lines table (issue #7907): the rows of a composition child of the
+     * form's {@code forEntity}, listed by the record the task is about. The table is loaded from the
+     * child's controller, which the process trigger hands the form as a locator, so - as for an
+     * {@code editable} relation - the form must be a task form of processes triggered on its
+     * {@code forEntity}. The columns are the child's own fields.
+     */
+    private static void validateFormItems(FormIntent form, EntityIntent bound, Map<String, EntityIntent> byName,
+            Map<String, Set<String>> taskFormTriggers, List<String> issues) {
+        FormItemsIntent items = form.getItems();
+        if (items == null) {
+            return;
+        }
+        String subject = "form [" + form.getName() + "] items";
+        if (bound == null) {
+            issues.add(subject + " needs the form's forEntity - the lines are the rows of one of its composition children");
+            return;
+        }
+        EntityIntent child = isBlank(items.getEntity()) ? null : byName.get(items.getEntity());
+        if (child == null) {
+            issues.add(subject + " entity [" + items.getEntity() + "] is not a declared entity");
+            return;
+        }
+        RelationIntent master = masterRelation(child);
+        if (master == null || child.isSetting() || !bound.getName()
+                                                         .equals(master.getTo())
+                || !"manyToOne".equals(master.getKind()) || !isBlank(master.getModel())) {
+            issues.add(subject + " entity [" + child.getName() + "] is not a composition child of [" + bound.getName()
+                    + "] - declare a manyToOne relation to it with composition: true");
+            return;
+        }
+        Set<String> triggers = taskFormTriggers.get(form.getName());
+        if (triggers == null || !triggers.equals(Set.of(bound.getName()))) {
+            issues.add(subject + " can only be shown on a TASK form whose forEntity [" + bound.getName()
+                    + "] is the trigger entity of every process that uses it - the lines are located through that trigger");
+        }
+        if (items.getFields()
+                 .isEmpty()) {
+            issues.add(subject + " lists no fields - name the columns of the lines table");
+        }
+        for (String field : items.getFields()) {
+            if (field == null || fieldByName(child, field) == null) {
+                issues.add(subject + " field [" + field + "] is not a field of [" + child.getName() + "] - a column is one of the"
+                        + " line's own fields");
+            }
+        }
+    }
+
+    /**
+     * The child's composition relation - the first to-one one, as
+     * {@link IntentEntities#compositionParents} reads it.
+     */
+    private static RelationIntent masterRelation(EntityIntent child) {
+        for (RelationIntent relation : child.getRelations()) {
+            if (relation.isComposition() && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+                return relation;
+            }
+        }
+        return null;
     }
 
     /**
@@ -12440,6 +12834,7 @@ public final class IntentParser {
                 validateMapTarget(crossModel || items.getTo() == null ? null : byName.get(items.getTo()), items.getMap(),
                         "generates [" + name + "]", "items map", issues);
                 validateGeneratesItemsWhere(items, "generates [" + name + "]", itemSource, issues);
+                validateGeneratesItemsBackLink(g, itemSource, crossModel, issues);
             }
             if (g.hasUnique()) {
                 // The natural key is a SCHEDULE's idempotency guard (issue #7070). An on-demand
@@ -12504,6 +12899,28 @@ public final class IntentParser {
             }
             validateScheduleMoment(condition, itemSource, subject + " items", issues);
             validateWhereStatusValue(condition, itemSource, subject + " items", issues);
+        }
+    }
+
+    /**
+     * The mark a create-from writes on each source row it consumed (issue #7956): a to-one of the item
+     * source to the TARGET, so the row names the document it became a line of and a later run can tell
+     * it is spent. A cross-model source's items live in the owner model and are checked at generation.
+     */
+    private static void validateGeneratesItemsBackLink(GeneratesIntent g, EntityIntent itemSource, boolean crossModel,
+            List<String> issues) {
+        String backLink = g.getItems()
+                           .getBackLink();
+        if (!g.getItems()
+              .hasBackLink() || itemSource == null) {
+            return;
+        }
+        RelationIntent relation = toOneRelationByName(itemSource, backLink);
+        if (relation == null || relation.isComposition() || !java.util.Objects.equals(relation.getTo(), g.getTo())
+                || !java.util.Objects.equals(relation.isCrossModel() ? relation.getModel() : null, crossModel ? g.getUses() : null)) {
+            issues.add("generates [" + g.getName() + "] items backLink [" + backLink + "] must be a manyToOne/oneToOne of ["
+                    + itemSource.getName() + "] to the target [" + g.getTo() + "]" + (crossModel ? " (model [" + g.getUses() + "])" : "")
+                    + " - each consumed row is marked with the document it became a line of");
         }
     }
 
@@ -12575,9 +12992,10 @@ public final class IntentParser {
      * over a retired target (issue #6814) and frees the source's slot, and if nothing can refill it the
      * author is left with a model that reads as automatic and is not. So the hook must exist to be
      * inverted, the inverse must be a different status, the map must copy the source's key onto the
-     * back-reference the reopen reads the source through, the target must be one whose retirement is
-     * recognisable HERE (a local target whose nomenclature classifies a retiring {@code stage:}), and
-     * an appending create-from - which keeps no guard and no slot - is refused outright.
+     * back-reference the reopen reads the source through, a local target must be one whose nomenclature
+     * classifies a retiring {@code stage:} (a cross-model target's classification is its owner's, read
+     * off the owner's {@code .model} at generation - #7954), and an appending create-from - which keeps
+     * no guard and no slot - is refused outright.
      *
      * <p>
      * The remaining check is the source's own state machine, and it lives with the other status writes
@@ -12628,9 +13046,9 @@ public final class IntentParser {
                     + " }`) - the reopen reaches the source it returns through that back-reference");
         }
         if (crossModel) {
-            issues.add(subject + " cannot reopen for a cross-model target (uses [" + g.getUses() + "]) - what RETIRES a [" + g.getTo()
-                    + "] is the `stage:` classification of its status nomenclature, seeded in the owner model and not resolvable here;"
-                    + " author the create-from in [" + g.getUses() + "], or keep a button (button: true) to reissue by hand");
+            // What retires a cross-model target is the `stage:` classification its owner seeds and
+            // publishes on the target's status property in its .model (#7954) - read, and refused when
+            // it classifies no retiring stage, by the generator.
             return;
         }
         EntityIntent target = g.getTo() == null ? null : byName.get(g.getTo());
@@ -13725,6 +14143,9 @@ public final class IntentParser {
                 if (t.getStamp() != null) {
                     validateTransitionStamp(subject, t, entity, issues);
                 }
+                if (t.hasPrompt()) {
+                    validateTransitionPrompt(subject, t, entity, issues);
+                }
             }
             if (t.getFrom() == null || t.getFrom()
                                         .isEmpty()) {
@@ -13758,6 +14179,43 @@ public final class IntentParser {
             // Optional outbound mail after the flip ("on Void, mail the counterparty"), about the
             // transitioned record itself.
             validateNotifyBlock(t.getNotify(), subject + " notify", entity == null ? null : entity.getName(), model, true, issues);
+        }
+    }
+
+    /**
+     * A transition's {@code prompt:} (#7909) names the record's OWN fields and to-one relations, once
+     * each - the generates prompt grammar. Not its status (the move writes it), nor a column the
+     * platform writes (its key, a document number, a status stamp), nor a {@code timestamp} the dialog
+     * cannot collect; and no {@code default:} - the record an input would default from is the one it
+     * writes.
+     */
+    private static void validateTransitionPrompt(String subject, TransitionIntent t, EntityIntent entity, List<String> issues) {
+        Set<String> seen = new HashSet<>();
+        for (PromptFieldIntent p : t.getPrompt()) {
+            String field = p.getField();
+            if (field == null || field.isBlank()) {
+                issues.add(subject + " prompt entry has no field");
+                continue;
+            }
+            String prefix = subject + " prompt field [" + field + "]";
+            if (!seen.add(field)) {
+                issues.add(subject + " prompt names [" + field + "] more than once");
+            }
+            if (p.hasDefault()) {
+                issues.add(prefix + " declares default: - a transition's input has no source to default from;"
+                        + " a date stamped with the move is the field's stampOn: { status }");
+            }
+            FieldIntent own = fieldByName(entity, field);
+            RelationIntent relation = toOneRelationByName(entity, field);
+            if (own == null && relation == null) {
+                issues.add(prefix + " is not a field or to-one relation of [" + entity.getName() + "]");
+            } else if (relation != null && relation.isEntityStatus()) {
+                issues.add(prefix + " is the status the transition writes - setStatus decides it");
+            } else if (own != null && (own.isPrimaryKey() || own.getNumber() != null || own.getStampOn() != null)) {
+                issues.add(prefix + " is written by the platform (its key, a document number or a status stamp), not asked for");
+            } else if (own != null && "timestamp".equals(own.getType())) {
+                issues.add(prefix + " has type timestamp, which the prompt dialog does not support yet");
+            }
         }
     }
 

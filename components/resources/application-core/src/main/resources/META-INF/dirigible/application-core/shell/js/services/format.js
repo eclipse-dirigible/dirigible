@@ -92,18 +92,21 @@
     return { groupSep: firstOf(p, [SPACE, NBSP, ',']), decimalSep: '.' };
   };
 
-  // Fraction digit count declared by a field pattern (its decimal separator is always '.', as emitted
-  // by the intent generator). No field pattern -> follow the instance Number pattern's own fraction.
+  // Fraction digits declared by a field pattern (its decimal separator is always '.', as emitted by the
+  // intent generator): a '0' is a digit always shown, a '#' one shown only when the value has it (#8878),
+  // so "##0.00####" is { min: 2, max: 6 }. No field pattern -> follow the instance Number pattern's own
+  // fraction.
+  const fractionDigits = (frac) => ({ min: (frac.match(/0/g) || []).length, max: frac.length });
   const fieldDecimals = (fieldPattern) => {
     if (fieldPattern) {
       const dot = String(fieldPattern).lastIndexOf('.');
-      return dot >= 0 ? String(fieldPattern).length - dot - 1 : 0;
+      return fractionDigits(dot >= 0 ? String(fieldPattern).slice(dot + 1) : '');
     }
     const gp = patterns().number;
     const ds = separators(gp).decimalSep;
     const i = gp.lastIndexOf(ds);
     const frac = i >= 0 ? gp.slice(i + 1) : '';
-    return /^[0#]+$/.test(frac) ? frac.length : 0;
+    return fractionDigits(/^[0#]+$/.test(frac) ? frac : '');
   };
 
   // Whether the field's integer part carries a grouping placeholder (so "0" / a plain integer pattern
@@ -243,7 +246,8 @@
 
     /**
      * Format a floating-point value for display. Decimals + whether-to-group come from the field
-     * pattern; the separators come from the instance Number pattern. Empty -> emptyText (default '—');
+     * pattern (a '0' decimal always shown, a '#' one only when the value has it); the separators come
+     * from the instance Number pattern. Empty -> emptyText (default '—');
      * a non-finite value passes through unchanged.
      */
     number(value, fieldPattern, emptyText) {
@@ -253,7 +257,12 @@
       if (!isFinite(n)) return value;
       const decimals = fieldDecimals(fieldPattern);
       const { groupSep, decimalSep } = separators(patterns().number);
-      const parts = n.toFixed(decimals).split('.');
+      const parts = n.toFixed(decimals.max).split('.');
+      if (parts.length > 1) {
+        // Drop the optional digits the value does not have: trailing zeros past the mandatory count.
+        parts[1] = parts[1].slice(0, decimals.min) + parts[1].slice(decimals.min).replace(/0+$/, '');
+        if (!parts[1]) parts.pop();
+      }
       if (groupSep && fieldGroups(fieldPattern)) {
         parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, groupSep);
       }

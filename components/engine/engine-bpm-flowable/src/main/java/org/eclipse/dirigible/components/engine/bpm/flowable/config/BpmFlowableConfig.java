@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.engine.bpm.flowable.config;
 
+import java.time.Duration;
 import java.util.List;
 import javax.sql.DataSource;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
@@ -24,6 +25,7 @@ import org.flowable.engine.ProcessEngineConfiguration;
 import org.flowable.common.engine.api.FlowableIllegalArgumentException;
 import org.flowable.common.engine.impl.history.HistoryLevel;
 import org.flowable.engine.impl.bpmn.parser.factory.DefaultListenerFactory;
+import org.flowable.engine.impl.cfg.ProcessEngineConfigurationImpl;
 import org.flowable.spring.SpringProcessEngineConfiguration;
 import org.flowable.spring.boot.actuate.endpoint.ProcessEngineEndpoint;
 import org.flowable.spring.boot.actuate.info.FlowableInfoContributor;
@@ -47,6 +49,9 @@ import org.springframework.transaction.PlatformTransactionManager;
 @EnableAutoConfiguration(exclude = {LiquibaseAutoConfiguration.class, TaskExecutionAutoConfiguration.class})
 public class BpmFlowableConfig {
     private static final Logger LOGGER = LoggerFactory.getLogger(BpmFlowableConfig.class);
+
+    /** The longest job lock time whose milliseconds still fit the int the engine computes them in. */
+    static final long MAX_LOCK_TIME_SECONDS = Integer.MAX_VALUE / 1000;
 
     /**
      * The data sources manager.
@@ -104,6 +109,7 @@ public class BpmFlowableConfig {
         config.setHistory(historyLevel().getKey());
 
         config.setAsyncExecutorActivate(true);
+        applyJobLockTimes(config);
         config.setApplicationContext(applicationContext);
 
         config.setProcessDiagramGenerator(new DirigibleProcessDiagramGenerator());
@@ -178,6 +184,73 @@ public class BpmFlowableConfig {
             LOGGER.info("Flowable history level is [{}]", level.getKey());
         }
         return level;
+    }
+
+    /**
+     * Sets the configured job lock times on the engine's async executor (#8871). The engine does not
+     * extend a lock while a step runs, so a step cut by a stop or a crash keeps its job and its process
+     * instance locked by the gone instance until the lock time has passed - that is how long the next
+     * instance waits before it continues the step. A due timer is locked for the timer lock time only
+     * while the executor hands it on to run as an async job, under the async job lock time; one picked
+     * up by an instance that stopped before handing it on waits the timer lock time. The defaults are
+     * Flowable's own (one hour): a lock time shorter than the longest step lets a second thread run the
+     * step while the first still does, so only an operator who knows the deployment's steps lowers it.
+     *
+     * @param config the engine configuration, before the engine is built
+     * @throws IllegalArgumentException when a configured value is not a positive whole number of
+     *         seconds
+     */
+    static void applyJobLockTimes(ProcessEngineConfigurationImpl config) {
+        Duration asyncJobLockTime = asyncJobLockTime();
+        Duration timerLockTime = timerLockTime();
+        config.getAsyncExecutorConfiguration()
+              .setAsyncJobLockTime(asyncJobLockTime);
+        config.getAsyncExecutorConfiguration()
+              .setTimerLockTime(timerLockTime);
+        LOGGER.info("Flowable job lock times: async jobs [{}s] ({}), timer jobs [{}s] ({})", asyncJobLockTime.toSeconds(),
+                DirigibleConfig.FLOWABLE_ASYNC_JOB_LOCK_TIME_SECONDS.getKey(), timerLockTime.toSeconds(),
+                DirigibleConfig.FLOWABLE_TIMER_JOB_LOCK_TIME_SECONDS.getKey());
+    }
+
+    /**
+     * How long the engine locks an async job and its process instance while the job runs.
+     *
+     * @return the validated lock time
+     * @throws IllegalArgumentException when the configured value is not a positive whole number of
+     *         seconds
+     */
+    static Duration asyncJobLockTime() {
+        return lockTime(DirigibleConfig.FLOWABLE_ASYNC_JOB_LOCK_TIME_SECONDS);
+    }
+
+    /**
+     * How long the engine locks a due timer job while it hands the job on to run as an async job; the
+     * run itself is locked for {@link #asyncJobLockTime()}.
+     *
+     * @return the validated lock time
+     * @throws IllegalArgumentException when the configured value is not a positive whole number of
+     *         seconds
+     */
+    static Duration timerLockTime() {
+        return lockTime(DirigibleConfig.FLOWABLE_TIMER_JOB_LOCK_TIME_SECONDS);
+    }
+
+    private static Duration lockTime(DirigibleConfig key) {
+        String configured = key.getStringValue();
+        long seconds;
+        try {
+            seconds = Long.parseLong(configured == null ? "" : configured.trim());
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException(key.getKey() + " is [" + configured + "] but must be a positive whole number of seconds",
+                    ex);
+        }
+        // Flowable computes the lock expiry from the lock time in int milliseconds, so a longer one
+        // would wrap around to a lock that has already expired.
+        if (seconds <= 0 || seconds > MAX_LOCK_TIME_SECONDS) {
+            throw new IllegalArgumentException(key.getKey() + " is [" + configured
+                    + "] but must be a positive whole number of seconds, at most " + MAX_LOCK_TIME_SECONDS);
+        }
+        return Duration.ofSeconds(seconds);
     }
 
     private void setDatabaseConfig(SpringProcessEngineConfiguration config, DataSource datasource,

@@ -40,10 +40,11 @@ import org.springframework.stereotype.Component;
  * {@code access.extraRolesReadOnly}), so a gate never names a role the instance does not know.</li>
  * <li>{@code <intent>.access} - the URL-shaped constraints over the paths the generated stack
  * publishes (each entity's controller subtree and generated pages, each report's controller and
- * page), derived from the {@code can: [Resource:action, ...]} tokens. <b>Opt-in</b> through the
- * project's {@code .settings} ({@code "access": {"generate": true}}) rather than a DSL key: the
- * paths belong to the templates the settings' recipes name, so whether to gate them is a decision
- * about this deployment, not a property of the domain.</li>
+ * page), derived from the {@code can: [Resource:action, ...]} tokens - the resource's read gate as
+ * the EDM and the report carry it, convention roles included where an {@code additive} entry keeps
+ * them. <b>Opt-in</b> through the project's {@code .settings} ({@code "access": {"generate":
+ * true}}) rather than a DSL key: the paths belong to the templates the settings' recipes name, so
+ * whether to gate them is a decision about this deployment, not a property of the domain.</li>
  * </ul>
  *
  * <p>
@@ -173,14 +174,14 @@ public class PermissionIntentGenerator implements IntentTargetGenerator {
             }
             // Same rule the EDM gates follow: a composition child with no grants of its own is gated
             // by the master it is managed under, so a document's items are reachable to exactly the
-            // roles the document is.
-            String gateName = gates.covers(name) ? name : IntentEntities.compositionPerspective(name, compositionParents);
-            Set<String> readRoles = gates.read()
-                                         .get(gateName);
-            if (readRoles == null) {
+            // roles the document is. The roles are the EDM's read gate itself, so an entity an additive
+            // entry names is constrained to its convention roles AND the added one (#8852).
+            String rolePerspective = IntentEntities.compositionPerspective(name, compositionParents);
+            if (!gates.reaches(rolePerspective, name)) {
                 continue;
             }
-            List<String> roles = gates.appendRead(gateName, readRoles);
+            List<String> roles = List.of(gates.readGate(project, rolePerspective, name)
+                                              .split(","));
             String perspective = IntentEntities.resolvePerspective(name, compositionParents, model);
             constraints.add(constraint("/services/java/" + project + "/gen/" + module + "/api/" + IntentNaming.javaIdentifier(perspective)
                     + "/" + name + "Controller/**", roles));
@@ -191,12 +192,11 @@ public class PermissionIntentGenerator implements IntentTargetGenerator {
         }
         for (ReportIntent report : model.getReports()) {
             String name = report.getName();
-            if (name == null || !gates.read()
-                                      .containsKey(name)) {
+            if (name == null || gates.grantedRead(name) == null) {
                 continue;
             }
-            List<String> roles = gates.appendRead(name, gates.read()
-                                                             .get(name));
+            List<String> roles = List.of(gates.readGate(name, project + ".Report." + name + "ReadOnly")
+                                              .split(","));
             constraints.add(constraint(IntentNaming.reportControllerUrl(project, name) + "/**", roles));
             constraints.add(constraint(IntentNaming.reportPageFolderUrl(project, name) + "/**", roles));
         }

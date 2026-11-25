@@ -1,0 +1,71 @@
+package gen.events.${javaGenFolderName};
+
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+import org.eclipse.dirigible.sdk.messaging.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+import org.eclipse.dirigible.sdk.messaging.Producer;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+/**
+ * Reopening relay of period register ${name}: when a ${name} moves into a status that is not closed,
+ * announce it on the model-agnostic topic a posting of ANOTHER model listens to. Generated from the
+ * intent period: marker - do not edit; it is re-generated with the application.
+ *
+ * Why it exists (#8755): a record of another model may be locked by this register (intent
+ * `immutableInPeriod: { period: ${name}, model: ${javaGenFolderName} }`), and a posting into it leaves a
+ * document dated in a closed period unposted until the period reopens. Its sweep cannot bind this
+ * register's own topics - their project and perspective are this model's - nor read the typed
+ * ${name} payload, and that model cannot use this one back. So the reopening is re-announced here,
+ * keyed only by what the lock already names (PeriodRegisters.reopenedTopic), with the bounds as ISO
+ * dates.
+ *
+ * Every move into an open status is announced, as for the sweep of a posting of this model: whether
+ * the period WAS closed is not on the event, and a sweep that finds nothing to re-post costs one query.
+ */
+@Component("${javaGenFolderName}_${className}")
+public class ${className} implements MessageHandler {
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}");
+
+    @Override
+    public String destination() {
+        return "${projectName}-${perspective}-${name}${topicSuffix}";
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.TOPIC;
+    }
+
+    @Override
+    public void onMessage(String message) {
+        gen.${javaGenFolderName}.data.${javaPerspective}.${name}Entity period =
+                Json.parse(message, gen.${javaGenFolderName}.data.${javaPerspective}.${name}Entity.class);
+        if (period == null || period.${keyField} == null || period.${statusProperty} == null || period.${startProperty} == null
+                || period.${endProperty} == null) {
+            return;
+        }
+        for (String closed : "${closedValues}".split(",")) {
+            if (closed.equals(String.valueOf(period.${statusProperty}))) {
+                return;
+            }
+        }
+        java.util.Map<String, Object> reopened = new java.util.LinkedHashMap<>();
+        reopened.put("model", "${javaGenFolderName}");
+        reopened.put("register", "${name}");
+        reopened.put("id", String.valueOf(period.${keyField}));
+        reopened.put("start", String.valueOf(period.${startProperty}));
+        reopened.put("end", String.valueOf(period.${endProperty}));
+        // Durable: a lost announcement would leave the other models' documents unposted for good, which
+        // is the very gap this relay closes.
+        Producer.sendToTopicDurable(org.eclipse.dirigible.sdk.db.PeriodRegisters.reopenedTopic("${javaGenFolderName}", "${name}"),
+                Json.stringify(reopened));
+    }
+
+    @Override
+    public void onError(String error) {
+        LOG.error("Period register ${name}: the reopening relay on [{}] failed - [{}]", destination(), error);
+    }
+}

@@ -54,6 +54,11 @@ import java.util.List;
  * off the record (a billable expense line needs the employee's assignment to the project). Same
  * routing as {@code requiredWhen}: no gate = every user write, a {@link #status} gate = the
  * repository at that transition; {@link #when} narrows it, and a null match value skips it.</li>
+ * <li>{@code notExists}: the inverse - the move into the {@link #status} gate is refused WHILE a
+ * row of {@link #entity} matches {@link #match} and every {@link #where} term (a month is not
+ * closed while a draft entry is dated inside it, a deal is not marked lost while one of its
+ * quotations is accepted). Always gated; {@link #model} may also name a model this one does not
+ * {@code uses:}, whose rows are then counted by name at runtime.</li>
  * </ul>
  */
 public class CheckIntent {
@@ -120,6 +125,13 @@ public class CheckIntent {
      * record's own field or to-one, or a one-hop {@code Relation.field}. All pairs must match one row.
      */
     private java.util.Map<String, String> match;
+    /**
+     * {@code notExists}: the conditions on the TARGET's rows besides {@link #match} - a
+     * {@code <target property> <op> <operand>} term, or a list of them (an implicit AND), the operator
+     * one of {@code == != >= <= > <} or {@code in [..]}, the operand a literal or a path on this record
+     * ({@code date >= fromDate}).
+     */
+    private Object where;
     /** {@code itemsMin}: the minimum number of items. */
     private Integer count;
     /**
@@ -445,6 +457,14 @@ public class CheckIntent {
 
     public void setMatch(java.util.Map<String, String> match) {
         this.match = match;
+    }
+
+    public Object getWhere() {
+        return where;
+    }
+
+    public void setWhere(Object where) {
+        this.where = where;
     }
 
     public Integer getCount() {

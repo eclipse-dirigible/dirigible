@@ -24,6 +24,8 @@
        fk       optional: the attachment's foreign-key property to the record (with `files`)
        mode     `review` opens on the record named by `id` instead of the upload step
        id       the record to review
+       under    optional, upload step: the captured line's foreign-key property to its master (#8626) - the
+                record named by `id` is that master, and the upload names it as `?<under>=<id>`
 
      `capture` and `files` are validated as same-origin /services/java/ paths before anything is sent, so
      the page cannot be used to POST a user's file anywhere else.
@@ -311,6 +313,7 @@
           captureBase: '',
           filesBase: '',
           fk: '',
+          underQuery: '',            // `?<fk>=<id>` naming the master a line is captured under (#8626)
           entityName: 'record',
           camera: false,
           chosen: null,              // the File picked for upload
@@ -333,15 +336,17 @@
             const files = params.get('files');
             const fk = params.get('fk');
             const id = params.get('id');
+            const under = params.get('under');
             this.reviewMode = params.get('mode') === 'review';
             const entity = (params.get('entity') || '').trim();
             if (entity) this.entityName = entity.substring(0, 100);
             if (!safePath(capture) || (files !== null && !safePath(files)) || (fk !== null && !SAFE_NAME.test(fk))
-                || (this.reviewMode && !SAFE_ID.test(id || ''))) {
+                || ((this.reviewMode || under !== null) && !SAFE_ID.test(id || '')) || (under !== null && !SAFE_NAME.test(under))) {
               this.step = 'invalid';
               return;
             }
             this.captureBase = capture;
+            if (under !== null && !this.reviewMode) this.underQuery = '?' + enc(under) + '=' + enc(id);
             if (files && fk) { this.filesBase = files; this.fk = fk; }
             try { this.camera = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); } catch (e) { this.camera = false; }
             if (this.reviewMode) {
@@ -410,7 +415,7 @@
               form.append('file', this.chosen, this.chosen.name);
               let response;
               try {
-                response = await fetch(this.captureBase + '/upload', {
+                response = await fetch(this.captureBase + '/upload' + this.underQuery, {
                   method: 'POST',
                   body: form,
                   credentials: 'same-origin',

@@ -110,6 +110,20 @@ class CrossModelScheduleNotifyIntentTest {
     }
 
     @Test
+    void aShareLinkToAnotherApplicationsRecordIsRefused() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(schedule("""
+                      to: email
+                      subject: "Your account statement"
+                      body: "Read it here: {shareUrl}"
+                      attach: { report: CustomerStatement, bind: { customer: name } }\
+                """)));
+
+        assertTrue(ex.getMessage()
+                     .contains("uses {shareUrl} on the cross-model source [Customer]"),
+                ex.getMessage());
+    }
+
+    @Test
     void attachingTheSourcesOwnPrintIsRefused() {
         IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(schedule("""
                       to: email
