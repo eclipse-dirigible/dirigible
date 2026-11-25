@@ -20,9 +20,9 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The dashboard's column spans come from {@code dashboardLayout.js}, two pure functions: the number
- * tiles fill rows of up to four, and the content tiles are packed first-fit into rows of twelve
- * columns (wide 8, narrow 4). The shipped file is evaluated in a polyglot context, the way
- * {@link HarmoniaDateFormatIT} does for {@code format.js}.
+ * tiles fill rows of up to four, and the content tiles (wide 8, narrow 4) are packed into full rows
+ * of twelve columns, a chart beside a chart and a table beside a table. The shipped file is
+ * evaluated in a polyglot context, the way {@link HarmoniaDateFormatIT} does for {@code format.js}.
  */
 class HarmoniaDashboardLayoutIT {
 
@@ -43,23 +43,39 @@ class HarmoniaDashboardLayoutIT {
     }
 
     @Test
-    void contentTilesArePackedFirstFitInRowsOfTwelve() {
-        assertEquals("[12]", pack("N"));
-        assertEquals("[6,6]", pack("NN"));
+    void everyRowIsFullAndAWideTileTakesANarrowPartner() {
         assertEquals("[12]", pack("W"));
-        assertEquals("[8,4,12]", pack("WNN"), "the second narrow tile is alone in its row and stretched");
-        assertEquals("[8,4,12]", pack("WWN"), "a narrow tile joins the first wide one; the second wide one is alone");
-        assertEquals("[8,4,4,8]", pack("WNNW"));
-        assertEquals("[8,4,4,4,4]", pack("WNNNN"));
-        assertEquals("[4,4,4,12]", pack("NNNW"));
-        assertEquals("[8,4,8,4]", pack("WWNN"), "each wide tile takes the next narrow one beside it");
-        assertEquals("[6,6,12]", pack("NNW"), "two narrow tiles that cannot take the wide one are stretched");
+        assertEquals("[8,4]", pack("WN"));
+        assertEquals("[4,8]", pack("NW"), "a row keeps the given order of its tiles");
+        assertEquals("[8,4,12]", pack("WWN"), "a wide tile without a narrow partner fills its row");
+        assertEquals("[4,8,4,4,4]", pack("NNNNW"));
     }
 
     @Test
-    void aLaterTileThatFitsTakesTheGapBeforeAnEarlierOneThatDoesNot() {
-        assertEquals("[8,4,12]", pack("WWN"));
-        assertEquals("W:0 N:2 W:1", order("WWN"), "the narrow tile is rendered second, beside the first wide one");
+    void narrowTilesShareRowsAndAreNeverLeftAloneBesideOthers() {
+        assertEquals("[12]", pack("N"), "a lone narrow tile only when it is the only content tile");
+        assertEquals("[6,6]", pack("NN"));
+        assertEquals("[4,4,4]", pack("NNN"));
+        assertEquals("[6,6,6,6]", pack("NNNN"), "three plus one becomes two plus two");
+        assertEquals("[4,4,4,6,6]", pack("NNNNN"));
+        assertEquals("[12,6,6]", pack("WNN"), "the wide tile fills a row so the two narrow ones can share one");
+    }
+
+    @Test
+    void aChartPairsWithAChartAndATableWithATable() {
+        assertEquals("[8,4]", pack("LP"), "a line chart and a pie chart share a row");
+        assertEquals("L:0 P:2 W:1 N:3", order("LWPN"), "the pie joins the line chart, the narrow table the wide table");
+        assertEquals("W:0 N:2 L:1", order("WLN"), "a narrow table goes to the wide table, not the line chart");
+        assertEquals("L:0 P:2 W:1", order("LWP"));
+        assertEquals("[8,4]", pack("WP"), "across kinds when nothing of the same kind is left");
+    }
+
+    @Test
+    void aSingleNarrowTileLeftOverTakesTheNarrowTableOfAPairNotThePieChart() {
+        // The dashboard of a list (N), a wide table (W), a narrow table (N), a bar chart (L), a doughnut
+        // (P).
+        assertEquals("N:0 N:2 W:1 L:3 P:4", order("NWNLP"));
+        assertEquals("[6,6,12,8,4]", pack("NWNLP"));
     }
 
     @Test
@@ -95,7 +111,10 @@ class HarmoniaDashboardLayoutIT {
                     .replace("\"", "");
     }
 
-    /** Packs tiles written as W / N and returns the column numbers in packed order. */
+    /**
+     * Packs tiles written as W (wide table), N (narrow table), L (wide chart, a line) and P (narrow
+     * chart, a pie) and returns the column numbers in packed order.
+     */
     private static String pack(String shapes) {
         try (Context context = load()) {
             return cols(context.eval("js", tiles(shapes) + "JSON.stringify(DashboardLayout.pack(t).map(p => p.span))")
@@ -120,7 +139,9 @@ class HarmoniaDashboardLayoutIT {
                   .append(':')
                   .append(i)
                   .append("', weight: ")
-                  .append(shape == 'W' ? "DashboardLayout.WIDE" : "DashboardLayout.NARROW")
+                  .append(shape == 'W' || shape == 'L' ? "DashboardLayout.WIDE" : "DashboardLayout.NARROW")
+                  .append(", chart: ")
+                  .append(shape == 'L' || shape == 'P')
                   .append("},");
         }
         return script.append("];")

@@ -11,7 +11,8 @@
      tiles first, in rows of up to four that fill the row evenly, then ONE grid of content tiles
      (top-N lists, custom pages, report previews) where each tile is wide (8) or narrow (4) by what
      it shows - a many-column table or a line chart wide, a donut or a short table narrow - and the
-     tiles are packed so a row has no hole (services/dashboardLayout.js, sized in dashboardPage). The
+     tiles are packed into full rows, a chart beside a chart (a line chart with its pie) and a table
+     beside a table (services/dashboardLayout.js, sized in dashboardPage). The
      page carries no title of its own; the shell's breadcrumb names it. Reached via the Home icon
      ('/' and /dashboard). -->
 <div x-data="dashboardPage" class="vbox gap-4 p-4">

@@ -18,7 +18,8 @@
  *
  *   kpiSpans(count)  - the number tiles: rows of at most four, filled evenly, so a row has no hole.
  *   pack(tiles)      - the content tiles (list, page, report preview): each weighs WIDE (8 columns) or
- *                      NARROW (4), and is placed first-fit in order into rows of 12.
+ *                      NARROW (4); a wide tile takes a narrow partner of its kind (chart or table),
+ *                      the other narrow tiles share rows, and no row is left short.
  */
 (function () {
   'use strict';
@@ -61,41 +62,78 @@
   }
 
   /**
-   * Places content tiles into rows of 12 columns, first fit: the next tile in order starts a row and
-   * the row then takes the first later tile that still fits, until none does. A row that closes with
-   * free space is stretched: a lone tile takes the whole row, two NARROW tiles take half each. (8 + 4,
-   * 4 + 8 and 4 + 4 + 4 are the only other row shapes, and they are already full.) A weight other than
-   * NARROW counts as WIDE, so every tile fits an empty row and the packing always ends.
+   * Places content tiles into full rows of 12 columns:
    *
-   * @param {{weight: number}[]} tiles each with `weight` WIDE (8) or NARROW (4); anything else is WIDE
-   * @returns {{tile: object, span: string}[]} the tiles in packed (render) order with their span class
+   * 1. each WIDE tile takes a NARROW one beside it (8 + 4) - a chart beside a chart and a table beside
+   *    a table first (a line chart with its pie chart), then across kinds;
+   * 2. the NARROW tiles left over share rows of three (4 + 4 + 4);
+   * 3. a short last row is never stretched from one narrow tile: two narrow tiles split a row (6 + 6),
+   *    and a single one left over takes a partner - from the last row of three (making 6 + 6 twice) or
+   *    from a wide tile's pair (a table's before a chart's), the wide tile then filling a row alone.
+   *    A wide tile with no narrow partner fills a row alone (12).
+   *
+   * A wide tile grows by half when it fills a row alone and uses the width; a narrow one would triple
+   * and a pie chart or a two-column table would only gain margins. Rows keep the order of their first
+   * tile, and the tiles in a row keep their given order. A weight other than NARROW counts as WIDE.
+   *
+   * @param {{weight: number, chart?: boolean}[]} tiles `weight` WIDE (8) or NARROW (4), anything else
+   *        is WIDE; `chart` marks a chart (pairing prefers the same kind)
+   * @returns {{tile: object, span: string}[]} the tiles in render order with their span class
    */
   function pack(tiles) {
-    const queue = tiles.slice();
-    const packed = [];
-    while (queue.length) {
-      const row = [];
-      let used = 0;
-      for (;;) {
-        const at = queue.findIndex(t => used + weightOf(t) <= ROW);
-        if (at < 0) break;
-        const tile = queue.splice(at, 1)[0];
-        row.push(tile);
-        used += weightOf(tile);
-      }
-      for (const tile of row) packed.push({ tile, span: SPAN[spanOf(row, tile)] });
+    const entries = tiles.map((tile, index) => ({ tile, index }));
+    const wides = entries.filter(e => weightOf(e.tile) === WIDE);
+    let narrows = entries.filter(e => weightOf(e.tile) === NARROW);
+
+    const pairs = [];
+    const lone = [];
+    const pairWide = (wide, accept) => {
+      const at = narrows.findIndex(n => accept(n, wide));
+      if (at < 0) return false;
+      pairs.push([wide, narrows.splice(at, 1)[0]]);
+      return true;
+    };
+    const unpaired = wides.filter(w => !pairWide(w, (n, wide) => isChart(n) === isChart(wide)));
+    for (const wide of unpaired) {
+      if (!pairWide(wide, () => true)) lone.push(wide);
     }
-    return packed;
+
+    const rows = pairs.map(pair => pair.map(e => ({ entry: e, span: weightOf(e.tile) })));
+    for (const wide of lone) rows.push([{ entry: wide, span: ROW }]);
+
+    const narrowRows = [];
+    for (let i = 0; i < narrows.length; i += 3) narrowRows.push(narrows.slice(i, i + 3));
+    const last = narrowRows[narrowRows.length - 1];
+    if (last && last.length === 1) {
+      if (narrowRows.length > 1) {
+        const four = narrowRows.splice(-2).flat();
+        narrowRows.push(four.slice(0, 2), four.slice(2));
+      } else {
+        const breakable = pairs.filter(([, narrow]) => !isChart(narrow)).pop() || pairs[pairs.length - 1];
+        if (breakable) {
+          rows.splice(pairs.indexOf(breakable), 1, [{ entry: breakable[0], span: ROW }]);
+          narrowRows[0] = [breakable[1], last[0]];
+        }
+      }
+    }
+    for (const row of narrowRows) {
+      const span = row.length === 3 ? NARROW : ROW / row.length;
+      rows.push(row.map(e => ({ entry: e, span })));
+    }
+
+    return rows
+      .map(row => row.sort((a, b) => a.entry.index - b.entry.index))
+      .sort((a, b) => a[0].entry.index - b[0].entry.index)
+      .flat()
+      .map(cell => ({ tile: cell.entry.tile, span: SPAN[cell.span] }));
   }
 
   function weightOf(tile) {
     return tile.weight === NARROW ? NARROW : WIDE;
   }
 
-  function spanOf(row, tile) {
-    if (row.length === 1) return ROW;
-    if (row.length === 2 && row.every(t => weightOf(t) === NARROW)) return ROW / 2;
-    return weightOf(tile);
+  function isChart(entry) {
+    return entry.tile.chart === true;
   }
 
   window.DashboardLayout = { WIDE, NARROW, kpiSpans, pack };
