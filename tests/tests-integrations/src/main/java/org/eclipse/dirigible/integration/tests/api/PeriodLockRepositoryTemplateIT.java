@@ -51,10 +51,9 @@ class PeriodLockRepositoryTemplateIT {
         assertTrue(rendered.contains(".le(\"StartDate\", date)") && rendered.contains(".ge(\"EndDate\", date)"),
                 "the covering period: " + rendered);
         assertTrue(rendered.contains("for (String closed : \"2,3\".split(\",\")) {"), "the closed statuses: " + rendered);
-        assertTrue(
-                rendered.contains("throw new ValidationException(") && rendered.contains(
-                        "\"The AccountingPeriod covering this date is closed - book the correction in an open period\");"),
-                "refused with the controller's own sentence, as a ValidationException: " + rendered);
+        assertTrue(rendered.contains(
+                "throw org.eclipse.dirigible.sdk.db.RecordRefusals.periodClosed(null, new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label(\"AccountingPeriod\", null));"),
+                "refused with the controller's own sentence, from the catalog (#8775), as a ValidationException: " + rendered);
         assertTrue(rendered.contains("import org.eclipse.dirigible.sdk.db.ValidationException;"), rendered);
     }
 

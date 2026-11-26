@@ -60,10 +60,9 @@ class WorkflowStatusScopeControllerTemplateIT {
         for (String template : CONTROLLERS) {
             String rendered = render(template, context());
 
-            assertTrue(rendered.contains("WORKFLOW_STATUS_REFUSAL"), template + " must emit the refusal");
+            assertTrue(rendered.contains("FieldRefusals.workflowOwned("), template + " must emit the refusal");
             assertTrue(rendered.contains("requireWorkflowStatusOnCreate(entity);"), template + " must guard the create verb");
-            assertTrue(rendered.contains("throw new ResponseStatusException(HttpStatus.CONFLICT, WORKFLOW_STATUS_REFUSAL);"),
-                    template + " must refuse a differing value");
+            assertTrue(rendered.contains("throw workflowStatusRefusal();"), template + " must refuse a differing value");
             assertTrue(rendered.contains("entity.Status = stored.Status;"), template + " must preserve an omitted status");
             assertNoUnresolvedReferences(rendered);
         }

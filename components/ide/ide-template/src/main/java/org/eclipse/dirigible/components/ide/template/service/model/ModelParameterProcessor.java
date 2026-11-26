@@ -108,8 +108,9 @@ final class ModelParameterProcessor {
             resolveBanners(entities, parameters);
             resolveShare(entities, parameters);
             resolveCollectionColumns(entities, parameters);
-            resolveRollupGuards(entities);
+            resolveRollupGuards(entities, parameters);
             resolveAgreeGuards(entities, parameters);
+            resolveLeafOnlyTargets(entities, parameters);
             resolveTargetAgreementRules(entities);
         }
         markCollectionColumnRendering(entities);
@@ -165,6 +166,7 @@ final class ModelParameterProcessor {
         for (Map<String, Object> property : asMaps(entity.get("properties"))) {
             processProperty(property, entity, entities, parameters);
         }
+        resolveStatusLabel(entity);
         resolveDetailLayoutWithoutMaster(entity);
         resolveVisibleWhen(entity);
         resolveListProperties(entity);
@@ -520,6 +522,20 @@ final class ModelParameterProcessor {
     }
 
     /**
+     * A message of the model's catalog as the two arguments {@code CheckMessages} takes (#8775): its
+     * fully qualified catalog key and its default-language text.
+     *
+     * @param parameters the generation parameters (project name and model file path)
+     * @param messageKey the message's key under the catalog's {@code checks}
+     * @param message the default-language text
+     * @return the two arguments, joined
+     */
+    private static String messageArgsJava(Map<String, Object> parameters, String messageKey, String message) {
+        String catalogKey = ModelTranslations.catalogKey(parameters, ModelTranslations.CHECKS_CATALOG + "." + messageKey);
+        return "\"" + JavaLiterals.escape(catalogKey) + "\", \"" + JavaLiterals.escape(message) + "\"";
+    }
+
+    /**
      * The record's values a check message names (intent {@code {field}} / {@code {Relation.field}}
      * placeholders, issue #8665), as the name/value pairs appended to {@code messageArgsJava}: an own
      * value read off {@code entity} - the record every check site judges - and a value one hop away
@@ -606,6 +622,76 @@ final class ModelParameterProcessor {
     private static String labelArgsJava(String label, String catalog, String dataName) {
         return "\"" + JavaLiterals.escape(label) + "\", "
                 + (catalog == null || dataName == null ? "null" : "\"" + JavaLiterals.escape(catalog + ".t." + dataName) + "\"");
+    }
+
+    /**
+     * An entity of this model as a record refusal names it (#8775): a {@code GenerateRefusals.Label} of
+     * its default-language label and that label's catalog key.
+     */
+    private static String refusalLabelJava(Map<String, Object> entity, String catalog) {
+        return "new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label("
+                + labelArgsJava(ModelTranslations.entityLabel(entity), catalog, str(entity, "dataName")) + ")";
+    }
+
+    /**
+     * An entity this model does not own as a record refusal names it: its humanized name, which no
+     * catalog of this model translates.
+     */
+    private static String foreignRefusalLabelJava(String entityName) {
+        return "new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label(\""
+                + JavaLiterals.escape(NamingHelper.humanizeIdentifier(entityName)) + "\", null)";
+    }
+
+    /**
+     * Hands the entity's repository the status lookup its refusals name statuses by (#8775): the
+     * repository of its {@code function: EntityStatus} target and the target's label property, so a
+     * status reads as its row does for the request's language - translated when the status entity is
+     * multilingual - and not as a positional id. Every entity with a status gets the lookup
+     * ({@code hasStatusLabel}), since a transition or a create-from of the model calls it; one whose
+     * status target names no label property answers the id.
+     *
+     * @param entity the entity, its properties processed
+     */
+    private static void resolveStatusLabel(Map<String, Object> entity) {
+        for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+            if (!"DOCUMENT_STATUS".equals(str(property, "widgetType"))) {
+                continue;
+            }
+            entity.put("hasStatusLabel", Boolean.TRUE);
+            String repositoryClass = str(property, "targetRepositoryClass");
+            String labelProperty = str(property, "widgetDropDownValue");
+            if (repositoryClass != null && labelProperty != null && !labelProperty.isEmpty()) {
+                entity.put("statusLabelRepositoryClass", repositoryClass);
+                entity.put("statusLabelEntityClass",
+                        repositoryClass.substring(0, repositoryClass.length() - "Repository".length()) + "Entity");
+                entity.put("statusLabelProperty", labelProperty);
+            }
+            return;
+        }
+    }
+
+    /**
+     * Hands each {@code leafOnly} reference the label of the entity it references (#8775), for the
+     * refusal of a non-leaf: {@code leafOnlyTargetLabelArgsJava}, the label and its catalog key - the
+     * humanized name alone for a target of another model.
+     *
+     * @param entities every entity in the model
+     * @param parameters the generation parameters
+     */
+    private static void resolveLeafOnlyTargets(List<Map<String, Object>> entities, Map<String, Object> parameters) {
+        String catalog = ModelTranslations.catalog(parameters);
+        for (Map<String, Object> entity : entities) {
+            for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+                if (!truthy(property, "leafOnlyRepositoryClass")) {
+                    continue;
+                }
+                String targetName = str(property, "relationshipEntityName");
+                Map<String, Object> target = findEntity(entities, targetName);
+                property.put("leafOnlyTargetLabelArgsJava",
+                        target == null ? "\"" + JavaLiterals.escape(NamingHelper.humanizeIdentifier(targetName)) + "\", null"
+                                : labelArgsJava(ModelTranslations.entityLabel(target), catalog, str(target, "dataName")));
+            }
+        }
     }
 
     /**
@@ -723,6 +809,8 @@ final class ModelParameterProcessor {
                 catalog == null || dataName == null ? "null" : "\"" + JavaLiterals.escape(catalog + ".t." + dataName) + "\"");
         if (str(entity, "name") != null) {
             entity.put("entityLabelJava", "\"" + JavaLiterals.escape(ModelTranslations.entityLabel(entity)) + "\"");
+            // The entity as a record refusal names it (#8775): its label and the label's catalog key.
+            entity.put("entityRefusalLabelJava", refusalLabelJava(entity, catalog));
         }
         Set<String> propertyNames = new HashSet<>();
         for (Map<String, Object> property : asMaps(entity.get("properties"))) {
@@ -1627,7 +1715,9 @@ final class ModelParameterProcessor {
     /**
      * Renders what a capacity guard needs beyond its coordinates (issue #7542): the row filter, as the
      * {@code Criteria} chain the re-sum appends and the Java test the row being written has to pass,
-     * and the authored refusal message.
+     * and the refusal - the authored message as a catalog entry whose figures are ordinary
+     * placeholders, or, with no message, the shared {@code capacityExceeded} naming the record holding
+     * the capacity (#8775).
      *
      * <p>
      * The filter is applied TWICE, and that is the whole point of rendering both halves from the one
@@ -1643,8 +1733,10 @@ final class ModelParameterProcessor {
      * authored and is never true.
      *
      * @param entities the entities
+     * @param parameters the generation parameters
      */
-    private static void resolveRollupGuards(List<Map<String, Object>> entities) {
+    private static void resolveRollupGuards(List<Map<String, Object>> entities, Map<String, Object> parameters) {
+        String catalog = ModelTranslations.catalog(parameters);
         for (Map<String, Object> entity : entities) {
             for (Map<String, Object> guard : asMaps(entity.get("rollupGuards"))) {
                 List<Map<String, Object>> filter = asMaps(guard.get("filter"));
@@ -1652,10 +1744,14 @@ final class ModelParameterProcessor {
                     guard.put("filterChain", JavaLiterals.criteriaChain(filter));
                     guard.put("incomingMatch", incomingRowMatch(entity, filter));
                 }
-                String message = str(guard, "message");
-                if (message != null && !message.isEmpty()) {
-                    guard.put("messageExpression", guardMessageExpression(message, guard));
+                String messageKey = ModelTranslations.rollupGuardMessageKey(entity, guard);
+                if (messageKey != null) {
+                    guard.put("messageArgsJava", messageArgsJava(parameters, messageKey, str(guard, "message")));
                 }
+                Map<String, Object> parent = findEntity(entities, str(guard, "parentEntity"));
+                guard.put("parentLabelJava",
+                        parent == null || truthy(guard, "parentGenFolder") ? foreignRefusalLabelJava(str(guard, "parentEntity"))
+                                : refusalLabelJava(parent, catalog));
                 if (truthy(guard, "guardStatusProperty")) {
                     // The targeted write path has to run the gated guards too - a workflow setter is how
                     // a document reaches the gate status - and Velocity cannot ask a list whether any of
@@ -1707,63 +1803,8 @@ final class ModelParameterProcessor {
         return match.toString();
     }
 
-    /**
-     * The authored refusal message as a Java expression, with the four figures the guard has in hand
-     * spliced in where the author placed them.
-     *
-     * @param message the authored message
-     * @param guard the guard
-     * @return the Java string expression
-     */
-    private static String guardMessageExpression(String message, Map<String, Object> guard) {
-        String capacity = "guardParent." + str(guard, "capacityField");
-        Map<String, String> figures = new LinkedHashMap<>();
-        figures.put("{capacity}", capacity);
-        figures.put("{sum}", "guardConsumed");
-        figures.put("{requested}", "guardIncoming");
-        // An integral capacity (#7944) is converted before the decimal arithmetic, as the guard itself
-        // does.
-        String capacityDecimal = truthy(guard, "capacityFieldType") ? "java.math.BigDecimal.valueOf(" + capacity + ")" : capacity;
-        figures.put("{remaining}", capacityDecimal + ".subtract(guardConsumed)");
-        StringBuilder expression = new StringBuilder();
-        StringBuilder literal = new StringBuilder();
-        int index = 0;
-        while (index < message.length()) {
-            String matched = null;
-            for (String token : figures.keySet()) {
-                if (message.startsWith(token, index)) {
-                    matched = token;
-                    break;
-                }
-            }
-            if (matched == null) {
-                literal.append(message.charAt(index));
-                index++;
-                continue;
-            }
-            appendLiteral(expression, literal);
-            expression.append(expression.length() == 0 ? "" : " + ")
-                      .append(figures.get(matched));
-            index += matched.length();
-        }
-        appendLiteral(expression, literal);
-        return expression.length() == 0 ? "\"\"" : expression.toString();
-    }
-
-    private static void appendLiteral(StringBuilder expression, StringBuilder literal) {
-        if (literal.length() == 0) {
-            return;
-        }
-        if (expression.length() > 0) {
-            expression.append(" + ");
-        }
-        expression.append('"')
-                  .append(JavaLiterals.escape(literal.toString()))
-                  .append('"');
-        literal.setLength(0);
-    }
-
     private static void resolvePeriodLock(List<Map<String, Object>> entities, Map<String, Object> parameters) {
+        String catalog = ModelTranslations.catalog(parameters);
         for (Map<String, Object> entity : entities) {
             String foreignModel = str(entity, "periodLockModel");
             if (foreignModel != null && !foreignModel.isEmpty()) {
@@ -1788,6 +1829,7 @@ final class ModelParameterProcessor {
             periodLock.put("endProperty", str(register, "periodEndProperty"));
             periodLock.put("statusProperty", str(register, "periodStatusProperty"));
             periodLock.put("closedValues", str(register, "periodClosedValues"));
+            periodLock.put("labelJava", refusalLabelJava(register, catalog));
             entity.put("periodLock", periodLock);
         }
     }
@@ -1814,6 +1856,7 @@ final class ModelParameterProcessor {
         periodLock.put("dateJavaClass", date == null ? "java.time.LocalDate" : str(date, "dataTypeJavaClass"));
         periodLock.put("entity", register);
         periodLock.put("foreignModel", NamingHelper.sanitizeJavaIdentifier(foreignModel));
+        periodLock.put("labelJava", foreignRefusalLabelJava(register));
         entity.put("periodLock", periodLock);
     }
 
@@ -1892,6 +1935,7 @@ final class ModelParameterProcessor {
         level.put("entity", master.get("name"));
         level.put("entityClass", masterPackage + str(master, "name") + "Entity");
         level.put("repositoryClass", masterPackage + str(master, "name") + "Repository");
+        level.put("labelJava", refusalLabelJava(master, ModelTranslations.catalog(parameters)));
         level.put("always", truthy(master, "immutableAlways"));
         level.put("statusProperty", str(master, "immutableStatusProperty"));
         level.put("statusValues", str(master, "immutableStatusValues"));
@@ -1992,7 +2036,8 @@ final class ModelParameterProcessor {
                 String referencingPerspective = NamingHelper.sanitizeJavaIdentifier(str(referencing, "perspectiveName"));
                 guard.put("repositoryClass", "gen." + str(parameters, "javaGenFolderName") + ".data." + referencingPerspective + "."
                         + str(referencing, "name") + "Repository");
-                resolveMessageLiteral(guard);
+                guard.put("messageArgsJava",
+                        messageArgsJava(parameters, ModelTranslations.agreeGuardMessageKey(entity, guard), str(guard, "message")));
                 resolved.add(guard);
             }
             entity.put("agreeGuards", resolved);

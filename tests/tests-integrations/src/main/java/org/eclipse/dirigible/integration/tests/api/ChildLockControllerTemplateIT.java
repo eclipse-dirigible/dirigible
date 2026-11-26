@@ -64,7 +64,8 @@ class ChildLockControllerTemplateIT {
         assertTrue(rendered.contains("repository.findOne(id).ifPresent(stored -> requireMasterMutable(stored.Invoice));"),
                 "update and delete must consult the STORED master");
         assertTrue(rendered.contains("\"2,3\".split(\",\")"), "the guard must carry the master's immutable status ids");
-        assertTrue(rendered.contains("HttpStatus.CONFLICT"), "a write against a locked master must be a 409");
+        assertTrue(rendered.contains("new org.eclipse.dirigible.sdk.db.ConflictException("),
+                "a write against a locked master must be a 409");
         assertNoUnresolvedReferences(rendered);
     }
 
@@ -72,7 +73,10 @@ class ChildLockControllerTemplateIT {
     void anAppendOnlyMasterLocksItsChildrenUnconditionally() throws Exception {
         String rendered = render("EntityController.java.template", context(appendOnlyLock()));
 
-        assertTrue(rendered.contains("append-only Invoice"), "an append-only master must say so in the refusal");
+        assertTrue(
+                rendered.contains("RecordRefusals.masterAppendOnly(")
+                        && rendered.contains("new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label(\"Invoice\", null)"),
+                "an append-only master must say so in the refusal");
         assertFalse(rendered.contains("master.Status"), "an append-only master has no status to consult: " + rendered);
         assertNoUnresolvedReferences(rendered);
     }
@@ -166,7 +170,10 @@ class ChildLockControllerTemplateIT {
             assertTrue(rendered.contains("isAncestor1Mutable(ancestor1)") && rendered.contains("\"3\".split(\",\")"),
                     template + " must refuse by the run's immutable status ids");
             assertTrue(rendered.contains("isAncestor1PeriodOpen(ancestor1.RunDate)"), template + " must check the run's period too");
-            assertTrue(rendered.contains("The PayrollRun of this InvoiceItem is immutable"), template + " must name the locking ancestor");
+            assertTrue(
+                    rendered.contains("RecordRefusals.masterImmutable(")
+                            && rendered.contains("new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label(\"PayrollRun\", null)"),
+                    template + " must name the locking ancestor");
             assertFalse(rendered.contains("isMasterMutable"), template + " must emit no status guard for the unlocked payslip");
             assertNoUnresolvedReferences(rendered);
         }

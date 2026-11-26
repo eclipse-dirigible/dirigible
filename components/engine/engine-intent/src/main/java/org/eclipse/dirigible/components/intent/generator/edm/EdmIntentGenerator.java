@@ -81,6 +81,7 @@ import org.eclipse.dirigible.components.intent.model.PostIntent;
 import org.eclipse.dirigible.components.intent.model.PostingIntent;
 import org.eclipse.dirigible.components.intent.model.RelatedIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
+import org.eclipse.dirigible.components.intent.model.ReversalRefusalIntent;
 import org.eclipse.dirigible.components.intent.model.ShareIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.SettlementIntent;
@@ -1092,7 +1093,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     /**
      * The authored {@code items: refuse:} sentences of the create-froms, by the key the generated run
      * resolves them under ({@link IntentNaming#generateItemsRefusedKey}) - only for a rule that
-     * refuses, the same condition {@code GlueIntentGenerator} emits the sentence on.
+     * refuses, the same condition {@code GlueIntentGenerator} emits the sentence on - and the authored
+     * {@code refuse:} sentences of the reversals, under {@link IntentNaming#generateReversalRefusedKey}
+     * (#8775).
      */
     private static Map<String, String> buildGenerateRefusals(IntentModel model) {
         Map<String, String> refusals = new LinkedHashMap<>();
@@ -1102,6 +1105,17 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                                          .isBlank()
                     && items != null && items.hasWhere() && items.hasRefuse()) {
                 refusals.put(IntentNaming.generateItemsRefusedKey(generates.getName()), items.getRefuse());
+            }
+            // A reversal's authored refusals (#8775), each under its position in the refuse: list.
+            if (generates.getName() != null && !generates.getName()
+                                                         .isBlank()
+                    && generates.getReversal() != null) {
+                List<ReversalRefusalIntent> refuse = generates.getReversal()
+                                                              .getRefuse();
+                for (int index = 0; index < refuse.size(); index++) {
+                    refusals.put(IntentNaming.generateReversalRefusedKey(generates.getName(), index), refuse.get(index)
+                                                                                                            .getMessage());
+                }
             }
         }
         return refusals;

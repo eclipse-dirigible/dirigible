@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -230,7 +231,12 @@ class IntentFixedAfterCreateIT extends IntegrationTest {
         put(TIMESHEETS, timesheet, "{\"Note\":\"week 1\",\"Project\":3,\"Employee\":1}", null).statusCode(409)
                                                                                               .body("message", equalTo(REFUSAL));
         put(TIMESHEETS, timesheet, "{\"Note\":\"week 1\",\"Project\":3,\"Employee\":1}", "bg").statusCode(409)
-                                                                                              .body("message", equalTo(REFUSAL_BG));
+                                                                                              .body("message", equalTo(REFUSAL_BG))
+                                                                                              // ...with its key and the
+                                                                                              // property it is about (#8775).
+                                                                                              .body("messageKey", endsWith(
+                                                                                                      ".checks.Timesheet_fixed_Project"))
+                                                                                              .body("field", equalTo("Project"));
         // ...and so is one through the personal surface, and through the partner one.
         put(MY_TIMESHEETS, timesheet, "{\"Note\":\"week 1\",\"Project\":3}", null).statusCode(409)
                                                                                   .body("message", equalTo(REFUSAL));
@@ -273,7 +279,8 @@ class IntentFixedAfterCreateIT extends IntegrationTest {
         put(TIMESHEETS, timesheet, changed, null).statusCode(409)
                                                  .body("message", equalTo(FIELD_REFUSAL));
         put(TIMESHEETS, timesheet, changed, "bg").statusCode(409)
-                                                 .body("message", equalTo(FIELD_REFUSAL_BG));
+                                                 .body("message", equalTo(FIELD_REFUSAL_BG))
+                                                 .body("field", equalTo("Reference"));
         put(MY_TIMESHEETS, timesheet, "{\"Note\":\"week 1\",\"Reference\":\"OTHER\"}", null).statusCode(409)
                                                                                             .body("message", equalTo(FIELD_REFUSAL));
         // A decimal compares by value: a different one is a change...

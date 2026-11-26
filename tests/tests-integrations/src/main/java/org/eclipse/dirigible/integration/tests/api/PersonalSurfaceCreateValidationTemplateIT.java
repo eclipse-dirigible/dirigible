@@ -107,7 +107,7 @@ class PersonalSurfaceCreateValidationTemplateIT {
     void theDocumentNumberIsAllocatedAfterEveryGuardThatCanRefuseTheCreate() throws Exception {
         String rendered = render(DAO_BASE, "Repository.java.template", context());
 
-        int required = rendered.indexOf("throw new ValidationException(\"VacationRequest.FromDate is required\")");
+        int required = rendered.indexOf("throw org.eclipse.dirigible.sdk.db.FieldRefusals.required(null, \"FromDate\"");
         int allocation = rendered.indexOf("DocumentNumbers.next(");
         int insert = rendered.indexOf("super.save(entity,");
         assertTrue(required >= 0, "the repository must still refuse a missing required value: " + rendered);
@@ -123,7 +123,7 @@ class PersonalSurfaceCreateValidationTemplateIT {
     void theNumberColumnIsNotItselfRefusedByTheRequiredCheck() throws Exception {
         String rendered = render(DAO_BASE, "Repository.java.template", context());
 
-        assertTrue(!rendered.contains("VacationRequest.Number is required"),
+        assertTrue(!rendered.contains("FieldRefusals.required(null, \"Number\""),
                 "the platform fills the number itself - it can never be the caller's omission: " + rendered);
     }
 

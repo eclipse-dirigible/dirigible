@@ -66,6 +66,15 @@ class I18nKeyCoverageIT {
     private static final String CORE_I18N = DIRIGIBLE + "application-core/i18n/";
 
     /**
+     * The platform catalog's section of the refusal sentences every model shares (#8775) - read by the
+     * server, not a page's chrome.
+     */
+    private static final String SHARED_REFUSALS = "generated.checks.";
+
+    /** A check message's placeholder: {@code {name}}. */
+    private static final Pattern SINGLE_BRACE_PLACEHOLDER = Pattern.compile("(?<!\\{)\\{(\\w+)\\}(?!\\})");
+
+    /**
      * The sections of a generated page's chrome keys - the ones {@code i18n.js} resolves through the
      * platform's shared {@code generated} catalog.
      */
@@ -207,6 +216,60 @@ class I18nKeyCoverageIT {
             }
         }
         assertNoneMissing("generated.json out of step with the en-US one", problems);
+    }
+
+    /**
+     * dirigible #8775: the refusal sentences every model shares - a required value, a status move, a
+     * locked record - are translated once, in the platform catalog a model's own catalog falls back to
+     * on the server. Each sentence the SDK defines ships there in every language with the SDK's own
+     * placeholders, and the default language's text is the SDK's, word for word.
+     */
+    @Test
+    void everySharedRefusalSentenceShipsInEveryLanguage() throws ReflectiveOperationException {
+        Map<String, String> sdk = new TreeMap<>();
+        for (Class<?> refusals : List.of(org.eclipse.dirigible.sdk.db.FieldRefusals.class,
+                org.eclipse.dirigible.sdk.db.DeleteRefusals.class, org.eclipse.dirigible.sdk.db.GenerateRefusals.class,
+                org.eclipse.dirigible.sdk.db.RecordRefusals.class)) {
+            for (java.lang.reflect.Field key : refusals.getFields()) {
+                String name = key.getName();
+                if (name.endsWith("_KEY")) {
+                    String text = name.substring(0, name.length() - "_KEY".length()) + "_TEXT";
+                    sdk.put(SHARED_REFUSALS + key.get(null), (String) refusals.getField(text)
+                                                                              .get(null));
+                }
+            }
+        }
+        List<String> problems = new ArrayList<>();
+        for (String locale : languages()) {
+            Map<String, String> catalog = coreCatalog(locale);
+            for (Map.Entry<String, String> sentence : sdk.entrySet()) {
+                String translated = catalog.get(sentence.getKey());
+                if (translated == null || translated.isBlank()) {
+                    problems.add(locale + ": " + sentence.getKey() + " missing");
+                } else if (!singleBracePlaceholders(translated).equals(singleBracePlaceholders(sentence.getValue()))) {
+                    problems.add(locale + ": " + sentence.getKey() + " placeholders " + singleBracePlaceholders(translated) + " != "
+                            + singleBracePlaceholders(sentence.getValue()));
+                } else if ("en-US".equals(locale) && !translated.equals(sentence.getValue())) {
+                    problems.add(
+                            locale + ": " + sentence.getKey() + " reads [" + translated + "], the SDK's [" + sentence.getValue() + "]");
+                }
+            }
+            for (String key : catalog.keySet()) {
+                if (key.startsWith(SHARED_REFUSALS) && !sdk.containsKey(key)) {
+                    problems.add(locale + ": " + key + " is no refusal the SDK raises");
+                }
+            }
+        }
+        assertNoneMissing("shared refusal sentences out of step with the SDK", problems);
+    }
+
+    private static Set<String> singleBracePlaceholders(String text) {
+        Set<String> names = new TreeSet<>();
+        Matcher matcher = SINGLE_BRACE_PLACEHOLDER.matcher(text);
+        while (matcher.find()) {
+            names.add(matcher.group(1));
+        }
+        return names;
     }
 
     @Test
@@ -669,7 +732,8 @@ class I18nKeyCoverageIT {
     private static Map<String, String> generatedChrome(String locale) {
         Map<String, String> chrome = new TreeMap<>();
         coreCatalog(locale).forEach((key, value) -> {
-            if (key.startsWith(GENERATED_SECTION)) {
+            // The shared refusal sentences (#8775) live beside the chrome, read by the server.
+            if (key.startsWith(GENERATED_SECTION) && !key.startsWith(SHARED_REFUSALS)) {
                 chrome.put(key.substring(GENERATED_SECTION.length()), value);
             }
         });

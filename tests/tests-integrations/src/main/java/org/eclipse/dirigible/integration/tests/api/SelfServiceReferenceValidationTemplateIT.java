@@ -46,9 +46,9 @@ class SelfServiceReferenceValidationTemplateIT {
     private static final List<String> SELF_SERVICE_SURFACES =
             List.of("EntityMyController.java.template", "EntityPartnerController.java.template");
 
-    private static final String LEAF_REFUSAL = "The 'Account' must reference a leaf Account - the selected one has children";
+    private static final String LEAF_REFUSAL = "FieldRefusals.leafOnly(null, \"Account\", \"Account\", null, \"Account\", null)";
 
-    private static final String CYCLE_REFUSAL = "The 'Parent' reference would create a cycle in the Booking hierarchy";
+    private static final String CYCLE_REFUSAL = "FieldRefusals.hierarchyCycle(null, \"Parent\", \"Parent\", null, \"Booking\", null)";
 
     private final VelocityGenerationEngine velocityGenerationEngine = new VelocityGenerationEngine();
 
@@ -76,7 +76,8 @@ class SelfServiceReferenceValidationTemplateIT {
         for (String template : SELF_SERVICE_SURFACES) {
             String rendered = render(template);
 
-            assertTrue(rendered.contains("The Booking hierarchy is implausibly deep - aborting"),
+            assertTrue(rendered.contains(
+                    "RecordRefusals.hierarchyTooDeep(null, new org.eclipse.dirigible.sdk.db.GenerateRefusals.Label(\"Booking\", null))"),
                     template + " must bound the parent walk: " + rendered);
         }
     }

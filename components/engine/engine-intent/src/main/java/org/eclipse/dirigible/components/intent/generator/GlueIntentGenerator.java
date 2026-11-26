@@ -1445,6 +1445,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("guardStatusProperty", guard == null ? "" : guard.statusProperty());
             e.put("guardStatusExpr", guard == null ? "" : guard.expression());
             e.put("guardStatusText", guard == null ? "" : guard.text(g.getFrom()));
+            // Which refusal the guard answers with (#8775): an authored allow-list names the statuses, an
+            // implied guard says the action already ran.
+            e.put("guardStatusImplied", guard != null && guard.allowed()
+                                                              .isEmpty());
             e.put("guardStatuses", guard == null ? "" : guard.statuses());
             e.put("sourceStatusProperty", sourceStatusProperty);
             e.put("sourceStatusValue",
@@ -1704,6 +1708,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         negate(e, "fieldAssignments", negated, "source");
         negate(e, "itemFieldAssignments", negated, "srcItem");
         List<Map<String, Object>> refusals = new ArrayList<>();
+        int index = 0;
         for (ReversalRefusalIntent refusal : reversal.getRefuse()) {
             List<Map<String, Object>> terms = new ArrayList<>();
             // The terms read the record being written ("entity"); here that record is the loaded original.
@@ -1715,6 +1720,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("terms", terms);
             entry.put("message", refusal.getMessage());
+            // Its catalog entry (#8775), the key the .model writes the sentence under.
+            entry.put("messageKey", IntentNaming.generateReversalRefusedKey(g.getName(), index++));
             refusals.add(entry);
         }
         e.put("hasRefusals", !refusals.isEmpty());
@@ -2360,6 +2367,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             }
             e.put("guardReading", guardReading);
             e.put("guardText", guardText);
+            // What its refusals are translated through (#8775): the model catalog, the button's label and
+            // the entity's, as a create-from's are.
+            String catalog = refusalCatalog(model, context, projectName);
+            e.put("refusalCatalog", catalog);
+            e.put("actionLabel", IntentNaming.customActionLabel(t.getName(), t.getLabel()));
+            e.put("actionLabelKey", catalog + ".actions." + t.getName());
+            putEntityLabel(e, "entity", t.getForEntity(), catalog, IntentNaming.upperSnake(modelBaseName(model, context)));
             // Optional outbound mail after the flip commits ("on Void, mail the counterparty"),
             // resolved against the transitioned record - the same notify block a schedule or a
             // process step authors. Fail-soft in the generated controller: the flip is the contract.
@@ -2368,7 +2382,6 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             if (t.hasPrompt()) {
                 // The record's own inputs (#7909), written with the status: converted and refused exactly as
                 // a create-from's prompt is, in the model catalog's language.
-                String catalog = refusalCatalog(model, context, projectName);
                 List<Map<String, Object>> prompted = new ArrayList<>();
                 for (org.eclipse.dirigible.components.intent.model.PromptFieldIntent p : t.getPrompt()) {
                     Map<String, Object> field = p.getField() == null ? null : localPromptField(p, entity, catalog);
@@ -2377,7 +2390,6 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     }
                 }
                 e.put("promptFields", prompted);
-                e.put("refusalCatalog", catalog);
             }
             if (t.stampsNumber()) {
                 // The move issues the document (#8493): its stampOn: issue number is drawn and written

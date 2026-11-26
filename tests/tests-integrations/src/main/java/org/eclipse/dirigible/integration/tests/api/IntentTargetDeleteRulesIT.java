@@ -644,7 +644,7 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200));
 
-        String closed = "The PayPeriod covering this date is closed - book the correction in an open period";
+        String closed = "The Pay Period covering this date is closed - book the correction in an open period";
         assertRefused(payouts + "/" + booked, closed);
         assertRefused(employees + "/" + kim, closed);
         assertFound(payouts + "/" + booked);

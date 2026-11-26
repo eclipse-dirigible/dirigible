@@ -80,7 +80,7 @@ class IntentCaptureUnderMasterIT extends IntegrationTest {
     private static final String CAPTURE = "/services/java/" + PROJECT + "/gen/events/" + PROJECT + "/ReceiptPhotoCapture";
     private static final String LEDGER = "CLAIMCAPTURE_CLAIM_ITEM_CAPTURES";
     private static final String LOCKED =
-            "The Claim of this ClaimItem is immutable in its current status - corrections go through the workflow";
+            "The Claim of this Claim Item is immutable in its current status - corrections go through the workflow";
     private static final long TIMEOUT_SECONDS = 90;
     private static final String PASSWORD = "claim-capture-it-password";
     private static final String OWNER = "claim-owner";

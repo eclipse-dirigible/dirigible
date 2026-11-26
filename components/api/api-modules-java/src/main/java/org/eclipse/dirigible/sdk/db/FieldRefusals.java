@@ -113,6 +113,44 @@ public final class FieldRefusals {
      */
     public static final String SINGLE_TAKEN_IN_SCOPE_TEXT = "Another {entity} is already '{label}' for this {scope}";
 
+    /** The key, under a catalog's {@code checks}, of the sentence refusing a malformed selection. */
+    public static final String SELECTION_KEY = "fieldSelection";
+
+    /**
+     * The default-language sentence refusing a multi-select value that is not the chosen ids,
+     * comma-separated (dirigible #8775).
+     */
+    public static final String SELECTION_TEXT = "The '{label}' selection must be the chosen ids, comma-separated";
+
+    /**
+     * The key, under a catalog's {@code checks}, of the sentence refusing a reference to a non-leaf.
+     */
+    public static final String LEAF_ONLY_KEY = "fieldLeafOnly";
+
+    /**
+     * The default-language sentence refusing a {@code leafOnly} reference to a record with children:
+     * {@code {target}} is the referenced entity's label (dirigible #8775).
+     */
+    public static final String LEAF_ONLY_TEXT = "The '{label}' must reference a leaf {target} - the selected one has children";
+
+    /** The key, under a catalog's {@code checks}, of the sentence refusing a hierarchy cycle. */
+    public static final String HIERARCHY_CYCLE_KEY = "fieldHierarchyCycle";
+
+    /**
+     * The default-language sentence refusing a parent reference that would close a cycle:
+     * {@code {entity}} is the hierarchy's entity label (dirigible #8775).
+     */
+    public static final String HIERARCHY_CYCLE_TEXT = "The '{label}' reference would create a cycle in the {entity} hierarchy";
+
+    /** The key, under a catalog's {@code checks}, of the sentence refusing a direct status edit. */
+    public static final String WORKFLOW_OWNED_KEY = "fieldWorkflowOwned";
+
+    /**
+     * The default-language sentence refusing a direct edit of the status a workflow owns (dirigible
+     * #8775).
+     */
+    public static final String WORKFLOW_OWNED_TEXT = "'{label}' changes through the workflow, not a direct edit";
+
     private FieldRefusals() {}
 
     /**
@@ -334,6 +372,75 @@ public final class FieldRefusals {
         return refusal(language, catalogs, catalog, SINGLE_TAKEN_IN_SCOPE_KEY, SINGLE_TAKEN_IN_SCOPE_TEXT, field, label, labelKey, "entity",
                 CheckMessages.resolve(language, catalogs, entityLabelKey, entityLabel, Map.of()), "scope",
                 CheckMessages.resolve(language, catalogs, scopeLabelKey, scopeLabel, Map.of()));
+    }
+
+    /**
+     * The refusal of a multi-select value that is not the chosen ids, comma-separated.
+     *
+     * @param catalog the entity's model catalog ({@code <project>:<catalog prefix>}), or {@code null}
+     * @param field the property
+     * @param label the property's default-language label
+     * @param labelKey the fully qualified catalog key of that label, or {@code null}
+     * @return the exception to throw - mapped to HTTP 400 carrying the key, the parameters and the
+     *         field
+     */
+    public static ValidationException selection(String catalog, String field, String label, String labelKey) {
+        return refusal(CheckMessages.language(), CheckMessages::readCatalog, catalog, SELECTION_KEY, SELECTION_TEXT, field, label,
+                labelKey);
+    }
+
+    /**
+     * The refusal of a {@code leafOnly} reference to a record that has children.
+     *
+     * @param catalog the entity's model catalog, or {@code null}
+     * @param field the reference property
+     * @param label the property's default-language label
+     * @param labelKey the fully qualified catalog key of that label, or {@code null}
+     * @param targetLabel the referenced entity's default-language label
+     * @param targetLabelKey the fully qualified catalog key of that label, or {@code null}
+     * @return the exception to throw - mapped to HTTP 400 carrying the key, the parameters and the
+     *         field
+     */
+    public static ValidationException leafOnly(String catalog, String field, String label, String labelKey, String targetLabel,
+            String targetLabelKey) {
+        String language = CheckMessages.language();
+        return refusal(language, CheckMessages::readCatalog, catalog, LEAF_ONLY_KEY, LEAF_ONLY_TEXT, field, label, labelKey, "target",
+                CheckMessages.resolve(language, CheckMessages::readCatalog, targetLabelKey, targetLabel, Map.of()));
+    }
+
+    /**
+     * The refusal of a parent reference that would make a record its own ancestor.
+     *
+     * @param catalog the entity's model catalog, or {@code null}
+     * @param field the parent reference property
+     * @param label the property's default-language label
+     * @param labelKey the fully qualified catalog key of that label, or {@code null}
+     * @param entityLabel the hierarchy's entity default-language label
+     * @param entityLabelKey the fully qualified catalog key of that label, or {@code null}
+     * @return the exception to throw - mapped to HTTP 400 carrying the key, the parameters and the
+     *         field
+     */
+    public static ValidationException hierarchyCycle(String catalog, String field, String label, String labelKey, String entityLabel,
+            String entityLabelKey) {
+        String language = CheckMessages.language();
+        return refusal(language, CheckMessages::readCatalog, catalog, HIERARCHY_CYCLE_KEY, HIERARCHY_CYCLE_TEXT, field, label, labelKey,
+                "entity", CheckMessages.resolve(language, CheckMessages::readCatalog, entityLabelKey, entityLabel, Map.of()));
+    }
+
+    /**
+     * The refusal of a direct edit of the status a workflow owns - a {@code processes:} step or a
+     * {@code transitions:} button.
+     *
+     * @param catalog the entity's model catalog, or {@code null}
+     * @param field the status property
+     * @param label the property's default-language label
+     * @param labelKey the fully qualified catalog key of that label, or {@code null}
+     * @return the refusal, carrying the key, the parameters and the field; wrapped in a 409 by the
+     *         generated controllers
+     */
+    public static ValidationException workflowOwned(String catalog, String field, String label, String labelKey) {
+        return refusal(CheckMessages.language(), CheckMessages::readCatalog, catalog, WORKFLOW_OWNED_KEY, WORKFLOW_OWNED_TEXT, field, label,
+                labelKey);
     }
 
     static ValidationException refusal(String language, CheckMessages.CatalogReader catalogs, String catalog, String key, String text,

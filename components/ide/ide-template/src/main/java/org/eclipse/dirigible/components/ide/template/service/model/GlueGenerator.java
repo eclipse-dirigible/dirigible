@@ -1168,6 +1168,16 @@ class GlueGenerator {
                 // the boolean - a .glue written before these keys existed carries none and renders the
                 // unguarded run() it always had.
                 "hasStatusGuard", "guardStatusProperty", "guardStatusExpr", "guardStatusText", "guardStatuses");
+        // Which refusal the from-status guard answers with (#8775). A .glue written before the key tells
+        // the implied guard by the sentence it carried.
+        context.put("guardStatusImplied", item.containsKey("guardStatusImplied") ? truthy(item, "guardStatusImplied")
+                : strOr(item, "guardStatusText", "").startsWith("was already generated"));
+        // A status is named by its row's label through the repository of the entity it belongs to (#8775) -
+        // only one this model generates, since another model's repository may predate the lookup.
+        context.put("sourceStatusLabels", !truthy(item, "crossModelSource"));
+        context.put("targetStatusLabels", !truthy(item, "crossModel"));
+        context.put("undoStatusIds", strOr(item, "undoStatuses", "").replace("[", "")
+                                                                    .replace("]", ""));
         // The mapped values, each rendered from the reading the glue carries (issue #7425) - a copy off
         // the source, a typed literal, today in the target field's shape, a Calc arithmetic cell.
         context.put("fieldAssignments", assignments(item.get("fieldAssignments")));
@@ -1242,7 +1252,7 @@ class GlueGenerator {
         // original receives. A .glue written before the keys existed carries no booleans and renders the
         // create-from it always had.
         copy(context, item, "hasRefusals", "hasBackLink", "backLinkProperty");
-        context.put("refusals", refusals(item.get("refusals")));
+        context.put("refusals", refusals(item.get("refusals"), strOr(item, "refusalCatalog", "")));
         // Lines read from a report's result rows (issue #8329): the report run with the source's values,
         // the line and counter cells, the row rule, the test of a live document a second run is refused
         // over, and the undo booking the target's reversal. A .glue written before the keys existed
@@ -1319,13 +1329,15 @@ class GlueGenerator {
     }
 
     /**
-     * A reversal's refusals (issue #7886), each its condition over the loaded original and the message
-     * as a Java string literal's content.
+     * A reversal's refusals (issue #7886), each its condition over the loaded original, the message as
+     * a Java string literal's content and the message's catalog key as a Java expression (#8775) -
+     * {@code null} for a .glue written before the key, whose refusal keeps its default text.
      *
      * @param raw the declared refusals, may be absent
+     * @param catalog the model catalog the messages are entries of, blank for none
      * @return the refusals the template renders
      */
-    static List<Map<String, Object>> refusals(Object raw) {
+    static List<Map<String, Object>> refusals(Object raw, String catalog) {
         List<Map<String, Object>> refusals = new ArrayList<>();
         for (Map<String, Object> declared : asMaps(raw)) {
             String condition = JavaLiterals.conditionExpression(asMaps(declared.get("terms")));
@@ -1337,6 +1349,9 @@ class GlueGenerator {
             Map<String, Object> refusal = new LinkedHashMap<>();
             refusal.put("condition", condition);
             refusal.put("message", JavaLiterals.escape(str(declared, "message")));
+            String messageKey = strOr(declared, "messageKey", "");
+            refusal.put("messageKeyJava", catalog.isBlank() || messageKey.isBlank() ? "null"
+                    : javaString(catalog + "." + ModelTranslations.CHECKS_CATALOG + "." + messageKey));
             refusals.add(refusal);
         }
         return refusals;
@@ -1380,6 +1395,13 @@ class GlueGenerator {
         // The role gate of the click (issue #7913), as for a create-from: a .glue written before the key
         // existed renders an empty gate that no caller satisfies, never the ungated run() it used to be.
         context.put("writeRolesJavaLiteral", JavaLiterals.escape(strOr(item, "writeRoles", "")));
+        // What the guards' refusals are translated through (#8775); a .glue written before the keys has no
+        // catalog and names the action and the entity by their humanized names.
+        context.put("refusalCatalogJava", javaStringOrNull(strOr(item, "refusalCatalog", "")));
+        context.put("actionLabelJava", labelJava(strOr(item, "actionLabel", NamingHelper.humanizeName(strOr(item, "name", ""))),
+                strOr(item, "actionLabelKey", "")));
+        context.put("entityLabelJava", labelJava(strOr(item, "entityLabel", NamingHelper.humanizeName(strOr(item, "entity", ""))),
+                strOr(item, "entityLabelKey", "")));
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("notifyRelationLoads", relationLoads(item.get("notifyRelationLoads"), parameters));
         context.put("javaForEachPerspective", NamingHelper.sanitizeJavaIdentifier(strOr(item, "forEachPerspective", "")));

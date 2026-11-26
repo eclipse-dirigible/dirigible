@@ -207,9 +207,11 @@ class IntentGenerateOnEventIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body("findAll { it.Sale == " + sale + " }.Id.sort()", equalTo(List.of(memo, draftMemo)))
                                                  .body("findAll { it.Sale == " + sale + " }.Text.unique()", equalTo(List.of("S-memo"))));
-        // The guarded one still refuses a sale out of its from-status, now that the sale exists.
+        // The guarded one still refuses a sale out of its from-status, now that the sale exists - naming
+        // the action and the statuses by their labels (#8775).
         transition("SendSale", sale);
-        assertRunRefused("DraftMemoFromSale", "{\"id\":" + sale + "}", 409, "current status is [3]");
+        assertRunRefused("DraftMemoFromSale", "{\"id\":" + sale + "}", 409,
+                "Draft Memo From Sale is allowed only from Draft - this Sale is Sent");
     }
 
     /** The event path as it normally runs: issuing the sale generates its delivery and flips it on. */

@@ -4546,9 +4546,9 @@ class IntentEngineIT extends IntegrationTest {
         generateFromModel("template-application-ui-harmonia-java/template/template.js", "orders.model");
 
         String repository = codeOf("gen/orders/data/customer/CustomerRepository.java");
-        assertTrue(repository.contains("throw new ValidationException(\"Customer.Name is required\");"),
-                "the required field must be refused by name: " + repository);
-        assertFalse(repository.contains("throw new ValidationException(\"Customer.CreditLimit is required\");"),
+        assertTrue(repository.contains("FieldRefusals.required(\"" + PROJECT + ":orders-model\", \"Name\","),
+                "the required field must be refused by name, from the catalog (#8775): " + repository);
+        assertFalse(repository.contains("FieldRefusals.required(\"" + PROJECT + ":orders-model\", \"CreditLimit\","),
                 "an optional field must not be refused");
         // A column carrying a DEFAULT is deliberately NOT in the set - the database supplies its value,
         // so an empty one is not missing, which is exactly what an intent relation's `init:` opening
@@ -4556,7 +4556,7 @@ class IntentEngineIT extends IntegrationTest {
         // defaulted status still answers 200 and echoes the DB-applied default.
         // It gates the write: everything the repository computes itself (a document number, a uuid, a
         // calculated field) is assigned above it, and the insert happens below it.
-        assertTrue(repository.indexOf("is required") < repository.indexOf("super.save(entity,"),
+        assertTrue(repository.indexOf("FieldRefusals.required(") < repository.indexOf("super.save(entity,"),
                 "the required check must precede the insert");
     }
 

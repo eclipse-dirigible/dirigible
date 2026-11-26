@@ -63,6 +63,20 @@ public final class IntentNaming {
     }
 
     /**
+     * The key, under the model catalog's {@code checks}, of a reversal's authored {@code refuse:}
+     * sentence (dirigible #8775): {@code reverse-invoice}, its first refusal ->
+     * {@code reverseInvoiceReversalRefused0}. One rule for the {@code .model} that writes the sentence
+     * into the catalog and the {@code .glue} whose generated code resolves it.
+     *
+     * @param name the create-from's name
+     * @param index the refusal's position in the reversal's {@code refuse:} list
+     * @return the key
+     */
+    public static String generateReversalRefusedKey(String name, int index) {
+        return camelCase(pascalIdentifier(name)) + "ReversalRefused" + index;
+    }
+
+    /**
      * The i18n catalog key of a custom action's label: {@code <project>:<model>-model.actions.<name>} -
      * the same {@code <model>-model} namespace the generated translation catalog is emitted under
      * (mirrors the template engine's translation prefix for the {@code .model} file).

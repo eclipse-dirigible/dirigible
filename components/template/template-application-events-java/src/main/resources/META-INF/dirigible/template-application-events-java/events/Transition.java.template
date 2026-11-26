@@ -85,6 +85,9 @@ public class ${controllerClass} {
     }
 
 #end
+    /** The model catalog this transition's refusals are translated in (dirigible #8775). */
+    private static final String REFUSAL_CATALOG = ${refusalCatalogJava};
+
     public static class Request {
         public Integer id;
 #if($promptFields.size() > 0)
@@ -95,7 +98,7 @@ public class ${controllerClass} {
 
     @Post("/run")
     public String run(@Body Request req) {
-        // Every branch returns a JSON body - the guard errors carry {"error": reason}.
+        // Every branch returns a JSON body - a guard's refusal carries its message, and {"error": reason}.
         Response.setContentType("application/json");
 #if($personal)
         // The personal gate (issue #8406): the caller runs the transition on their OWN ${entity}, so
@@ -134,14 +137,16 @@ public class ${controllerClass} {
         }
         // The status FK read with the Calc semantics (null reads as 0 - never an allowed seed id).
         int currentStatus = org.eclipse.dirigible.sdk.utils.Calc.eval("${statusProperty}", source, 0).intValue();
+        // A refused move answers in the reader's language, naming the action, the entity and the statuses
+        // by their labels, with the body every generated refusal carries (#8775).
         if (!(${allowedExpr})) {
-            Response.setStatus(409);
-            return "{\"error\": \"${name} is allowed only from status [${fromStatuses}] - current status is [" + currentStatus + "]\"}";
+            return refused(org.eclipse.dirigible.sdk.db.RecordRefusals.statusNotAllowed(REFUSAL_CATALOG, ${actionLabelJava}, ${entityLabelJava},
+                    gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository.statusLabels(${fromStatuses}),
+                    gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository.statusLabel(currentStatus)));
         }
 #if($guardExpr != "")
         if (!(${guardExpr})) {
-            Response.setStatus(409);
-            return "{\"error\": \"${name} requires ${guardText}\"}";
+            return refused(org.eclipse.dirigible.sdk.db.RecordRefusals.conditionNotMet(REFUSAL_CATALOG, ${actionLabelJava}, "${guardText}"));
         }
 #end
 #if($promptFields.size() > 0)
@@ -653,4 +658,10 @@ public class ${controllerClass} {
         return isBlank(value) ? new String[0] : new String[] {value};
     }
 #end
+
+    /** Answers a refused move with 409 and the refusal's body - its message, key, parameters and field. */
+    private static String refused(org.eclipse.dirigible.sdk.db.ValidationException refusal) {
+        Response.setStatus(409);
+        return Json.stringify(org.eclipse.dirigible.sdk.db.RecordRefusals.body(refusal));
+    }
 }

@@ -188,8 +188,9 @@ class IntentPersonalTransitionIT extends IntegrationTest {
         refused(OWNER, PERSONAL_RUN, 987654, 404, "VacationRequest not found");
         assertEquals(SUBMITTED, status(colleagues));
 
-        // Their own record in a status outside from: the guard's 409, nothing written.
-        refused(OWNER, PERSONAL_RUN, draft, 409, "allowed only from status [2, 3]");
+        // Their own record in a status outside from: the guard's 409, nothing written - the action and the
+        // statuses named by their labels (#8775), the sentence still under the older error key too.
+        refused(OWNER, PERSONAL_RUN, draft, 409, "Withdraw is allowed only from SUBMITTED, APPROVED - this Vacation Request is DRAFT");
         assertEquals(DRAFT, status(draft));
 
         // The power run is unchanged: it still demands the entity's write gate, which the owner lacks.

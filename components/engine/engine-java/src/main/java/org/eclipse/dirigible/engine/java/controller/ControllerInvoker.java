@@ -26,6 +26,7 @@ import org.eclipse.dirigible.components.base.http.request.RequestIds;
 import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.sdk.db.ConcurrentWriteException;
 import org.eclipse.dirigible.sdk.db.ConfirmationRequiredException;
+import org.eclipse.dirigible.sdk.db.ConflictException;
 import org.eclipse.dirigible.sdk.db.DeleteRestrictionException;
 import org.eclipse.dirigible.sdk.db.DuplicateKeyException;
 import org.eclipse.dirigible.sdk.db.ValidationException;
@@ -183,6 +184,14 @@ public class ControllerInvoker {
                 LOGGER.debug("Controller [{}#{}] collided with a business key: {}", match.entry()
                                                                                          .fqn(),
                         method.getName(), cause.getMessage(), cause);
+                throw new ResponseStatusException(HttpStatus.CONFLICT, cause.getMessage(), cause);
+            }
+            if (cause instanceof ConflictException) {
+                // A write the record's current state refuses (#8775) - a locked record, a fixed field, a
+                // workflow-owned status: well-formed, refused only because of what the record is now.
+                LOGGER.debug("Controller [{}#{}] refused the write in the record's current state: {}", match.entry()
+                                                                                                            .fqn(),
+                        method.getName(), cause.getMessage());
                 throw new ResponseStatusException(HttpStatus.CONFLICT, cause.getMessage(), cause);
             }
             if (cause instanceof ValidationException) {

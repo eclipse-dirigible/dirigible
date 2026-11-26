@@ -3485,6 +3485,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // A move the lifecycle refuses (OPEN has no edge to CLOSED) is never written, so it stamps nothing.
         int refused = createRecord(clearances, "{\"Note\":\"refused\"}");
         updateRecord(clearances, refused, "{\"Id\":" + refused + ",\"Note\":\"refused\",\"Status\":4}", 400);
+        // ...refused from the catalog, naming the status it is about (#8775).
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + refused + ",\"Note\":\"refused\",\"Status\":4}")
+                                                 .when()
+                                                 .put(API + clearances + "/" + refused)
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("messageKey", endsWith(".checks.lifecycleMove"))
+                                                 .body("field", equalTo("Status")));
         Map<String, Object> unmoved = readRecord(clearances, refused);
         assertEquals(1, ((Number) unmoved.get("Status")).intValue(), "a refused move leaves the status where it was: " + unmoved);
         assertNull(unmoved.get("ClosedOn"), "a refused move into a stamped status must stamp nothing: " + unmoved);
@@ -3842,7 +3851,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         "!(new java.math.BigDecimal(entity.Paid.toString()).compareTo(new java.math.BigDecimal(\"0\")) >= 0)"),
                 "checks: compare against a numeric literal must compare by value through BigDecimal, got: " + entryController);
         String snapshotController = contentOf("gen/emission/api/snapshot/SnapshotController.java");
-        assertTrue(snapshotController.contains("requireMutable") && snapshotController.contains("append-only"),
+        assertTrue(snapshotController.contains("requireMutable") && snapshotController.contains("RecordRefusals.appendOnly("),
                 "immutable: true must emit the unconditional append-only gate in the REST controller");
         // The immutability UI pre-check (GET /{id}/mutable): the controller exposes it and the
         // generated pages gate their Edit affordances on it - the form/document pages ask the
@@ -3898,16 +3907,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertEquals(3, countOf(ledgerBookingRepository, "requirePeriodOpen(entity.BookedOn);"),
                 "immutableInPeriod must be enforced on save, update and updateWithoutEvent in the repository, got: "
                         + ledgerBookingRepository);
-        assertTrue(
-                ledgerBookingRepository.contains(
-                        "\"The AccountingPeriod covering this date is closed - book the correction in an open period\""),
-                "the repository refuses with the period sentence, got: " + ledgerBookingRepository);
+        assertTrue(ledgerBookingRepository.contains("throw org.eclipse.dirigible.sdk.db.RecordRefusals.periodClosed("),
+                "the repository refuses with the period sentence, from the catalog (#8775), got: " + ledgerBookingRepository);
         String ledgerBookingController = contentOf("gen/emission/api/ledgerbooking/LedgerBookingController.java");
         assertTrue(ledgerBookingController.contains("requirePeriodOpen(") && ledgerBookingController.contains("AccountingPeriodRepository"),
                 "immutableInPeriod must emit the period guard querying the declared register");
         assertTrue(ledgerBookingController.contains("/{id}/mutable"),
                 "immutableInPeriod must emit the GET /{id}/mutable pre-check endpoint in the REST controller");
-        assertTrue(entryController.contains("must reference a leaf"),
+        assertTrue(entryController.contains("org.eclipse.dirigible.sdk.db.FieldRefusals.leafOnly("),
                 "leafOnly must emit the server-side children check in the REST controller");
 
         // related: the read-only register of the records REFERENCING Account. The registration is
@@ -4237,8 +4244,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(
                 walletRepository.contains("new gen.emission.data.walletcoupon.WalletCouponRepository()")
                         && walletRepository.contains(".eq(\"Wallet\", id))")
-                        && walletRepository.contains(
-                                "throw new ValidationException(\"A coupon is redeemed only against a wallet of its own party\")"),
+                        && walletRepository.contains("\", \"A coupon is redeemed only against a wallet of its own party\");"),
                 "a parent of an agree junction must refuse re-pointing the agreed property while referenced, got: " + walletRepository);
         assertEquals(2, countOf(walletRepository, "requireAgreementKept(entity);"), "update() and updateWithoutEvent() must both ask");
         assertTrue(walletRepository.contains("requireAgreementKept(id, agreedBefore, entity);"),
@@ -4429,7 +4435,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // and the system write alike. The generated form normalizes too; that is the belt, not the rule
         // (#6897).
         String campaignRepository = contentOf("gen/emission/data/campaign/CampaignRepository.java");
-        assertEquals(3, campaignRepository.split("normalizeKeySet\\(\"Channels\"", -1).length - 1,
+        assertEquals(3, campaignRepository.split("normalizeKeySet\\(entity.Channels, \"Channels\"", -1).length - 1,
                 "every write path of the repository must normalize the subset value, got: " + campaignRepository);
         assertTrue(entryRepository.contains("EntryLineRepository"),
                 "aggregate: true must make the master repository recompute totals from its items child");
@@ -4601,10 +4607,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the pledge capacity must be guarded: " + pledgePaymentRepository);
         assertTrue(pledgePaymentRepository.contains("PledgeFundEntity guardParent = new PledgeFundRepository().findById(entity.Fund)"),
                 "the fund capacity must be guarded alongside it - not dropped: " + pledgePaymentRepository);
-        assertEquals(2, countOf(pledgePaymentRepository, "throw new ValidationException(\"Pledge capacity exceeded"),
+        assertEquals(2, countOf(pledgePaymentRepository, "throw org.eclipse.dirigible.sdk.db.RecordRefusals.capacityExceeded("),
                 "the pledge guard runs on create and on update: " + pledgePaymentRepository);
-        assertEquals(2, countOf(pledgePaymentRepository, "throw new ValidationException(\"This fund has only \""),
-                "so does the fund guard, refusing in the authored words (#7542): " + pledgePaymentRepository);
+        assertEquals(2,
+                countOf(pledgePaymentRepository, ".checks.PledgePayment_rollupGuard_Fund_Budget\", \"This fund has only {remaining}"),
+                "so does the fund guard, refusing in the authored words (#7542) as a catalog entry (#8775): " + pledgePaymentRepository);
         // WHICH rows the fund's capacity counts (#7542): the filter narrows the re-sum, and the row being
         // written is tested the same way - a row the filter excludes changes no sum, so cancelling an
         // allocation is never refused by the ceiling the cancellation frees. The fit guard (#8096) projects
@@ -7428,7 +7435,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .put(API + "/entry/EntryController/" + entryId)
                                                  .then()
                                                  .statusCode(409)
-                                                 .body(containsString("changes through the workflow")));
+                                                 .body(containsString("changes through the workflow"))
+                                                 .body("messageKey", endsWith(".checks.fieldWorkflowOwned"))
+                                                 .body("field", equalTo("Status")));
 
         // checks: itemsMin - carrying the gate status with no lines must be rejected.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
@@ -7875,7 +7884,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(API + "/campaign/CampaignStageStepController")
                                                  .then()
                                                  .statusCode(409)
-                                                 .body(containsString("The Campaign of this CampaignStageStep is immutable")));
+                                                 .body("message", containsString("The Campaign of this Campaign Stage Step is immutable"))
+                                                 .body("messageKey", endsWith(".checks.masterImmutable")));
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Id\":" + step.get() + ",\"CampaignStage\":" + stage.get()
                                                          + ",\"Title\":\"renamed\"}")
@@ -7927,7 +7937,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .when()
                                                  .put(API + "/snapshot/SnapshotController/" + snapshot.get())
                                                  .then()
-                                                 .statusCode(409));
+                                                 .statusCode(409)
+                                                 .body("messageKey", endsWith(".checks.recordAppendOnly")));
         restAssuredExecutor.execute(() -> given().when()
                                                  .delete(API + "/snapshot/SnapshotController/" + snapshot.get())
                                                  .then()
@@ -7982,7 +7993,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .when()
                                                  .put(API + "/ledgerbooking/LedgerBookingController/" + ledgerBooking.get())
                                                  .then()
-                                                 .statusCode(409));
+                                                 .statusCode(409)
+                                                 .body("messageKey", endsWith(".checks.recordPeriodClosed")));
         restAssuredExecutor.execute(() -> given().when()
                                                  .delete(API + "/ledgerbooking/LedgerBookingController/" + ledgerBooking.get())
                                                  .then()
@@ -8027,7 +8039,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post("/services/java/" + PROJECT + "/gen/events/emission/BookingFromPeriodGenerate/run")
                                                  .then()
                                                  .statusCode(400)
-                                                 .body(containsString("The AccountingPeriod covering this date is closed")));
+                                                 .body("message", containsString("The Accounting Period covering this date is closed"))
+                                                 .body("messageKey", endsWith(".checks.recordPeriodClosed")));
         AtomicInteger openPeriod = new AtomicInteger();
         restAssuredExecutor.execute(() -> openPeriod.set(given().contentType("application/json")
                                                                 .body("{\"Name\":\"2026-05\",\"StartDate\":\"2026-05-01\",\"EndDate\":\"2026-05-31\",\"Status\":1}")
@@ -8102,7 +8115,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .when()
                                                  .post(transitionRun)
                                                  .then()
-                                                 .statusCode(409));
+                                                 .statusCode(409)
+                                                 .body("messageKey", endsWith(".checks.actionStatusNotAllowed"))
+                                                 .body("message", containsString(" is allowed only from "))
+                                                 .body("error", containsString(" is allowed only from ")));
         // ...and the when guard rejects a DRAFT entry with something paid, leaving it DRAFT.
         AtomicInteger guarded = new AtomicInteger();
         restAssuredExecutor.execute(() -> guarded.set(given().contentType("application/json")
@@ -8118,7 +8134,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .when()
                                                  .post(transitionRun)
                                                  .then()
-                                                 .statusCode(409));
+                                                 .statusCode(409)
+                                                 .body("messageKey", endsWith(".checks.actionConditionNotMet")));
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(API + "/entry/EntryController/" + guarded.get())
                                                  .then()
@@ -8192,7 +8209,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .when()
                                                  .post(API + "/bill/BillLineController")
                                                  .then()
-                                                 .statusCode(409));
+                                                 .statusCode(409)
+                                                 .body("messageKey", endsWith(".checks.masterImmutable")));
         restAssuredExecutor.execute(() -> {
             Object amount = given().when()
                                    .get(API + "/bill/BillController/" + bill.get())
@@ -8672,7 +8690,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(API + "/pledge/PledgePaymentController")
                                                  .then()
                                                  .statusCode(400)
-                                                 .body(containsString("Pledge capacity exceeded")));
+                                                 .body("message", containsString("The Pledge capacity is exceeded"))
+                                                 .body("messageKey", endsWith(".checks.capacityExceeded"))
+                                                 .body("field", equalTo("Amount")));
         // ...and so does the SECOND: 1000 more is inside the other pledge's total but overdraws the fund,
         // which has 500 left. This is the request that used to return 200.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
@@ -8685,7 +8705,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  // ...in the AUTHORED words (#7542): `message:` with its
                                                  // four figures spliced in where the author placed them.
                                                  .body(containsString("This fund has only 500.00 left of 1500.00"))
-                                                 .body(containsString("this allocation asks 1000")));
+                                                 .body(containsString("this allocation asks 1000"))
+                                                 .body("messageKey", endsWith(".checks.PledgePayment_rollupGuard_Fund_Budget"))
+                                                 .body("field", equalTo("Amount")));
         // What fits under both is still accepted, and the fund's own roll-up follows it.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Pledge\":" + secondPledge.get() + ",\"Fund\":" + fundId.get()
