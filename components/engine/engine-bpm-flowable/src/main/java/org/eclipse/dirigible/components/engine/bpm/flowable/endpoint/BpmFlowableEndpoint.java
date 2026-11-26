@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -32,8 +33,10 @@ import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.engine.bpm.flowable.config.BpmProviderFlowable;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActionData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActivityStatusData;
+import org.eclipse.dirigible.components.engine.bpm.flowable.dto.HistoricProcessInstanceData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessDefinitionData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessInstanceData;
+import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessLabelKeys;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.StartProcessInstanceData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskActionData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskDTO;
@@ -52,7 +55,6 @@ import org.flowable.variable.api.history.HistoricVariableInstance;
 import org.flowable.variable.api.persistence.entity.VariableInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -88,14 +90,23 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
     /**
      * The bpm provider flowable.
      */
-    @Autowired
-    private BpmProviderFlowable bpmProviderFlowable;
+    private final BpmProviderFlowable bpmProviderFlowable;
 
     /**
      * The bpm service.
      */
-    @Autowired
-    private BpmService bpmService;
+    private final BpmService bpmService;
+
+    /**
+     * Instantiates a new bpm flowable endpoint.
+     *
+     * @param bpmProviderFlowable the bpm provider flowable
+     * @param bpmService the bpm service
+     */
+    BpmFlowableEndpoint(BpmProviderFlowable bpmProviderFlowable, BpmService bpmService) {
+        this.bpmProviderFlowable = bpmProviderFlowable;
+        this.bpmService = bpmService;
+    }
 
     /**
      * Gets the process definition xml.
@@ -242,7 +253,27 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
             @Nullable @RequestParam("businessKey") Optional<String> businessKey, @Nullable @RequestParam("key") Optional<String> key,
             @RequestParam(value = "limit", required = false) Integer limit) {
         // the Processes perspective asks for 100 - honoured in the database (dirigible #7982)
-        return ResponseEntity.ok(bpmService.getProcessInstances(key, businessKey, limit));
+        List<ProcessInstanceData> instances = bpmService.getProcessInstances(key, businessKey, limit);
+        Map<String, Optional<String>> nameKeys = new HashMap<>();
+        instances.forEach(instance -> instance.setProcessDefinitionNameKey(
+                nameKeys.computeIfAbsent(instance.getProcessDefinitionId(), this::processNameKey)
+                        .orElse(null)));
+        return ResponseEntity.ok(instances);
+    }
+
+    /**
+     * The i18n key of a process' name (issue #8788). The Monitoring shell lists the processes of every
+     * deployed module and has no idea which module's catalog names which process, so the key travels
+     * with the instance - as it does with a task in the Inbox. A listing resolves it once per process
+     * definition: a listing is typically a handful of definitions and every instance of one shares its
+     * catalog, so the BPMN is read once per definition, never once per row.
+     *
+     * @param processDefinitionId the instance's process definition id
+     * @return the translation key, empty when the process declares no catalog
+     */
+    private Optional<String> processNameKey(String processDefinitionId) {
+        return bpmService.getProcessLabelKeys(processDefinitionId)
+                         .map(ProcessLabelKeys::processNameKey);
     }
 
     /**
@@ -263,12 +294,18 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
     }
 
     @GetMapping(value = "/bpm-processes/historic-instances")
-    public ResponseEntity<List<HistoricProcessInstance>> getHistoricProcessesInstances(
+    public ResponseEntity<List<HistoricProcessInstanceData>> getHistoricProcessesInstances(
             @Nullable @RequestParam("definitionKey") Optional<String> definitionKey,
             @Nullable @RequestParam("businessKey") Optional<String> businessKey,
             @RequestParam(value = "limit", required = false) Integer limit) {
         // history grows without bound: the page the client asks for, in the database (dirigible #7982)
-        return ResponseEntity.ok(bpmService.getCompletedProcessInstances(definitionKey, businessKey, limit));
+        List<HistoricProcessInstance> instances = bpmService.getCompletedProcessInstances(definitionKey, businessKey, limit);
+        Map<String, Optional<String>> nameKeys = new HashMap<>();
+        return ResponseEntity.ok(instances.stream()
+                                          .map(instance -> new HistoricProcessInstanceData(instance,
+                                                  nameKeys.computeIfAbsent(instance.getProcessDefinitionId(), this::processNameKey)
+                                                          .orElse(null)))
+                                          .toList());
     }
 
     /**
@@ -286,7 +323,9 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
 
     @GetMapping(value = "/bpm-processes/instance/{id}")
     public ResponseEntity<ProcessInstanceData> getProcessInstance(@PathVariable("id") String id) {
-        return ResponseEntity.ok(bpmService.getProcessInstanceById(id));
+        ProcessInstanceData instance = bpmService.getProcessInstanceById(id);
+        instance.setProcessDefinitionNameKey(processNameKey(instance.getProcessDefinitionId()).orElse(null));
+        return ResponseEntity.ok(instance);
     }
 
     @PostMapping(value = "/bpm-processes/instance")

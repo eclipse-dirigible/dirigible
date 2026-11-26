@@ -249,4 +249,16 @@
       console.error('i18n: additional catalogs unavailable', e);
     }
   };
+
+  // Load the catalogs a set of fully-qualified keys ('<namespace>:<path>') live in. For a surface
+  // listing items of modules it does not know - the Inbox's tasks, Monitoring's processes - whose
+  // keys travel with the items; a missing key, or one naming no namespace, is skipped.
+  window.AppI18nAddNamespacesOf = (keys) => {
+    const namespaces = new Set();
+    (keys || []).forEach((key) => {
+      const separator = key ? key.indexOf(':') : -1;
+      if (separator > 0) namespaces.add(key.substring(0, separator));
+    });
+    return namespaces.size ? window.AppI18nAddNamespaces([...namespaces]) : Promise.resolve();
+  };
 })();

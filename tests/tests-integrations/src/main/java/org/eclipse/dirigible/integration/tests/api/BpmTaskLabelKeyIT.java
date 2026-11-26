@@ -11,6 +11,7 @@ package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import io.restassured.http.ContentType;
 import java.nio.charset.StandardCharsets;
@@ -19,6 +20,7 @@ import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
+import org.hamcrest.Matcher;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +34,11 @@ import org.springframework.beans.factory.annotation.Autowired;
  * is why an Approve button stayed English on an otherwise fully translated app. A generated process
  * therefore declares that catalog on its {@code <process>} element, and the inbox serves each task
  * the key of its own entry: the catalog plus the task's BPMN id, which is the authored step name.
+ *
+ * <p>
+ * The Monitoring shell lists the processes of every deployed module the same way, so its listings -
+ * running instances, finished ones and an instance's detail - carry the key of the process' name
+ * too (#8788).
  *
  * <p>
  * This drives the runtime half over HTTP - that Flowable carries the declaration through deployment
@@ -90,8 +97,10 @@ class BpmTaskLabelKeyIT extends IntegrationTest {
                                                  .body("[0].nameKey", equalTo(CATALOG + ".approve"))
                                                  .body("[0].processDefinitionNameKey", equalTo(CATALOG + "." + PROCESS_KEY)),
                 ASSERTION_TIMEOUT_SECONDS);
+        assertRunningInstanceNameKey(PROCESS_KEY, processInstanceId, equalTo(CATALOG + "." + PROCESS_KEY));
 
         completeFirstTask(processInstanceId);
+        assertFinishedInstanceNameKey(PROCESS_KEY, processInstanceId, equalTo(CATALOG + "." + PROCESS_KEY));
     }
 
     /**
@@ -112,8 +121,47 @@ class BpmTaskLabelKeyIT extends IntegrationTest {
                                                  .body("[0].nameKey", nullValue())
                                                  .body("[0].processDefinitionNameKey", nullValue()),
                 ASSERTION_TIMEOUT_SECONDS);
+        assertRunningInstanceNameKey(processKey, processInstanceId, nullValue());
 
         completeFirstTask(processInstanceId);
+        assertFinishedInstanceNameKey(processKey, processInstanceId, nullValue());
+    }
+
+    /** The Monitoring shell's running-instance listing and the instance's detail name the key. */
+    private void assertRunningInstanceNameKey(String processKey, String processInstanceId, Matcher<?> nameKey) {
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/services/bpm/bpm-processes/instances?key=" + processKey)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("[0].id", equalTo(processInstanceId))
+                                                 .body("[0].processDefinitionName", equalTo("Approval"))
+                                                 .body("[0].processDefinitionNameKey", nameKey),
+                ASSERTION_TIMEOUT_SECONDS);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/services/bpm/bpm-processes/instance/" + processInstanceId)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("processDefinitionNameKey", nameKey),
+                ASSERTION_TIMEOUT_SECONDS);
+    }
+
+    /**
+     * The finished-instance listing names the key beside every property the engine records - the record
+     * is answered flat, as it was before the key was added.
+     */
+    private void assertFinishedInstanceNameKey(String processKey, String processInstanceId, Matcher<?> nameKey) {
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/services/bpm/bpm-processes/historic-instances?definitionKey=" + processKey)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("[0].id", equalTo(processInstanceId))
+                                                 .body("[0].processDefinitionKey", equalTo(processKey))
+                                                 .body("[0].processDefinitionName", equalTo("Approval"))
+                                                 .body("[0].businessKey", equalTo(processKey + "-key"))
+                                                 .body("[0].endTime", notNullValue())
+                                                 .body("[0].instance", nullValue())
+                                                 .body("[0].processDefinitionNameKey", nameKey),
+                ASSERTION_TIMEOUT_SECONDS);
     }
 
     private void deploy(String path, String content) {

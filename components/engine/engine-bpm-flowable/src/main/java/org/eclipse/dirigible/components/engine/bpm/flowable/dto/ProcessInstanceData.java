@@ -43,6 +43,9 @@ public class ProcessInstanceData {
     /** The process definition name. */
     private String processDefinitionName;
 
+    /** The i18n key of the process definition's name, null when the process declares no catalog. */
+    private String processDefinitionNameKey;
+
     /** The process definition version. */
     private int processDefinitionVersion;
 
@@ -221,6 +224,27 @@ public class ProcessInstanceData {
      */
     public void setProcessDefinitionName(String processDefinitionName) {
         this.processDefinitionName = processDefinitionName;
+    }
+
+    /**
+     * The fully-qualified i18n key of the process' display name, read off the catalog its definition
+     * declares - what lets a shell listing processes of every module name each in the viewer's
+     * language.
+     *
+     * @return the translation key, or null when the process declares no catalog (e.g. a hand-authored
+     *         one)
+     */
+    public String getProcessDefinitionNameKey() {
+        return processDefinitionNameKey;
+    }
+
+    /**
+     * Sets the i18n key of the process' display name.
+     *
+     * @param processDefinitionNameKey the translation key, or null
+     */
+    public void setProcessDefinitionNameKey(String processDefinitionNameKey) {
+        this.processDefinitionNameKey = processDefinitionNameKey;
     }
 
     /**

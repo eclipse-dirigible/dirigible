@@ -13,6 +13,15 @@ window.MonitoringOps = (() => {
   const ABSOLUTE = { baseUrl: '' };
   const get = (url) => App.services.api.get(url, ABSOLUTE);
 
+  // A generated process names the i18n key of its name (`processDefinitionNameKey`, #8788), in the
+  // catalog of the module that declared it - which this shell cannot know in advance, as it lists the
+  // processes of every module. So the catalogs a listing's keys name are loaded on arrival; the names
+  // already rendered re-evaluate when they land.
+  const withProcessNameCatalogs = (instances) => {
+    if (window.AppI18nAddNamespacesOf) AppI18nAddNamespacesOf((instances || []).map((instance) => instance.processDefinitionNameKey));
+    return instances;
+  };
+
   return {
     /**
      * The build this instance runs: { productName, productVersion, productCommitId,
@@ -50,10 +59,21 @@ window.MonitoringOps = (() => {
       App.services.api.post('/services/jobs/trigger/' + encodeURIComponent(name), parameters, ABSOLUTE),
 
     /** Active process instances. */
-    processInstances: () => get('/services/bpm/bpm-processes/instances'),
+    processInstances: () => get('/services/bpm/bpm-processes/instances').then(withProcessNameCatalogs),
 
     /** Completed process instances. */
-    historicProcessInstances: () => get('/services/bpm/bpm-processes/historic-instances'),
+    historicProcessInstances: () => get('/services/bpm/bpm-processes/historic-instances').then(withProcessNameCatalogs),
+
+    /**
+     * A process instance's name as the pages show it: its definition's name in the user's language
+     * when the process declares a catalog, otherwise the BPMN name (a hand-written process), falling
+     * back to the definition key. The one rule for the list, the detail title, the search box and the
+     * overview's incidents.
+     */
+    processName: (instance) => {
+      const name = instance.processDefinitionName || instance.processDefinitionKey || '';
+      return window.T ? T(instance.processDefinitionNameKey, name) : name;
+    },
 
     /** What the engine records: { historyLevel } - 'none' means completed instances leave no trace. */
     processEngine: () => get('/services/bpm/bpm-processes/engine'),

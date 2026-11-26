@@ -1,0 +1,8 @@
+{
+  "monprocnames-model": {
+    "processes": {
+      "TicketApproval": "Одобрение на заявка",
+      "TicketEscalation": "Ескалация на заявка"
+    }
+  }
+}

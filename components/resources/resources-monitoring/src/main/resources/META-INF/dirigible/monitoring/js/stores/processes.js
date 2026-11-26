@@ -59,14 +59,14 @@ document.addEventListener('alpine:init', () => {
       this.load();
     },
 
-    /** The instances matching the search box - definition, business key or instance id. */
+    /** The instances matching the search box - the definition as shown or as named in the BPMN, business key or instance id. */
     get visibleInstances() {
       const needle = this.filter.trim()
                          .toLowerCase();
       if (!needle) return this.instances;
-      return this.instances.filter((instance) => [instance.processDefinitionName, instance.processDefinitionKey,
-        instance.businessKey, instance.id].some((value) => (value || '').toLowerCase()
-                                                                        .includes(needle)));
+      return this.instances.filter((instance) => [window.MonitoringOps.processName(instance), instance.processDefinitionName,
+        instance.processDefinitionKey, instance.businessKey, instance.id].some((value) => (value || '').toLowerCase()
+                                                                                                         .includes(needle)));
     },
 
     clearSelection() {
