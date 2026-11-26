@@ -210,15 +210,18 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
      * check reading the submitted record saw whatever the caller sent for a calculated field (usually
      * nothing, or the value of a previous save) and a soft or hard check on one never fired for a REST
      * write. The defaults the create applies come first, as in save(), since an expression may read
-     * them. The calculated ACTIONS run too, in declaration order with the expressions exactly as in
-     * save() (#8000): a check over an action-derived field - a duplicate warning on a supplier the action
+     * them - and so does a check (#8910): an {@code agree} over a relation the caller left to its
+     * {@code init:} judged a null it skips, and the row was stored with the very value it forbids. The
+     * calculated ACTIONS run too, in declaration order with the expressions exactly as in save()
+     * (#8000): a check over an action-derived field - a duplicate warning on a supplier the action
      * reads off the bill - otherwise judged the caller's value, or nothing, while the stored row carried
      * the derived one. An action is handed this copy, never the submitted record, and is called again
      * by save(): it computes a value from the record and writes nothing ({@code CalculatedField}). The
      * submitted record itself is not touched - what is persisted is still computed by save().
      *
      * @param submitted the record about to be created
-     * @return a copy carrying the computed values, or the record itself when nothing is calculated
+     * @return a copy carrying the defaults and the computed values, or the record itself when nothing
+     *         is defaulted or calculated
      */
     public InvoiceLineEntity calculatedForCreate(InvoiceLineEntity submitted) {
         trimText(submitted);

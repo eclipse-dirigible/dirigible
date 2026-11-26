@@ -1060,6 +1060,64 @@ public class ${name}MyController {
         // "+359 898 123 456" meets a `pattern:` that demands "+359898123456".
         ${name}Repository.normalize(entity);
 #end
+## The values come first (#8909): whether each field is there and well-formed is decided before the
+## row checks read it. A required relation left empty is a null hop, and a forbidWhen over it
+## (`Store.Status != 1`) is true there - it answered a missing Store with "This store is not active",
+## no field marked, instead of the required-field refusal naming Store.
+## The refusals of one property's value are resolved for the reader's language (#8596): the model's
+## catalog, the entity's label and its key - each as the processor derived it, else the bare names.
+#set($refusalCatalog = "null")
+#if($messageCatalogJava)#set($refusalCatalog = $messageCatalogJava)#end
+#set($refusalEntityLabel = '"' + $name + '"')
+#if($entityLabelJava)#set($refusalEntityLabel = $entityLabelJava)#end
+#set($refusalEntityLabelKey = "null")
+#if($labelCatalogKeyJava)#set($refusalEntityLabelKey = $labelCatalogKeyJava)#end
+#foreach($property in $properties)
+#set($refusalField = '"' + $property.name + '", "' + $property.name + '", null')
+#if($property.refusalFieldArgsJava)#set($refusalField = $property.refusalFieldArgsJava)#end
+## A required value the PLATFORM supplies is not the caller's to send: the generated repository fills a
+## document number and a uuid on insert, so demanding them here would refuse every create of a numbered
+## document with a message about a field no form has (#7099). A relation defaulting from a flag
+## (`init: { flag: }`, #8683) is filled there too; with no holder the repository refuses it by name.
+#set($requiredChecked = $property.isRequiredProperty && !$property.dataDefaultValue && !$property.relationshipInitFlag && !$property.numberStampOnCreate && !$property.generatedUuid)
+#if($requiredChecked)
+## A whitespace-only text value is no value (#7719) - the repository trims it to empty on the write.
+        if (entity.${property.name} == null#if($property.dataTypeJavaClass == "String") || org.eclipse.dirigible.sdk.db.Normalize.isBlank(entity.${property.name})#end) {
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required(${refusalCatalog}, ${refusalField});
+        }
+#end
+#if($property.dataTypeJavaClass == "String" && $property.dataLength && $property.dataTypeJava != "time")
+## The null guard only where the required check above did not already refuse a null (#7696).
+        if (#if(!$requiredChecked)entity.${property.name} != null && #{end}entity.${property.name}.length() > ${property.dataLength}) {
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.tooLong(${refusalCatalog}, ${refusalField}, ${property.dataLength});
+        }
+#end
+#if($property.dataTypeJavaClass == "String" && ($property.widgetType == "MONTH" || $property.widgetType == "WEEK"))
+## A month / week field is a string column (#8328): only YYYY-MM with a month 01-12, or an ISO YYYY-Www
+## that exists in its year, is a value - "2026-5" next to "2026-05" would open one month twice under a
+## unique key, and "2026-13" breaks every reader that parses it. Blank is "no value" as for a pattern.
+        if (entity.${property.name} != null#if($property.isRequiredProperty != "true") && !entity.${property.name}.isBlank()#end && !org.eclipse.dirigible.sdk.db.FieldFormats.#if($property.widgetType == "MONTH")isMonth#{else}isWeek#end(entity.${property.name})) {
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.#if($property.widgetType == "MONTH")month#{else}week#end(${refusalCatalog}, ${refusalField});
+        }
+#end
+#if($property.inputFormat == "IBAN")
+## format: iban (#8302): the shape AND the ISO 7064 check digits, which a regex cannot check - so a
+## value whose check digits fail is refused like one off the shape, and blank is "no value" as above.
+        if (entity.${property.name} != null#if($property.isRequiredProperty != "true") && !entity.${property.name}.isBlank()#end && !org.eclipse.dirigible.sdk.db.FieldFormats.isIban(entity.${property.name})) {
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.iban(${refusalCatalog}, ${refusalField});
+        }
+#elseif($property.widgetPattern && $property.widgetPattern != "")
+## A format constraint describes what a value must look like WHEN THERE IS ONE - on an OPTIONAL
+## property a blank string is "no value", exactly as on the power surface.
+        if (entity.${property.name} != null#if($property.isRequiredProperty != "true") && !entity.${property.name}.toString().isBlank()#end && !entity.${property.name}.toString().matches("${property.widgetPatternJava}")) {
+#if($property.patternMessageArgsJava)
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.authoredPattern(${property.patternMessageArgsJava}, ${refusalField}, "${property.widgetPatternJava}");
+#else
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.pattern(${refusalCatalog}, ${refusalField}, "${property.widgetPatternJava}");
+#end
+        }
+#end
+#end
 #set($checksLoadHops = false)
 #foreach($check in $rowChecks)
 #if($check.pathLoads && $check.pathLoads.size() > 0)
@@ -1191,60 +1249,6 @@ public class ${name}MyController {
             }
         }
 #end
-#end
-#end
-## The refusals of one property's value are resolved for the reader's language (#8596): the model's
-## catalog, the entity's label and its key - each as the processor derived it, else the bare names.
-#set($refusalCatalog = "null")
-#if($messageCatalogJava)#set($refusalCatalog = $messageCatalogJava)#end
-#set($refusalEntityLabel = '"' + $name + '"')
-#if($entityLabelJava)#set($refusalEntityLabel = $entityLabelJava)#end
-#set($refusalEntityLabelKey = "null")
-#if($labelCatalogKeyJava)#set($refusalEntityLabelKey = $labelCatalogKeyJava)#end
-#foreach($property in $properties)
-#set($refusalField = '"' + $property.name + '", "' + $property.name + '", null')
-#if($property.refusalFieldArgsJava)#set($refusalField = $property.refusalFieldArgsJava)#end
-## A required value the PLATFORM supplies is not the caller's to send: the generated repository fills a
-## document number and a uuid on insert, so demanding them here would refuse every create of a numbered
-## document with a message about a field no form has (#7099). A relation defaulting from a flag
-## (`init: { flag: }`, #8683) is filled there too; with no holder the repository refuses it by name.
-#set($requiredChecked = $property.isRequiredProperty && !$property.dataDefaultValue && !$property.relationshipInitFlag && !$property.numberStampOnCreate && !$property.generatedUuid)
-#if($requiredChecked)
-## A whitespace-only text value is no value (#7719) - the repository trims it to empty on the write.
-        if (entity.${property.name} == null#if($property.dataTypeJavaClass == "String") || org.eclipse.dirigible.sdk.db.Normalize.isBlank(entity.${property.name})#end) {
-            throw org.eclipse.dirigible.sdk.db.FieldRefusals.required(${refusalCatalog}, ${refusalField});
-        }
-#end
-#if($property.dataTypeJavaClass == "String" && $property.dataLength && $property.dataTypeJava != "time")
-## The null guard only where the required check above did not already refuse a null (#7696).
-        if (#if(!$requiredChecked)entity.${property.name} != null && #{end}entity.${property.name}.length() > ${property.dataLength}) {
-            throw org.eclipse.dirigible.sdk.db.FieldRefusals.tooLong(${refusalCatalog}, ${refusalField}, ${property.dataLength});
-        }
-#end
-#if($property.dataTypeJavaClass == "String" && ($property.widgetType == "MONTH" || $property.widgetType == "WEEK"))
-## A month / week field is a string column (#8328): only YYYY-MM with a month 01-12, or an ISO YYYY-Www
-## that exists in its year, is a value - "2026-5" next to "2026-05" would open one month twice under a
-## unique key, and "2026-13" breaks every reader that parses it. Blank is "no value" as for a pattern.
-        if (entity.${property.name} != null#if($property.isRequiredProperty != "true") && !entity.${property.name}.isBlank()#end && !org.eclipse.dirigible.sdk.db.FieldFormats.#if($property.widgetType == "MONTH")isMonth#{else}isWeek#end(entity.${property.name})) {
-            throw org.eclipse.dirigible.sdk.db.FieldRefusals.#if($property.widgetType == "MONTH")month#{else}week#end(${refusalCatalog}, ${refusalField});
-        }
-#end
-#if($property.inputFormat == "IBAN")
-## format: iban (#8302): the shape AND the ISO 7064 check digits, which a regex cannot check - so a
-## value whose check digits fail is refused like one off the shape, and blank is "no value" as above.
-        if (entity.${property.name} != null#if($property.isRequiredProperty != "true") && !entity.${property.name}.isBlank()#end && !org.eclipse.dirigible.sdk.db.FieldFormats.isIban(entity.${property.name})) {
-            throw org.eclipse.dirigible.sdk.db.FieldRefusals.iban(${refusalCatalog}, ${refusalField});
-        }
-#elseif($property.widgetPattern && $property.widgetPattern != "")
-## A format constraint describes what a value must look like WHEN THERE IS ONE - on an OPTIONAL
-## property a blank string is "no value", exactly as on the power surface.
-        if (entity.${property.name} != null#if($property.isRequiredProperty != "true") && !entity.${property.name}.toString().isBlank()#end && !entity.${property.name}.toString().matches("${property.widgetPatternJava}")) {
-#if($property.patternMessageArgsJava)
-            throw org.eclipse.dirigible.sdk.db.FieldRefusals.authoredPattern(${property.patternMessageArgsJava}, ${refusalField}, "${property.widgetPatternJava}");
-#else
-            throw org.eclipse.dirigible.sdk.db.FieldRefusals.pattern(${refusalCatalog}, ${refusalField}, "${property.widgetPatternJava}");
-#end
-        }
 #end
 #end
     }
