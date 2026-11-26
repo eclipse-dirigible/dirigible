@@ -2382,7 +2382,6 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             if (t.hasPrompt()) {
                 // The record's own inputs (#7909), written with the status: converted and refused exactly as
                 // a create-from's prompt is, in the model catalog's language.
-                String catalog = refusalCatalog(model, context, projectName);
                 List<Map<String, Object>> prompted = new ArrayList<>();
                 for (org.eclipse.dirigible.components.intent.model.PromptFieldIntent p : t.getPrompt()) {
                     Map<String, Object> field = p.getField() == null ? null : localPromptField(p, entity, catalog);
@@ -2391,7 +2390,6 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     }
                 }
                 e.put("promptFields", prompted);
-                e.put("refusalCatalog", catalog);
             }
             if (t.stampsNumber()) {
                 // The move issues the document (#8493): its stampOn: issue number is drawn and written
