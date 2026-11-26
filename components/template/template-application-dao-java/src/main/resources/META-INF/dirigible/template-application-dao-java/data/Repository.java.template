@@ -17,6 +17,11 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 ## The business keys (#8661): a composite `unique:` or a `unique: true` field - a write colliding with one
 ## is refused with its message by this repository, see duplicateKeys().
 #set($hasDuplicateKeys = false)
+## A period register's writes retry a deadlock victim (#7829): its overlap check locks every row.
+#set($periodUnit = "call")
+#if($periodStatusProperty)
+#set($periodUnit = "callRetryingDeadlock")
+#end
 #if($uniqueConstraints && !$uniqueConstraints.isEmpty())
 #set($hasDuplicateKeys = true)
 #end
@@ -650,7 +655,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 
     @Override
     public ${name}Entity save(${name}Entity entity) {
-#if($hasSingleFlags || $documentItem)
+#if($hasSingleFlags || $documentItem || $periodStatusProperty)
 #if($hasSingleFlags)
         // A single flag changes hands in ONE unit of work with the write that takes it, so the holder
         // it demotes and this row commit together or not at all.
@@ -660,7 +665,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         // header cannot take refuses the line, instead of failing after the line was stored and leaving
         // a document whose footer is not the sum of its lines (#8096).
 #end
-        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+#if($periodStatusProperty)
+        // A period row commits in ONE unit of work with the overlap check that admits it, the register
+        // locked from the check's read to the commit (#7829) - see requireNoOverlappingPeriod. A unit the
+        // database rolled back to break a deadlock is run again, as the reference check's is (#8341).
+#end
+        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.${periodUnit}(() -> {
 #if($documentItem)
             // The header is locked FIRST: the line's reference check share-locks it too, and two lines
             // added at once would each hold that share lock while waiting to write the total. Taken
@@ -685,6 +695,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
 #if($periodLock)
         requirePeriodOpen(entity.${periodLock.dateProperty});
+#end
+#if($periodStatusProperty)
+        requireNoOverlappingPeriod(entity);
 #end
 #if($hasLabel)
         computeName(entity);
@@ -840,18 +853,21 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 
     @Override
     public ${name}Entity update(${name}Entity entity) {
-#if($hasSingleFlags || $documentItem || $preservedOnUpdate.size() > 0 || $hasNotExistsChecks)
+#if($hasSingleFlags || $documentItem || $preservedOnUpdate.size() > 0 || $periodStatusProperty || $hasNotExistsChecks)
         // One unit with the header total(s) it moves - see save() (#8096) - and with the row lock the
         // carried-over system-owned columns are read under (#8109).
+#if($periodStatusProperty)
+        // A period row's overlap check holds the register locked until this write commits (#7829).
+#end
 #if($hasDuplicateKeys)
         try {
-            return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updateInUnit(entity));
+            return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.${periodUnit}(() -> updateInUnit(entity));
         } catch (RuntimeException e) {
             // A merge reaches the database when the unit commits, past the write that maps a collision.
             throw duplicateKeyOr(e);
         }
 #else
-        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updateInUnit(entity));
+        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.${periodUnit}(() -> updateInUnit(entity));
 #end
     }
 
@@ -878,6 +894,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
 #if($periodLock)
         requirePeriodOpen(entity.${periodLock.dateProperty});
+#end
+#if($periodStatusProperty)
+        requireNoOverlappingPeriod(entity);
 #end
 #if($hasAgreeGuards)
         requireAgreementKept(entity);
@@ -1054,17 +1073,18 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      * re-fire onUpdate reactions (notifications, roll-ups, integrations) for a change the user never made.
      */
     public ${name}Entity updateWithoutEvent(${name}Entity entity) {
-#if($hasSingleFlags || $documentItem || $hasNotExistsChecks)
-        // One unit with the header total(s) it moves - see save() (#8096).
+#if($hasSingleFlags || $documentItem || $periodStatusProperty || $hasNotExistsChecks)
+        // One unit with the header total(s) it moves - see save() (#8096) - and with the register lock a
+        // period row's overlap check holds (#7829).
 #if($hasDuplicateKeys)
         try {
-            return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updateWithoutEventInUnit(entity));
+            return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.${periodUnit}(() -> updateWithoutEventInUnit(entity));
         } catch (RuntimeException e) {
             // A merge reaches the database when the unit commits, past the write that maps a collision.
             throw duplicateKeyOr(e);
         }
 #else
-        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updateWithoutEventInUnit(entity));
+        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.${periodUnit}(() -> updateWithoutEventInUnit(entity));
 #end
     }
 
@@ -1102,6 +1122,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
 #if($periodLock)
         requirePeriodOpen(entity.${periodLock.dateProperty});
+#end
+#if($periodStatusProperty)
+        requireNoOverlappingPeriod(entity);
 #end
 #measuredBalances()
 #if($documentChecks && $documentChecks.size() > 0)
@@ -3369,6 +3392,44 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     @Override
     public String periodRegister() {
         return "${name}";
+    }
+
+    /**
+     * A period register partitions time (intent {@code period:}, dirigible #7829): a date falls in at
+     * most one ${name}, or "the period covering this date" - what the period lock and the posting
+     * reopen sweep both ask - has no single answer, and one date could stand OPEN and CLOSED at once.
+     * Both bounds are inclusive, as for the lock, so a window ending on the 31st and one starting on
+     * the 1st touch without overlapping, while two windows sharing a day overlap - a 409 naming the
+     * ${name} already holding it. An update is asked only when it moves a bound, so a row stored
+     * before this check stays editable. Every ${name} row is locked before the others are read and
+     * stays locked until this write commits: two concurrent overlapping writes take turns, and the
+     * second reads the first. A register with no rows yet has nothing to lock.
+     *
+     * @param entity the period about to be written, carrying its id on an update
+     */
+    private void requireNoOverlappingPeriod(${name}Entity entity) {
+        var start = entity.${periodStartProperty};
+        var end = entity.${periodEndProperty};
+        if (start == null || end == null) {
+            return;
+        }
+        if (entity.${pkPropertyName} != null) {
+            ${name}Entity stored = super.findById(entity.${pkPropertyName});
+            if (stored != null && start.equals(stored.${periodStartProperty}) && end.equals(stored.${periodEndProperty})) {
+                return;
+            }
+        }
+        lockAllForUpdate();
+        java.util.List<${name}Entity> overlapping = findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                                                                                                                         .le("${periodStartProperty}", end)
+                                                                                                                         .ge("${periodEndProperty}", start)
+                                                                                                                         .ne("${pkPropertyName}", entity.${pkPropertyName}));
+        if (!overlapping.isEmpty()) {
+            ${name}Entity other = overlapping.get(0);
+            throw new org.eclipse.dirigible.sdk.db.DuplicateKeyException(new org.eclipse.dirigible.sdk.db.ValidationException("The ${name} from "
+                    + start + " to " + end + " overlaps ${name} " + other.${pkPropertyName} + " (" + other.${periodStartProperty} + " to "
+                    + other.${periodEndProperty} + ") - a date can fall in only one ${name}", null, null, "${periodStartProperty}"));
+        }
     }
 
     @Override
