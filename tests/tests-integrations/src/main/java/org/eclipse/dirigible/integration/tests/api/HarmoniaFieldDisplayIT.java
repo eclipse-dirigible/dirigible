@@ -50,6 +50,13 @@ class HarmoniaFieldDisplayIT {
      */
     private static final String RECORD_PAGE = "perspective/manage/form-view.html.template";
 
+    /**
+     * The personal document shows a stored record in Preview (#8899): every value in its own field, an
+     * empty one as an em dash, so it has no read-only card and no row gate of its own - the field's
+     * {@code visibleGate} asks {@code canSee()}.
+     */
+    private static final String PREVIEW_PAGE = "my/my-document-view.html.template";
+
     /** The record page's rail, from its heading to the history block (or the end of the rail). */
     private static final String RAIL_START = "x-text=\"T('$projectName:${tprefix}.defaults.details', 'Details')\"";
 
@@ -193,6 +200,16 @@ class HarmoniaFieldDisplayIT {
                     content.contains("#macro(valueDisplay $property)#if($property.widgetEmptyText)orEmptyText(" + served + ", " + shown
                             + ", #emptyTextArgs($property))#{else}" + shown + "#end#end"),
                     view + " does not define its value display over the shared fieldDisplay()");
+            assertFalse(content.contains("x-text=\"form."), view + " prints a raw form value");
+            assertFalse(content.contains("headerDisplay("), view + " still calls a per-page copy of the formatter");
+            if (PREVIEW_PAGE.equals(view)) {
+                assertTrue(content.contains("x-text=\"(#valueDisplay($property)) || '\\u2014'\""),
+                        view + " previews a value that does not go through the shared helper");
+                assertTrue(content.contains("#visibleGate($property)"), view + " does not gate its fields");
+                assertTrue(lineStartingWith(content, "#macro(visibleGate $property)").contains("x-show=\"canSee('${property.name}')"),
+                        view + " previews a role-scoped field without asking canSee()");
+                continue;
+            }
             assertTrue(content.contains("#valueGate($property)"), view + " gates a read-only card row outside the shared helper");
             assertTrue(content.contains("x-text=\"#valueDisplay($property)"),
                     view + " renders a read-only card that does not go through the shared helper");
@@ -202,8 +219,6 @@ class HarmoniaFieldDisplayIT {
             assertTrue(gate.contains(
                     "#if($property.widgetEmptyText)#if($property.roleRead || $property.visibleWhenJs)x-show=\"#if($property.roleRead)canSee('${property.name}')"),
                     view + " shows a role-scoped emptyText field without asking canSee(): " + gate);
-            assertFalse(content.contains("x-text=\"form."), view + " prints a raw form value");
-            assertFalse(content.contains("headerDisplay("), view + " still calls a per-page copy of the formatter");
         }
     }
 

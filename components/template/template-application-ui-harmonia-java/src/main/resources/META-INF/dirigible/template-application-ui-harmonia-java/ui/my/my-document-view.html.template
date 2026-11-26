@@ -35,15 +35,13 @@
 #end
 #macro(valueOptions $property)#if($property.widgetType == "CHECKBOX")[{ value: true, text: T('$projectName:${tprefix}.${property.booleanTrueKey}', '${property.booleanTrueTextJs}') }, { value: false, text: T('$projectName:${tprefix}.${property.booleanFalseKey}', '${property.booleanFalseTextJs}') }]#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT")options['${property.name}']#{else}null#end#end
 ## A shown value reads the record as the server answered it (`record`, #8367), never the input buffer:
-## `form` holds a date cut to the shape its input takes (13:49:11 -> 13:49). The gate only tests for
-## emptiness, so it may read the form.
+## `form` holds a date cut to the shape its input takes (13:49:11 -> 13:49).
 #macro(displayArgs $property)'#if($property.numberStampOnIssue)DOCUMENT_NUMBER#else$!{property.widgetType}#end', '#if($property.isFloatType)$!{property.formatPattern}#end', #valueOptions($property)#end
 ## intent `emptyText:` (#8605): the text an empty value reads as, translated through t.<DATA_NAME>_empty;
 ## also the placeholder of a text-like or number input. Nothing is emitted for a property without it.
 #macro(emptyTextArgs $p)'$projectName:${tprefix}.t.${p.dataName}_empty', '${p.widgetEmptyTextJs}'#end
 #macro(emptyPlaceholder $p)#if($p.widgetEmptyText) :placeholder="T(#emptyTextArgs($p))"#end#end
 #macro(valueDisplay $property)#if($property.widgetEmptyText)orEmptyText(record.${property.name}, fieldDisplay(record.${property.name}, #displayArgs($property)), #emptyTextArgs($property))#{else}fieldDisplay(record.${property.name}, #displayArgs($property))#end#end
-#macro(valueGate $property)#if($property.widgetEmptyText)#if($property.roleRead || $property.visibleWhenJs)x-show="#if($property.roleRead)canSee('${property.name}')#if($property.visibleWhenJs) && #end#end$!{property.visibleWhenJs}"#end#{else}x-show="#if($property.roleRead)canSee('${property.name}') && #end#if($property.visibleWhenJs)${property.visibleWhenJs} && #{end}fieldDisplay(form.${property.name}, #displayArgs($property)) !== ''"#end#end
 <div x-data="${name}MyDocumentPage" class="vbox w-full"
      @keydown.window.ctrl.s.prevent="saveShortcut()" @keydown.window.meta.s.prevent="saveShortcut()"
      @keydown.escape.window="escapeDismiss()">
