@@ -16,6 +16,7 @@ import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.lessThan;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
@@ -194,7 +195,8 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
                 "checks": {
                   "Employee_fixedWhenReferenced_Code": "Кодът не може да се смени, докато други записи сочат служителя",
                   "deleteReferenced": "{entity} не може да бъде изтрит: използва се в {references}.",
-                  "deleteReference": "{count} {label}"
+                  "deleteReference_one": "{count} запис ({label, lowercase})",
+                  "deleteReference_other": "{count} записа ({label, lowercase})"
                 }
               }
             }
@@ -488,8 +490,8 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
         int travel = create(categories, "{\"Name\":\"Travel\"}");
         int claim = create(claims, "{\"Employee\":" + ada + ",\"Category\":" + travel + ",\"Amount\":12.5}");
 
-        assertRefused(employees + "/" + ada, "This Employee is referenced by 1 Expense Claim record(s) and cannot be deleted");
-        assertRefused(categories + "/" + travel, "This Expense Category is referenced by 1 Expense Claim record(s) and cannot be deleted");
+        assertRefused(employees + "/" + ada, "This Employee is referenced by 1 Expense Claim record and cannot be deleted");
+        assertRefused(categories + "/" + travel, "This Expense Category is referenced by 1 Expense Claim record and cannot be deleted");
 
         // With the claim gone, nothing restricts either delete any more.
         assertDeleted(claims + "/" + claim);
@@ -509,8 +511,12 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
         JsonObject checks = owner.getAsJsonObject("checks");
         assertEquals("This {entity} is referenced by {references} and cannot be deleted", checks.get("deleteReferenced")
                                                                                                 .getAsString());
-        assertEquals("{count} {label} record(s)", checks.get("deleteReference")
-                                                        .getAsString());
+        // #8777: the way one kind is written has its plural forms, as i18next names them.
+        assertEquals("{count} {label} record", checks.get("deleteReference_one")
+                                                     .getAsString());
+        assertEquals("{count} {label} records", checks.get("deleteReference_other")
+                                                      .getAsString());
+        assertFalse(checks.has("deleteReference"), "the plural forms replace the plain entry: " + checks);
         assertEquals("Employee", owner.getAsJsonObject("t")
                                       .get("STAFF_EMPLOYEE")
                                       .getAsString());
@@ -536,13 +542,15 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
         String ivyUrl = employees + "/" + ivy;
 
         Map<String, Object> english = refusalOf(ivyUrl, null);
-        assertRefusalLists(english, "This Employee is referenced by ", " and cannot be deleted", "1 Expense Claim record(s)",
-                "2 Advance record(s)");
+        assertRefusalLists(english, "This Employee is referenced by ", " and cannot be deleted", "1 Expense Claim record",
+                "2 Advance records");
         assertEquals(OWNER + ":staff-model.checks.deleteReferenced", english.get("messageKey"), english.toString());
         assertEquals("Employee", ((Map<?, ?>) english.get("messageParams")).get("entity"), english.toString());
 
         Map<String, Object> bulgarian = refusalOf(ivyUrl, "bg-BG");
-        assertRefusalLists(bulgarian, "Служител не може да бъде изтрит: използва се в ", ".", "1 Разходен документ", "2 Аванс");
+        // #8777: each kind in the plural form its count takes, its label lower-cased inside the sentence.
+        assertRefusalLists(bulgarian, "Служител не може да бъде изтрит: използва се в ", ".", "1 запис (разходен документ)",
+                "2 записа (аванс)");
         assertEquals(OWNER + ":staff-model.checks.deleteReferenced", bulgarian.get("messageKey"), bulgarian.toString());
         assertFound(ivyUrl);
 
@@ -618,7 +626,7 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
         int dee = create(employees, "{\"Name\":\"Dee\"}");
         int claim = create(claims, "{\"Employee\":" + dee + ",\"Reviewer\":" + dee + ",\"Amount\":3}");
 
-        assertRefused(employees + "/" + dee, "This Employee is referenced by 1 Expense Claim record(s) and cannot be deleted");
+        assertRefused(employees + "/" + dee, "This Employee is referenced by 1 Expense Claim record and cannot be deleted");
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(claims + "/" + claim)
                                                  .then()

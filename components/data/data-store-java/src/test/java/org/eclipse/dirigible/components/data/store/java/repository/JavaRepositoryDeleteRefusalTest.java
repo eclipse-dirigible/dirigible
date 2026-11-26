@@ -83,10 +83,10 @@ class JavaRepositoryDeleteRefusalTest {
 
         DeleteRestrictionException refusal = assertThrows(DeleteRestrictionException.class, () -> repository.deleteById(2));
 
-        assertEquals("This Product is referenced by 1 Product Cost record(s), 2 Stock Movement record(s) and cannot be deleted",
+        assertEquals("This Product is referenced by 1 Product Cost record, 2 Stock Movement records and cannot be deleted",
                 refusal.getMessage());
         assertEquals("products:products-model.checks.deleteReferenced", refusal.getMessageKey());
-        assertEquals(Map.of("entity", "Product", "references", "1 Product Cost record(s), 2 Stock Movement record(s)"),
+        assertEquals(Map.of("entity", "Product", "references", "1 Product Cost record, 2 Stock Movement records"),
                 refusal.getMessageParams());
         for (TargetDeleteRule rule : List.of(costs, unrelated, movements)) {
             verify(rule).countRestricting(TARGET, 2);
@@ -102,7 +102,7 @@ class JavaRepositoryDeleteRefusalTest {
 
         DeleteRestrictionException refusal = assertThrows(DeleteRestrictionException.class, () -> repository.deleteById(2));
 
-        assertEquals("This Product is referenced by 1 Product Cost record(s), 2 Stock Movement record(s) and cannot be deleted",
+        assertEquals("This Product is referenced by 1 Product Cost record, 2 Stock Movement records and cannot be deleted",
                 refusal.getMessage());
         assertNull(refusal.getMessageKey());
     }
@@ -134,7 +134,7 @@ class JavaRepositoryDeleteRefusalTest {
         org.eclipse.dirigible.sdk.db.ValidationException refusal =
                 assertThrows(org.eclipse.dirigible.sdk.db.ValidationException.class, () -> repository.requireMayGainChild(2));
 
-        assertEquals("This Product is referenced as a leaf by 3 Product Cost record(s) and cannot be given a child", refusal.getMessage());
+        assertEquals("This Product is referenced as a leaf by 3 Product Cost records and cannot be given a child", refusal.getMessage());
         assertEquals("products:products-model.checks.leafReferenced", refusal.getMessageKey());
         verify(store).lockForUpdate(Product.class, 2);
     }

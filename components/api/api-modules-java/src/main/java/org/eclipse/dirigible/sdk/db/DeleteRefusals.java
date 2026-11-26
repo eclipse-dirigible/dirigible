@@ -30,6 +30,11 @@ import java.util.Map;
  * <p>
  * A master whose composition children refuse its delete (intent {@code whenMasterDeleted: refuse})
  * is refused the same way, under {@code <catalog>.checks.deleteHasChildren} (dirigible #8635).
+ *
+ * <p>
+ * The entries that carry a {@code {count}} have plural forms (dirigible #8777): a catalog writes
+ * them as {@code deleteReference_one} / {@code deleteReference_other} (and the other CLDR
+ * categories its language uses), and the plain key stays the fallback for a catalog written before.
  */
 public final class DeleteRefusals {
 
@@ -47,9 +52,12 @@ public final class DeleteRefusals {
 
     /**
      * The default-language text of one kind of reference: {@code {count}} records of the entity
-     * labelled {@code {label}}.
+     * labelled {@code {label}} - the plural form, {@code deleteReference_other}.
      */
-    public static final String REFERENCE_TEXT = "{count} {label} record(s)";
+    public static final String REFERENCE_TEXT = "{count} {label} records";
+
+    /** The singular form of {@link #REFERENCE_TEXT}, {@code deleteReference_one}. */
+    public static final String REFERENCE_ONE_TEXT = "{count} {label} record";
 
     /**
      * The key, under a catalog's {@code checks}, of the sentence refusing a record the database found
@@ -84,6 +92,15 @@ public final class DeleteRefusals {
      * {@link #REFERENCE_TEXT}.
      */
     public static final String LEAF_REFERENCED_TEXT = "This {entity} is referenced as a leaf by {references} and cannot be given a child";
+
+    /**
+     * The default-language sentence refusing a master that still has {@code {count}} children - the
+     * plural form, {@code deleteHasChildren_other}.
+     */
+    public static final String HAS_CHILDREN_COUNT_TEXT = "This {entity} still has {count} {children} records - delete those first";
+
+    /** The singular form of {@link #HAS_CHILDREN_COUNT_TEXT}, {@code deleteHasChildren_one}. */
+    public static final String HAS_CHILDREN_COUNT_ONE_TEXT = "This {entity} still has {count} {children} record - delete it first";
 
     /** How the kinds of reference are joined inside the sentence. */
     private static final String SEPARATOR = ", ";
@@ -131,7 +148,8 @@ public final class DeleteRefusals {
 
     /**
      * The refusal of a master that still has composition children which refuse its delete (intent
-     * {@code whenMasterDeleted: refuse}), resolved for the request's language.
+     * {@code whenMasterDeleted: refuse}), resolved for the request's language - the form a repository
+     * generated before dirigible #8777 throws, which does not count the children.
      *
      * @param catalog the master's model catalog ({@code <project>:<catalog prefix>}), or {@code null}
      *        for the default-language text
@@ -174,6 +192,26 @@ public final class DeleteRefusals {
                 params);
     }
 
+    /**
+     * The refusal of a master that still has {@code count} composition children which refuse its delete
+     * (intent {@code whenMasterDeleted: refuse}), resolved for the request's language in the plural
+     * form the count takes.
+     *
+     * @param catalog the master's model catalog ({@code <project>:<catalog prefix>}), or {@code null}
+     *        for the default-language text
+     * @param entityLabel the master's default-language label
+     * @param entityLabelKey the fully qualified catalog key of that label, or {@code null}
+     * @param childLabel the child's default-language label
+     * @param childLabelKey the fully qualified catalog key of that label, or {@code null}
+     * @param count how many children the master still has
+     * @return the exception to throw - mapped to HTTP 400 carrying the key and the parameters
+     */
+    public static ValidationException hasChildren(String catalog, String entityLabel, String entityLabelKey, String childLabel,
+            String childLabelKey, long count) {
+        return hasChildren(CheckMessages.language(), CheckMessages::readCatalog, catalog, entityLabel, entityLabelKey, childLabel,
+                childLabelKey, count);
+    }
+
     static DeleteRestrictionException referenced(String language, CheckMessages.CatalogReader catalogs, String catalog, String entityLabel,
             String entityLabelKey, List<Reference> references) {
         Map<String, Object> params = CheckMessages.params("entity", label(language, catalogs, entityLabelKey, entityLabel), "references",
@@ -196,19 +234,32 @@ public final class DeleteRefusals {
                 params);
     }
 
+    static ValidationException hasChildren(String language, CheckMessages.CatalogReader catalogs, String catalog, String entityLabel,
+            String entityLabelKey, String childLabel, String childLabelKey, long count) {
+        Map<String, Object> params = CheckMessages.params("entity", label(language, catalogs, entityLabelKey, entityLabel), "children",
+                label(language, catalogs, childLabelKey, childLabel), "count", count);
+        String messageKey = checkKey(catalog, HAS_CHILDREN_KEY);
+        return new ValidationException(
+                CheckMessages.resolve(language, catalogs, messageKey, plural(HAS_CHILDREN_COUNT_ONE_TEXT, HAS_CHILDREN_COUNT_TEXT), params),
+                messageKey, params);
+    }
+
     private static DeleteRestrictionException refusal(String language, CheckMessages.CatalogReader catalogs, String messageKey, String text,
             Map<String, Object> params) {
         return new DeleteRestrictionException(CheckMessages.resolve(language, catalogs, messageKey, text, params), messageKey, params);
     }
 
-    /** The referencing kinds, each written as {@link #REFERENCE_TEXT}, joined for the sentence. */
+    /**
+     * The referencing kinds, each written in the plural form its count takes
+     * ({@link #REFERENCE_ONE_TEXT} / {@link #REFERENCE_TEXT}), joined for the sentence.
+     */
     private static String listReferences(String language, CheckMessages.CatalogReader catalogs, String catalog,
             List<Reference> references) {
         String referenceKey = checkKey(catalog, REFERENCE_KEY);
         List<String> listed = new ArrayList<>(references.size());
         for (Reference reference : references) {
             String label = CheckMessages.resolve(language, catalogs, reference.labelKey(), reference.label(), Map.of());
-            listed.add(CheckMessages.resolve(language, catalogs, referenceKey, REFERENCE_TEXT,
+            listed.add(CheckMessages.resolve(language, catalogs, referenceKey, plural(REFERENCE_ONE_TEXT, REFERENCE_TEXT),
                     CheckMessages.params("count", reference.count(), "label", label)));
         }
         return String.join(SEPARATOR, listed);
@@ -216,6 +267,11 @@ public final class DeleteRefusals {
 
     private static String label(String language, CheckMessages.CatalogReader catalogs, String labelKey, String label) {
         return CheckMessages.resolve(language, catalogs, labelKey, label, Map.of());
+    }
+
+    /** An English default text by its plural category. */
+    private static Map<String, String> plural(String one, String other) {
+        return Map.of(PluralCategories.ONE, one, PluralCategories.OTHER, other);
     }
 
     /** The fully qualified key of a catalog's {@code checks} entry; {@code null} without a catalog. */

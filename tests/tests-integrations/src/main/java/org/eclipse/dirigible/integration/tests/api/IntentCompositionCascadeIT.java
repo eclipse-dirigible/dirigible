@@ -150,7 +150,8 @@ class IntentCompositionCascadeIT extends IntegrationTest {
                   "CASCADE_TRIP_COPY": "Печатно копие"
                 },
                 "checks": {
-                  "deleteHasChildren": "{entity} все още има записи {children} - първо изтрийте тях"
+                  "deleteHasChildren_one": "{entity} все още има {count} запис ({children, lowercase}) - първо го изтрийте",
+                  "deleteHasChildren_other": "{entity} все още има {count} записа ({children, lowercase}) - първо ги изтрийте"
                 }
               }
             }
@@ -207,7 +208,7 @@ class IntentCompositionCascadeIT extends IntegrationTest {
                                                  .delete(TRIPS + "/" + chained)
                                                  .then()
                                                  .statusCode(400)
-                                                 .body(containsString("still has Trip Leg Note records")));
+                                                 .body(containsString("still has 1 Trip Leg Note record - delete it first")));
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(TRIPS + "/" + chained)
                                                  .then()
@@ -227,14 +228,16 @@ class IntentCompositionCascadeIT extends IntegrationTest {
                                                  .delete(TRIPS + "/" + refusing)
                                                  .then()
                                                  .statusCode(400)
-                                                 .body(containsString("still has Trip Copy records")));
-        // ...in the reader's language, both entities named by their translated labels (#8635).
+                                                 .body(containsString("still has 1 Trip Copy record - delete it first")));
+        // ...in the reader's language, both entities named by their translated labels (#8635), in the
+        // plural form of the count, the child's label lower-cased inside the sentence (#8777).
         restAssuredExecutor.execute(() -> given().header("Accept-Language", "bg-BG")
                                                  .when()
                                                  .delete(TRIPS + "/" + refusing)
                                                  .then()
                                                  .statusCode(400)
-                                                 .body("message", equalTo("Пътуване все още има записи Печатно копие - първо изтрийте тях"))
+                                                 .body("message",
+                                                         equalTo("Пътуване все още има 1 запис (печатно копие) - първо го изтрийте"))
                                                  .body("messageKey", equalTo(PROJECT + ":cascade-model.checks.deleteHasChildren")));
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(TRIPS + "/" + refusing)
@@ -264,12 +267,18 @@ class IntentCompositionCascadeIT extends IntegrationTest {
         assertFleetCount(fleet, 2);
     }
 
-    /** #8635: the en-US catalog carries the refusal's sentence, for a translator to copy. */
+    /**
+     * #8635: the en-US catalog carries the refusal's sentence, for a translator to copy - in its plural
+     * forms (#8777).
+     */
     private void assertTheCatalogCarriesTheChildrenRefusal() {
         String catalog = new String(repository.getResource(PROJECT_PATH + "/i18n/en-US/cascade.model.json")
                                               .getContent(),
                 StandardCharsets.UTF_8);
-        assertTrue(catalog.contains("\"deleteHasChildren\": \"This {entity} still has {children} records - delete those first\""),
+        assertTrue(
+                catalog.contains("\"deleteHasChildren_one\": \"This {entity} still has {count} {children} record - delete it first\"")
+                        && catalog.contains(
+                                "\"deleteHasChildren_other\": \"This {entity} still has {count} {children} records - delete those first\""),
                 "the en-US catalog must carry the children refusal: " + catalog);
     }
 

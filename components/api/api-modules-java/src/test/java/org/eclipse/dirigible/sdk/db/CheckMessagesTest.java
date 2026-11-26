@@ -124,4 +124,67 @@ class CheckMessagesTest {
         assertNull(CheckMessages.lookup(JsonParser.parseString(catalog), "billing-model.checks.Missing".split("\\.")));
         assertNull(CheckMessages.lookup(JsonParser.parseString(catalog), "billing-model.checks".split("\\.")));
     }
+
+    /** dirigible #8777: the count picks the plural form the language's CLDR rule gives. */
+    @Test
+    void the_count_picks_the_plural_form_of_the_language() {
+        Map<String, String> catalog = Map.of( //
+                "bg:" + KEY + "_one", "{count} ред с нулева цена", //
+                "bg:" + KEY + "_other", "{count} реда с нулева цена", //
+                "en:" + KEY + "_one", "{count} line at price zero", //
+                "en:" + KEY + "_other", "{count} lines at price zero");
+        CheckMessages.CatalogReader catalogs = (language, key) -> catalog.get(language + ":" + key);
+
+        assertEquals("1 ред с нулева цена", CheckMessages.resolve("bg", catalogs, KEY, TEXT, Map.of("count", 1)));
+        assertEquals("5 реда с нулева цена", CheckMessages.resolve("bg", catalogs, KEY, TEXT, Map.of("count", 5)));
+        assertEquals("1 line at price zero", CheckMessages.resolve("en", catalogs, KEY, TEXT, Map.of("count", 1)));
+        assertEquals("5 lines at price zero", CheckMessages.resolve("en", catalogs, KEY, TEXT, Map.of("count", 5L)));
+        assertEquals("0 lines at price zero", CheckMessages.resolve("en", catalogs, KEY, TEXT, Map.of("count", 0)));
+    }
+
+    /** A catalog without plural forms - one written before #8777 - is read by its plain key. */
+    @Test
+    void a_missing_plural_form_falls_back_to_the_plain_key() {
+        Map<String, String> catalog = Map.of( //
+                "bg:" + KEY, "Нулеви редове: {count}", //
+                "ru:" + KEY + "_one", "{count} строка");
+        CheckMessages.CatalogReader catalogs = (language, key) -> catalog.get(language + ":" + key);
+
+        assertEquals("Нулеви редове: 5", CheckMessages.resolve("bg", catalogs, KEY, TEXT, Map.of("count", 5)));
+        // ru 5 is "many", which this catalog lacks, and it has no plain entry: the default text answers.
+        assertEquals("5 line(s) at price zero", CheckMessages.resolve("ru", catalogs, KEY, TEXT, Map.of("count", 5)));
+        assertEquals("21 строка", CheckMessages.resolve("ru", catalogs, KEY, TEXT, Map.of("count", 21)));
+        // A count that is not a whole number picks no form.
+        assertEquals("Нулеви редове: 1.5", CheckMessages.resolve("bg", catalogs, KEY, TEXT, Map.of("count", 1.5)));
+    }
+
+    /** The default text has plural forms of its own, picked by the English rule. */
+    @Test
+    void the_default_text_takes_its_plural_form_too() {
+        Map<String, String> texts = Map.of("one", "{count} line", "other", "{count} lines");
+        assertEquals("1 line", CheckMessages.resolve(null, NO_CATALOG, KEY, texts, Map.of("count", 1)));
+        assertEquals("5 lines", CheckMessages.resolve("bg", NO_CATALOG, KEY, texts, Map.of("count", 5)));
+        assertEquals("? lines", CheckMessages.resolve(null, NO_CATALOG, KEY, texts, Map.of("count", "?")));
+    }
+
+    /** dirigible #8777: a label inside a sentence opts into lower case, as the browser's formatter. */
+    @Test
+    void a_label_opting_into_lowercase_is_lower_cased_but_an_acronym_stays() {
+        Map<String, Object> params = Map.of("entity", "Валута", "label", "Ставка ДДС", "code", "Код");
+        assertEquals("Вече съществува валута с тази ставка ДДС, Код",
+                CheckMessages.interpolate("Вече съществува {entity, lowercase} с тази {{ label , lowercase }}, {code}", params, "bg"));
+        assertEquals("a VAT rate", CheckMessages.lowercase("A VAT Rate", "en"));
+        // An unknown format leaves the value as it is; an unknown name with a format is kept.
+        assertEquals("Валута {missing, lowercase}", CheckMessages.interpolate("{entity, upper} {missing, lowercase}", params, "bg"));
+    }
+
+    @Test
+    void the_lowercase_rule_mirrors_the_browser() {
+        assertEquals("валута", CheckMessages.lowercase("Валута", "bg"));
+        assertEquals("ДДС", CheckMessages.lowercase("ДДС", "bg"));
+        assertEquals("ставка ДДС", CheckMessages.lowercase("Ставка ДДС", "bg"));
+        // A single capital is a word, not an acronym.
+        assertEquals("a", CheckMessages.lowercase("A", "en"));
+        assertEquals("ırmak", CheckMessages.lowercase("Irmak", "tr"));
+    }
 }

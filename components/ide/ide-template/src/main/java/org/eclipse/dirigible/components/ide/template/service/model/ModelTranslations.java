@@ -112,13 +112,17 @@ final class ModelTranslations {
      * sentence refusing a master that still has composition children (dirigible #8635), and the one
      * refusing a child under a leaf that leafOnly relations reference (dirigible #7826). They are the
      * ones {@code org.eclipse.dirigible.sdk.db.DeleteRefusals} falls back to, written into the en-US
-     * catalog for a translator to copy into another language's.
+     * catalog for a translator to copy into another language's. The two that carry a {@code {count}}
+     * are written in their plural forms, {@code _one} / {@code _other}, as i18next names them
+     * (dirigible #8777): a language that has more forms adds its own ({@code _few}, {@code _many}).
      */
     static final List<Map.Entry<String, String>> DELETE_REFUSAL_MESSAGES = List.of( //
             Map.entry("deleteReferenced", "This {entity} is referenced by {references} and cannot be deleted"), //
-            Map.entry("deleteReference", "{count} {label} record(s)"), //
+            Map.entry("deleteReference_one", "{count} {label} record"), //
+            Map.entry("deleteReference_other", "{count} {label} records"), //
             Map.entry("deleteReferencedByOthers", "This {entity} is referenced by other records and cannot be deleted"), //
-            Map.entry("deleteHasChildren", "This {entity} still has {children} records - delete those first"), //
+            Map.entry("deleteHasChildren_one", "This {entity} still has {count} {children} record - delete it first"), //
+            Map.entry("deleteHasChildren_other", "This {entity} still has {count} {children} records - delete those first"), //
             Map.entry("leafReferenced", "This {entity} is referenced as a leaf by {references} and cannot be given a child"));
 
     /**

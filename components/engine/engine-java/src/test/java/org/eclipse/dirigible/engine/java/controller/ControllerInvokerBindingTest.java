@@ -427,10 +427,10 @@ class ControllerInvokerBindingTest {
         Map<?, ?> body = new ObjectMapper().readValue(response.body(), Map.class);
         // #8569: the 409 keeps its readable message and adds the key and the parameters next to it.
         assertEquals(HttpStatus.CONFLICT.value(), response.getStatus());
-        assertEquals("This Category is referenced by 2 Expense record(s), 1 Budget record(s) and cannot be deleted", body.get("message"),
+        assertEquals("This Category is referenced by 2 Expense records, 1 Budget record and cannot be deleted", body.get("message"),
                 response.body());
         assertEquals("ledger:ledger-model.checks.deleteReferenced", body.get("messageKey"), response.body());
-        assertEquals(Map.of("entity", "Category", "references", "2 Expense record(s), 1 Budget record(s)"), body.get("messageParams"),
+        assertEquals(Map.of("entity", "Category", "references", "2 Expense records, 1 Budget record"), body.get("messageParams"),
                 response.body());
     }
 
@@ -540,9 +540,9 @@ class ControllerInvokerBindingTest {
         @Get("/delete-me-keyed")
         public String deleteMeKeyed() {
             throw new org.eclipse.dirigible.sdk.db.DeleteRestrictionException(
-                    "This Category is referenced by 2 Expense record(s), 1 Budget record(s) and cannot be deleted",
+                    "This Category is referenced by 2 Expense records, 1 Budget record and cannot be deleted",
                     "ledger:ledger-model.checks.deleteReferenced",
-                    Map.of("entity", "Category", "references", "2 Expense record(s), 1 Budget record(s)"));
+                    Map.of("entity", "Category", "references", "2 Expense records, 1 Budget record"));
         }
 
         @Get("/collide")
