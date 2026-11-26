@@ -24,6 +24,7 @@ uses `ctx` instead of Angular globals:
 | `ctx.http` | the platform fetch client (`get/post/put/delete`; pass `{ baseUrl: '' }` for an absolute URL such as a generated controller or `/services/...`) |
 | `ctx.task` | `{ id, processInstanceId, complete(variables?) }` — `complete()` POSTs to `/services/inbox/tasks/{id}` |
 | `ctx.notify(msg)` | show a status message on the form |
+| `ctx.messages` | the form's own outcome sentences in the user's language - `submitted()`, `submitFailed()`, `notOpenedFromTask()` - resolved from the form's catalog and, where the module never translated them, from the platform's `application-core:generated.messages.*` (#8785) |
 | `ctx.close()` | ask a hosting SPA dialog to close (no-op standalone) |
 
 The code attaches button handlers onto `ctx`; a widget `button`'s `callback` names the

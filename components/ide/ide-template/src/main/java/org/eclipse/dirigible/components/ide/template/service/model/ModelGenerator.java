@@ -432,10 +432,9 @@ class ModelGenerator {
         } else {
             Map<String, Object> metadata = asMap(model.get("metadata"));
             if (isForm && metadata != null && metadata.get("successMsg") != null) {
-                Map<String, Object> dialogs = asMap(catalog.get("dialogs"));
-                if (dialogs != null) {
-                    dialogs.put("successMsg", metadata.get("successMsg"));
-                }
+                // The form's own sentence overrides the platform's chrome word, which lives only in
+                // application-core's generated.json (#8782, #8785).
+                catalog.put("messages", Map.of("submitted", metadata.get("successMsg")));
             }
             catalog.put("t", ModelTranslations.formTranslations(model));
         }

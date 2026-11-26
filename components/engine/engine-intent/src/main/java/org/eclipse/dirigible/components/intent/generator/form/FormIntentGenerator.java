@@ -388,45 +388,46 @@ public class FormIntentGenerator implements IntentTargetGenerator {
         // ?taskId=&processInstanceId=. Each action completes the current task via the platform BPM API,
         // passing the action name plus the form model as process variables so a downstream gateway can
         // branch on them. A form opened outside a task (no taskId) reports it instead of failing silently.
-        sb.append(
-                """
-                        const __taskParams = new URLSearchParams(window.location.search);
-                        const __taskId = __taskParams.get('taskId');
-                        const __notifications = new NotificationHub();
-                        const __dialogs = new DialogHub();
+        // Every outcome is reported in the form runtime's own words ($scope.messages), which the user
+        // reads in their language (#8785).
+        sb.append("""
+                const __taskParams = new URLSearchParams(window.location.search);
+                const __taskId = __taskParams.get('taskId');
+                const __notifications = new NotificationHub();
+                const __dialogs = new DialogHub();
 
-                        function __completeTask(action) {
-                            if (!__taskId) {
-                                __notifications.show({ type: 'negative', title: 'Cannot submit', description: 'This form was not opened from a task (no taskId).' });
-                                return;
-                            }
-                            // The clicked button's `action` MUST win. The form model can carry a STALE
-                            // `action` (a prior task in the flow set it as a process variable, preloaded
-                            // into the model on open) plus control-only vars (__*) that are not entity
-                            // data; strip both, then set `action` LAST so the gateway branches on the
-                            // button, not the stale value (fixes approve-completing-as-reject).
-                            const __data = {};
-                            const __model = $scope.model || {};
-                            Object.keys(__model).forEach((key) => {
-                                if (key !== 'action' && key.indexOf('__') !== 0) {
-                                    __data[key] = __model[key];
-                                }
-                            });
-                            __data.action = action;
-                            $http.post('/services/inbox/tasks/' + __taskId, {
-                                action: 'COMPLETE',
-                                data: __data
-                            }).then(() => {
-                                __notifications.show({ type: 'positive', title: 'Task submitted', description: 'The task was completed (' + action + ').' });
-                                __dialogs.closeWindow();
-                                window.close();
-                            }).catch((error) => {
-                                const message = App.services.apiErrors.refusalMessageFor(error, 'Submit failed.');
-                                __notifications.show({ type: 'negative', title: 'Submit failed', description: message });
-                            });
+                function __completeTask(action) {
+                    if (!__taskId) {
+                        __notifications.show({ type: 'negative', description: $scope.messages.notOpenedFromTask() });
+                        return;
+                    }
+                    // The clicked button's `action` MUST win. The form model can carry a STALE
+                    // `action` (a prior task in the flow set it as a process variable, preloaded
+                    // into the model on open) plus control-only vars (__*) that are not entity
+                    // data; strip both, then set `action` LAST so the gateway branches on the
+                    // button, not the stale value (fixes approve-completing-as-reject).
+                    const __data = {};
+                    const __model = $scope.model || {};
+                    Object.keys(__model).forEach((key) => {
+                        if (key !== 'action' && key.indexOf('__') !== 0) {
+                            __data[key] = __model[key];
                         }
+                    });
+                    __data.action = action;
+                    $http.post('/services/inbox/tasks/' + __taskId, {
+                        action: 'COMPLETE',
+                        data: __data
+                    }).then(() => {
+                        __notifications.show({ type: 'positive', description: $scope.messages.submitted() });
+                        __dialogs.closeWindow();
+                        window.close();
+                    }).catch((error) => {
+                        const message = App.services.apiErrors.refusalMessageFor(error, $scope.messages.submitFailed());
+                        __notifications.show({ type: 'negative', description: message });
+                    });
+                }
 
-                        """);
+                """);
         for (String action : actions) {
             if (isCloseAction(action)) {
                 // Close does NOT complete the task: it just closes the dialog/window (same as the X), so

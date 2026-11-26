@@ -60,10 +60,25 @@ class TaskFormApiErrorTest {
     void completeTaskCatchRoutesThroughApiErrors() {
         String code = codeOf("ConfirmOrder");
 
-        assertTrue(code.contains("App.services.apiErrors.refusalMessageFor(error, 'Submit failed.')"),
+        assertTrue(code.contains("App.services.apiErrors.refusalMessageFor(error, $scope.messages.submitFailed())"),
                 "the COMPLETE catch must map the failure through the shared apiErrors helper: " + code);
         assertFalse(code.contains("error.data.message"),
                 "the COMPLETE catch must never read the developer-facing error.data.message: " + code);
         assertFalse(code.contains("'Unknown error'"), "the raw 'Unknown error' fallback must be gone: " + code);
+    }
+
+    /**
+     * Every outcome a task form reports is the form runtime's translated sentence, never an English
+     * literal of the code's own (#8785).
+     */
+    @Test
+    void everyOutcomeIsTheFormRuntimesTranslatedSentence() {
+        String code = codeOf("ConfirmOrder");
+
+        assertTrue(
+                code.contains("description: $scope.messages.submitted()")
+                        && code.contains("description: $scope.messages.notOpenedFromTask()"),
+                "the success and the missing-task outcomes must report through $scope.messages: " + code);
+        assertFalse(code.contains("title: '") || code.contains("description: '"), "an outcome must not be an English literal: " + code);
     }
 }
