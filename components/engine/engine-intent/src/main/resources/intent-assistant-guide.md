@@ -5779,7 +5779,8 @@ or by a process step - leaves BOTH parents' totals right: the one that received 
 left. Nothing to declare.
 
 **Sum + balance + status (payment settlement).** With `op: sum` the roll-up keeps `field` equal to the
-sum of the children's `of` field. Add `capacity` (a numeric parent field the sum is measured against)
+sum of the children's `of` field (any numeric type - `integer` / `long` seat or hour counts work as well
+as `decimal` amounts). Add `capacity` (a numeric parent field the sum is measured against)
 to also maintain a `balance` field (= `capacity − sum`) and set a `status` relation to `statusWhenFull`
 (when `sum >= capacity`) or `statusWhenPartial` (when `0 < sum < capacity`). At zero the roll-up gives
 the status back: the first move into one of its two statuses remembers the status it displaced (a

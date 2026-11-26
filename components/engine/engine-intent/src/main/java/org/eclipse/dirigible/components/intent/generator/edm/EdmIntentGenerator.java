@@ -651,6 +651,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 if (measured != null) {
                     property.put("balanceCapacity", IntentNaming.pascalCase(measured.getCapacity()));
                     property.put("balanceSum", IntentNaming.pascalCase(measured.getField()));
+                    putIfPresent(property, "balanceCapacityType", integralFieldClass(entity, measured.getCapacity()));
+                    putIfPresent(property, "balanceSumType", integralFieldClass(entity, measured.getField()));
                 }
                 // A scalar field with dependsOn is auto-populated from the trigger's target record
                 // (no filterBy - there is no option list to narrow).
@@ -1189,6 +1191,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             String parentEntity;
             String parentPerspective;
             String parentGenFolder = "";
+            String capacityType;
             if (notBlank(via.getModel())) {
                 UsesIntent uses = usesByAlias.get(via.getModel());
                 if (uses == null) {
@@ -1203,6 +1206,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 parentEntity = via.getTo();
                 parentPerspective = target.perspectiveName();
                 parentGenFolder = via.getModel();
+                capacityType = withCapacity && target.propertyTypes() != null ? IntentEntities.integralJavaClass(target.propertyTypes()
+                                                                                                                       .get(IntentNaming.pascalCase(
+                                                                                                                               rollup.getCapacity())))
+                        : "";
             } else {
                 EntityIntent parent = byName.get(via.getTo());
                 if (parent == null) {
@@ -1210,7 +1217,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 }
                 parentEntity = parent.getName();
                 parentPerspective = IntentEntities.resolvePerspective(parent.getName(), compositionParents, model);
+                capacityType = withCapacity ? integralFieldClass(parent, rollup.getCapacity()) : "";
             }
+            // Integral columns are converted to the BigDecimal the guards compute in (#7944); the keys are
+            // put only for one, so a decimal roll-up's guard renders exactly as before.
+            String ofType = integralFieldClass(child, rollup.getOf());
             List<Map<String, Object>> forChild = guards.computeIfAbsent(rollup.getEntity(), ignored -> new ArrayList<>());
             List<Map<String, Object>> filter = ScheduleSupport.conditions(rollup.getWhere());
             if (parentGenFolder.isEmpty()) {
@@ -1221,6 +1232,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 fit.put("fkProperty", IntentNaming.pascalCase(rollup.getVia()));
                 fit.put("fitField", IntentNaming.pascalCase(rollup.getField()));
                 fit.put("ofField", IntentNaming.pascalCase(rollup.getOf()));
+                putIfPresent(fit, "ofFieldType", ofType);
                 fit.put("childIdField", "Id");
                 if (!filter.isEmpty()) {
                     fit.put("filter", filter);
@@ -1243,6 +1255,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             guard.put("fkProperty", IntentNaming.pascalCase(rollup.getVia()));
             guard.put("capacityField", IntentNaming.pascalCase(rollup.getCapacity()));
             guard.put("ofField", IntentNaming.pascalCase(rollup.getOf()));
+            putIfPresent(guard, "ofFieldType", ofType);
+            putIfPresent(guard, "capacityFieldType", capacityType);
             guard.put("childIdField", "Id");
             // WHICH rows count (#7542). The very clauses the asynchronous recompute queries by, so the
             // stored balance and the enforced ceiling are one authored definition - the guard re-sums
@@ -3796,6 +3810,25 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                            .trim()
                            .toLowerCase(java.util.Locale.ROOT);
         return "string".equals(type) || "text".equals(type);
+    }
+
+    /**
+     * The integral Java class of the entity's named field ({@link IntentEntities#integralJavaClass}),
+     * or "".
+     */
+    private static String integralFieldClass(EntityIntent entity, String name) {
+        FieldIntent field = fieldOf(entity, name);
+        return field == null ? "" : IntentEntities.integralJavaClass(IntentEntities.sqlType(field.getType()));
+    }
+
+    /**
+     * Puts a value only when it is not empty, so a descriptor that does not need the key stays
+     * unchanged.
+     */
+    private static void putIfPresent(Map<String, Object> target, String key, String value) {
+        if (!value.isEmpty()) {
+            target.put(key, value);
+        }
     }
 
     private static FieldIntent fieldOf(EntityIntent entity, String name) {

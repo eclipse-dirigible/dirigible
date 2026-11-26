@@ -1721,7 +1721,10 @@ final class ModelParameterProcessor {
         figures.put("{capacity}", capacity);
         figures.put("{sum}", "guardConsumed");
         figures.put("{requested}", "guardIncoming");
-        figures.put("{remaining}", capacity + ".subtract(guardConsumed)");
+        // An integral capacity (#7944) is converted before the decimal arithmetic, as the guard itself
+        // does.
+        String capacityDecimal = truthy(guard, "capacityFieldType") ? "java.math.BigDecimal.valueOf(" + capacity + ")" : capacity;
+        figures.put("{remaining}", capacityDecimal + ".subtract(guardConsumed)");
         StringBuilder expression = new StringBuilder();
         StringBuilder literal = new StringBuilder();
         int index = 0;

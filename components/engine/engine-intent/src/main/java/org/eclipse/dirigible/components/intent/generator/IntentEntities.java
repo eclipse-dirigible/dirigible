@@ -429,4 +429,26 @@ public final class IntentEntities {
                 return "VARCHAR";
         }
     }
+
+    /**
+     * The boxed Java class of an INTEGRAL numeric column - {@code Integer} or {@code Long} - or the
+     * empty string for any other column. A roll-up computes in {@code BigDecimal}, which is also the
+     * class of a {@code decimal} / {@code double} column (both are {@code DECIMAL}), so only an
+     * integral one has to be converted on the way in and narrowed on the way out (#7944).
+     *
+     * @param sqlType the column's SQL type - {@link #sqlType(String)} of a local field, or the owner
+     *        model's {@code dataType} of a cross-model property; may be {@code null}
+     * @return {@code Integer}, {@code Long}, or {@code ""}
+     */
+    public static String integralJavaClass(String sqlType) {
+        if (sqlType == null) {
+            return "";
+        }
+        return switch (sqlType.trim()
+                              .toUpperCase(java.util.Locale.ROOT)) {
+            case "INTEGER", "INT" -> "Integer";
+            case "BIGINT" -> "Long";
+            default -> "";
+        };
+    }
 }
