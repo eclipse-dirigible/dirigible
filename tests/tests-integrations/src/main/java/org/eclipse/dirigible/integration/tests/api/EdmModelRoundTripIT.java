@@ -90,6 +90,10 @@ class EdmModelRoundTripIT extends IntegrationTest {
     private static final String META_PROJECT = "edm-roundtrip-meta";
     private static final String META_PROJECT_PATH = WORKSPACE_PATH + "/" + META_PROJECT;
     private static final String META_EDM_PUT_URL = "/services/ide/workspaces/" + WORKSPACE + "/" + META_PROJECT + "/meta.edm";
+    /** Declares a share: (#8622), whose entity-level map the .edm has to carry. */
+    private static final String SHARE_PROJECT = "edm-roundtrip-share";
+    private static final String SHARE_PROJECT_PATH = WORKSPACE_PATH + "/" + SHARE_PROJECT;
+    private static final String SHARE_EDM_PUT_URL = "/services/ide/workspaces/" + WORKSPACE + "/" + SHARE_PROJECT + "/share.edm";
 
     // The owner of the cross-model target. Currency is a SETTING, so its owner publishes it under the
     // "Settings" perspective - a perspective that is not the entity's name, which is the only shape in
@@ -261,6 +265,56 @@ class EdmModelRoundTripIT extends IntegrationTest {
                   - { id: 9, name: VOIDED, stage: void }
             """;
 
+    // A document whose issued copy may be handed out through a link (#8613). `share:` reaches the
+    // .model as one entity-level map - the state as a scalar AND as typed terms, the copy, its master
+    // foreign key, the expiry and the roles - and an .edm that does not carry it loses all of it on the
+    // first save of the diagram, after which the next generation emits no share code at all (#8622).
+    private static final String SHARE_INTENT_YAML = """
+            name: share
+            entities:
+              - name: InvoiceStatus
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, length: 40 }
+
+              - name: Invoice
+                function: Document
+                share:
+                  when: "status == ISSUED"
+                  copy: InvoiceCopy
+                  roles: [Sharer]
+                  expiresAfterDays: 30
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: title, type: string, length: 60, required: true, function: DocumentTitle }
+                relations:
+                  - { name: status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus }
+
+              - name: InvoiceLine
+                function: DocumentItem
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string, length: 60 }
+                relations:
+                  - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+
+              - name: InvoiceCopy
+                function: Snapshot
+                relations:
+                  - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+
+            permissions:
+              - { role: Sharer, description: May hand an issued invoice to its customer }
+
+            seeds:
+              - name: invoice-statuses
+                entity: InvoiceStatus
+                rows:
+                  - { id: 1, name: DRAFT }
+                  - { id: 2, name: ISSUED }
+            """;
+
     @Autowired
     private IRepository repository;
 
@@ -397,6 +451,39 @@ class EdmModelRoundTripIT extends IntegrationTest {
 
         assertTrue(resource(META_PROJECT_PATH, "meta.model").exists(), "the .edm -> .model transform must have regenerated meta.model");
         assertEveryKeySurvives(modelFromIntent, parseModel(contentOf(META_PROJECT_PATH, "meta.model")));
+    }
+
+    /**
+     * An entity's {@code share:} (#8613) survives an unmodified {@code .edm} save (#8622). The
+     * {@code share} map used to be written into the {@code .model} only, so the {@code .model} rebuilt
+     * from the {@code .edm} had none, and the next generation dropped the share endpoints, the Share
+     * links panel and the {@code ShareSubject} - leaving links already handed out unserved and
+     * unrevokable. The whole-document diff then covers whatever else a shareable document carries.
+     */
+    @Test
+    void share_survives_the_edm_to_model_round_trip() {
+        writeIntent(SHARE_PROJECT_PATH, SHARE_INTENT_YAML);
+        generate(SHARE_PROJECT);
+
+        JsonObject modelFromIntent = parseModel(contentOf(SHARE_PROJECT_PATH, "share.model"));
+        assertTrue(entity(modelFromIntent, "Invoice").has("share"),
+                "fixture precondition: the generated .model should carry Invoice.share");
+        assertTrue(contentOf(SHARE_PROJECT_PATH, "share.edm").contains("share=\""),
+                "the .edm must carry the structured value [share] as an attribute");
+
+        byte[] edmBytes = resource(SHARE_PROJECT_PATH, "share.edm").getContent();
+        resource(SHARE_PROJECT_PATH, "share.model").delete();
+        restAssuredExecutor.execute(() -> given().contentType("application/octet-stream")
+                                                 .body(edmBytes)
+                                                 .when()
+                                                 .put(SHARE_EDM_PUT_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        assertTrue(resource(SHARE_PROJECT_PATH, "share.model").exists(), "the .edm -> .model transform must have regenerated share.model");
+        JsonObject modelFromEdm = parseModel(contentOf(SHARE_PROJECT_PATH, "share.model"));
+        assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Invoice", "share");
+        assertEveryKeySurvives(modelFromIntent, modelFromEdm);
     }
 
     /**
@@ -674,7 +761,7 @@ class EdmModelRoundTripIT extends IntegrationTest {
 
     @AfterEach
     void cleanup() {
-        for (String path : new String[] {PROJECT_PATH, OWNER_PROJECT_PATH, META_PROJECT_PATH}) {
+        for (String path : new String[] {PROJECT_PATH, OWNER_PROJECT_PATH, META_PROJECT_PATH, SHARE_PROJECT_PATH}) {
             if (repository.hasCollection(path)) {
                 repository.removeCollection(path);
             }
