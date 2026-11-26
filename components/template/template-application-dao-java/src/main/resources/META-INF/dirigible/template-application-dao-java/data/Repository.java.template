@@ -12,6 +12,17 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #set($hasStatusStamps = $statusStamps && $statusStamps.size() > 0)
 ## The single flags (#8101): booleans at most one row holds, fleet-wide or per scope.
 #set($hasSingleFlags = $singleFlags && $singleFlags.size() > 0)
+## The gated duplicates (#7750): `checks: duplicate` with a status gate - refused at the move into it.
+## Every write that can carry the gate status runs in a unit of work, so the check can hold its lock
+## until the write commits.
+#set($hasGatedDuplicates = false)
+#if($documentChecks)
+#foreach($check in $documentChecks)
+#if($check.kind == "duplicate")
+#set($hasGatedDuplicates = true)
+#end
+#end
+#end
 ## The case-insensitive keys (#8095): `unique: { ignoreCase: true }` fields.
 #set($hasUniqueIgnoringCase = false)
 ## The business keys (#8661): a composite `unique:` or a `unique: true` field - a write colliding with one
@@ -650,10 +661,13 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 
     @Override
     public ${name}Entity save(${name}Entity entity) {
-#if($hasSingleFlags || $documentItem)
+#if($hasSingleFlags || $documentItem || $hasGatedDuplicates)
 #if($hasSingleFlags)
         // A single flag changes hands in ONE unit of work with the write that takes it, so the holder
         // it demotes and this row commit together or not at all.
+#end
+#if($hasGatedDuplicates)
+        // A gated duplicate check holds its lock until this write commits (#7750).
 #end
 #if($documentItem)
         // A document line commits in ONE unit of work with the header total it moves: a total the
@@ -840,9 +854,10 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 
     @Override
     public ${name}Entity update(${name}Entity entity) {
-#if($hasSingleFlags || $documentItem || $preservedOnUpdate.size() > 0 || $hasNotExistsChecks)
-        // One unit with the header total(s) it moves - see save() (#8096) - and with the row lock the
-        // carried-over system-owned columns are read under (#8109).
+#if($hasSingleFlags || $documentItem || $preservedOnUpdate.size() > 0 || $hasGatedDuplicates || $hasNotExistsChecks)
+        // One unit with the header total(s) it moves - see save() (#8096) - with the row lock the
+        // carried-over system-owned columns are read under (#8109), and with the lock a gated duplicate
+        // check holds until the write commits (#7750).
 #if($hasDuplicateKeys)
         try {
             return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updateInUnit(entity));
@@ -1054,8 +1069,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      * re-fire onUpdate reactions (notifications, roll-ups, integrations) for a change the user never made.
      */
     public ${name}Entity updateWithoutEvent(${name}Entity entity) {
-#if($hasSingleFlags || $documentItem || $hasNotExistsChecks)
-        // One unit with the header total(s) it moves - see save() (#8096).
+#if($hasSingleFlags || $documentItem || $hasGatedDuplicates || $hasNotExistsChecks)
+        // One unit with the header total(s) it moves - see save() (#8096) - and with the lock a gated
+        // duplicate check holds until the write commits (#7750).
 #if($hasDuplicateKeys)
         try {
             return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updateWithoutEventInUnit(entity));
@@ -1207,9 +1223,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 
     @Override
     public int updateProperties(Object id, java.util.Map<String, Object> values, String eventTopic) {
-#if($documentItem || $hasNotExistsChecks)
-        // One unit with the header total(s) it moves - see save() (#8096) - and with the row lock a
-        // notExists check counts under (#8002).
+#if($documentItem || $hasGatedDuplicates || $hasNotExistsChecks)
+        // One unit with the header total(s) it moves - see save() (#8096) - with the row lock a
+        // notExists check counts under (#8002), and with the lock a gated duplicate check holds until
+        // the write commits (#7750): a transition button and a workflow setter move the status through
+        // here.
         return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updatePropertiesInUnit(id, values, eventTopic));
     }
 
@@ -1937,6 +1955,8 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         return false;
     }
 
+## The values a gated duplicate compares (#7750), as a fresh Criteria per call - the builder is mutable.
+#macro(duplicateCriteria $check)org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()#foreach($field in $check.fields)#if($check.normalizedFields && $check.normalizedFields.contains($field)).eqNormalized("${field}", entity.${field})#else.eq("${field}", entity.${field})#end#end#end
     /**
      * Declarative document checks (intent {@code checks:}): each runs when the document is persisted
      * carrying its gate status. Throws {@code ValidationException} with the authored message - mapped to
@@ -1988,6 +2008,38 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             Object requiredValue = ${check.valueExpression};
             if ((${requiredGuard}) && (requiredValue == null || org.eclipse.dirigible.sdk.db.Normalize.isBlank(String.valueOf(requiredValue)))) {
                 throw #if($check.refusalJava)${check.refusalJava}#{else}org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava})#end;
+            }
+#elseif($check.kind == "duplicate")
+            // The refusing twin of the duplicate warning (intent `checks: duplicate` with a status gate,
+            // #7750): the move into the gate status is refused while ANOTHER row with the same values
+            // holds one of the `among` statuses - two draft bills with one supplier invoice number may
+            // coexist, the second may not be approved. The values compare as the warning compares them
+            // (#7524), and an unset value repeats nothing.
+            if (#foreach($field in $check.fields)entity.${field} != null#if($foreach.hasNext) && #end#end) {
+                if (store().isInUnitOfWork()) {
+                    // Two such moves at once would both count before either committed. The rows carrying
+                    // these values take turns on ONE lock - the oldest of them, this row included - held
+                    // until the write commits, so the second writer waits and then counts the first one's
+                    // row. One lock per move, the same one for every writer, so the turns cannot deadlock.
+                    // (checkFor() asks outside a unit and takes no lock; the write it precedes does.)
+                    java.util.List<${name}Entity> lockScope = findAll(#duplicateCriteria($check).orderByAsc("${pkPropertyName}"), 1, 0);
+                    if (!lockScope.isEmpty()) {
+                        lockForUpdate(lockScope.get(0).${pkPropertyName});
+                    }
+                }
+                org.eclipse.dirigible.components.data.store.java.repository.Criteria duplicateOf = #duplicateCriteria($check)
+                        .in("${check.statusProperty}", java.util.List.of(#foreach($among in $check.among)${entityStatusJavaClass}.valueOf("${among}")#if($foreach.hasNext), #end#end));
+                if (entity.${pkPropertyName} != null) {
+                    duplicateOf.ne("${pkPropertyName}", entity.${pkPropertyName});
+                }
+                java.util.List<${name}Entity> duplicates = findAll(duplicateOf, 1, 0);
+                if (!duplicates.isEmpty()) {
+#if($check.matchProperty)
+                    throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava}, "match", duplicates.get(0).${check.matchProperty});
+#else
+                    throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
+#end
+                }
             }
 #elseif($check.kind == "forbidWhen")
             // The reject-twin of requiredWhen (intent `checks: forbidWhen`), gated on the status at

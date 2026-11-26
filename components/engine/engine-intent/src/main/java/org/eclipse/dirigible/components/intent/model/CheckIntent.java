@@ -167,9 +167,18 @@ public class CheckIntent {
      * {@code forbidWhen} it is optional and it is the routing: without one the check holds on every
      * user write (the generated controller), with one it runs in the repository when the record is
      * persisted carrying this status (the workflow transition into e.g. POSTED), so drafting
-     * item-by-item stays unconstrained.
+     * item-by-item stays unconstrained. On a {@code duplicate} it turns the warning into a refusal at
+     * that transition (issue #7750), counting only the other rows that hold one of {@link #among}.
      */
     private Integer status;
+    /**
+     * {@code duplicate} with a {@link #status} gate only (issue #7750): the statuses (seed ids, a name
+     * resolved at parse) another row must hold to count as the duplicate that refuses the move. Two
+     * DRAFT bills of one supplier with the same supplier invoice number may coexist; the second one may
+     * not be APPROVED while the first is APPROVED, PARTIAL or PAID. Required with the gate - a row in a
+     * status left out (a cancelled bill) never refuses anything.
+     */
+    private List<Integer> among;
     /**
      * The user-facing message when the check fails, in the module's default language. Other languages
      * translate it in the module's catalogs ({@code i18n/<locale>/<model>.model.json}) under
@@ -294,12 +303,20 @@ public class CheckIntent {
 
     /**
      * Whether this check is the soft tier - declared {@code severity: warn}, or a kind that exists only
-     * as a warning ({@code duplicate}, {@code itemsCompare}).
+     * as a warning ({@code itemsCompare}, and a {@code duplicate} without a {@link #status} gate).
      *
      * @return true for a warning
      */
     public boolean isWarning() {
-        return "warn".equals(severity) || "duplicate".equals(kind) || "itemsCompare".equals(kind);
+        return "warn".equals(severity) || ("duplicate".equals(kind) && status == null) || "itemsCompare".equals(kind);
+    }
+
+    public List<Integer> getAmong() {
+        return among;
+    }
+
+    public void setAmong(List<Integer> among) {
+        this.among = among;
     }
 
     public String getOutcome() {

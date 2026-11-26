@@ -1030,10 +1030,19 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   - `{ kind: duplicate, fields: [name], message: "A customer with this name already exists" }`:
     another record already carries the same values. Use it where a hard `unique:` would be wrong -
     two companies may share a registered name under different registration numbers. Fields are own
-    fields or to-one relations; it is always a warning (`severity: error` is refused - that is `unique:`).
-    A text field is compared ignoring case and surrounding spaces ("ACME Ltd" repeats "Acme Ltd "), and
-    `{match}` in the message is replaced with the existing record's label (its `name`, else its id) -
-    `message: "A customer with this name already exists: {match}"`.
+    fields or to-one relations; ungated it is always a warning (`severity: error` is refused - that is
+    `unique:`). A text field is compared ignoring case and surrounding spaces ("ACME Ltd" repeats "Acme
+    Ltd "), and `{match}` in the message is replaced with the existing record's label (its `name`, else
+    its id) - `message: "A customer with this name already exists: {match}"`.
+    **With a `status:` gate it REFUSES instead (#7750)** - the hard twin at a transition: `{ kind:
+    duplicate, fields: [Supplier, supplierNumber], status: APPROVED, among: [APPROVED, PARTIAL, PAID],
+    message: "This supplier invoice number is already approved for this supplier: {match}" }`. The move
+    into `status` (a transition button, a workflow step, an update carrying it) is refused with 400 while
+    ANOTHER row with the same values holds one of `among`; drafts with the same values still coexist, and
+    a row in a status not listed (a cancelled bill) never counts. `among` is required with the gate
+    (statuses by name), `severity: warn` is refused with it (nobody to confirm at a transition), and
+    `severity: error` is optional. Declare the ungated warning beside it to ask at drafting time too.
+    Two such moves at once take turns on a row lock, so only one passes.
   - `{ kind: itemsCompare, field: price, op: gt, value: 0, message: "{count} line(s) at price zero" }`
     on the DOCUMENT (the master): every line's `field` compared with the `value` literal, asked ONCE
     when the document is saved for all the lines that break it - not once per line. `{count}` in the

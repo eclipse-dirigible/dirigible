@@ -7725,6 +7725,9 @@ public final class IntentParser {
             validateDuplicateCheck(entity, check, subject, issues);
             return;
         }
+        if (check.getAmong() != null) {
+            issues.add(subject + " carries `among` - only a duplicate check with a `status` gate counts the statuses of other rows");
+        }
         if ("itemsCompare".equals(kind)) {
             validateItemsCompareCheck(entity, check, entities, subject, issues);
             return;
@@ -7909,10 +7912,20 @@ public final class IntentParser {
             return;
         }
         String kind = check.getKind();
+        if ("duplicate".equals(kind) && check.getStatus() != null) {
+            // The gated duplicate (#7750) is a refusal at a transition, where nobody can confirm a warning.
+            if ("warn".equals(severity)) {
+                issues.add(subject + " carries both `severity: warn` and a `status` gate - a gated duplicate refuses the move into"
+                        + " that status, where there is nobody to confirm a warning; drop the gate or the severity");
+            }
+            return;
+        }
         if ("duplicate".equals(kind) || "itemsCompare".equals(kind)) {
             if ("error".equals(severity)) {
                 issues.add(subject + " exists only as a warning and cannot carry `severity: error` - "
-                        + ("duplicate".equals(kind) ? "a hard refusal of a second record with the same values is `unique:`"
+                        + ("duplicate".equals(kind)
+                                ? "a hard refusal of a second record with the same values is `unique:`, and a refusal at a"
+                                        + " transition is a duplicate with a `status` gate and `among`"
                                 : "a hard per-line rule is a `compare` check on the items entity"));
             }
             return;
@@ -7933,6 +7946,14 @@ public final class IntentParser {
      * {@code fields} - the rule for which a hard {@code unique:} is wrong because two legitimate
      * records may share them (two companies with the same registered name under different registration
      * numbers). Each field is the entity's own field or to-one relation.
+     *
+     * <p>
+     * With a {@code status} gate it is the hard twin (#7750): the move into that status is refused
+     * while another row with the same values holds one of {@code among} - two draft bills with one
+     * supplier invoice number may coexist, the second may not be approved. {@code among} is required
+     * with the gate rather than defaulted: every default reads a status nobody named (a cancelled bill
+     * refusing the approval of its replacement, or a paid one not refusing it), and the refusal is
+     * hard.
      */
     private static void validateDuplicateCheck(EntityIntent entity, CheckIntent check, String subject, List<String> issues) {
         if (check.getFields() == null || check.getFields()
@@ -7941,7 +7962,21 @@ public final class IntentParser {
             return;
         }
         if (check.getStatus() != null) {
-            issues.add(subject + " is row-level and cannot carry a `status` gate - it is asked of the person saving the record");
+            if (entityStatusRelationOf(entity) == null) {
+                issues.add(subject + " with a `status` gate requires a `function: EntityStatus` relation on [" + entity.getName()
+                        + "] to read the gate from");
+            }
+            if (check.getAmong() == null || check.getAmong()
+                                                 .isEmpty()) {
+                issues.add(subject + " with a `status` gate requires `among`: the statuses another [" + entity.getName()
+                        + "] must hold to refuse the move (e.g. [APPROVED, PAID]) - a row in any other status is not a duplicate");
+            } else if (check.getAmong()
+                            .contains(null)) {
+                issues.add(subject + " has an empty entry in `among`");
+            }
+        } else if (check.getAmong() != null) {
+            issues.add(subject + " carries `among` without a `status` gate - `among` names the statuses that refuse the move into the"
+                    + " gate; an ungated duplicate is a warning about every other record");
         }
         for (String field : check.getFields()) {
             if (field == null || !hasPropertyIgnoreCase(entity, field)) {
