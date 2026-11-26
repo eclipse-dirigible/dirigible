@@ -9,11 +9,11 @@
  */
 package org.eclipse.dirigible.components.extensions.aggregation;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import org.eclipse.dirigible.commons.config.ApplicationLanguages;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.script.ScriptEngineAvailability;
@@ -26,6 +26,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.util.ClassUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -175,6 +176,9 @@ class ShellBootstrapEndpoint {
         try {
             return json(locales.aggregate(values(request, EXTENSION_POINTS, LocalesAggregator.DEFAULT_EXTENSION_POINT),
                     values(request, "langs"), values(request, "namespaces")));
+        } catch (UnknownLocaleException e) {
+            // The caller asked for a language no locale stands for: its error, not the platform's (#8159).
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
         } catch (RuntimeException e) {
             LOGGER.error("Error while loading locale modules", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -231,12 +235,7 @@ class ShellBootstrapEndpoint {
     @GetMapping({CANONICAL + "languages", SCRIPT_SERVICES + "application-languages.js",
             PUBLIC_SCRIPT_SERVICES + "application-languages.js"})
     ResponseEntity<Object> languages() {
-        List<String> languages = Arrays.stream(Configuration.get(DirigibleConfig.APPLICATION_LANGUAGES.getKey(), "en")
-                                                            .split(","))
-                                       .map(String::trim)
-                                       .filter(code -> !code.isEmpty())
-                                       .toList();
-        return json(languages.isEmpty() ? List.of("en") : languages);
+        return json(ApplicationLanguages.get());
     }
 
     /**

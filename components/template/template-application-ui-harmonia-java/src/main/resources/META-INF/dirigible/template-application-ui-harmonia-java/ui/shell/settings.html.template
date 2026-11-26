@@ -109,7 +109,7 @@
              Language setting) and, under it, the display formats - both are how values are PRESENTED
              to this user, both apply to every application on this origin, so they share one pane.
              The offered language codes are the platform's supported set
-             (DIRIGIBLE_APPLICATION_LANGUAGES, default en,bg) - never per-app. One preference drives
+             (DIRIGIBLE_APPLICATION_LANGUAGES, default en) - never per-app. One preference drives
              both sides: the fetch client sends it as Accept-Language, so multilingual entities come
              back translated; Print prefers it too. The language card alone is hidden when the
              platform configures a single language - there is then nothing to choose. -->

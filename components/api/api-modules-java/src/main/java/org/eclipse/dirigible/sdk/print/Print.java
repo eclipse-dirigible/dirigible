@@ -11,7 +11,7 @@ package org.eclipse.dirigible.sdk.print;
 
 import java.io.IOException;
 
-import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.commons.config.ApplicationLanguages;
 import org.eclipse.dirigible.components.engine.document.PrintFacade;
 import org.eclipse.dirigible.sdk.component.Beans;
 
@@ -57,14 +57,6 @@ public final class Print {
      * @return the first configured language code, {@code en} when the set is empty
      */
     public static String defaultLanguage() {
-        String configured = DirigibleConfig.APPLICATION_LANGUAGES.getStringValue();
-        if (configured != null) {
-            for (String code : configured.split(",")) {
-                if (!code.isBlank()) {
-                    return code.trim();
-                }
-            }
-        }
-        return "en";
+        return ApplicationLanguages.defaultLanguage();
     }
 }
