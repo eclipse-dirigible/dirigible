@@ -6180,9 +6180,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             return null;
         }
         for (ScheduleConditionIntent condition : conditions) {
+            // a null value is the presence test (#7984), not a status name
             if (condition.getField() != null && condition.getField()
                                                          .equalsIgnoreCase(target.statusProperty())
-                    && !isSeedId(condition.getValue())) {
+                    && condition.getValue() != null && !isSeedId(condition.getValue())) {
                 return condition;
             }
         }

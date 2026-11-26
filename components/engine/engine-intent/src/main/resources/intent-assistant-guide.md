@@ -5905,6 +5905,11 @@ refused by the very ceiling the cancellation frees. **Only `eq` / `ne`**: the fi
 (as a query and as a Java comparison of the row in hand) and an exact equality is the only comparison
 whose two renderings cannot disagree.
 
+`value: null` is the presence test: `{ field: Storno, op: eq, value: null }` counts only the rows
+whose `Storno` is empty ("not a reversal"), `op: ne` only the rows where it is set. Every other
+comparison leaves an empty column out, so this is the only way to filter on "not reversed yet" or "no
+parent yet".
+
 `guardAt:` says WHEN the capacity guard runs. Without it the check runs on every write of the child,
 which is right for a row carrying its own typed amount (an allocation's) and useless for one whose
 amount is a DOCUMENT TOTAL - that is recomputed from the lines after the header is written, so the
