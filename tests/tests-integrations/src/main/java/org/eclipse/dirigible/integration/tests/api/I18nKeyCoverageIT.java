@@ -218,7 +218,9 @@ class I18nKeyCoverageIT {
         for (String locale : languages()) {
             Map<String, String> catalog = coreCatalog(locale);
             used.forEach((key, files) -> {
-                if (!catalog.containsKey(key)) {
+                // A key asked for with a count resolves to its plural forms (i18next's `<key>_one` /
+                // `_other`); `_other` is the one every language has.
+                if (!catalog.containsKey(key) && !catalog.containsKey(key + "_other")) {
                     missing.add(locale + ": application-core:" + key + "  (used in " + files + ")");
                 }
             });
@@ -465,6 +467,23 @@ class I18nKeyCoverageIT {
             assertEquals("Search Goods Receipts...",
                     t(context, "orders:orders-model.messages.inputSearch", "Search {{name}}...", "Goods Receipts"),
                     "the default language keeps the label as written");
+        }
+    }
+
+    /**
+     * The Settings report of untranslated records (#8789) counts them in the user's language: the shell
+     * catalog carries the plural forms and i18next picks the one the count asks for - evaluated over
+     * the real i18next, whose plural rules decide.
+     */
+    @Test
+    void anUntranslatedRecordCountInBulgarianPicksItsPluralForm() {
+        String count = "T('application-core:shell.settings.untranslatedRecords', 'x', { entity: 'Валути', count: %d, total: 160,"
+                + " language: 'български' })";
+        try (Context context = loadI18n("bg", JSON.createObjectNode(), read(resources(I18NEXT).get(0)))) {
+            assertEquals("Валути: 1 от 160 записа няма превод на български.", context.eval("js", count.formatted(1))
+                                                                                     .asString());
+            assertEquals("Валути: 3 от 160 записа нямат превод на български.", context.eval("js", count.formatted(3))
+                                                                                      .asString());
         }
     }
 

@@ -188,16 +188,16 @@
               </div>
             </div>
           </div>
-          <template x-if="languageWarnings().length > 0">
+          <template x-if="$store.languageCoverage.warnings().length > 0">
             <div class="vbox gap-2 mt-8">
               <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.missingTranslations', 'Incomplete translations')"></span>
-              <template x-for="warn in languageWarnings()" :key="warn.app">
+              <template x-for="warn in $store.languageCoverage.warnings()" :key="warn.app">
                 <div x-h-alert data-variant="warning" role="alert">
+                  <div x-h-alert-title x-text="warn.app"></div>
                   <div x-h-alert-description class="vbox gap-1">
-                    <p x-show="warn.screens.length > 0"
-                       x-text="T('application-core:shell.settings.missingScreens', '{{app}} has no {{missing}} translation of its screens - its labels show in the default language.', { app: warn.app, missing: warn.screens.join(', ') })"></p>
-                    <p x-show="warn.data.length > 0"
-                       x-text="T('application-core:shell.settings.missingData', '{{app}} does not provide {{missing}} data - its lists and documents show the default-language values (for example statuses and types). Declare languages: in its intent once the data is translated.', { app: warn.app, missing: warn.data.join(', ') })"></p>
+                    <template x-for="line in warn.lines" :key="line">
+                      <p x-text="line"></p>
+                    </template>
                   </div>
                 </div>
               </template>

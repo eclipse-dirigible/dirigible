@@ -27,15 +27,20 @@ App.config = {
 
   // Data-language codes this app PROVIDES translations for (the intent's `languages:`). This never
   // defines what the stack supports - the platform's set (DIRIGIBLE_APPLICATION_LANGUAGES) drives
-  // the Region & Language picker. The shared application shell compares this declaration against
-  // the platform set and lists the app as a warning when translations are missing; untranslated
+  // the Region & Language picker. The shells' Settings fall back to this declaration only when the
+  // translations the app's data actually has cannot be read (see translatableEntities); untranslated
   // content falls back to the default language.
   languages: ${appLanguages},
 
-  // Whether the app has data to translate at all (a multilingual entity). The shell weighs the
-  // `languages` declaration above only for such an app: one without translatable data is fully
+  // Whether the app has data to translate at all (a multilingual entity). An app without it is fully
   // translated once its screens are (#8137).
   translatableData: ${appTranslatableData},
+
+  // The multilingual entities, each with its plural label (catalog key and default text) and the URL
+  // that answers how many of its records have no translation per platform language (#8789). The
+  // shells' Settings report that, not the declaration above. Kept on one line: the shells read this
+  // file as text, not as a script.
+  translatableEntities: ${appTranslatableEntities},
 
   // Country-scoped label overrides (the intent's field `countryLabels:`), keyed by ISO 3166-1
   // alpha-2 country code and then by the label's own translation key. The shared i18n runtime
