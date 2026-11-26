@@ -4067,6 +4067,39 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * The one property of the record a {@code forbidWhen} condition is about (#8911): every term reads
+     * it - the record's own field or to-one, or one hop through that to-one ({@code Store.Status}) - so
+     * changing it is what clears the refusal, and the refusal names it for the form to mark. A
+     * condition over two properties names none, and neither does one over the composition master: a
+     * line's form cannot move the line to another document.
+     *
+     * @param entity the entity the check is declared on
+     * @param compositionParents each child's composition-master entity name
+     * @param when the authored condition, which {@link CheckSupport#conditionTerms} has already read
+     *        (so every term parses, and names a property exactly as it is declared)
+     * @return the PascalCased property, or {@code null} when the condition has no single one
+     */
+    private static String forbidWhenField(EntityIntent entity, Map<String, String> compositionParents, Object when) {
+        Set<String> properties = new HashSet<>();
+        for (String term : CheckSupport.terms(when)) {
+            properties.add(CheckSupport.parse(term)
+                                       .property()
+                                       .split("\\.", -1)[0]);
+        }
+        if (properties.size() != 1) {
+            return null;
+        }
+        String property = properties.iterator()
+                                    .next();
+        RelationIntent relation = toOneOf(entity, property);
+        if (relation != null && relation.getTo()
+                                        .equals(compositionParents.get(entity.getName()))) {
+            return null;
+        }
+        return IntentNaming.pascalCase(property);
+    }
+
+    /**
      * The UI descriptor for a {@code forbidWhen} whose every term reads the composition MASTER of this
      * child (#7275): the master-detail panel already holds that record, so the generated view can hide
      * the child's Add/edit/delete affordance while the condition holds, with no extra fetch - the same
@@ -4081,43 +4114,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * @param when the authored condition
      * @return the term descriptors ({@code property}/{@code equal}/{@code value}), or {@code null}
      */
-    /**
-     * The one property of the record a {@code forbidWhen} condition is about (#8911): every term reads
-     * it - the record's own field or to-one, or one hop through that to-one ({@code Store.Status}) - so
-     * changing it is what clears the refusal, and the refusal names it for the form to mark. A
-     * condition over two properties names none, and neither does one over the composition master: a
-     * line's form cannot move the line to another document.
-     *
-     * @param entity the entity the check is declared on
-     * @param compositionParents composition-parent map
-     * @param when the authored condition, already read by {@link CheckSupport#conditionTerms}
-     * @return the PascalCased property, or {@code null} when the condition has no single one
-     */
-    private static String forbidWhenField(EntityIntent entity, Map<String, String> compositionParents, Object when) {
-        String property = null;
-        for (String term : CheckSupport.terms(when)) {
-            CheckSupport.Comparison comparison = CheckSupport.parse(term);
-            if (comparison == null) {
-                return null;
-            }
-            String first = comparison.property()
-                                     .split("\\.", -1)[0];
-            if (property != null && !property.equalsIgnoreCase(first)) {
-                return null;
-            }
-            property = first;
-        }
-        if (property == null) {
-            return null;
-        }
-        RelationIntent relation = toOneOf(entity, property);
-        if (relation != null && relation.getTo()
-                                        .equals(compositionParents.get(entity.getName()))) {
-            return null;
-        }
-        return IntentNaming.pascalCase(property);
-    }
-
     private static List<Map<String, Object>> forbidWhenMasterGuard(EntityIntent entity, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, Object when) {
         String master = compositionParents.get(entity.getName());
