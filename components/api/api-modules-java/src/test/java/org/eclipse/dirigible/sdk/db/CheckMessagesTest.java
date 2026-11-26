@@ -12,14 +12,32 @@ package org.eclipse.dirigible.sdk.db;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.when;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.api.platform.RepositoryFacade;
+import org.eclipse.dirigible.components.api.security.UserFacade;
+import org.eclipse.dirigible.repository.api.ICollection;
+import org.eclipse.dirigible.repository.api.IResource;
+import org.eclipse.dirigible.sdk.security.User;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.slf4j.LoggerFactory;
 
 import com.google.gson.JsonParser;
+
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 
 /**
  * How a check message is resolved for the request's language (issue #7611): the language's catalog,
@@ -30,6 +48,65 @@ class CheckMessagesTest {
     private static final String KEY = "billing:billing-model.checks.Invoice_zeroLines";
     private static final String TEXT = "{count} line(s) at price zero";
     private static final CheckMessages.CatalogReader NO_CATALOG = (language, key) -> null;
+    private static final String BG_CATALOG = "{\"billing-model\":{\"checks\":{\"Invoice_zeroLines\":\"Нулеви редове: {{count}}\"}}}";
+
+    @AfterEach
+    void clearLanguage() {
+        User.clearLanguage();
+    }
+
+    /**
+     * Work that runs without a request - a notification send, a process step, an event's handler -
+     * binds the language of the user it serves, and a catalog message resolved there is in it (#8776).
+     */
+    @Test
+    void without_a_request_the_bound_language_resolves_the_catalog_text() {
+        User.setLanguage("bg");
+        try (MockedStatic<RepositoryFacade> registry = registryWithBgCatalog()) {
+            assertEquals("Нулеви редове: 2", CheckMessages.message(KEY, TEXT, "count", 2));
+            assertEquals("Нулеви редове: 2", CheckMessages.refusal(KEY, TEXT, "count", 2)
+                                                          .getMessage());
+        }
+    }
+
+    /**
+     * Without a request and without a bound language nobody reads the message in a language of their
+     * own: the default text, and the facade is not asked - it would log its no-request error on every
+     * refusal.
+     */
+    @Test
+    void without_a_request_or_a_bound_language_the_default_text_is_resolved_silently() {
+        Logger facadeLogger = (Logger) LoggerFactory.getLogger(UserFacade.class);
+        ListAppender<ILoggingEvent> logged = new ListAppender<>();
+        logged.start();
+        facadeLogger.addAppender(logged);
+        try (MockedStatic<RepositoryFacade> registry = registryWithBgCatalog()) {
+            assertEquals("2 line(s) at price zero", CheckMessages.message(KEY, TEXT, "count", 2));
+        } finally {
+            facadeLogger.detachAppender(logged);
+        }
+        assertTrue(logged.list.stream()
+                              .noneMatch(event -> event.getLevel()
+                                                       .isGreaterOrEqual(Level.ERROR)),
+                () -> "the facade logged " + logged.list);
+    }
+
+    /** The registry of the {@code billing} project: its bg-BG catalog translates {@link #KEY}. */
+    private static MockedStatic<RepositoryFacade> registryWithBgCatalog() {
+        IResource catalog = mock(IResource.class);
+        when(catalog.getContent()).thenReturn(BG_CATALOG.getBytes(StandardCharsets.UTF_8));
+        ICollection bg = mock(ICollection.class);
+        when(bg.getResourcesNames()).thenReturn(List.of("billing.model.json"));
+        when(bg.getResource("billing.model.json")).thenReturn(catalog);
+        ICollection i18n = mock(ICollection.class);
+        when(i18n.exists()).thenReturn(true);
+        when(i18n.getCollectionsNames()).thenReturn(List.of("en-US", "bg-BG"));
+        when(i18n.getCollection("bg-BG")).thenReturn(bg);
+        MockedStatic<RepositoryFacade> registry = mockStatic(RepositoryFacade.class);
+        registry.when(() -> RepositoryFacade.getCollection(anyString()))
+                .thenReturn(i18n);
+        return registry;
+    }
 
     @Test
     void the_language_catalog_translates_the_default_text() {

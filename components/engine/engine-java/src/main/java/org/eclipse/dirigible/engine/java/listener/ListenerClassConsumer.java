@@ -1111,8 +1111,11 @@ public class ListenerClassConsumer
         }
         // The user whose write raised the event, stamped by the platform's producer from the outbox
         // row: bound for the handler, so the rows it writes are attributed to that user rather than to
-        // the guest fallback of a thread without a request (#8228). Absent, the handler runs as before.
+        // the guest fallback of a thread without a request (#8228) - with the language of that write, so
+        // the messages it resolves and the multilingual rows it reads are in it (#8776). Absent, the
+        // handler runs as before.
         String user = originatingUserOf(msg, label);
+        String language = originatingLanguageOf(msg, label);
         try {
             tenantContext.execute(tenantId, () -> {
                 // Re-establishing the tenant's identity above is not enough: Configuration's tenant
@@ -1122,7 +1125,7 @@ public class ListenerClassConsumer
                 // (e.g. a generated notification's {appUrl} token) - load it here the same way, and clear
                 // it so it never leaks onto the pooled broker thread.
                 Configuration.setThreadConfiguration(tenantConfigurationService.resolveInjectableForCurrentTenant());
-                try (OriginatingUser.Binding binding = OriginatingUser.bind(user)) {
+                try (OriginatingUser.Binding binding = OriginatingUser.bind(user, language)) {
                     // A deadlock or lock-wait victim is run again here rather than handed to the broker,
                     // so lock contention does not spend the message's redelivery budget (#8745). Safe
                     // because the dispatch is no transaction: each write the handler made committed or
@@ -1156,6 +1159,15 @@ public class ListenerClassConsumer
             return OriginatingUserProperty.read(msg);
         } catch (JMSException e) {
             LOGGER.debug("@Listener [{}] message has an unreadable originating user; handling it without one.", label, e);
+            return null;
+        }
+    }
+
+    private static String originatingLanguageOf(Message msg, String label) {
+        try {
+            return OriginatingUserProperty.readLanguage(msg);
+        } catch (JMSException e) {
+            LOGGER.debug("@Listener [{}] message has an unreadable originating language; handling it without one.", label, e);
             return null;
         }
     }

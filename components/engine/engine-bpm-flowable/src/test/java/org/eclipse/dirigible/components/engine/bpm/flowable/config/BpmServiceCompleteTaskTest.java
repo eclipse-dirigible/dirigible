@@ -18,6 +18,7 @@ import static org.mockito.Mockito.when;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.base.context.OriginatingUser;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService;
@@ -232,6 +233,19 @@ class BpmServiceCompleteTaskTest {
                                       .processInstanceId(instance.getId())
                                       .singleResult()
                                       .getTaskDefinitionKey());
+    }
+
+    /**
+     * The completion records its user's language beside its user, for the steps that follow to resolve
+     * their messages in (issue #8776) - here a language a render bound, as no request runs.
+     */
+    @Test
+    void theCompletionRecordsTheLanguageOfItsUser() {
+        ProcessInstance instance = start(SEPARATED_PROCESS, Map.of());
+        try (OriginatingUser.Binding binding = OriginatingUser.bind(null, "bg")) {
+            bpmService.completeTask(taskOf(instance), completion(Map.of(BpmProviderFlowable.LAST_COMPLETED_LANGUAGE, "de")));
+        }
+        assertEquals("bg", variablesOf(instance).get(BpmProviderFlowable.LAST_COMPLETED_LANGUAGE));
     }
 
     @Test

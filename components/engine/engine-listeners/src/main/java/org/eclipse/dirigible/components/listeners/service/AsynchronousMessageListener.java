@@ -81,9 +81,11 @@ class AsynchronousMessageListener implements MessageListener {
         }
         String tenantId = null;
         String originatingUser = null;
+        String originatingLanguage = null;
         try {
             tenantId = tenantPropertyManager.getCurrentTenantId(message);
             originatingUser = OriginatingUserProperty.read(message);
+            originatingLanguage = OriginatingUserProperty.readLanguage(message);
             LOGGER.debug("Processing message WITH context for tenant [{}].", tenantId);
         } catch (JMSException e) {
             throw new IllegalStateException("Failed to handle message: " + message, e);
@@ -107,8 +109,9 @@ class AsynchronousMessageListener implements MessageListener {
         // }
         try {
             String user = originatingUser;
+            String language = originatingLanguage;
             tenantContext.execute(tenantId, () -> {
-                try (OriginatingUser.Binding binding = OriginatingUser.bind(user)) {
+                try (OriginatingUser.Binding binding = OriginatingUser.bind(user, language)) {
                     executeOnMessageHandler(textMsg);
                 }
                 return null;

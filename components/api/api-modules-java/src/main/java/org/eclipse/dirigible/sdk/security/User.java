@@ -90,6 +90,36 @@ public final class User {
         UserFacade.clearLanguage();
     }
 
+    /**
+     * Binds a language to the current thread for the scope of a try-with-resources block, and restores
+     * the language bound before it when the block ends. Prefer it to {@link #setLanguage(String)} and
+     * {@link #clearLanguage()}: inside the handler of an event, which is bound to the language of the
+     * write that raised it, clearing would leave the rest of the handler with no language (#8776).
+     *
+     * <pre>{@code
+     * try (User.LanguageBinding binding = User.bindLanguage(language)) {
+     *     // render in the language
+     * }
+     * }</pre>
+     *
+     * @param language the language to bind (a null or blank value binds none for the scope)
+     * @return the binding; closing it restores the previous language
+     */
+    public static LanguageBinding bindLanguage(String language) {
+        return UserFacade.bindLanguage(language)::close;
+    }
+
+    /**
+     * A language bound by {@link #bindLanguage(String)}; closing it restores the language bound before.
+     */
+    @FunctionalInterface
+    public interface LanguageBinding extends AutoCloseable {
+
+        /** Restores the language bound before the binding. */
+        @Override
+        void close();
+    }
+
     public static Integer getTimeout() {
         return UserFacade.getTimeout();
     }

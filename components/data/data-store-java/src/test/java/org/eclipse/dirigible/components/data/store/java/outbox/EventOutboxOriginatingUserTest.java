@@ -31,6 +31,7 @@ import java.util.UUID;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.api.messaging.MessagingFacade;
 import org.eclipse.dirigible.components.base.context.OriginatingUser;
+import org.eclipse.dirigible.components.base.context.ThreadLanguage;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.data.store.java.repository.DomainEvent;
@@ -48,8 +49,8 @@ import org.springframework.beans.factory.support.StaticListableBeanFactory;
 /**
  * An event remembers the user whose write raised it, and both deliveries - the in-process one after
  * the commit and the relay's redelivery - publish it as that user, whatever thread they run on
- * (#8228). Against a real (H2) outbox table, including one an earlier version created without the
- * user column.
+ * (#8228) - and in the language of that write (#8776). Against a real (H2) outbox table, including
+ * ones earlier versions created without the user or the language column.
  */
 class EventOutboxOriginatingUserTest {
 
@@ -67,6 +68,9 @@ class EventOutboxOriginatingUserTest {
 
     /** The originating user bound while each message was handed to the broker, in order. */
     private final List<String> publishedAs = new ArrayList<>();
+
+    /** The language bound while each message was handed to the broker, in order. */
+    private final List<String> publishedIn = new ArrayList<>();
 
     @BeforeEach
     void setUp() throws SQLException {
@@ -91,8 +95,12 @@ class EventOutboxOriginatingUserTest {
 
         messaging = mockStatic(MessagingFacade.class);
         messaging.when(() -> MessagingFacade.sendToTopic(anyString(), anyString()))
-                 .thenAnswer(invocation -> publishedAs.add(OriginatingUser.get()
-                                                                          .orElse(null)));
+                 .thenAnswer(invocation -> {
+                     publishedAs.add(OriginatingUser.get()
+                                                    .orElse(null));
+                     return publishedIn.add(ThreadLanguage.get()
+                                                          .orElse(null));
+                 });
         // Due at once, so the relay can be asked to redeliver what a write has just recorded.
         DirigibleConfig.EVENT_OUTBOX_RELAY_GRACE_SECONDS.setStringValue("0");
     }
@@ -152,6 +160,93 @@ class EventOutboxOriginatingUserTest {
         assertThat(publishedAs).containsExactly("alice");
     }
 
+    @Test
+    void the_in_process_delivery_publishes_in_the_language_of_the_write() {
+        outbox.prepare();
+        EventOutbox.Batch batch;
+        try (OriginatingUser.Binding binding = OriginatingUser.bind("alice", "bg")) {
+            batch = outbox.record(session, List.of(new DomainEvent(TOPIC, "{}")));
+        }
+
+        batch.dispatch();
+
+        assertThat(publishedIn).containsExactly("bg");
+        assertThat(ThreadLanguage.get()).isEmpty();
+    }
+
+    @Test
+    void the_relay_redelivers_in_the_language_of_the_write() throws SQLException {
+        outbox.prepare();
+        try (OriginatingUser.Binding binding = OriginatingUser.bind("alice", "bg")) {
+            outbox.record(session, List.of(new DomainEvent(TOPIC, "{}")));
+        }
+        assertThat(storedLanguages()).containsExactly("bg");
+
+        outbox.relay();
+
+        assertThat(publishedAs).containsExactly("alice");
+        assertThat(publishedIn).containsExactly("bg");
+    }
+
+    @Test
+    void an_event_raised_without_a_language_is_published_without_one() throws SQLException {
+        outbox.prepare();
+        try (OriginatingUser.Binding binding = OriginatingUser.bind("alice")) {
+            outbox.record(session, List.of(new DomainEvent(TOPIC, "{}")));
+        }
+
+        assertThat(storedLanguages()).containsExactly((String) null);
+        outbox.relay();
+
+        assertThat(publishedIn).containsExactly((String) null);
+    }
+
+    @Test
+    void a_durable_publish_records_the_current_language_too() {
+        outbox.prepare();
+        try (OriginatingUser.Binding binding = OriginatingUser.bind("alice", "bg")) {
+            outbox.publishToTopic(TOPIC, "{}");
+        }
+
+        assertThat(publishedIn).containsExactly("bg");
+    }
+
+    /** The language comes from the client's header: one longer than the column is not recorded. */
+    @Test
+    void a_language_longer_than_any_real_tag_is_not_recorded() throws SQLException {
+        outbox.prepare();
+        try (OriginatingUser.Binding binding = OriginatingUser.bind("alice", "x".repeat(EventOutboxStore.LANGUAGE_MAX_LENGTH + 1))) {
+            outbox.record(session, List.of(new DomainEvent(TOPIC, "{}")));
+        }
+
+        assertThat(storedUsers()).containsExactly("alice");
+        assertThat(storedLanguages()).containsExactly((String) null);
+    }
+
+    /**
+     * A table the #8228 version created has the user column but no language column: the relay adds it,
+     * delivers the old entries without a language, and a new write records its language.
+     */
+    @Test
+    void a_table_created_before_the_language_column_is_migrated() throws SQLException {
+        try (Connection connection = h2Connection(); Statement statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE \"DIRIGIBLE_EVENT_OUTBOX\" (\"EVENT_ID\" VARCHAR(36) PRIMARY KEY, \"EVENT_TOPIC\" VARCHAR(255),"
+                    + " \"EVENT_PAYLOAD\" CLOB, \"EVENT_CREATED_AT\" TIMESTAMP, \"EVENT_ATTEMPTS\" INTEGER,"
+                    + " \"EVENT_NEXT_ATTEMPT_AT\" TIMESTAMP, \"EVENT_ERROR\" VARCHAR(2000), \"EVENT_USER\" VARCHAR(255))");
+            statement.execute("INSERT INTO \"DIRIGIBLE_EVENT_OUTBOX\" VALUES ('old', '" + TOPIC
+                    + "', '{}', CURRENT_TIMESTAMP, 0, DATEADD('MINUTE', -5, CURRENT_TIMESTAMP), NULL, 'bob')");
+        }
+
+        outbox.relay();
+        assertThat(publishedAs).containsExactly("bob");
+        assertThat(publishedIn).containsExactly((String) null);
+
+        try (OriginatingUser.Binding binding = OriginatingUser.bind("alice", "bg")) {
+            outbox.record(session, List.of(new DomainEvent(TOPIC, "{}")));
+        }
+        assertThat(storedLanguages()).containsExactly("bg");
+    }
+
     /**
      * A table an earlier version created has no user column: preparing it adds the column, and the
      * relay - possibly the first on the node to touch the table - does so too, delivering the old
@@ -170,10 +265,11 @@ class EventOutboxOriginatingUserTest {
         outbox.relay();
         assertThat(publishedAs).containsExactly((String) null);
 
-        try (OriginatingUser.Binding binding = OriginatingUser.bind("alice")) {
+        try (OriginatingUser.Binding binding = OriginatingUser.bind("alice", "bg")) {
             outbox.record(session, List.of(new DomainEvent(TOPIC, "{}")));
         }
         assertThat(storedUsers()).containsExactly("alice");
+        assertThat(storedLanguages()).containsExactly("bg");
     }
 
     private int count() throws SQLException {
@@ -186,15 +282,23 @@ class EventOutboxOriginatingUserTest {
     }
 
     private List<String> storedUsers() throws SQLException {
-        List<String> users = new ArrayList<>();
+        return stored("EVENT_USER");
+    }
+
+    private List<String> storedLanguages() throws SQLException {
+        return stored("EVENT_LANGUAGE");
+    }
+
+    private List<String> stored(String column) throws SQLException {
+        List<String> values = new ArrayList<>();
         try (Connection connection = h2Connection();
                 Statement statement = connection.createStatement();
-                ResultSet resultSet = statement.executeQuery("SELECT \"EVENT_USER\" FROM \"DIRIGIBLE_EVENT_OUTBOX\"")) {
+                ResultSet resultSet = statement.executeQuery("SELECT \"" + column + "\" FROM \"DIRIGIBLE_EVENT_OUTBOX\"")) {
             while (resultSet.next()) {
-                users.add(resultSet.getString(1));
+                values.add(resultSet.getString(1));
             }
         }
-        return users;
+        return values;
     }
 
     /**
