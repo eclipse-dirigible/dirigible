@@ -34,6 +34,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import com.codeborne.selenide.Selenide;
 
 import io.restassured.http.ContentType;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * #8779: a key has one meaning, so a translated page says what the English one says. The Save
@@ -44,7 +46,8 @@ import io.restassured.http.ContentType;
  *
  * <p>
  * This needs a real browser: the words are resolved by the generated page through the shared i18n
- * runtime, in the language the user picked, from the platform's copy of the template catalog.
+ * runtime, in the language the user picked, from the platform's shared chrome catalog - the
+ * application's own catalog carries none of them (#8782).
  */
 class OneMeaningPerKeyHarmoniaIT extends UserInterfaceIntegrationTest {
 
@@ -59,6 +62,8 @@ class OneMeaningPerKeyHarmoniaIT extends UserInterfaceIntegrationTest {
             "/services/ide/intent/generate?workspace=" + WORKSPACE + "&project=" + PROJECT + "&path=app.intent";
     private static final String APP = "/services/web/" + PROJECT + "/gen/onemeaning/index.html#";
     private static final String INVOICES = "/services/java/" + PROJECT + "/gen/onemeaning/api/invoice/InvoiceController";
+    private static final String MODEL_CATALOG = PROJECT_PATH + "/i18n/en-US/onemeaning.model.json";
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     private static final String INTENT_YAML = """
             name: onemeaning
@@ -108,6 +113,12 @@ class OneMeaningPerKeyHarmoniaIT extends UserInterfaceIntegrationTest {
     @Test
     void the_save_button_and_the_empty_tables_say_the_same_thing_in_every_language() {
         generate();
+        // The words below are the platform's: the application's catalog does not copy them (#8782).
+        JsonNode catalog = JSON.readTree(repository.getResource(MODEL_CATALOG)
+                                                   .getContent())
+                               .path("onemeaning-model");
+        assertTrue(catalog.has("t") && !catalog.has("defaults") && !catalog.has("messages"),
+                "the application's en-US catalog must hold its own labels and none of the shared chrome: " + catalog);
         // The platform registers en-US only; a deployment that speaks Bulgarian registers the locale.
         write(PROJECT_PATH + "/configs/bg-BG.json",
                 "{ \"id\": \"bg-BG\", \"label\": \"Български\", \"common\": \"/" + PROJECT + "/i18n/bg-BG/common.json\" }");

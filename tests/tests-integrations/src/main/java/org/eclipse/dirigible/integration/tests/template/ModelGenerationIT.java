@@ -19,6 +19,8 @@ import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -27,6 +29,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
@@ -144,6 +147,35 @@ class ModelGenerationIT extends IntegrationTest {
     /** The fixture whose Item entity has the LIST layout and a relation column to Category. */
     private static final String CATALOG = "catalog.model";
 
+    /** The fixture regenerated over the catalogs an earlier generation and a translator left. */
+    private static final String REGENERATED = "simple.model";
+
+    /** The en-US catalog generation writes for {@link #REGENERATED}. */
+    private static final String REGENERATED_CATALOG = "i18n/en-US/" + REGENERATED + ".json";
+
+    /** A module's own Bulgarian catalog of {@link #REGENERATED}, which no generation writes. */
+    private static final String REGENERATED_TRANSLATION = "i18n/bg-BG/" + REGENERATED + ".json";
+
+    /**
+     * The en-US catalog a generation before #8782 wrote: the shared chrome copied in beside the model's
+     * labels.
+     */
+    private static final String CATALOG_WITH_CHROME = """
+            {"simple-model": {"aria": {"options": "{{name}} options"}, "state": {"busy": "Loading..."},
+              "messages": {"noDataYet": "No {{name}} yet"}, "defaults": {"save": "Save"}, "extName": "{{content}}", "t": {}}}
+            """;
+
+    /** A module's own Bulgarian override of a chrome text, which a regeneration must leave alone. */
+    private static final String CHROME_OVERRIDE = "{\"simple-model\": {\"defaults\": {\"save\": \"Съхрани\"}}}";
+
+    /**
+     * The sections of an entity model's catalog: its labels, check messages, banners, action and
+     * process labels. The chrome is the platform's shared catalog, never the module's (#8782).
+     */
+    private static final Set<String> MODEL_CATALOG_SECTIONS = Set.of("t", "checks", "banners", "actions", "processes");
+
+    private static final ObjectMapper JSON = new ObjectMapper();
+
     /** The shared shell mixin every generated page spreads, evaluated under the rendered list page. */
     private static final String BASE_PAGE = "/META-INF/dirigible/application-core/shell/js/components/pages/basePage.js";
 
@@ -221,6 +253,7 @@ class ModelGenerationIT extends IntegrationTest {
         }
         problems.addAll(listSortProblems());
         problems.addAll(listHeaderProblems());
+        problems.addAll(regeneratedCatalogProblems());
         assertTrue(problems.isEmpty(),
                 () -> "The generation pipeline has " + problems.size() + " problem(s):\n\n" + String.join("\n\n", problems));
     }
@@ -360,6 +393,53 @@ class ModelGenerationIT extends IntegrationTest {
     private static String withUnreadAttribute(String model) {
         return PROPERTY_NAME.matcher(model)
                             .replaceAll(Matcher.quoteReplacement("\"" + UNREAD_ATTRIBUTE + "\": \"asked-for\", ") + "$0");
+    }
+
+    /**
+     * Regenerates a model over the catalogs an earlier generation and a translator left, and collects
+     * what is wrong with them afterwards (dirigible #8782).
+     *
+     * <p>
+     * The generated pages resolve their chrome through the platform's shared catalog, so the module's
+     * en-US catalog holds only the model's own sections: a regeneration drops the chrome an older
+     * generation copied in. Generation writes en-US alone, so the module's Bulgarian override of a
+     * chrome text stays as the translator left it.
+     *
+     * @return the problems found, empty when the catalogs are sound
+     * @throws IOException when the fixture or a template is missing, or rendering fails
+     */
+    private List<String> regeneratedCatalogProblems() throws IOException {
+        String workspace = "generation-regenerated-catalog";
+        seed(workspace, REGENERATED, readFixture(REGENERATED));
+        seed(workspace, REGENERATED_CATALOG, CATALOG_WITH_CHROME);
+        seed(workspace, REGENERATED_TRANSLATION, CHROME_OVERRIDE);
+        modelGenerationService.generate(workspace, PROJECT, REGENERATED, TEMPLATE_APPLICATION, new LinkedHashMap<>());
+
+        Project project = workspaceService.getWorkspace(workspace)
+                                          .getProject(PROJECT);
+        String label = "[" + REGENERATED + " regenerated with " + TEMPLATE_APPLICATION + "] ";
+        List<String> problems = new ArrayList<>();
+        String catalog = new String(project.getFile(REGENERATED_CATALOG)
+                                           .getContent(),
+                StandardCharsets.UTF_8);
+        Set<String> sections = new TreeSet<>();
+        for (Map.Entry<String, JsonNode> prefix : JSON.readTree(catalog)
+                                                      .properties()) {
+            prefix.getValue()
+                  .properties()
+                  .forEach(section -> sections.add(section.getKey()));
+        }
+        if (!sections.contains("t") || !MODEL_CATALOG_SECTIONS.containsAll(sections)) {
+            problems.add(label + "the en-US catalog must hold only the model's own sections " + MODEL_CATALOG_SECTIONS + ", got " + sections
+                    + ":\n" + catalog);
+        }
+        String translation = new String(project.getFile(REGENERATED_TRANSLATION)
+                                               .getContent(),
+                StandardCharsets.UTF_8);
+        if (!CHROME_OVERRIDE.equals(translation)) {
+            problems.add(label + "the module's own Bulgarian catalog must be left as it was, got:\n" + translation);
+        }
+        return problems;
     }
 
     /**

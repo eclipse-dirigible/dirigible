@@ -91,7 +91,7 @@ id stays `template-application-ui-harmonia-java/template/template.js`, which res
 - `template/template.json` — entry; includes `template-application-schema` (REQUIRED: the
   schema creates the tables the client-Java entities only map), `template-application-rest-java`
   (which includes the DAO layer) and `template/ui/template.json`.
-- `template/ui/template.json` — the translation catalog, then the per-view source lists below.
+- `template/ui/template.json` — the model's translation catalog (its own labels only; the pages' chrome words live once in `application-core/i18n/<locale>/generated.json`), then the per-view source lists below.
 - `template/ui/shell.json` — the project-specific shell files (`index.html`, `js/config.js`,
   `_settings.html`, the dashboard); the shared runtime is served from `application-core/shell`.
 - `template/ui/list.json` — LIST/PRIMARY entities -> page component + view fragment.
