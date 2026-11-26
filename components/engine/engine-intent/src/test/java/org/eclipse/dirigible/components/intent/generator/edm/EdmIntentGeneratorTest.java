@@ -2522,6 +2522,9 @@ class EdmIntentGeneratorTest {
                                           .get("entity"));
         // Ungated, so it holds on every user write (the controller), carrying no status.
         assertNull(check.get("status"));
+        // The composition master is not a field the line's form can change, so the refusal names none
+        // (#8911).
+        assertNull(check.get("field"));
         // The UI half: the term reads the composition master, so the panel gets a { property, ==, value }
         // it evaluates against the master record it already holds.
         List<Map<String, Object>> masterGuard = (List<Map<String, Object>>) check.get("masterGuard");
@@ -2546,6 +2549,66 @@ class EdmIntentGeneratorTest {
         Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales");
         return ((List<Map<String, Object>>) entityByName(entities(model), "SalesInvoiceCustomerPayment").get("checks")).get(0)
                                                                                                                        .get("verbs");
+    }
+
+    /**
+     * #8911: a {@code forbidWhen} whose terms all read one property of the record - itself, or one hop
+     * through it - and an {@code agree} with a side that is the record's own to-one name that property
+     * as the check's {@code field}, so the refusal marks it on the form. Two properties, or two sides
+     * one hop away each, name none.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void forbidWhenAndAgreeNameTheirSingleOwnProperty() {
+        String yaml = """
+                name: stock
+                entities:
+                  - name: Company
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Store
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: active, type: boolean }
+                    relations:
+                      - { name: Company, kind: manyToOne, to: Company }
+                  - name: Order
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Company, kind: manyToOne, to: Company }
+                  - name: Receipt
+                    checks:
+                      - { kind: forbidWhen, when: "Store.active == false", message: "This store is not active" }
+                      - { kind: forbidWhen, when: ["Store != null", "Store.active == false"], message: "Still the store" }
+                      - { kind: forbidWhen, when: ["Store == null", "note == 'locked'"], message: "Two properties" }
+                      - { kind: agree, relations: [Store, Company], onProperty: Company, message: "Own side" }
+                      - { kind: agree, relations: [Store, Order], onProperty: Company, message: "Both one hop away" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string }
+                    relations:
+                      - { name: Store, kind: manyToOne, to: Store }
+                      - { name: Company, kind: manyToOne, to: Company }
+                      - { name: Order, kind: manyToOne, to: Order }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "stock");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "Receipt").get("checks");
+        assertEquals(5, checks.size());
+        assertEquals("Store", checks.get(0)
+                                    .get("field"));
+        assertEquals("Store", checks.get(1)
+                                    .get("field"));
+        assertNull(checks.get(2)
+                         .get("field"));
+        assertEquals("Company", checks.get(3)
+                                      .get("field"));
+        assertNull(checks.get(4)
+                         .get("field"));
+        // The own side's target IS the agreed value: it has no Company of its own to guard, so it gets
+        // no guard (a guard reading entity.Company did not compile); the side one hop away keeps its own.
+        assertNull(entityByName(entities(model), "Company").get("agreeGuards"));
+        assertEquals(2, ((List<Map<String, Object>>) entityByName(entities(model), "Store").get("agreeGuards")).size());
     }
 
     /**

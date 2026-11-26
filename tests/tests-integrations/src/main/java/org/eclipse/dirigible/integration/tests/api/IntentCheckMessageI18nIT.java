@@ -13,6 +13,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -64,6 +65,9 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
     private static final String ITEMS = API + "/invoice/InvoiceItemController";
     private static final String UOMS = API + "/uom/UomController";
     private static final String CURRENCIES = API + "/currency/CurrencyController";
+    private static final String COMPANIES = API + "/company/CompanyController";
+    private static final String STORES = API + "/store/StoreController";
+    private static final String RECEIPTS = API + "/receipt/ReceiptController";
     private static final String CONFIRM = "X-Confirm-Warnings";
     private static final String CATALOG = PROJECT + ":" + PROJECT + "-model.checks.";
     private static final long TIMEOUT_SECONDS = 90;
@@ -132,6 +136,32 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
                   - { name: price, type: decimal, precision: 18, scale: 2 }
                 relations:
                   - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+
+              - name: Company
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, length: 50 }
+
+              - name: Store
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: active, type: boolean }
+                relations:
+                  - { name: Company, kind: manyToOne, to: Company }
+
+              - name: Receipt
+                checks:
+                  - { id: storeCompany, kind: agree, relations: [Store, Company], onProperty: Company,
+                      message: "The store belongs to another company" }
+                  - { id: activeStore, kind: forbidWhen, when: "Store.active == false", message: "This store is not active" }
+                  - { id: lockedNote, kind: forbidWhen, when: ["Store == null", "note == 'locked'"],
+                      message: "A locked note needs a store" }
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string, length: 20 }
+                relations:
+                  - { name: Store,   kind: manyToOne, to: Store }
+                  - { name: Company, kind: manyToOne, to: Company }
             """;
 
     /**
@@ -225,6 +255,53 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
                                                                     .body("field", equalTo("Sap"));
         refused(UOMS, "{\"Sap\":\"KG\",\"Numerator\":1}", "en", 409).body("message",
                 equalTo("A " + uomLabel + " with this 'SAP Code' already exists"));
+    }
+
+    /**
+     * dirigible #8911: an {@code agree} whose side is the record's own to-one, and a {@code forbidWhen}
+     * whose terms all read one own property (here one hop through it), name that property in their
+     * refusal, so the form marks it - in every language. A {@code forbidWhen} over two properties has
+     * no single field and keeps the banner.
+     */
+    @Test
+    void agree_and_forbid_when_refusals_name_their_single_field() {
+        generateProject();
+        writeResource(PROJECT_PATH + "/i18n/bg-BG/checkmsg.model.json", """
+                {
+                  "checkmsg-model": {
+                    "checks": {
+                      "Receipt_storeCompany": "Складът е на друга фирма",
+                      "Receipt_activeStore": "Този склад не е активен"
+                    }
+                  }
+                }
+                """);
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        int acme = create(COMPANIES, "{\"Name\":\"Acme\"}", null, "en");
+        int other = create(COMPANIES, "{\"Name\":\"Other\"}", null, "en");
+        int active = create(STORES, "{\"Active\":true,\"Company\":" + acme + "}", null, "en");
+        int closed = create(STORES, "{\"Active\":false,\"Company\":" + acme + "}", null, "en");
+
+        String foreignCompany = "{\"Store\":" + active + ",\"Company\":" + other + "}";
+        refused(RECEIPTS, foreignCompany, "bg", 400).body("message", equalTo("Складът е на друга фирма"))
+                                                    .body("messageKey", equalTo(CATALOG + "Receipt_storeCompany"))
+                                                    .body("field", equalTo("Company"));
+        refused(RECEIPTS, foreignCompany, "en", 400).body("message", equalTo("The store belongs to another company"))
+                                                    .body("field", equalTo("Company"));
+
+        String closedStore = "{\"Store\":" + closed + ",\"Company\":" + acme + "}";
+        refused(RECEIPTS, closedStore, "bg", 400).body("message", equalTo("Този склад не е активен"))
+                                                 .body("messageKey", equalTo(CATALOG + "Receipt_activeStore"))
+                                                 .body("field", equalTo("Store"));
+        refused(RECEIPTS, closedStore, "en", 400).body("message", equalTo("This store is not active"))
+                                                 .body("field", equalTo("Store"));
+
+        refused(RECEIPTS, "{\"Note\":\"locked\"}", "en", 400).body("message", equalTo("A locked note needs a store"))
+                                                             .body("messageKey", equalTo(CATALOG + "Receipt_lockedNote"))
+                                                             .body("field", nullValue());
+        create(RECEIPTS, "{\"Store\":" + active + ",\"Company\":" + acme + "}", null, "en");
     }
 
     /**
