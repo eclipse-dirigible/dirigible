@@ -60,7 +60,9 @@ class TaskFormApiErrorTest {
     void completeTaskCatchRoutesThroughApiErrors() {
         String code = codeOf("ConfirmOrder");
 
-        assertTrue(code.contains("App.services.apiErrors.refusalMessageFor(error, 'Submit failed.')"),
+        assertTrue(
+                code.contains("App.services.apiErrors.refusalMessageFor(error,\n")
+                        && code.contains("T('application-core:shell.taskForm.submitFailed', 'Could not submit the task.'));"),
                 "the COMPLETE catch must map the failure through the shared apiErrors helper: " + code);
         assertFalse(code.contains("error.data.message"),
                 "the COMPLETE catch must never read the developer-facing error.data.message: " + code);

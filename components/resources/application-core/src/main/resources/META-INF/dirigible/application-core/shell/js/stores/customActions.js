@@ -319,7 +319,7 @@ document.addEventListener('alpine:init', () => {
         url += (url.indexOf('?') >= 0 ? '&' : '?') + 'id=' + encodeURIComponent(id);
       }
       this.dialogUrl = url;
-      this.dialogTitle = action.label || 'Action';
+      this.dialogTitle = action.label || this.t('shell.customActions.action', 'Action');
       this.dialogOpen = true;
     },
 
@@ -332,7 +332,7 @@ document.addEventListener('alpine:init', () => {
       this.confirmBusy = true;
       try {
         const outcome = await this.run(action, this.confirmId);
-        if (!outcome.ok) this.notify(action.label || 'Action', outcome.message, 'negative');
+        if (!outcome.ok) this.notify(action.label || this.t('shell.customActions.action', 'Action'), outcome.message, 'negative');
       } finally {
         this.confirmBusy = false;
         this.cancelConfirm();
@@ -659,7 +659,7 @@ document.addEventListener('alpine:init', () => {
         outcome = await this.run(action, this.promptId, this.promptValues);
       } catch (e) {
         console.error('customActions: the prompted run failed', e);
-        outcome = { ok: false, message: 'Action failed' };
+        outcome = { ok: false, message: this.t('shell.customActions.failed', 'The action failed.') };
       } finally {
         this.promptBusy = false;
       }
@@ -668,7 +668,7 @@ document.addEventListener('alpine:init', () => {
       } else if (this.showsPromptRefusal()) {
         this.promptRefusal = outcome.message;
       } else {
-        this.notify(action.label || 'Action', outcome.message, 'negative');
+        this.notify(action.label || this.t('shell.customActions.action', 'Action'), outcome.message, 'negative');
         this.cancelPrompt();
       }
     },
@@ -719,11 +719,13 @@ document.addEventListener('alpine:init', () => {
       return action.call ? this.runCall(action, id, values) : this.runEndpoint(action, id, values);
     },
 
-    // The user-facing reason a run failed: a 400/409's own message, else the catalog line.
+    // The user-facing reason a run failed: a 400/409's own message, else the catalog line. No sentence
+    // of its own is handed over: the notification's title already names the action, and for a fault
+    // the catalog line says what went wrong (the server, the connection).
     failureMessage(e) {
       return (App.services.apiErrors && App.services.apiErrors.refusalMessageFor)
-        ? App.services.apiErrors.refusalMessageFor(e, 'Action failed')
-        : 'Action failed';
+        ? App.services.apiErrors.refusalMessageFor(e)
+        : this.t('shell.customActions.failed', 'The action failed.');
     },
 
     // Send a `call` action's request to the application's own endpoint (issue #8090). `{id}` in the
@@ -732,7 +734,7 @@ document.addEventListener('alpine:init', () => {
     // toasts the authored `success`; a failure resolves to the endpoint's own message for a 400/409,
     // the catalog line for anything else.
     async runCall(action, id, values) {
-      const label = action.label || 'Action';
+      const label = action.label || this.t('shell.customActions.action', 'Action');
       const call = action.call;
       const key = (id !== undefined && id !== null) ? String(id) : '';
       const url = call.path.split('{id}').join(encodeURIComponent(key));
@@ -786,7 +788,7 @@ document.addEventListener('alpine:init', () => {
     // message for the caller (issue #8365). The endpoint is an absolute
     // same-origin path (it targets gen/events, not the entity api base), so we prepend no baseUrl.
     async runEndpoint(action, id, values) {
-      const label = action.label || 'Action';
+      const label = action.label || this.t('shell.customActions.action', 'Action');
       const body = {};
       if (id !== undefined && id !== null && id !== '') body.id = id;
       if (values && Object.keys(values).length) body.values = values;
@@ -807,17 +809,19 @@ document.addEventListener('alpine:init', () => {
       const notified = action.notifies && created ? created.notify : null;
       const record = (action.notifies && created && created.record !== undefined) ? created.record : created;
       const ref = record && (record.Number || record.Name || record.Id || record.id);
+      const prefix = ref ? ref + ': ' : '';
       if (notified && notified.status === 'failed') {
-        this.notify(label, (ref ? ref + ': ' : '') + 'e-mail not sent - '
-          + (notified.message || 'unknown error'), 'warning');
+        // The mail server's own reason is passed on as it came; the sentence around it is ours.
+        this.notify(label, prefix + this.t('shell.customActions.mailFailed', 'e-mail not sent - {{reason}}',
+          { reason: notified.message || this.t('shell.customActions.mailFailedUnknown', 'unknown error') }), 'warning');
       } else if (notified && notified.status === 'skipped') {
-        this.notify(label, (ref ? ref + ': ' : '') + 'no e-mail address on the record - nothing was sent', 'warning');
+        this.notify(label, prefix + this.t('shell.customActions.mailSkipped', 'no e-mail address on the record - nothing was sent'), 'warning');
       } else {
         // A transition moved a record that already existed; a generate/create-from made a new one.
         // Reporting a status flip as "Created INV-1" is how the Void toast read before #7073.
         const done = action.kind === 'transition'
-          ? (ref ? 'Done - ' + ref : 'Done')
-          : (ref ? 'Created ' + ref : 'Completed');
+          ? (ref ? this.t('shell.customActions.doneRef', 'Done - {{ref}}', { ref }) : this.t('shell.customActions.done', 'Done'))
+          : (ref ? this.t('shell.customActions.createdRef', 'Created {{ref}}', { ref }) : this.t('shell.customActions.completed', 'Completed'));
         this.notify(label, done, 'positive');
       }
       window.dispatchEvent(new CustomEvent('harmonia:action-done'));
@@ -848,12 +852,12 @@ document.addEventListener('alpine:init', () => {
     // message listener in init); the dialog's own X calls this with nothing, and a dismissal is not
     // an outcome worth announcing.
     closeDialog(outcome) {
-      const label = this.dialogTitle || 'Action';
+      const label = this.dialogTitle || this.t('shell.customActions.action', 'Action');
       this.dialogOpen = false;
       this.dialogUrl = '';
       if (outcome) {
         const failed = outcome.status === 'error';
-        this.notify(label, outcome.message || (failed ? 'Action failed' : 'Completed'),
+        this.notify(label, outcome.message || (failed ? this.t('shell.customActions.failed', 'The action failed.') : this.t('shell.customActions.completed', 'Completed')),
           failed ? 'negative' : 'positive');
       }
       // Let the originating view refresh after a (possibly) mutating action.

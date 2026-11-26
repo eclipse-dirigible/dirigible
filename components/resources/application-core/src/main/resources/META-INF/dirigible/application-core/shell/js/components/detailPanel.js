@@ -218,7 +218,7 @@ function detailPanel(def, masterId, master) {
           this.state = this.rows.length === 0 ? "empty" : "default";
         }
       } catch (e) {
-        this.error = App.services.apiErrors.messageFor(e, "Could not load " + this.def.label + ".");
+        this.error = App.services.apiErrors.messageFor(e, T('application-core:shell.related.error.load', 'Could not load {{name}}.', { name: T(this.def.tkey, this.def.label) }));
         this.state = "error";
       }
       this.refreshIcons();
@@ -450,7 +450,7 @@ function detailPanel(def, masterId, master) {
         await App.services.api.post(this.def.apiPath + "/upload" + q, fd);
         await this.load();
       } catch (e) {
-        this.fileError = App.services.apiErrors.messageFor(e, "Upload failed.");
+        this.fileError = App.services.apiErrors.messageFor(e, T('application-core:shell.related.error.upload', 'Could not upload the files.'));
       } finally {
         this.uploading = false;
       }
@@ -473,7 +473,7 @@ function detailPanel(def, masterId, master) {
         this.deleteTarget = null;
         await this.load();
       } catch (e) {
-        this.error = App.services.apiErrors.refusalMessageFor(e, "Could not delete.");
+        this.error = App.services.apiErrors.refusalMessageFor(e, T('application-core:shell.related.error.delete', 'Could not delete the record.'));
       } finally {
         this.deleteBusy = false;
       }

@@ -53,7 +53,7 @@ function relatedPanel(def, recordId) {
         this.rows = await App.services.api.post(this.def.apiPath + '/search', filter, { baseUrl: '' });
         this.state = this.rows.length === 0 ? 'empty' : 'default';
       } catch (e) {
-        this.error = App.services.apiErrors.messageFor(e, 'Could not load ' + this.def.label + '.');
+        this.error = App.services.apiErrors.messageFor(e, T('application-core:shell.related.error.load', 'Could not load {{name}}.', { name: this.title }));
         this.state = 'error';
       }
       this.refreshIcons();

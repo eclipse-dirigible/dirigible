@@ -5938,11 +5938,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                    .toList();
         assertTrue(rawMessagePages.isEmpty(),
                 "every generated page must route a failure through apiErrors, never print e.message: " + rawMessagePages);
-        assertTrue(myList.contains("refusalMessageFor(e, 'Could not load your"),
+        assertTrue(myList.contains(".messages.error.loadList', 'Could not load the list.')"),
                 "a failed personal list load must show the refusal text or the neutral fallback, never e.message (#7263)");
-        assertTrue(partnerList.contains("refusalMessageFor(e, 'Could not load your"),
+        assertTrue(partnerList.contains(".messages.error.loadList', 'Could not load the list.')"),
                 "a failed partner list load must show the refusal text or the neutral fallback, never e.message (#7263)");
-        assertTrue(myLeaveCalendar.contains("refusalMessageFor(e, 'Could not load your"),
+        assertTrue(myLeaveCalendar.contains(".messages.error.loadList', 'Could not load the list.')"),
                 "a failed personal calendar load must show the refusal text or the neutral fallback, never e.message (#7263)");
 
         // The app-test manifest carries the personal UI-parity metadata the runner's my flow

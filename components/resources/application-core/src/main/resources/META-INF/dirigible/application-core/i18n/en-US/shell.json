@@ -128,7 +128,18 @@
       "accessRead": "Read",
       "accessWrite": "Write",
       "accessAdd": "Add",
-      "close": "Close"
+      "close": "Close",
+      "error": {
+        "openFolder": "Could not open the folder.",
+        "refreshFolder": "Could not refresh the folder.",
+        "createFolder": "Could not create the folder.",
+        "rename": "Could not rename.",
+        "delete": "Could not delete.",
+        "loadAccess": "Could not load the access rules.",
+        "addRule": "Could not add the rule.",
+        "removeRule": "Could not remove the rule.",
+        "upload": "Could not upload the files."
+      }
     },
     "reports": {
       "select": "Select a report",
@@ -479,7 +490,12 @@
       "addNewNamed": "{{name}}: new record",
       "savedOne": "{{saved}} was saved; this record was not. It stays selected - correct this record and save again instead of creating it anew.",
       "savedMany": "{{saved}} were saved; this record was not. They stay selected - correct this record and save again instead of creating them anew.",
-      "unreadable": "Your role cannot list these records, so the stored one is kept."
+      "unreadable": "Your role cannot list these records, so the stored one is kept.",
+      "error": {
+        "load": "Could not load {{name}}.",
+        "upload": "Could not upload the files.",
+        "delete": "Could not delete the record."
+      }
     },
     "shareLinks": {
       "title": "Share links",
@@ -520,7 +536,16 @@
       "promptMissing": "Required: {{fields}}",
       "promptCancel": "Cancel",
       "promptRun": "Run",
-      "promptSelect": "Select..."
+      "promptSelect": "Select...",
+      "failed": "The action failed.",
+      "completed": "Completed",
+      "action": "Action",
+      "mailFailed": "e-mail not sent - {{reason}}",
+      "mailFailedUnknown": "unknown error",
+      "mailSkipped": "no e-mail address on the record - nothing was sent",
+      "doneRef": "Done - {{ref}}",
+      "done": "Done",
+      "createdRef": "Created {{ref}}"
     },
     "list": {
       "resizeColumn": "Resize column",
@@ -601,6 +626,7 @@
       "InternalServerError": "Something went wrong on our end. Please try again.",
       "NetworkError": "Unable to reach the server. Check your connection and try again.",
       "ConfirmationDeclined": "Not saved - the warnings were not confirmed.",
+      "ConfirmationRequired": "Not saved - this change needs a confirmation first.",
       "default": "Something went wrong. Please try again.",
       "field": {
         "required": "This field is required.",
@@ -686,6 +712,12 @@
       },
       "doneMessage": "Captured {{file}}: {{n}} to review",
       "rejectedFlagsTitle": "What was read needs your attention"
+    },
+    "taskForm": {
+      "submitted": "Task submitted",
+      "completed": "The task was completed ({{action}}).",
+      "submitFailed": "Could not submit the task.",
+      "submitFailedTitle": "Submit failed"
     }
   }
 }

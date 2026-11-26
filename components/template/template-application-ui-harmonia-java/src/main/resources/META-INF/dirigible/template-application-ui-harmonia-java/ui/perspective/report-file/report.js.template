@@ -427,7 +427,7 @@ document.addEventListener('alpine:init', () => {
         else this.state = conditions.length ? 'no-results' : 'empty';
         this.lastUpdated = new Date();
       } catch (e) {
-        this.error = App.services.apiErrors.refusalMessageFor(e, 'Could not run the ${name} report.');
+        this.error = App.services.apiErrors.refusalMessageFor(e, T('$projectName:${tprefix}.messages.error.runReport', 'Could not run the report.'));
         this.state = 'error';
       } finally {
         this.reloading = false;
@@ -618,7 +618,7 @@ document.addEventListener('alpine:init', () => {
         a.click();
         URL.revokeObjectURL(a.href);
       } catch (e) {
-        this.actionError = App.services.apiErrors.refusalMessageFor(e, 'Export failed.');
+        this.actionError = App.services.apiErrors.refusalMessageFor(e, T('$projectName:${tprefix}.messages.error.exportFailed', 'Could not export the data.'));
       }
     },
 
@@ -653,7 +653,7 @@ document.addEventListener('alpine:init', () => {
         w.focus();
         w.print();
       } catch (e) {
-        this.actionError = App.services.apiErrors.refusalMessageFor(e, 'Print failed.');
+        this.actionError = App.services.apiErrors.refusalMessageFor(e, T('$projectName:${tprefix}.messages.error.printFailed', 'Could not print.'));
       }
     },
   }));

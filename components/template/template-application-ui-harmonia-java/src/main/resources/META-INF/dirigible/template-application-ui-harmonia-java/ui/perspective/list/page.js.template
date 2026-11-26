@@ -81,7 +81,7 @@ document.addEventListener('alpine:init', () => {
           this.selected = this.items.find(it => it.${primaryKeysString} === this.selected.${primaryKeysString}) || null;
         }
       } catch (e) {
-        this.error = App.services.apiErrors.messageFor(e, 'Could not load ${name}.');
+        this.error = App.services.apiErrors.messageFor(e, T('$projectName:${tprefix}.messages.error.loadList', 'Could not load the list.'));
         this.state = 'error';
       }
       this.refreshIcons();

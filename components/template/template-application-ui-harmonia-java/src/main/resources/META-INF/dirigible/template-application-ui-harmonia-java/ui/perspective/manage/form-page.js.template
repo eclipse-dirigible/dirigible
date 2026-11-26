@@ -529,7 +529,7 @@ document.addEventListener('alpine:init', () => {
         // A failed poll keeps the record on screen; pollWhile logs it and stops polling (#8375).
         if (polled) throw e;
 #end
-        this.applyLoadError(e, { fallbackMessage: 'Could not load the ${name} record.' });
+        this.applyLoadError(e, { fallbackMessage: T('$projectName:${tprefix}.messages.error.loadRecord', 'Could not load the record.') });
       }
     },
 
@@ -953,8 +953,8 @@ document.addEventListener('alpine:init', () => {
         this.navigateBack('/${name}');
       } catch (e) {
         this.applyApiError(e, {
-          fallbackMessage: this.isEdit ? 'Could not update the ${name} record.'
-                                       : 'Could not create the ${name} record.'
+          fallbackMessage: this.isEdit ? T('$projectName:${tprefix}.messages.error.updateRecord', 'Could not update the record.')
+                                       : T('$projectName:${tprefix}.messages.error.createRecord', 'Could not create the record.')
         });
       }
     },
@@ -1438,7 +1438,7 @@ document.addEventListener('alpine:init', () => {
         if (this.isDialog) { this.emitClose(); return; }
         this.navigateBack('/${name}');
       } catch (e) {
-        this.deleteError = App.services.apiErrors.refusalMessageFor(e, 'Could not delete the ${name} record.');
+        this.deleteError = App.services.apiErrors.refusalMessageFor(e, T('$projectName:${tprefix}.messages.error.deleteRecord', 'Could not delete the record.'));
       } finally {
         this.deleteBusy = false;
       }

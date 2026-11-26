@@ -38,7 +38,7 @@ document.addEventListener('alpine:init', () => {
         this.state = this.rows.length === 0 ? 'empty' : 'default';
         this.lastUpdated = new Date();
       } catch (e) {
-        this.error = App.services.apiErrors.messageFor(e, 'Could not run the ${name} report.');
+        this.error = App.services.apiErrors.messageFor(e, T('$projectName:${tprefix}.messages.error.runReport', 'Could not run the report.'));
         this.state = 'error';
       } finally {
         this.reloading = false;
@@ -64,7 +64,7 @@ document.addEventListener('alpine:init', () => {
         a.click();
         URL.revokeObjectURL(a.href);
       } catch (e) {
-        this.actionError = App.services.apiErrors.messageFor(e, 'Export failed.');
+        this.actionError = App.services.apiErrors.messageFor(e, T('$projectName:${tprefix}.messages.error.exportFailed', 'Could not export the data.'));
       }
       function toCsv(rows) {
         if (!rows.length) return '';
@@ -114,7 +114,7 @@ document.addEventListener('alpine:init', () => {
         w.focus();
         w.print();
       } catch (e) {
-        this.actionError = App.services.apiErrors.messageFor(e, 'Print failed.');
+        this.actionError = App.services.apiErrors.messageFor(e, T('$projectName:${tprefix}.messages.error.printFailed', 'Could not print.'));
       }
     },
   }));

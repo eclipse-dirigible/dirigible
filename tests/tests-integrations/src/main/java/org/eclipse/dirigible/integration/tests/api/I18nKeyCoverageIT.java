@@ -562,6 +562,57 @@ class I18nKeyCoverageIT {
         }
     }
 
+    /**
+     * A fault names what failed, in the user's language (#8781): a page hands the error helpers its own
+     * translated sentence, which a 5xx or an unreachable server shows instead of the generic line; a
+     * refusal still shows the server's text, a missing role the catalog's line, and a 428 the client
+     * could not put to the user is translated too.
+     */
+    @Test
+    void aFaultReadsTheCallersSentenceInBulgarian() {
+        String documentPage = read(DIRIGIBLE + "template-application-ui-harmonia-java/ui/perspective/document/document-page.js.template");
+        String key = keyFor(documentPage, "Could not load the line items.", "orders:orders-model.");
+        try (Context context = loadI18n("bg", JSON.createObjectNode(), STUB_I18NEXT)) {
+            context.eval("js", read(DIRIGIBLE + "application-core/shell/js/services/apiError.js"));
+            context.getBindings("js")
+                   .putMember("__sentence", t(context, key, "Could not load the line items."));
+            assertEquals("Редовете не можаха да бъдат заредени.",
+                    apiMessage(context, "{ httpStatus: 500, errorType: 'InternalServerError' }"));
+            assertEquals("Редовете не можаха да бъдат заредени.", apiMessage(context, "{ httpStatus: 0, errorType: 'NetworkError' }"));
+            assertEquals("Нямате право да извършите това действие.",
+                    apiMessage(context, "{ httpStatus: 403, errorType: 'InsufficientPermission' }"));
+            assertEquals("Фактура 12 вече е издадена.",
+                    apiMessage(context, "{ httpStatus: 409, errorType: 'Conflict', errorMessage: 'Фактура 12 вече е издадена.' }"));
+            assertEquals("Не е записано - тази промяна първо трябва да бъде потвърдена.",
+                    apiMessage(context, "{ httpStatus: 428, errorType: 'ConfirmationRequired' }"));
+        }
+    }
+
+    /**
+     * No page hands the error helpers an English literal (#8781): a sentence naming what failed is a
+     * catalog key, or it never reaches a reader of another language.
+     */
+    @Test
+    void noErrorHelperIsHandedAnEnglishLiteral() {
+        Pattern literal = Pattern.compile("(?:messageFor|refusalMessageFor|apply\\w*Error)\\(\\s*\\w+\\s*,\\s*['\"]"
+                + "|fallbackMessage:\\s*(?:this\\.\\w+\\s*\\?\\s*)?['\"]");
+        List<String> offenders = new ArrayList<>();
+        for (String location : List.of(HARMONIA_TEMPLATES, "classpath*:" + DIRIGIBLE + "application-core/shell/**/*.js")) {
+            for (Resource resource : resources(location)) {
+                Matcher matcher = literal.matcher(read(resource));
+                while (matcher.find()) {
+                    offenders.add(resource.getFilename() + ": " + matcher.group());
+                }
+            }
+        }
+        assertTrue(offenders.isEmpty(), "English literals handed to the error helpers: " + offenders);
+    }
+
+    private static String apiMessage(Context context, String error) {
+        return context.eval("js", "App.services.apiErrors.refusalMessageFor(" + error + ", __sentence)")
+                      .asString();
+    }
+
     private static String t(Context context, String key, String fallback) {
         context.getBindings("js")
                .putMember("__key", key);

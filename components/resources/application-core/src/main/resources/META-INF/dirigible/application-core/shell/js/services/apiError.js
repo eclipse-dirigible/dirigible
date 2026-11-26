@@ -44,6 +44,8 @@
       NetworkError:           ['application-core:shell.apiErrors.NetworkError', 'Unable to reach the server. Check your connection and try again.'],
       // The user answered "Cancel" to the warnings a save raised (#7466) - nothing was written.
       ConfirmationDeclined:   ['application-core:shell.apiErrors.ConfirmationDeclined', 'Not saved - the warnings were not confirmed.'],
+      // A 428 the client could not put to the user (a form-data request, or one naming no warnings).
+      ConfirmationRequired:   ['application-core:shell.apiErrors.ConfirmationRequired', 'Not saved - this change needs a confirmation first.'],
     },
 
     // 422 cause errorType -> per-field message. Extend as backend cause types appear.
@@ -63,8 +65,17 @@
 
     default: ['application-core:shell.apiErrors.default', 'Something went wrong. Please try again.'],
 
-    /** Top-level, user-safe message for an error. `fallback` overrides the catalog default. */
+    /**
+     * Top-level, user-safe message for an error.
+     *
+     * `fallback` is the caller's own, already translated sentence naming what failed ("Could not load
+     * the line items."). For a fault - a 5xx or a request that never reached the server - it says more
+     * than the generic type sentence and is preferred (dirigible #8781); for any other status the
+     * type's sentence wins, and `fallback` stands in only for a type the catalog does not know.
+     */
     messageFor(err, fallback) {
+      const status = err && err.httpStatus;
+      if (fallback && (status === 0 || status >= 500)) return fallback;
       const type = err && err.errorType;
       const entry = type && this.messages[type];
       return entry ? localize(entry) : (fallback || localize(this.default));

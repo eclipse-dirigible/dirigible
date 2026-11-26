@@ -417,12 +417,17 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                                 action: 'COMPLETE',
                                 data: __data
                             }).then(() => {
-                                __notifications.show({ type: 'positive', title: 'Task submitted', description: 'The task was completed (' + action + ').' });
+                                __notifications.show({
+                                    type: 'positive',
+                                    title: T('application-core:shell.taskForm.submitted', 'Task submitted'),
+                                    description: T('application-core:shell.taskForm.completed', 'The task was completed ({{action}}).', { action })
+                                });
                                 __dialogs.closeWindow();
                                 window.close();
                             }).catch((error) => {
-                                const message = App.services.apiErrors.refusalMessageFor(error, 'Submit failed.');
-                                __notifications.show({ type: 'negative', title: 'Submit failed', description: message });
+                                const message = App.services.apiErrors.refusalMessageFor(error,
+                                    T('application-core:shell.taskForm.submitFailed', 'Could not submit the task.'));
+                                __notifications.show({ type: 'negative', title: T('application-core:shell.taskForm.submitFailedTitle', 'Submit failed'), description: message });
                             });
                         }
 
