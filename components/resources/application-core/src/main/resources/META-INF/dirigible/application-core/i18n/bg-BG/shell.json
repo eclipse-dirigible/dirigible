@@ -19,13 +19,17 @@
       "administration": "Администрация",
       "partner": "Партньор",
       "partnerPortal": "Партньорски портал",
-      "issues": "Проблеми"
+      "issues": "Проблеми",
+      "navigation": "Навигация",
+      "loadingPage": "Страницата се зарежда",
+      "openTasks": "Отворени задачи: {{count}}"
     },
     "user": {
       "user": "Потребител",
       "logout": "Изход",
       "reportIssue": "Докладвай проблем",
-      "about": "Относно"
+      "about": "Относно",
+      "menu": "Меню на потребителя"
     },
     "tenant": {
       "title": "Клиент",
@@ -66,12 +70,14 @@
       "title": "Известия",
       "unread": "{{count}} непрочетени",
       "caughtUp": "Нямате нови известия.",
-      "newTask": "Нова задача: {{name}}"
+      "newTask": "Нова задача: {{name}}",
+      "markAllRead": "Маркирай всички като прочетени"
     },
     "dashboard": {
       "title": "Табло",
       "viewAll": "Виж всички",
-      "viewAllOf": "Отваряне на справка {{name}}"
+      "viewAllOf": "Отваряне на справка {{name}}",
+      "reportPreview": "Преглед на справката"
     },
     "inbox": {
       "refresh": "Опресни",
@@ -94,7 +100,8 @@
       "ref": "Реф. {{key}}",
       "actAsHidden": "Действате като {{person}} — {{count}} от вашите собствени задачи са скрити",
       "actAsServing": "Действате като {{person}} — тази пощенска кутия показва неговите задачи, не вашите",
-      "noTasksActAsHint": "Действате като {{person}} и този списък е негов. Излезте, за да видите своите задачи."
+      "noTasksActAsHint": "Действате като {{person}} и този списък е негов. Излезте, за да видите своите задачи.",
+      "task": "Задача"
     },
     "documents": {
       "newFolder": "Нова папка",
@@ -520,7 +527,17 @@
       "promptMissing": "Задължителни: {{fields}}",
       "promptCancel": "Отказ",
       "promptRun": "Изпълни",
-      "promptSelect": "Изберете..."
+      "promptSelect": "Изберете...",
+      "dialogTitle": "Действие",
+      "failed": "Действието е неуспешно",
+      "completed": "Готово",
+      "completedNamed": "{{name}}: готово",
+      "created": "Създадено: {{ref}}",
+      "done": "Готово",
+      "doneRef": "Готово - {{ref}}",
+      "mailFailed": "имейлът не е изпратен - {{reason}}",
+      "mailSkipped": "записът няма имейл адрес - нищо не е изпратено",
+      "unknownError": "неизвестна грешка"
     },
     "list": {
       "resizeColumn": "Промяна на ширината на колоната",
@@ -686,6 +703,32 @@
       },
       "doneMessage": "Разчетен е {{file}}: {{n}} за проверка",
       "rejectedFlagsTitle": "Прочетеното изисква вашето внимание"
+    },
+    "format": {
+      "dateHint": "Въведете датата във формат {{pattern}}."
+    },
+    "print": {
+      "failed": "Печатът е неуспешен"
+    },
+    "admin": {
+      "title": "{{app}} - Администрация",
+      "records": "Записи: {{count}}",
+      "refresh": "Опресни",
+      "new": "Нов",
+      "delete": "Изтрий",
+      "previous": "Предишна",
+      "next": "Следваща",
+      "range": "{{from}} - {{to}} от {{total}}",
+      "select": "Изберете {{name}}...",
+      "maxLength": "Максимум {{count}} знака",
+      "create": "Създай",
+      "save": "Запази",
+      "cancel": "Отказ",
+      "httpFailed": "HTTP {{status}} - причината е в сървърния журнал.",
+      "loadFailed": "Записите не можаха да бъдат заредени.",
+      "saveFailed": "Записът не можа да бъде запазен.",
+      "deleteFailed": "Записът не можа да бъде изтрит.",
+      "deleteConfirm": "Да изтрия ли {{name}} {{id}}?"
     }
   }
 }

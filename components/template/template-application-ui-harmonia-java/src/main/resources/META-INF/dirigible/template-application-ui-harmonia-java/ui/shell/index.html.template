@@ -88,7 +88,7 @@
                       <svg role="presentation" x-h-lucide data-lucide="inbox"></svg><span x-text="T('application-core:shell.nav.inbox', 'Inbox')"></span>
                       <!-- The open BPM task count, from the same store the bell and the record pages read. -->
                       <span x-h-sidebar-menu-badge x-show="$store.processTasks.tasks.length" role="img"
-                            :aria-label="$store.processTasks.tasks.length + ' open tasks'"
+                            :aria-label="T('application-core:shell.nav.openTasks', 'Open tasks: {{count}}', { count: $store.processTasks.tasks.length })"
                             x-text="$store.processTasks.tasks.length"></span>
                     </button>
                   </li>
@@ -118,7 +118,7 @@
                   <li x-h-sidebar-menu-item>
                     <button x-h-sidebar-menu-nav :data-active="isActive('/my/${entity.name}')" @click="navigate('/my/${entity.name}')">
                       <svg role="presentation" x-h-lucide data-lucide="#if($entity.iconName && $entity.iconName != '')${entity.iconName}#{else}user#end"></svg>
-                      <span x-text="'My ' + T('$projectName:${tprefix}.t.${entity.dataName}_plural', navLabel('#if($entity.menuLabel && $entity.menuLabel != '')${entity.menuLabel}#{else}${entity.name}#end'))"></span>
+                      <span x-text="T('$projectName:${tprefix}.defaults.myEntity', 'My {{name}}', { name: T('$projectName:${tprefix}.t.${entity.dataName}_plural', navLabel('#if($entity.menuLabel && $entity.menuLabel != '')${entity.menuLabel}#{else}${entity.name}#end')) })"></span>
                     </button>
                   </li>
 #end
@@ -205,18 +205,18 @@
                "Add" iframe dialog shows just the form, no shell chrome. -->
           <div x-h-toolbar data-variant="transparent" x-cloak x-show="!embedded">
             <button x-show="isSmallScreen && !embedded" x-h-button data-variant="transparent"
-                    aria-label="Navigation" @click="openSideNav()" data-size="icon">
+                    :aria-label="T('application-core:shell.nav.navigation', 'Navigation')" @click="openSideNav()" data-size="icon">
               <svg role="presentation" x-h-lucide data-lucide="menu"></svg>
             </button>
             <nav x-h-breadcrumb data-overflow="scroll"
                  :data-variant="isSmallScreen ? 'outline' : 'default'" data-size="md">
               <ol x-h-breadcrumb-list>
                 <li x-h-breadcrumb-item>
-                  <span x-show="isDashboard" x-h-breadcrumb-page aria-label="Home">
-                    <svg x-h-icon data-icon="home" class="size-4" role="img" aria-label="Home"></svg>
+                  <span x-show="isDashboard" x-h-breadcrumb-page :aria-label="T('application-core:shell.nav.home', 'Home')">
+                    <svg x-h-icon data-icon="home" class="size-4" role="img" :aria-label="T('application-core:shell.nav.home', 'Home')"></svg>
                   </span>
-                  <button x-show="!isDashboard" x-h-breadcrumb-link @click="navigate('/dashboard')" aria-label="Home">
-                    <svg x-h-icon data-icon="home" class="size-4" role="img" aria-label="Home"></svg>
+                  <button x-show="!isDashboard" x-h-breadcrumb-link @click="navigate('/dashboard')" :aria-label="T('application-core:shell.nav.home', 'Home')">
+                    <svg x-h-icon data-icon="home" class="size-4" role="img" :aria-label="T('application-core:shell.nav.home', 'Home')"></svg>
                   </button>
                 </li>
                 <template x-for="(crumb, i) in breadcrumbTrail" :key="i">
@@ -237,7 +237,7 @@
                     :aria-label="T('application-core:shell.theme.title', 'Theme')" :title="T('application-core:shell.theme.title', 'Theme')">
               <svg x-h-lucide role="presentation" :data-lucide="$store.theme.icon"></svg>
             </button>
-            <ul x-h-menu aria-label="Theme" data-align="bottom-end">
+            <ul x-h-menu :aria-label="T('application-core:shell.theme.title', 'Theme')" data-align="bottom-end">
               <li x-h-menu-radio-item="'light'" name="theme" x-model="$store.theme.mode">
                 <svg role="presentation" x-h-lucide data-lucide="sun"></svg>
                 <span x-text="T('application-core:shell.theme.light', 'Light')"></span>
@@ -268,7 +268,7 @@
                 <span x-h-toolbar-title class="shrink-0" x-text="T('application-core:shell.notifications.title', 'Notifications') + ' (' + $store.notifications.unreadCount + ')'"></span>
                 <div x-h-toolbar-spacer></div>
                 <button x-h-button data-variant="transparent" data-size="icon-sm" @click="$store.notifications.markAllRead()"
-                        title="Mark all as read" aria-label="Mark all as read"><svg role="presentation" x-h-lucide data-lucide="check-check"></svg></button>
+                        :title="T('application-core:shell.notifications.markAllRead', 'Mark all as read')" :aria-label="T('application-core:shell.notifications.markAllRead', 'Mark all as read')"><svg role="presentation" x-h-lucide data-lucide="check-check"></svg></button>
               </div>
               <div x-show="$store.notifications.items.length === 0" x-h-text.muted class="p-3 text-sm" x-text="T('application-core:shell.notifications.caughtUp', 'You\u2019re all caught up.')"></div>
               <ol x-show="$store.notifications.items.length" x-h-notification-list>
@@ -294,7 +294,7 @@
             <button id="user-menu-trigger" x-h-avatar x-h-menu-trigger.dropdown
                     :aria-label="$store.currentUser.name || 'Account'"
                     x-text="$store.currentUser.initials"></button>
-            <ul x-h-menu aria-label="User menu" data-align="bottom-end">
+            <ul x-h-menu :aria-label="T('application-core:shell.user.menu', 'User menu')" data-align="bottom-end">
               <div x-h-menu-label>
                 <span x-text="$store.currentUser.name || T('application-core:shell.user.user', 'User')"></span>
               </div>
@@ -316,7 +316,7 @@
                positioning parent keeps the bar from shifting the page it sits above. -->
           <div class="relative">
             <div class="absolute top-0 left-0 z-20 w-full rounded-none" x-show="routeLoading" x-cloak>
-              <div x-h-progress="0" data-loading="true" aria-label="Loading page"></div>
+              <div x-h-progress="0" data-loading="true" :aria-label="T('application-core:shell.nav.loadingPage', 'Loading page')"></div>
             </div>
           </div>
 
@@ -334,11 +334,11 @@
       <div x-h-dialog style="width: 92vw; max-width: 1100px;">
         <div x-h-dialog-header>
           <h2 x-h-dialog-title x-text="T($store.processTasks.formTitleKey, $store.processTasks.formTitle)"></h2>
-          <button x-h-dialog-close @click="$store.processTasks.closeForm()" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
+          <button x-h-dialog-close @click="$store.processTasks.closeForm()" :aria-label="T('$projectName:${tprefix}.defaults.close', 'Close')"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
         </div>
         <div x-h-dialog-content>
           <iframe x-show="$store.processTasks.formOpen" :src="$store.processTasks.formUrl"
-                  title="Task form" style="width:100%; height:70vh; border:0;"></iframe>
+                  :title="T('application-core:shell.inbox.taskForm', 'Task form')" style="width:100%; height:70vh; border:0;"></iframe>
         </div>
       </div>
     </div>
@@ -350,11 +350,11 @@
       <div x-h-dialog style="width: 92vw; max-width: 1100px;">
         <div x-h-dialog-header>
           <h2 x-h-dialog-title x-text="$store.customActions.dialogTitle"></h2>
-          <button x-h-dialog-close @click="$store.customActions.closeDialog()" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
+          <button x-h-dialog-close @click="$store.customActions.closeDialog()" :aria-label="T('$projectName:${tprefix}.defaults.close', 'Close')"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
         </div>
         <div x-h-dialog-content>
           <iframe x-show="$store.customActions.dialogOpen" :src="$store.customActions.dialogUrl"
-                  title="Action" style="width:100%; height:70vh; border:0;"></iframe>
+                  :title="T('application-core:shell.customActions.dialogTitle', 'Action')" style="width:100%; height:70vh; border:0;"></iframe>
         </div>
       </div>
     </div>
@@ -366,7 +366,7 @@
         <div x-h-dialog-header>
           <h2 x-h-dialog-title x-text="($store.customActions.confirmAction && $store.customActions.confirmAction.label) || T('application-core:shell.customActions.confirmTitle', 'Run action')"></h2>
           <p x-h-dialog-description x-show="$store.customActions.dialogDescription" x-text="$store.customActions.dialogDescription"></p>
-          <button x-h-dialog-close @click="$store.customActions.cancelConfirm()" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
+          <button x-h-dialog-close @click="$store.customActions.cancelConfirm()" :aria-label="T('$projectName:${tprefix}.defaults.close', 'Close')"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
         </div>
         <div x-h-dialog-content>
           <p x-h-text.muted x-text="($store.customActions.confirmAction && $store.customActions.confirmAction.confirm) ? $store.customActions.confirmText : $store.customActions.confirmBody"></p>
@@ -392,7 +392,7 @@
           <div x-h-dialog-header>
             <h2 x-h-dialog-title x-text="(s.promptAction && s.promptAction.label) || T('application-core:shell.customActions.promptTitle', 'Run action')"></h2>
             <p x-h-dialog-description x-show="s.dialogDescription" x-text="s.dialogDescription"></p>
-            <button x-h-dialog-close @click="s.cancelPrompt()" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
+            <button x-h-dialog-close @click="s.cancelPrompt()" :aria-label="T('$projectName:${tprefix}.defaults.close', 'Close')"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
           </div>
           <div x-h-dialog-content>
             <div x-show="s.promptRefusal" x-h-alert data-variant="negative" role="alert" data-prompt-refusal>
@@ -449,7 +449,7 @@
                   <template x-if="col.widget === 'DATE'">
                     <div x-h-date-picker.table>
                       <input type="text" :placeholder="HarmoniaFormat.dateHint()" />
-                      <button x-h-date-picker-trigger aria-label="Choose date"></button>
+                      <button x-h-date-picker-trigger :aria-label="T('$projectName:${tprefix}.defaults.chooseDate', 'Choose date')"></button>
                       <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="s.promptValues[col.name]"></div>
                     </div>
                   </template>
@@ -502,7 +502,7 @@
             <span x-h-notification-description x-show="description" x-text="description"></span>
           </div>
           <div x-h-notification-actions data-orientation="vertical">
-            <button x-h-button x-h-notification-close class="rounded-full" data-variant="transparent" data-size="icon-md" aria-label="Dismiss">
+            <button x-h-button x-h-notification-close class="rounded-full" data-variant="transparent" data-size="icon-md" :aria-label="T('$projectName:${tprefix}.defaults.dismiss', 'Dismiss')">
               <svg x-h-icon data-icon="close" role="img" aria-label="close"></svg>
             </button>
           </div>
@@ -784,10 +784,10 @@
       <div x-h-dialog style="width: 92vw; max-width: 1100px;">
         <div x-h-dialog-header>
           <h2 x-h-dialog-title x-text="$store.related.title"></h2>
-          <button x-h-dialog-close @click="$store.related.open = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
+          <button x-h-dialog-close @click="$store.related.open = false" :aria-label="T('$projectName:${tprefix}.defaults.close', 'Close')"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
         </div>
         <div x-h-dialog-content.flush>
-          <iframe x-show="$store.related.open" :src="$store.related.src" title="Add new" style="width:100%; height:70vh; border:0;"></iframe>
+          <iframe x-show="$store.related.open" :src="$store.related.src" :title="T('application-core:shell.related.addNew', 'Add new')" style="width:100%; height:70vh; border:0;"></iframe>
         </div>
       </div>
     </div>

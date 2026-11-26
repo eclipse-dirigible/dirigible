@@ -288,7 +288,7 @@
         <div x-h-alert-description x-text="actionError"></div>
         <div x-h-alert-actions>
           <button x-h-button data-variant="transparent" data-size="icon-sm" @click="actionError = null"
-                  :aria-label="T('application-core:shell.report.dismiss', 'Dismiss')">
+                  :aria-label="T('$projectName:${tprefix}.defaults.dismiss', 'Dismiss')">
             <svg role="presentation" x-h-lucide data-lucide="x"></svg>
           </button>
         </div>

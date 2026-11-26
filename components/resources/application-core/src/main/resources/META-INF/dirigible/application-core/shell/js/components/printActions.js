@@ -149,7 +149,7 @@ function printActions(options) {
         }
       } catch (e) {
         console.error('Print failed', e);
-        this.printError = 'Print failed';
+        this.printError = window.T ? T('application-core:shell.print.failed', 'Print failed') : 'Print failed';
       } finally {
         this.printBusy = false;
       }

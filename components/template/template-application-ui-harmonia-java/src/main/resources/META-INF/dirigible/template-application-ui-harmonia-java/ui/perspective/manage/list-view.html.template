@@ -448,7 +448,7 @@
 #end
 #end
                   <td x-h-table-cell data-row-actions data-sticky="end" class="text-right">
-                    <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions">
+                    <button x-h-menu-trigger.dropdown x-h-table-cell-button :aria-label="T('$projectName:${tprefix}.defaults.rowActions', 'Row actions')">
                       <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
                     </button>
                     <ul x-h-menu data-align="bottom-end">
@@ -714,7 +714,7 @@
                             <!-- The row's record's own actions (#8118), beside Open - only when it has any. -->
                             <template x-if="rowActions(row).length || rowDestructiveActions(row).length">
                               <span class="inline-flex">
-                                <button type="button" x-h-button data-variant="transparent" data-size="sm" x-h-menu-trigger.dropdown aria-label="Row actions"><svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg></button>
+                                <button type="button" x-h-button data-variant="transparent" data-size="sm" x-h-menu-trigger.dropdown :aria-label="T('$projectName:${tprefix}.defaults.rowActions', 'Row actions')"><svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg></button>
                                 <ul x-h-menu data-align="bottom-end">
                                   <template x-for="action in rowActions(row)" :key="action.id">
                                     <li x-h-menu-item @click="runRowAction(action, row)"
@@ -773,7 +773,7 @@
       <div x-h-dialog-header>
         <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.deleteTitle', 'Delete {{name}}?', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></h2>
         <p x-h-dialog-description></p>
-        <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
+        <button x-h-dialog-close @click="deleteOpen = false" :aria-label="T('$projectName:${tprefix}.defaults.close', 'Close')"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
       </div>
       <div x-h-dialog-content>
         <p x-text="T('$projectName:${tprefix}.messages.deleteConfirm', 'Are you sure you want to delete {{name}}? This action cannot be undone.', { name: (T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') + ' ' + recordLabel(deleteTarget)).trim() })"></p>

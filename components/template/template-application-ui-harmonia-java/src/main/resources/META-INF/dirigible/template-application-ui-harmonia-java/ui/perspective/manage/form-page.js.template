@@ -218,6 +218,13 @@ document.addEventListener('alpine:init', () => {
     history: [],
 #set($historyFirst = true)
     historyLabels: {#foreach($property in $properties)#if(!$property.dataPrimaryKey && (!$property.auditType || $property.auditType == "NONE"))#if($property.widgetLabel)#set($hlabel = $property.widgetLabelJs)#else#set($hlabel = $property.name)#end#if($historyFirst)#set($historyFirst = false)#else, #end'${property.name}': ['$projectName:${tprefix}.t.${property.dataName}', '${hlabel}']#end#end},
+    // How each audited property's stored text reads (#8778): the history stores String.valueOf(value),
+    // so a boolean, a number, a date and a relation's id are shown the way the read-only card shows
+    // them - each a function, so the words follow the language and the options once they are loaded.
+#set($historyFirst = true)
+    historyFormats: {#foreach($property in $properties)#if(!$property.dataPrimaryKey && (!$property.auditType || $property.auditType == "NONE"))#if($historyFirst)#set($historyFirst = false)#else,#end
+      '${property.name}': function () { return ['#if($property.numberStampOnIssue)DOCUMENT_NUMBER#elseif($property.isDateType && $property.widgetType == "DATE")DATE#elseif($property.isDateType)DATETIME-LOCAL#else$!{property.widgetType}#end', '#if($property.isFloatType)$!{property.formatPattern}#end', #if($property.widgetType == "CHECKBOX")[{ value: true, text: T('$projectName:${tprefix}.${property.booleanTrueKey}', '${property.booleanTrueTextJs}') }, { value: false, text: T('$projectName:${tprefix}.${property.booleanFalseKey}', '${property.booleanFalseTextJs}') }]#elseif(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && $property.aggregate != "true")this.options${property.name}#{else}null#end]; }#end#end
+    },
 #end
 #if($immutableStatusProperty || $immutableAlways || $periodLock)
 
@@ -746,7 +753,7 @@ document.addEventListener('alpine:init', () => {
     // web index.html (the generator resolves the correct - unsanitized - gen folder). The new row is
     // listed even when the picker's narrowing leaves it out, and remembered so a failed save of
     // this form says it was already saved (#7725).
-    addRelated(field, appUrl, entity) {
+    addRelated(field, appUrl, entity, label) {
       const lookups = {
 #foreach($property in $properties)
 #if($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.widgetDropdownControllerUrl)
@@ -754,7 +761,7 @@ document.addEventListener('alpine:init', () => {
 #end
 #end
       };
-      Alpine.store('related').create(App.utils.relatedCreateUrl(appUrl, entity), T('$projectName:${tprefix}.defaults.newTitle', 'New {{name}}', { name: entity }), async (id) => {
+      Alpine.store('related').create(App.utils.relatedCreateUrl(appUrl, entity), T('$projectName:${tprefix}.defaults.newTitle', 'New {{name}}', { name: label || entity }), async (id) => {
         await this.loadOptions();
         if (id == null) return;
         const option = await this.adoptCreatedOption(this['options' + field], id, lookups[field]);
@@ -978,8 +985,13 @@ document.addEventListener('alpine:init', () => {
       return entry ? T(entry[0], entry[1]) : property;
     },
 
-    historyValue(value) {
-      return (value === null || value === undefined || value === '') ? '—' : String(value);
+    historyValue(property, value) {
+      if (value === null || value === undefined || value === '') return '—';
+      const format = this.historyFormats[property];
+      if (!format) return String(value);
+      const [widget, pattern, options] = format.call(this);
+      const typed = widget === 'CHECKBOX' ? String(value) === 'true' : value;
+      return this.fieldDisplay(typed, widget, pattern, options) || String(value);
     },
 
     historyWho(entry) {
@@ -1101,7 +1113,7 @@ document.addEventListener('alpine:init', () => {
     taskAssignedLine() {
       const task = this.primaryTask;
       if (!task || !task.createTime || !window.HarmoniaFormat) return '';
-      return ' \u00b7 ' + T('$projectName:${tprefix}.messages.workflowAssigned', 'assigned') + ' ' + HarmoniaFormat.value(task.createTime, true);
+      return ' \u00b7 ' + T('$projectName:${tprefix}.messages.workflowAssignedAt', 'assigned {{time}}', { time: HarmoniaFormat.value(task.createTime, true) });
     },
 #else
     get recordTasks() { return []; },

@@ -221,11 +221,11 @@ document.addEventListener('alpine:init', () => {
       return (unit === 0 ? String(value) : value.toFixed(1)) + ' ' + units[unit];
     },
 
-    /** A timestamp in the user's locale; empty when there is none. */
+    /** A timestamp in the application's timestamp format, not the browser's (#8778); empty when there is none. */
     time(iso) {
       if (!iso) return '';
       const date = new Date(iso);
-      return isNaN(date.getTime()) ? iso : date.toLocaleString();
+      return isNaN(date.getTime()) ? iso : window.HarmoniaFormat.value(date, true);
     },
 
     // ---- internals ----

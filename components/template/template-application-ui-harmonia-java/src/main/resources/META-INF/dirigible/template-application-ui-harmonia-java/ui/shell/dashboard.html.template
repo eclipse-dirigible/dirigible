@@ -168,13 +168,13 @@
                squashes the chart while the same markup fills the window on the report page. -->
           <template x-if="r.chart">
             <div x-h-card-content>
-              <iframe :src="r.url + '?preview=1'" title="Report preview" loading="lazy"
+              <iframe :src="r.url + '?preview=1'" :title="T('application-core:shell.dashboard.reportPreview', 'Report preview')" loading="lazy"
                       style="width:100%; height:18rem; border:0;"></iframe>
             </div>
           </template>
           <template x-if="!r.chart">
             <div x-h-card-content.flush>
-              <iframe :src="r.url + '?preview=1'" title="Report preview" loading="lazy"
+              <iframe :src="r.url + '?preview=1'" :title="T('application-core:shell.dashboard.reportPreview', 'Report preview')" loading="lazy"
                       style="width:100%; height:220px; border:0;"></iframe>
             </div>
           </template>

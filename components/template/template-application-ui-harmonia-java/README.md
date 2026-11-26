@@ -42,10 +42,15 @@ language when a template for it exists. The standalone **report page** offers **
 number ranges, boolean, text contains) from generation-time column metadata - added through the
 manage list's Filter menu and shown as editable, removable chips - applied
 **server-side** over the wrapped report query — pagination, count and CSV export all
-reflect the active filters. UI **labels** remain untranslated — the Harmonia
-framework itself has no i18n API (verified against 1.24.2: only breakpoint +
-colour-scheme helpers), so label i18n is a documented follow-up on top of the locale
-store; the generated `i18n/en-US/*.json` catalogs already exist for it. Remaining items are refinements — see the checklist + the
+reflect the active filters. UI **labels** are translated by the shared
+`application-core/shell/js/services/i18n.js` (i18next, driven by the locale store): every text a
+page shows or a screen reader announces is `T('<namespace>:<key>', 'English fallback')` - the
+module's own `i18n/<locale>/<model>.model.json` catalog for its labels, the platform's
+`application-core/i18n/<locale>/generated.json` for the page chrome and `shell.json` for the
+shell's words - and a sentence that names a label is one key with a placeholder
+(`{{name, lowercase}}` where the language needs it), never two translations glued together.
+`HarmoniaTemplateLiteralsIT` fails the build on a literal `aria-label`, `title` or visible text
+outside `T()`. Remaining items are refinements — see the checklist + the
 repo-root `HARMONIA_RUNTIME_PLAN.md` "Implementation status" + "Follow-ups".
 
 ## Architecture (how it differs from the Angular module)

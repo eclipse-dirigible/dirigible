@@ -462,11 +462,11 @@ document.addEventListener('alpine:init', () => {
       return this.t('shell.tenantUsers.grantedBy', 'Granted by {{by}} on {{at}}', { by: role.grantedBy || '-', at: this.time(role.grantedAt) });
     },
 
-    /** A timestamp in the user's locale; empty when there is none. */
+    /** A timestamp in the application's timestamp format, not the browser's (#8778); empty when there is none. */
     time(iso) {
       if (!iso) return '';
       const date = new Date(iso);
-      return isNaN(date.getTime()) ? iso : date.toLocaleString();
+      return isNaN(date.getTime()) ? iso : window.HarmoniaFormat.value(date, true);
     },
 
     // ---- internals ----

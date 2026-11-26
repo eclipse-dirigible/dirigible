@@ -440,7 +440,12 @@
       if (!read) return;
       if (read.refused) {
         event.stopPropagation();
-        input.setCustomValidity('Enter the date as ' + HarmoniaFormat.dateHint() + '.');
+        // The browser's own bubble reads it, so it is translated like any other message (#8778); the BPM
+        // task form loads this file without i18n.js, and keeps the English sentence.
+        const hint = { pattern: HarmoniaFormat.dateHint() };
+        input.setCustomValidity(typeof window.T === 'function'
+          ? window.T('application-core:shell.format.dateHint', 'Enter the date as {{pattern}}.', hint)
+          : 'Enter the date as ' + hint.pattern + '.');
         return;
       }
       input.value = read.value;

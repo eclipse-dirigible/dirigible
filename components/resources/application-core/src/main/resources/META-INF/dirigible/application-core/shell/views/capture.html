@@ -290,6 +290,7 @@
          labels would set App.config.projectName here first, as the task form and the report page do. -->
     <script>window.App = window.App || { config: {} }; App.config = App.config || {};</script>
     <!-- The language the instance offers (#8632): the labels and Accept-Language follow it, never a saved one it does not. -->
+    <script src="/services/web/application-core/shell/js/services/format.js"></script>
     <script src="/services/web/application-core/shell/js/stores/locale.js"></script>
     <script src="/services/web/application-core/shell/js/services/i18n.js"></script>
     <script>
@@ -551,7 +552,7 @@
           get whenText() {
             const at = this.review && this.review.capturedAt;
             const date = at ? new Date(at) : null;
-            return date && !isNaN(date.getTime()) ? date.toLocaleString() : '';
+            return date && !isNaN(date.getTime()) ? window.HarmoniaFormat.value(date, true) : '';
           },
 
           get liveText() {
