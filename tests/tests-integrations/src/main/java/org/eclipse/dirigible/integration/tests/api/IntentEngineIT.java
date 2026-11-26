@@ -3082,6 +3082,19 @@ class IntentEngineIT extends IntegrationTest {
         // side, or it settles a VOIDED invoice (#7668).
         assertTrue(onInvoice.contains("Integer s = invoice.Status;") && onInvoice.contains("s == 3 || s == 4 || s == 6"),
                 "the onInvoice delegate should only settle an invoice still in a payable status");
+        assertTrue(onInvoice.contains("invoices.lockForUpdate(invoiceId)") && onInvoice.contains("UnitOfWork.callRetryingDeadlock"),
+                "the pull should run as one unit under a lock on the invoice, so two settlements never spend one open amount twice");
+
+        // A total that grows after the invoice became payable is settled from the money on account
+        // (#8489): a derived write of the TOTAL re-runs the same pull. The paid roll-up's own write - a
+        // hand-deleted allocation - moves the paid column only and must not put the allocation back.
+        String onInvoiceUpdated = codeOf("gen/events/settle/AutoSettleOnInvoiceUpdated.java");
+        assertTrue(onInvoiceUpdated.contains("return \"" + PROJECT + "-Invoice-Invoice-updated\";"),
+                "the growth listener should bind the invoice's update topic");
+        assertTrue(onInvoiceUpdated.contains("if (written == null || !written.contains(\"Total\")) {"),
+                "only a derived write of the total should re-settle the invoice");
+        assertTrue(onInvoiceUpdated.contains("AutoSettleOnInvoice.settle(invoice.Id)"),
+                "the growth listener should run the very pull the on-invoice delegate runs");
 
         // What an invoice can still take is re-summed from its allocation ROWS - the rows the capacity
         // guard counts - never read off the paid roll-up column, which lags them (#7559). Sized from the
