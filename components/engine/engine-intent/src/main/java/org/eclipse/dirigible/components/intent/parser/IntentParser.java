@@ -2130,6 +2130,10 @@ public final class IntentParser {
             issues.add("schedule [" + name + "] generate declares undo or a report's rows (fromReport, parameters, where, backReference)"
                     + " - those are a click on the record an on-demand generates runs from");
         }
+        if (g.hasWhen() || g.getWhenMessage() != null) {
+            issues.add("schedule [" + name + "] generate declares when - the guard of a click on the source record (#7992);"
+                    + " a schedule selects the rows it generates from with its where: conditions");
+        }
         // The escalation writes its chosen level onto the target too (issue #7276), so the natural key
         // may - and must - name it, although no map / defaults entry does.
         validateScheduleGenerateUnique(name, g, crossModel, byName, schedule.getEscalate() == null ? null
@@ -12811,6 +12815,7 @@ public final class IntentParser {
                         + " an on-demand create-from's cardinality is its event mode (once / append)");
             }
             validateGeneratesFromStatus(g, name, byName, crossModelSource, issues);
+            validateGeneratesWhen(g, name, byName, crossModelSource, issues);
             validateGeneratesItemLines(g, name, source, byName, model.getEntities(), crossModel, issues);
             validateGeneratesPrompt(g, name, byName, crossModel, crossModelSource, issues);
             validateGeneratesLink(g, name, byName, crossModel, crossModelSource, issues);
@@ -12942,6 +12947,53 @@ public final class IntentParser {
         if (!hasStatus) {
             issues.add("generates [" + name + "] fromStatus requires the from entity [" + g.getFrom()
                     + "] to declare a function: EntityStatus relation");
+        }
+    }
+
+    /**
+     * Validate the guard of a create-from on the source's own values (issue #7992): {@code when:} with
+     * its {@code whenMessage:}, the {@code forbidWhen} vocabulary read off the source record.
+     *
+     * <p>
+     * Refused where it would be silent: a condition with no message (the message is all a refused
+     * caller is told), a message with no condition (a promise nothing keeps), a term that does not read
+     * against the source, and - like {@code fromStatus} - a page-scoped action (no record to read) and
+     * an event-driven one with no button (the guard is on the click; the event qualifies its moment
+     * with its own {@code when:}). A cross-model source is refused too: its fields live in the owner's
+     * {@code .model}, where nothing here can type the comparison.
+     */
+    private static void validateGeneratesWhen(GeneratesIntent g, String name, Map<String, EntityIntent> byName, boolean crossModelSource,
+            List<String> issues) {
+        String subject = "generates [" + name + "]";
+        if (!g.hasWhen()) {
+            if (g.getWhenMessage() != null && !g.getWhenMessage()
+                                                .isBlank()) {
+                issues.add(subject + " declares whenMessage with no when - nothing can refuse the click; add the when condition"
+                        + " the message explains");
+            }
+            return;
+        }
+        if (g.getWhenMessage() == null || g.getWhenMessage()
+                                           .isBlank()) {
+            issues.add(subject + " declares when with no whenMessage - the message is what the refused caller is told");
+        }
+        if (!"entity".equals(g.getScope())) {
+            issues.add(subject + " declares when but its scope is [" + g.getScope()
+                    + "] - the guard reads the record the action runs on, and a page-scoped action has none");
+        }
+        if (!g.hasButton()) {
+            issues.add(subject + " declares when but contributes no button (it is event-driven only) - the guard is on the click;"
+                    + " qualify the moment with the event's when: guard instead, or add button: true to keep the click and its guard");
+        }
+        if (crossModelSource) {
+            issues.add(subject + " declares when on a cross-model source (fromUses) - the source's fields live in the owner model,"
+                    + " where the comparison cannot be typed; guard it with fromStatus, or declare the action in the owner model");
+            return;
+        }
+        EntityIntent from = g.getFrom() == null ? null : byName.get(g.getFrom());
+        if (from != null && CheckSupport.conditionTerms(from, byName, g.getWhen()) == null) {
+            issues.add(subject + " when [" + g.getWhen() + "] does not read: each term is \"<field or to-one of " + from.getName()
+                    + "> ==|!= <value | null>\"");
         }
     }
 

@@ -4301,9 +4301,13 @@ class IntentEngineIT extends IntegrationTest {
                 "the run endpoint must read the source's status before creating anything");
         assertTrue(generate.contains("if (!(currentStatus != 3))"), "the implied guard is the completion hook's own status");
         assertTrue(generate.contains("Response.setStatus(409)"), "a barred status must be refused with 409");
-        // BEFORE the create: a guard that runs after the document exists is not a guard.
-        assertTrue(generate.indexOf("Response.setStatus(409)") < generate.indexOf("= create(req.id"),
-                "the status guard must be asked before the create-from runs");
+        // BEFORE the create: a guard that runs after the document exists is not a guard. And under the
+        // source's row lock, in the create's own unit (#7827): concurrent clicks take turns instead of
+        // all reading the unflipped status.
+        int sourceLock = generate.indexOf("sourceRepository.lockForUpdate(req.id)");
+        int guard = generate.indexOf("throw new WrongStatus(currentStatus)");
+        assertTrue(sourceLock >= 0 && sourceLock < guard, "the status guard must read the source under its row lock");
+        assertTrue(guard < generate.indexOf("return create(req.id"), "the status guard must be asked before the create-from runs");
 
         // The custom-action BUTTON localizes like every other label: the descriptor carries the
         // model-catalog translation key (the renderer shows T(translation.key, label)), and the

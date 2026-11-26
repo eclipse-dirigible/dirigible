@@ -224,7 +224,12 @@ document.addEventListener('alpine:init', () => {
     // the SAME record, so a rule that differs between them makes the two disagree on one row. String
     // comparison is the rule (issue #7150) - the earlier `Number()` conversion made this guard fail
     // open on any status value that is not numeric, leaving the button live while the server 409s it.
+    //
+    // A create-from may also carry a `when` guard over the source's own values (issue #7992): ANDed
+    // terms ({ property, equal, value }) compared as text, the way the master-detail panel reads a
+    // forbidWhen. A term whose property the record does not carry fails open, like the status guard.
     isAvailable(action, record) {
+      if (!this.whenHolds(action, record)) return false;
       const guard = action && action.guard;
       if (!guard || !guard.property || !record || typeof record !== 'object') return true;
       const current = record[guard.property];
@@ -238,8 +243,21 @@ document.addEventListener('alpine:init', () => {
       return true;
     },
 
+    // Whether a create-from's `when` guard (issue #7992) holds on the record - true when the action
+    // carries none, when there is no record, and for every term whose property the record lacks.
+    whenHolds(action, record) {
+      const terms = action && action.when;
+      if (!Array.isArray(terms) || !terms.length || !record || typeof record !== 'object') return true;
+      return terms.every((t) => {
+        const current = record[t.property];
+        if (current === undefined) return true;
+        const eq = String(current === null ? '' : current) === String(t.value);
+        return t.equal ? eq : !eq;
+      });
+    },
+
     // Whether an action's offer depends on the record's status - a transition's `from:` or a
-    // create-from's `guard` - i.e. exactly the actions appliesTo / isAvailable would consult the record
+    // create-from's `guard` (or its `when`, #7992) - i.e. exactly the actions appliesTo / isAvailable would consult the record
     // for. A page whose record is still LOADING holds no status yet, and both checks fail open on an
     // unknown one, so such a page leaves these actions out until the record arrives rather than
     // offering one the server then refuses (issue #7605). A caller with no row at all keeps the
@@ -247,7 +265,8 @@ document.addEventListener('alpine:init', () => {
     isGuarded(action) {
       if (!action) return false;
       const transition = Array.isArray(action.from) && action.from.length && action.statusProperty;
-      return Boolean(transition || (action.guard && action.guard.property));
+      const when = Array.isArray(action.when) && action.when.length;
+      return Boolean(transition || (action.guard && action.guard.property) || when);
     },
 
     // Whether an action destroys data (`destructive: true`, issue #8364). Every menu that lists a

@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.intent.generator;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -126,6 +127,70 @@ public final class GeneratesGuardSupport {
             return new Guard(statusProperty, List.copyOf(g.getFromStatus()), List.of());
         }
         return g.getSourceStatus() == null ? null : new Guard(statusProperty, List.of(), List.of(g.getSourceStatus()));
+    }
+
+    /**
+     * The guard of a create-from on the source's own values (issue #7992) as the neutral condition
+     * terms, each read off the {@code source} local the generated controller loads under its row lock -
+     * or {@code null} when it has none: no {@code when:}, a {@code page}-scoped action, a cross-model
+     * source (no local entity to type the terms against) or a condition that does not read, every one
+     * of which the parser refuses.
+     *
+     * @param g the create-from
+     * @param source the local source entity, or {@code null} for a cross-model one
+     * @param byName the local entities by name
+     * @return the terms, or null
+     */
+    public static List<Map<String, Object>> whenTerms(GeneratesIntent g, EntityIntent source, Map<String, EntityIntent> byName) {
+        if (!g.hasWhen() || !"entity".equals(g.getScope()) || source == null) {
+            return null;
+        }
+        List<Map<String, Object>> terms = CheckSupport.conditionTerms(source, byName, g.getWhen());
+        if (terms == null) {
+            return null;
+        }
+        List<Map<String, Object>> onSource = new ArrayList<>();
+        for (Map<String, Object> term : terms) {
+            Map<String, Object> owned = new LinkedHashMap<>(term);
+            owned.put("owner", "source");
+            onSource.add(owned);
+        }
+        return onSource;
+    }
+
+    /**
+     * The {@code when:} guard as a button descriptor's {@code when}: one {@code property} /
+     * {@code equal} / {@code value} entry per ANDed term, read by the shell's {@code customActions}
+     * store off the record it already has, comparing as text - the shape the master-detail panel reads
+     * a {@code forbidWhen} in. {@code null} when there is no guard to mirror, and when a term is a null
+     * test, which text comparison cannot tell from a value the list row does not carry: the generated
+     * controller's 409 then stays the only half, as it is for every other caller.
+     *
+     * @param g the create-from
+     * @param source the local source entity, or {@code null} for a cross-model one
+     * @param byName the local entities by name
+     * @return the descriptor terms, or null
+     */
+    public static List<Map<String, Object>> whenDescriptor(GeneratesIntent g, EntityIntent source, Map<String, EntityIntent> byName) {
+        if (!g.hasButton()) {
+            return null;
+        }
+        List<Map<String, Object>> terms = whenTerms(g, source, byName);
+        if (terms == null) {
+            return null;
+        }
+        List<Map<String, Object>> descriptor = new ArrayList<>();
+        for (Map<String, Object> term : terms) {
+            if (CheckSupport.NULL_TEST_TYPE.equals(term.get("type"))) {
+                return null;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("property", term.get("property"));
+            entry.put("equal", term.get("equal"));
+            entry.put("value", term.get("value"));
+            descriptor.add(entry);
+        }
+        return descriptor;
     }
 
     /**

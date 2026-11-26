@@ -731,6 +731,8 @@ generates:
     defaults: { InvoiceDate: now }
     items: { from: ProjectTimesheetItem, to: SalesInvoiceItem, map: { Description: Description } }
     fromStatus: [2]                   # optional guard: the SOURCE statuses the action may run from
+    when: "active == true"            # optional guard on the SOURCE's own values (forbidWhen grammar)
+    whenMessage: "Activate the template first"   # the 409 a refused click receives
     sourceStatus: 3                   # optional completion hook: the SOURCE's EntityStatus after creation
     sourceStatusOnRetire: 2           # optional INVERSE: where the SOURCE returns when the target is retired
 ```
@@ -764,6 +766,14 @@ mint a second document (another invoice for an already-invoiced proforma, in the
 is refused where it cannot mean anything - a `page` scope, a source with no `function: EntityStatus`
 relation, an event-only create-from (guard the moment with `event.when:`), and an allow-list that
 contains the `sourceStatus` the action itself writes.
+
+`when:` + `whenMessage:` (#7992) guard the CLICK on the source's own values where `fromStatus` reads a
+status - `active == true` on an invoice template. The condition is the `forbidWhen` record-local
+grammar (`==` / `!=`, an ANDed list, statuses by seeded name, `null` tests), read under the same row
+lock before anything is created; a refusal is **409** with the message, and the button hides while
+the condition fails on the record the page holds. Both may be declared (AND). Refused at parse
+without its message (and the reverse), on a term that does not read, a `page` scope, an event-only
+create-from, a cross-model source and a scheduled generation.
 
 `event: { onTransition: <Source>, when: "Status == <status>" }` (or `onCreate`, or a process step)
 mints the target with nobody clicking; the `map:` entry copying the source's key is then the

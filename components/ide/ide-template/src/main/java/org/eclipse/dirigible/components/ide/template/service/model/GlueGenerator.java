@@ -1168,6 +1168,7 @@ class GlueGenerator {
                 // the boolean - a .glue written before these keys existed carries none and renders the
                 // unguarded run() it always had.
                 "hasStatusGuard", "guardStatusProperty", "guardStatusExpr", "guardStatusText", "guardStatuses");
+        bindWhenGuard(item, context);
         // The mapped values, each rendered from the reading the glue carries (issue #7425) - a copy off
         // the source, a typed literal, today in the target field's shape, a Calc arithmetic cell.
         context.put("fieldAssignments", assignments(item.get("fieldAssignments")));
@@ -1316,6 +1317,28 @@ class GlueGenerator {
             cells.add(cell);
         }
         return cells;
+    }
+
+    /**
+     * The guard of a create-from on the source's own values (issue #7992): its condition over the
+     * {@code source} local the click reads under its row lock, and the authored refusal as a Java
+     * string literal's content. A .glue written before the keys existed carries no {@code hasWhenGuard}
+     * and renders the run() it always had.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     */
+    private static void bindWhenGuard(Map<String, Object> item, Map<String, Object> context) {
+        boolean guarded = Boolean.TRUE.equals(item.get("hasWhenGuard"));
+        String condition = guarded ? JavaLiterals.conditionExpression(asMaps(item.get("whenGuardTerms"))) : null;
+        if (guarded && condition == null) {
+            // A guard that does not render must never become no guard at all - the generator refuses an
+            // unreadable condition, so only a hand-edited .glue reaches this.
+            throw new IllegalArgumentException("A create-from when guard carries no renderable condition: " + item.get("whenGuardTerms"));
+        }
+        context.put("hasWhenGuard", guarded);
+        context.put("whenGuardCondition", guarded ? condition : "");
+        context.put("whenMessage", guarded ? JavaLiterals.escape(strOr(item, "whenMessage", "")) : "");
     }
 
     /**

@@ -160,13 +160,21 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 ## A gate moves the check to the moment the row is persisted carrying that status, which is what makes
 ## it usable on a row whose amount is a DOCUMENT TOTAL: that is recomputed from the lines after the
 ## header is written, so an ungated guard would only ever see the 0 the header was created with.
-#macro(rollupGuardBody $rollupGuard)
+## The ungated guard locks the parent BEFORE it reads it (#7827), inside the unit save() / update() open
+## for it, and the lock lasts until this write commits: two concurrent writes under one parent take
+## turns, and the second re-sums the rows including the first. Read without the lock, both summed the
+## same committed rows, both fit, and together they drove the balance negative (Paid 240 of 120). The
+## gated guard does not lock - it also runs on the targeted path, which opens no unit of its own.
+#macro(rollupGuardBody $rollupGuard $lockParent)
 #if($rollupGuard.parentGenFolder && $rollupGuard.parentGenFolder != "")
 #set($guardParentType = "gen.${rollupGuard.parentGenFolder}.data.${rollupGuard.parentPerspective}.${rollupGuard.parentEntity}")
 #else
 #set($guardParentType = "${rollupGuard.parentEntity}")
 #end
         if (entity.${rollupGuard.fkProperty} != null#if($rollupGuard.incomingMatch && $rollupGuard.incomingMatch != "") && ${rollupGuard.incomingMatch}#end) {
+#if($lockParent)
+            new ${guardParentType}Repository().lockForUpdate(entity.${rollupGuard.fkProperty});
+#end
             ${guardParentType}Entity guardParent = new ${guardParentType}Repository().findById(entity.${rollupGuard.fkProperty});
             if (guardParent != null && guardParent.${rollupGuard.capacityField} != null) {
                 java.math.BigDecimal guardConsumed = java.math.BigDecimal.ZERO;
@@ -194,7 +202,7 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #macro(rollupGuardCheck)
 #foreach($rollupGuard in $rollupGuards)
 #if($rollupGuard.capacityField && (!$rollupGuard.guardStatusProperty || $rollupGuard.guardStatusProperty == ""))
-#rollupGuardBody($rollupGuard)
+#rollupGuardBody($rollupGuard true)
 #end
 #end
 #end
@@ -238,7 +246,7 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #foreach($rollupGuard in $rollupGuards)
 #if($rollupGuard.guardStatusProperty && $rollupGuard.guardStatusProperty != "")
         if (entity.${rollupGuard.guardStatusProperty} != null && entity.${rollupGuard.guardStatusProperty}.longValue() == ${rollupGuard.guardStatusValue}L) {
-#rollupGuardBody($rollupGuard)
+#rollupGuardBody($rollupGuard false)
         }
 #end
 #end
@@ -644,9 +652,17 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     }
 #end
 
+## Whether an ungated capacity guard locks its parent (#7827) - save() and update() then open the unit
+## the lock lives in.
+#set($hasCapacityGuards = false)
+#foreach($rollupGuard in $rollupGuards)
+#if($rollupGuard.capacityField && (!$rollupGuard.guardStatusProperty || $rollupGuard.guardStatusProperty == ""))
+#set($hasCapacityGuards = true)
+#end
+#end
     @Override
     public ${name}Entity save(${name}Entity entity) {
-#if($hasSingleFlags || $documentItem)
+#if($hasSingleFlags || $documentItem || $hasCapacityGuards)
 #if($hasSingleFlags)
         // A single flag changes hands in ONE unit of work with the write that takes it, so the holder
         // it demotes and this row commit together or not at all.
@@ -656,7 +672,14 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         // header cannot take refuses the line, instead of failing after the line was stored and leaving
         // a document whose footer is not the sum of its lines (#8096).
 #end
+#if($hasCapacityGuards)
+        // A capacity guard and the write it admits commit in ONE unit, the guarded parent locked from
+        // the guard's read to the commit (#7827) - see rollupGuardBody. A unit the database rolled back
+        // to break a deadlock is run again, as the reference check's is (#8341, #8507).
+        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
+#else
         return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+#end
 #if($documentItem)
             // The header is locked FIRST: the line's reference check share-locks it too, and two lines
             // added at once would each hold that share lock while waiting to write the total. Taken
@@ -836,18 +859,24 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 
     @Override
     public ${name}Entity update(${name}Entity entity) {
-#if($hasSingleFlags || $documentItem || $preservedOnUpdate.size() > 0 || $hasNotExistsChecks)
-        // One unit with the header total(s) it moves - see save() (#8096) - and with the row lock the
-        // carried-over system-owned columns are read under (#8109).
+#if($hasSingleFlags || $documentItem || $preservedOnUpdate.size() > 0 || $hasCapacityGuards || $hasNotExistsChecks)
+        // One unit with the header total(s) it moves - see save() (#8096) - with the row lock the
+        // carried-over system-owned columns are read under (#8109), and with the lock a capacity guard
+        // holds on its parent (#7827).
+#if($hasCapacityGuards)
+#set($updateUnit = "callRetryingDeadlock")
+#else
+#set($updateUnit = "call")
+#end
 #if($hasDuplicateKeys)
         try {
-            return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updateInUnit(entity));
+            return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.${updateUnit}(() -> updateInUnit(entity));
         } catch (RuntimeException e) {
             // A merge reaches the database when the unit commits, past the write that maps a collision.
             throw duplicateKeyOr(e);
         }
 #else
-        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updateInUnit(entity));
+        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.${updateUnit}(() -> updateInUnit(entity));
 #end
     }
 

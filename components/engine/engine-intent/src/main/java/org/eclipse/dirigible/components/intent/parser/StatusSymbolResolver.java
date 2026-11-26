@@ -493,6 +493,10 @@ final class StatusSymbolResolver {
                 rewriteWhen(event, statusRelationName(source), status, subject + " event when");
             }
             putResolvedList(generate, "fromStatus", status, subject + " fromStatus");
+            if (text(generate, "fromUses") == null && generate.get("when") != null) {
+                // The click guard on the source's own values (#7992) reads like any record condition.
+                rewriteRecordWhen(generate, "when", source, subject + " when");
+            }
             putResolved(generate, "sourceStatus", status, subject + " sourceStatus");
             putResolved(generate, "sourceStatusOnRetire", status, subject + " sourceStatusOnRetire");
             rewriteGeneratesItemsWhere(generate, subject);

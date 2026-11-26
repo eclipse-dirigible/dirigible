@@ -21,6 +21,7 @@ import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.ReportItemsSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
+import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.slf4j.Logger;
@@ -68,6 +69,10 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
             return;
         }
         String project = context.getProjectName();
+        Map<String, EntityIntent> byName = new LinkedHashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            byName.put(entity.getName(), entity);
+        }
         for (GeneratesIntent g : model.getGenerates()) {
             String name = g.getName();
             if (name == null || name.isBlank()) {
@@ -102,6 +107,7 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
                     buildDescriptorModule(project, IntentNaming.javaModule(context), g,
                             IntentNaming.customActionTranslationKey(project, context, name),
                             GeneratesGuardSupport.of(g, GeneratesGuardSupport.statusProperty(g, model, context)),
+                            GeneratesGuardSupport.whenDescriptor(g, g.isCrossModelSource() ? null : byName.get(g.getFrom()), byName),
                             PromptColumns.of(g, model, context)));
             if (g.hasUndo() && g.readsReport()) {
                 // The undo of what a run generated (#8329): a second button on the same record, served by
@@ -147,7 +153,7 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
     }
 
     private static String buildDescriptorModule(String project, String javaModule, GeneratesIntent g, String translationKey,
-            GeneratesGuardSupport.Guard guard, List<Map<String, Object>> promptColumns) {
+            GeneratesGuardSupport.Guard guard, List<Map<String, Object>> whenGuard, List<Map<String, Object>> promptColumns) {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("id", project + "-" + g.getForEntity() + "-" + g.getName());
         String label = IntentNaming.customActionLabel(g.getName(), g.getLabel());
@@ -178,6 +184,13 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
             // customActions store decides it from the record it already has, with no extra request;
             // the generated controller's 409 stays the contract for every other caller.
             view.put("guard", guard.descriptor());
+        }
+        if (whenGuard != null) {
+            // The guard on the source's own values (issue #7992): the button stops offering itself on a
+            // record the condition refuses - a paused template must not carry a live "Create now". Its
+            // terms are compared as text off the record the page already holds; the generated
+            // controller's 409 stays the contract for every other caller.
+            view.put("when", whenGuard);
         }
         if (g.hasPrompt()) {
             // Declared input form (issue #6685): the customActions store opens a dialog instead of the
