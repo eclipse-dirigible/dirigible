@@ -840,6 +840,7 @@ class GlueGeneratorTest {
         full.put("hasRelations", Boolean.TRUE);
         full.put("relations", List.of(relation("Supplier", "Supplier", "Supplier", false, "")));
         full.put("itemRelations", List.of(relation("Vendor", "Partner", "Partner", true, "partners")));
+        full.put("hasWarnings", Boolean.TRUE);
 
         String java = renderCapture(full, Map.of("javaGenFolderName", "purchasing"));
 
@@ -855,6 +856,11 @@ class GlueGeneratorTest {
                         .contains("compare(read, \"total\", saved.Total, VALUES::decimal, flags);")
                         .contains("new gen.purchasing.data.supplier.SupplierRepository().findAll(")
                         .contains("new gen.partners.data.partner.PartnerRepository().findAll(");
+        assertThat(java).as("the entity's soft checks are flagged and asked before the save (#8631)")
+                        .contains("List<Warning> warnings = repository.warnings(checked);")
+                        .contains("CaptureFlag.Reason.WARNING")
+                        .contains("Warnings.requireConfirmed(warnings);")
+                        .contains("} catch (ConfirmationRequiredException held) {");
         assertThat(java).as("a same-model relation never reads another model's package")
                         .doesNotContain("gen.purchasing.data.partner.PartnerRepository");
     }
@@ -871,6 +877,7 @@ class GlueGeneratorTest {
                         .doesNotContain("CaptureQr.read(")
                         .doesNotContain("Attachments.store(")
                         .doesNotContain("void compare(")
+                        .doesNotContain("Warnings.requireConfirmed(")
                         .doesNotContain(".item(");
     }
 

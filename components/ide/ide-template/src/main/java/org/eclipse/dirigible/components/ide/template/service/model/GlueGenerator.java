@@ -910,7 +910,7 @@ class GlueGenerator {
         copy(context, item, "name", "nameLiteral", "className", "entity", "perspective", "keyProperty", "roles", "readRoles",
                 "instructionsLiteral", "hasQr", "qrSeparatorLiteral", "qrPartsLiteral", "schemaFields", "schemaItems", "fields", "compares",
                 "hasRelations", "hasCompares", "hasItems", "itemFields", "itemEntity", "itemBackRef", "hasAttachment", "attachmentEntity",
-                "attachmentBackRef");
+                "attachmentBackRef", "hasWarnings");
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("javaItemPerspective", truthy(item, "hasItems") ? sanitize(item, "itemPerspective") : "");
         context.put("javaAttachmentPerspective", truthy(item, "hasAttachment") ? sanitize(item, "attachmentPerspective") : "");

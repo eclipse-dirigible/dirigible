@@ -647,6 +647,7 @@
       "rejected": "The document was read, but the record could not be created.",
       "failed": "The document could not be read.",
       "failedGeneric": "The document could not be captured.",
+      "notConfirmed": "Not captured - the warnings were not confirmed.",
       "invalidTitle": "This page cannot be opened",
       "invalidText": "The link to document capture is not valid.",
       "reviewTitle": "Review the draft {{entity}}",
@@ -680,6 +681,7 @@
         "MISMATCH": "Differs from the calculated value",
         "LINE": "Line read with low confidence",
         "LINE_SKIPPED": "Line not created",
+        "WARNING": "Warning",
         "OTHER": "Needs a look"
       },
       "doneMessage": "Captured {{file}}: {{n}} to review",
