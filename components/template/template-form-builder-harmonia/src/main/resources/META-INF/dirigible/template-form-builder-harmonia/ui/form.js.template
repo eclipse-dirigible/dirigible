@@ -36,9 +36,14 @@ const harmoniaHttp = {
   // Returns { data, status }. The status matters to the AngularJS $http shim below, whose callers
   // branch on it (`if (response.status != 202)`), so it cannot be dropped on the success path.
   async exchange(method, url, body) {
+    const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+    // The Region & Language setting, as the application pages send it (#8912): the live record and
+    // the related ones it names - a multilingual status - answer in the reader's language.
+    const language = await App.services.api.language();
+    if (language) headers['Accept-Language'] = language;
     const r = await fetch(url, {
       method,
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      headers,
       // A string body is already serialized - AngularJS $http passes strings through untouched, and
       // legacy .form code posts JSON.stringify(model). Re-encoding it would send a quoted string.
       body: body == null ? undefined : (typeof body === 'string' ? body : JSON.stringify(body)),
@@ -282,13 +287,21 @@ document.addEventListener('alpine:init', () => {
       return option ? option.label : String(value);
     },
 
+    // A read-only field's text: a foreign key shows the name resolveRelationNames found for it, any
+    // other value - and a key whose name is not there - shows as it stands, an empty one as a dash.
+    fieldText(property) {
+      const name = this.model['__' + property + 'Name'];
+      const value = name === undefined ? this.model[property] : name;
+      return (value === null || value === undefined || value === '') ? '—' : value;
+    },
+
     // Resolve each foreign key to its display name: the trigger seeded __<Fk>EntityUrl + __<Fk>EntityLabel
-    // for every to-one relation, so fetch the related record and replace the raw FK id in the model with
-    // its label. Independent + best-effort - a missing URL/record just leaves the id (the documented
-    // fallback). Runs after the live entity is loaded, since the FK ids come from that entity.
-    // A relation rendered as an `editable` PICKER is deliberately skipped: its model must keep the id
-    // (the select matches its options on it, and the Writer persists it into the FK column), and the
-    // name is already what its options display.
+    // for every to-one relation, so fetch the related record and keep its label in __<Fk>Name, which the
+    // read-only field shows. The FK itself keeps the id (#8912): the step indicator matches the status
+    // on it, and a completion posts ids back. Independent + best-effort - a missing URL/record leaves no
+    // name, and the field shows the id. Runs after the live entity is loaded, since the FK ids come
+    // from that entity. A relation rendered as an `editable` PICKER is skipped: the name is already
+    // what its options display.
     async resolveRelationNames() {
       const picked = new Set((window.__harmoniaRelationSelects || []).map((s) => s.model));
       const keys = Object.keys(this.model).filter((k) => /^__.+EntityUrl$/.test(k));
@@ -302,9 +315,9 @@ document.addEventListener('alpine:init', () => {
         try {
           const related = await harmoniaHttp.get(url + '/' + encodeURIComponent(id));
           if (related && label && related[label] !== undefined && related[label] !== null && related[label] !== '') {
-            this.model[fk] = related[label];
+            this.model['__' + fk + 'Name'] = related[label];
           }
-        } catch (e) { /* keep the id */ }
+        } catch (e) { /* no name - the field shows the id */ }
       }));
     },
 

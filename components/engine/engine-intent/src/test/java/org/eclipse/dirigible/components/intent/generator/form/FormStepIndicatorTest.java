@@ -85,9 +85,12 @@ class FormStepIndicatorTest {
                                                               .get("metadata");
         assertEquals(Boolean.TRUE, meta.get("taskForm"));
         // CANCELLED is terminal (excluded); the bg translation seed is ignored; order is seed order.
-        // Each step carries its label plus the optional `description` seed column (absent -> no key).
-        assertEquals(List.of(Map.of("label", "DRAFT", "description", "Being prepared"),
-                Map.of("label", "APPROVED", "description", "Ready to ship"), Map.of("label", "SHIPPED")), meta.get("steps"));
+        // Each step carries its seed id (#8912), its label and the optional `description` seed column
+        // (absent -> no key).
+        assertEquals(
+                List.of(Map.of("id", "1", "label", "DRAFT", "description", "Being prepared"),
+                        Map.of("id", "2", "label", "APPROVED", "description", "Ready to ship"), Map.of("id", "3", "label", "SHIPPED")),
+                meta.get("steps"));
         // The current-status model variable is the EntityStatus relation name.
         assertEquals("Status", meta.get("statusVar"));
     }
@@ -174,8 +177,8 @@ class FormStepIndicatorTest {
         // Every task form of the approval flow: the entry status (init) plus the statuses the flow's own
         // steps write - APPROVED, ISSUED, CONFIRMED. PARTIAL/PAID are settlement states the paid roll-up
         // writes from ISSUED, so they are steps of no approval; CANCELLED is terminal.
-        List<Map<String, Object>> approvalSteps =
-                List.of(Map.of("label", "DRAFT"), Map.of("label", "APPROVED"), Map.of("label", "ISSUED"), Map.of("label", "CONFIRMED"));
+        List<Map<String, Object>> approvalSteps = List.of(Map.of("id", "1", "label", "DRAFT"), Map.of("id", "2", "label", "APPROVED"),
+                Map.of("id", "3", "label", "ISSUED"), Map.of("id", "5", "label", "CONFIRMED"));
         for (String form : List.of("ApproveInvoice", "IssueInvoice", "ConfirmInvoice")) {
             Map<String, Object> meta = (Map<String, Object>) forms.get(form)
                                                                   .get("metadata");
@@ -196,7 +199,9 @@ class FormStepIndicatorTest {
         // (issue #7239).
         Map<String, Object> meta = (Map<String, Object>) forms.get("RecordPayment")
                                                               .get("metadata");
-        assertEquals(List.of(Map.of("label", "ISSUED"), Map.of("label", "PARTIAL"), Map.of("label", "PAID")), meta.get("steps"));
+        assertEquals(
+                List.of(Map.of("id", "3", "label", "ISSUED"), Map.of("id", "6", "label", "PARTIAL"), Map.of("id", "7", "label", "PAID")),
+                meta.get("steps"));
     }
 
     /**
@@ -212,7 +217,7 @@ class FormStepIndicatorTest {
 
         Map<String, Object> meta = (Map<String, Object>) forms.get("RecordPayment")
                                                               .get("metadata");
-        assertEquals(List.of(Map.of("label", "PARTIAL"), Map.of("label", "PAID")), meta.get("steps"));
+        assertEquals(List.of(Map.of("id", "6", "label", "PARTIAL"), Map.of("id", "7", "label", "PAID")), meta.get("steps"));
     }
 
     /**
@@ -228,6 +233,8 @@ class FormStepIndicatorTest {
 
         Map<String, Object> meta = (Map<String, Object>) forms.get("RecordPayment")
                                                               .get("metadata");
-        assertEquals(List.of(Map.of("label", "ISSUED"), Map.of("label", "PARTIAL"), Map.of("label", "PAID")), meta.get("steps"));
+        assertEquals(
+                List.of(Map.of("id", "3", "label", "ISSUED"), Map.of("id", "6", "label", "PARTIAL"), Map.of("id", "7", "label", "PAID")),
+                meta.get("steps"));
     }
 }

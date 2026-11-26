@@ -35,7 +35,7 @@
           <!-- A number: { stampOn: issue } field: its pre-issue UUID placeholder shows as the draft marker. -->
           <span x-h-text class="text-sm wrap-break-word" x-text="HarmoniaFormat.documentNumber(model.$el.model) || '—'"></span>
 #else
-          <span x-h-text class="text-sm wrap-break-word" x-text="(model.$el.model === null || model.$el.model === undefined || model.$el.model === '') ? '—' : model.$el.model"></span>
+          <span x-h-text class="text-sm wrap-break-word" x-text="fieldText('$el.model')"></span>
 #end
         </div>
 #elseif($el.controlId == "header")
@@ -255,14 +255,14 @@
         <hr class="sm:col-span-2 mb-4" style="border: none; border-top: 1px solid var(--border);" />
         <!-- Document status flow, extracted from the intent (the bound entity's function: EntityStatus
              relation -> the status entity's non-terminal seeds, in order). Read-only (non-interactive);
-             active step = the current status name (model.$metadata.statusVar).
-             `label` stays the untranslated seed name because it is what the record's status value is
-             MATCHED against; `title` is the same name resolved through the catalog and is what shows. -->
-        <nav x-h-step-indicator="([#foreach($s in $metadata.steps){ label: '$s.label.replace($SQ, $ESCSQ)' }#if($foreach.hasNext), #end#end]).findIndex(s => s.label === model.${metadata.statusVar}) + 1" data-orientation="horizontal" class="sm:col-span-2 mb-4">
-          <template x-for="(step, i) in [#foreach($s in $metadata.steps){ label: '$s.label.replace($SQ, $ESCSQ)', title: #if($s.translation)T('${projectName}:${tprefix}.t.${s.translation.replace($SQ, $ESCSQ)}', '$s.label.replace($SQ, $ESCSQ)')#{else}'$s.label.replace($SQ, $ESCSQ)'#end, description: #if($s.description)'$s.description.replace($SQ, $ESCSQ)'#{else}''#end }#if($foreach.hasNext), #end#end]" :key="step.label">
+             active step = the one whose seed id the record's status holds (model.$metadata.statusVar,
+             #8912: the FK keeps its id, its name is a variable of its own). `label` is the seed name
+             the catalog key is built from; `title` is that name resolved through the catalog and shows. -->
+        <nav x-h-step-indicator="([#foreach($s in $metadata.steps){ id: '$s.id' }#if($foreach.hasNext), #end#end]).findIndex(s => s.id === String(model.${metadata.statusVar})) + 1" data-orientation="horizontal" class="sm:col-span-2 mb-4">
+          <template x-for="(step, i) in [#foreach($s in $metadata.steps){ id: '$s.id', label: '$s.label.replace($SQ, $ESCSQ)', title: #if($s.translation)T('${projectName}:${tprefix}.t.${s.translation.replace($SQ, $ESCSQ)}', '$s.label.replace($SQ, $ESCSQ)')#{else}'$s.label.replace($SQ, $ESCSQ)'#end, description: #if($s.description)'$s.description.replace($SQ, $ESCSQ)'#{else}''#end }#if($foreach.hasNext), #end#end]" :key="step.label">
             <div x-h-step-indicator-item="i + 1">
               <!-- Harmonia marks the active step visually only; aria-current announces it (#7645). -->
-              <button x-h-step-indicator-trigger data-non-interactive="true" type="button" :aria-current="step.label === model.${metadata.statusVar} ? 'step' : null">
+              <button x-h-step-indicator-trigger data-non-interactive="true" type="button" :aria-current="step.id === String(model.${metadata.statusVar}) ? 'step' : null">
                 <span x-h-step-indicator-marker x-text="i + 1"></span>
                 <span x-h-step-indicator-content>
                   <span x-h-step-indicator-title x-text="step.title"></span>
@@ -373,6 +373,8 @@
     <script src="/services/web/application-core/shell/js/services/format.js"></script>
     <!-- The shared refusal gate: a submit failure reaches the page only through App.services.apiErrors (#7263). -->
     <script src="/services/web/application-core/shell/js/services/apiError.js"></script>
+    <!-- The application pages' fetch client: the form's own client sends its Accept-Language (#8912). -->
+    <script src="/services/web/application-core/shell/js/services/api.js"></script>
     <!-- i18n: the shared shell translator (window.T + the Alpine i18n store), which serves the labels,
          the status steps and the submit messages from this form's own catalog. This page is standalone
          (no SPA shell / app.js), so the catalog namespace is bootstrapped inline: i18n.js reads
