@@ -43,6 +43,7 @@ class ReportManifestTest {
                     "tId": "openOrders",
                     "widget": { "kind": "count", "label": "Open", "icon": "inbox" },
                     "columns": [ { "alias": "Number", "type": "VARCHAR", "select": true } ],
+                    "columnCount": 1,
                     "url": "/services/web/shop/gen/openorders/reports/OpenOrders/index.html",
                     "apiBase": "/services/java/shop/gen/openorders/api/reports/OpenOrdersController"
                   },
@@ -52,6 +53,7 @@ class ReportManifestTest {
                     "description": "Revenue by month",
                     "dashboard": false,
                     "chart": "bar",
+                    "columnCount": 2,
                     "tId": "revenue",
                     "descriptionTId": "revenueDescription",
                     "url": "/services/web/shop/gen/revenue/reports/Revenue/index.html",
@@ -83,6 +85,9 @@ class ReportManifestTest {
                                              .getAsString());
         assertFalse(withoutWidget.has("widget"), "a report without a widget carries none: " + withoutWidget);
         assertFalse(withoutWidget.has("columns"), "nor the columns only a widget tile reads: " + withoutWidget);
+        assertEquals(2, withoutWidget.get("columnCount")
+                                     .getAsInt(),
+                "the column count reaches the shell for a report without a widget too");
         assertFalse(withoutWidget.get("dashboard")
                                  .getAsBoolean());
         assertEquals("revenueDescription", withoutWidget.get("descriptionTId")

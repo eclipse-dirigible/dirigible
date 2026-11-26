@@ -916,11 +916,25 @@ document.addEventListener('alpine:init', () => {
 
     visibleReports() { return Alpine.store('reports').items.filter(r => this.inProjection(r.url)); },
     dashKpiReports() { return Alpine.store('reports').kpiReports().filter(r => this.inProjection(r.url)); },
-    // The KPI widgets split by the shape they render as: one grid holding both number tiles and the wide
-    // top-N tables leaves holes around the tables, so the dashboard lays each kind out in its own grid.
+    // The KPI widgets split by the shape they render as: the number tiles fill rows of their own, the
+    // top-N tables are content tiles beside the report previews.
     summaryKpis() { return this.dashKpiReports().filter(r => r.widget.kind !== 'list'); },
     listKpis() { return this.dashKpiReports().filter(r => r.widget.kind === 'list'); },
     dashPreviewReports() { return Alpine.store('reports').previewReports().filter(r => this.inProjection(r.url)); },
+    // Column spans of the number tiles: rows of up to four, filled evenly (application-core's
+    // DashboardLayout, shared with the generated application's dashboard).
+    dashKpiSpans() { return window.DashboardLayout.kpiSpans(this.summaryKpis().length); },
+    // The top-N tables, then the report previews, each wide or narrow by what it shows and packed into
+    // full rows of 12 columns, a chart preferably beside a chart. Rendered in the packed order.
+    dashContentTiles() {
+      const L = window.DashboardLayout;
+      return L.pack([
+        ...this.listKpis().map(r => ({ type: 'list', key: 'list:' + r.url, item: r,
+          weight: L.tableWeight(Alpine.store('reports').widgetColumns(r).length) })),
+        ...this.dashPreviewReports().map(r => ({ type: 'report', key: 'report:' + r.url, item: r,
+          weight: L.reportWeight(r), chart: !!r.chart })),
+      ]);
+    },
 
     /** Settings entities scoped to the projection: those of a group the projection lists (a group
      *  means everything in it - sidebar items and settings, #8138), explicitly cherry-picked ones, and

@@ -677,6 +677,8 @@
     <script src="/services/web/application-core/shell/js/services/apiError.js" defer></script>
     <script src="/services/web/application-core/shell/js/services/formValidation.js" defer></script>
     <script src="/services/web/application-core/shell/js/services/format.js"></script>
+    <!-- column spans of the dashboard tiles (pure functions; read when dashboardPage computes its layout) -->
+    <script src="/services/web/application-core/shell/js/services/dashboardLayout.js"></script>
     <!-- rows -> x-h-calendar events (the document line-item calendars share this mapping) -->
     <script src="/services/web/application-core/shell/js/services/calendarEvents.js"></script>
     <!-- Instance branding (same DIRIGIBLE_BRANDING_* env vars as the AngularJS shell): the platform

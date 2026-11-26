@@ -79,6 +79,7 @@ class ReportsAggregatorTest {
         assertEquals("InvoiceTally", entry.get("tId"));
         assertEquals("Invoices on file", ((Map<String, Object>) entry.get("widget")).get("label"));
         assertEquals(List.of(Map.of("alias", "Number", "select", true)), entry.get("columns"));
+        assertEquals(1, entry.get("columnCount"));
         assertEquals("/services/web/shop/gen/Invoice-Tally/reports/InvoiceTally/index.html", entry.get("url"));
         assertEquals("/services/java/shop/gen/invoice_tally/api/reports/InvoiceTallyController", entry.get("apiBase"),
                 "the controller lives under the Java package the gen folder's name sanitizes to");
@@ -159,6 +160,22 @@ class ReportsAggregatorTest {
                 "the shell humanizes the name");
         assertFalse(reports.get(0)
                            .containsKey("widget"));
+        assertFalse(reports.get(0)
+                           .containsKey("columnCount"),
+                "without a report file the column count is unknown");
+    }
+
+    @Test
+    void counts_the_columns_a_report_without_a_widget_shows() {
+        page("shop", "by-status", "ByStatus");
+        report("shop", "ByStatus", """
+                {"name": "ByStatus", "query": "SELECT 1",
+                 "columns": [{"alias": "Status", "select": true}, {"alias": "Count"}, {"alias": "StatusId", "select": false}]}""");
+
+        Map<String, Object> entry = aggregate().get(0);
+
+        assertEquals(2, entry.get("columnCount"), "a column marked select false is grouped by, not shown");
+        assertFalse(entry.containsKey("columns"), "the columns themselves travel only with a widget");
     }
 
     @Test

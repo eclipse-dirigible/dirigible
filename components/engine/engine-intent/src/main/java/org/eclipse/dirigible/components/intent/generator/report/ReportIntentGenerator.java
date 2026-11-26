@@ -346,11 +346,14 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 entry.put(key, document.get(key));
             }
         }
-        // Only a KPI tile reads the columns (a list widget shows the report's selected ones), so a
-        // report without a widget does not carry them into every page of the shell.
+        List<Map<String, Object>> columns = columnsOf(document);
+        // The dashboard sizes a report's tile by how many columns it shows; a single integer is all
+        // it needs, so only a widget report carries the column list itself (a list widget shows the
+        // report's selected ones) rather than copying it into every page of the shell.
+        entry.put("columnCount", columns.size());
         if (document.containsKey("widget")) {
             entry.put("widget", document.get("widget"));
-            entry.put("columns", columnsOf(document));
+            entry.put("columns", columns);
         }
         // A list tile links each row to the records it counts (#8374).
         if (document.containsKey("drill")) {
