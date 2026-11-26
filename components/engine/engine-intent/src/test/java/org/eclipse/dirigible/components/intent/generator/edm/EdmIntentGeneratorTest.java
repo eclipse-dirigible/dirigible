@@ -1892,6 +1892,48 @@ class EdmIntentGeneratorTest {
                                          .get("sourceExpression"));
         assertEquals("The Year and the Company must have the same Company", agree.get("message"),
                 "the unauthored message names both sides and the property, as it does for two hops");
+        assertNull(entityByName(entities(model), "Company").get("agreeGuards"), "the own side guards nothing on its target (#7989)");
+        assertEquals(1, ((List<?>) entityByName(entities(model), "Year").get("agreeGuards")).size());
+    }
+
+    /**
+     * The record's own to-one side of an {@code agree} (#7631) guards nothing on its target (#7989): it
+     * relies on no property of the target, so a guard keyed on the agreed property there names one the
+     * target does not have - {@code ProjectEntity.Project} for a task agreeing with its parent on its
+     * project, which broke the compile of the whole module. The hopped side keeps its guard - on a
+     * self-reference, the entity's own repository, so a parent cannot move to another project while its
+     * sub-tasks stay behind.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void anOwnSideOfAnAgreeGuardsNothingOnItsTarget() {
+        String yaml = """
+                name: projects
+                entities:
+                  - name: Project
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: ProjectTask
+                    checks:
+                      - { kind: agree, relations: [Parent, Project], onProperty: Project,
+                          message: "The parent task belongs to a different project" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Project, kind: manyToOne, to: Project, composition: true, required: true }
+                      - { name: Parent, kind: manyToOne, to: ProjectTask }
+                """;
+        List<Map<String, Object>> entities = entities(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "projects"));
+
+        Map<String, Object> agree = ((List<Map<String, Object>>) entityByName(entities, "ProjectTask").get("checks")).get(0);
+        assertEquals("(hop0 == null ? null : hop0.Project)", agree.get("leftExpression"));
+        assertEquals("entity.Project", agree.get("rightExpression"));
+        assertNull(entityByName(entities, "Project").get("agreeGuards"), "the own side relies on no property of Project");
+        assertEquals(
+                List.of(Map.of("referencingEntity", "ProjectTask", "fkProperty", "Parent", "property", "Project", "message",
+                        "The parent task belongs to a different project")),
+                entityByName(entities, "ProjectTask").get("agreeGuards"), "the parent side guards the parent task's project");
     }
 
     /**
