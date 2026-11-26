@@ -142,7 +142,7 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
               .forEach(t -> {
                   t.setSchemaReference(schema);
                   // t.setSchema(schema.getName());
-                  t.setConstraints(carryUniqueConstraints(t));
+                  t.setConstraints(carryConstraints(t));
                   TablesSynchronizer.assignParent(t);
               });
         schema.getViews()
@@ -310,6 +310,7 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
                     format("Error in parsing columns of table [{0}] in schema [{1}]", table.getName(), location));
         }
         setUniqueConstraints(location, structure, table);
+        setCheckConstraints(location, structure, table);
         table.setDropped(droppedColumns(structure));
     }
 
@@ -360,12 +361,13 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
      * <p>
      * A unique key is the opposite case and does belong in the database: it says what a row
      * <em>is</em>, so it has to hold for every writer at once - including the ones that never route
-     * through the application.
+     * through the application. A check is carried for the same reason: it says what a stored value may
+     * be (#8794).
      *
      * @param table the parsed table
      * @return the constraints to attach
      */
-    private static TableConstraints carryUniqueConstraints(Table table) {
+    private static TableConstraints carryConstraints(Table table) {
         TableConstraints attached = new TableConstraints(table);
         TableConstraints parsed = table.getConstraints();
         if (parsed != null && parsed.getUniqueIndexes() != null) {
@@ -373,6 +375,13 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
                 unique.setConstraints(attached);
                 attached.getUniqueIndexes()
                         .add(unique);
+            }
+        }
+        if (parsed != null && parsed.getChecks() != null) {
+            for (TableConstraintCheck check : parsed.getChecks()) {
+                check.setConstraints(attached);
+                attached.getChecks()
+                        .add(check);
             }
         }
         return attached;
@@ -421,6 +430,43 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
             table.getConstraints()
                  .getUniqueIndexes()
                  .add(unique);
+        }
+    }
+
+    /**
+     * Reads a table's CHECK constraints ({@code constraints.checks}: a {@code name} and an
+     * {@code expression} each, the shape a {@code .table} declares them in). A check is compared with
+     * the live table by its name, so both are required.
+     *
+     * @param location the schema location
+     * @param structure the table structure
+     * @param table the table being built
+     */
+    private static void setCheckConstraints(String location, JsonObject structure, Table table) {
+        JsonElement constraintsElement = structure.get("constraints");
+        if (constraintsElement == null || !constraintsElement.isJsonObject()) {
+            return;
+        }
+        JsonElement checksElement = constraintsElement.getAsJsonObject()
+                                                      .get("checks");
+        if (checksElement == null || !checksElement.isJsonArray()) {
+            return;
+        }
+        for (JsonElement checkElement : checksElement.getAsJsonArray()) {
+            JsonObject checkObject = checkElement.getAsJsonObject();
+            String name = getJsonElementValue(checkObject, "name", null);
+            String expression = getJsonElementValue(checkObject, "expression", null);
+            if (name == null || name.isBlank() || expression == null || expression.isBlank()) {
+                throw new IllegalArgumentException(format(
+                        "A check constraint of table [{0}] in schema [{1}] needs a name and an expression", table.getName(), location));
+            }
+            TableConstraintCheck check = new TableConstraintCheck();
+            check.setName(name);
+            check.setExpression(expression);
+            check.setConstraints(table.getConstraints());
+            table.getConstraints()
+                 .getChecks()
+                 .add(check);
         }
     }
 
@@ -626,11 +672,11 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
                     }
                     break;
                 case START:
-                    // a declared unique key the alter could not add is attempted again (#8317)
+                    // a declared unique key or check the alter could not add is attempted again (#8317, #8794)
                     if (ArtefactLifecycle.CREATED.equals(schema.getLifecycle())
                             || ArtefactLifecycle.UPDATED.equals(schema.getLifecycle())) {
                         for (Table table : schema.getTables()) {
-                            TableAlterProcessor.retryUniqueConstraints(connection.get(), table);
+                            TableAlterProcessor.retryConstraints(connection.get(), table);
                         }
                     }
                     break;

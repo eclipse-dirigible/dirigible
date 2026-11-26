@@ -17,10 +17,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
+import org.eclipse.dirigible.components.data.structures.domain.TableConstraintCheck;
 import org.eclipse.dirigible.components.data.structures.domain.TableConstraints;
 import org.eclipse.dirigible.components.data.structures.domain.TableConstraintUnique;
 import java.util.Map;
 import java.util.List;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.ArrayList;
 import java.sql.DriverManager;
@@ -333,11 +336,11 @@ class TableAlterProcessorTest {
             TableAlterProcessor.execute(connection, tableModel);
             assertTrue(uniqueConstraints(connection).isEmpty(), "the duplicates refuse the key");
 
-            TableAlterProcessor.retryUniqueConstraints(connection, tableModel);
+            TableAlterProcessor.retryConstraints(connection, tableModel);
             assertTrue(uniqueConstraints(connection).isEmpty(), "still refused while the duplicates are there");
 
             insert(connection, "DELETE FROM \"T_NOTES\" WHERE \"ID\" = 2");
-            TableAlterProcessor.retryUniqueConstraints(connection, tableModel);
+            TableAlterProcessor.retryConstraints(connection, tableModel);
 
             assertEquals(Map.of("Notes_Company_Number", List.of("COMPANY", "NUMBER")), uniqueConstraints(connection));
         }
@@ -349,7 +352,7 @@ class TableAlterProcessorTest {
             createTable(connection, "\"COMPANY\" INTEGER, \"NUMBER\" VARCHAR(100), \"CODE\" VARCHAR(20) UNIQUE");
             Table tableModel = modelWithCompositeKey();
 
-            TableAlterProcessor.retryUniqueConstraints(connection, tableModel);
+            TableAlterProcessor.retryConstraints(connection, tableModel);
 
             Map<String, List<String>> uniques = uniqueConstraints(connection);
             assertEquals(List.of("COMPANY", "NUMBER"), uniques.get("Notes_Company_Number"), "the declared key is added: " + uniques);
@@ -367,7 +370,7 @@ class TableAlterProcessorTest {
             createTable(connection, "\"COMPANY\" INTEGER, \"NUMBER\" VARCHAR(100)");
             insert(connection, "CREATE UNIQUE INDEX \"Notes_Company_Number\" ON \"T_NOTES\" (\"COMPANY\", \"NUMBER\")");
 
-            TableAlterProcessor.retryUniqueConstraints(connection, modelWithCompositeKey());
+            TableAlterProcessor.retryConstraints(connection, modelWithCompositeKey());
 
             assertTrue(uniqueConstraints(connection).isEmpty(), "the index already enforces the key");
         }
@@ -414,8 +417,109 @@ class TableAlterProcessorTest {
     @Test
     void aRetryOfATableNotYetCreatedDoesNothing() throws SQLException {
         try (Connection connection = connect("alter_unique_retry_missing")) {
-            assertDoesNotThrow(() -> TableAlterProcessor.retryUniqueConstraints(connection, modelWithCompositeKey()));
+            assertDoesNotThrow(() -> TableAlterProcessor.retryConstraints(connection, modelWithCompositeKey()));
         }
+    }
+
+    /**
+     * #8794: a key over columns created with quoted mixed-case names - like a language table's
+     * {@code "Language"} - is added under those names; their upper-cased spelling is for comparing with
+     * the catalog only.
+     */
+    @Test
+    void aDeclaredKeyOverMixedCaseColumnsIsAdded() throws SQLException {
+        try (Connection connection = connect("alter_unique_mixed_case")) {
+            createTable(connection, "\"Code\" VARCHAR(20), \"Language\" VARCHAR(2)");
+            Table tableModel = new Table("T_NOTES");
+            new TableColumn("ID", "INTEGER", null, tableModel);
+            new TableColumn("Code", "VARCHAR", "20", tableModel);
+            new TableColumn("Language", "VARCHAR", "2", tableModel);
+            TableConstraints constraints = new TableConstraints(tableModel);
+            tableModel.setConstraints(constraints);
+            constraints.getUniqueIndexes()
+                       .add(new TableConstraintUnique("Notes_Language", null, new String[] {"Code", "Language"}, constraints, null, null));
+
+            TableAlterProcessor.execute(connection, tableModel);
+
+            assertEquals(Map.of("Notes_Language", List.of("Code", "Language")), uniqueConstraints(connection));
+        }
+    }
+
+    /**
+     * #8794: a check the model declares that an existing table lacks is added - the language table of a
+     * deployment generated before the check existed.
+     */
+    @Test
+    void aDeclaredCheckIsAddedToAnExistingTable() throws SQLException {
+        try (Connection connection = connect("alter_check_added")) {
+            createTable(connection, "\"LANGUAGE\" VARCHAR(2)");
+            insert(connection, "INSERT INTO \"T_NOTES\" VALUES (1, 'bg')");
+
+            TableAlterProcessor.execute(connection, modelWithLowerCaseCheck());
+
+            assertEquals(Set.of("NOTES_LOWER"), checkConstraints(connection));
+            assertThrows(SQLException.class, () -> insert(connection, "INSERT INTO \"T_NOTES\" VALUES (2, 'BG')"),
+                    "the check refuses an upper-case code");
+        }
+    }
+
+    /**
+     * #8794: rows that break a declared check refuse it - logged, not thrown - and a later retry adds
+     * it once they are fixed, without the table's definition changing.
+     */
+    @Test
+    void aCheckTheRowsBreakIsAddedByALaterRetryOnceTheyAreFixed() throws SQLException {
+        try (Connection connection = connect("alter_check_retry")) {
+            createTable(connection, "\"LANGUAGE\" VARCHAR(2)");
+            insert(connection, "INSERT INTO \"T_NOTES\" VALUES (1, 'BG')");
+            Table tableModel = modelWithLowerCaseCheck();
+
+            assertDoesNotThrow(() -> TableAlterProcessor.execute(connection, tableModel), "the refused check is logged, not thrown");
+            assertTrue(checkConstraints(connection).isEmpty(), "the upper-case row refuses the check");
+
+            TableAlterProcessor.retryConstraints(connection, tableModel);
+            assertTrue(checkConstraints(connection).isEmpty(), "still refused while the row is there");
+
+            insert(connection, "UPDATE \"T_NOTES\" SET \"LANGUAGE\" = 'bg'");
+            TableAlterProcessor.retryConstraints(connection, tableModel);
+
+            assertEquals(Set.of("NOTES_LOWER"), checkConstraints(connection));
+        }
+    }
+
+    @Test
+    void aCheckTheTableHasIsNotAddedAgain() throws SQLException {
+        try (Connection connection = connect("alter_check_present")) {
+            createTable(connection, "\"LANGUAGE\" VARCHAR(2), CONSTRAINT \"NOTES_LOWER\" CHECK (\"LANGUAGE\" = LOWER(\"LANGUAGE\"))");
+            Table tableModel = modelWithLowerCaseCheck();
+
+            assertDoesNotThrow(() -> TableAlterProcessor.execute(connection, tableModel));
+            TableAlterProcessor.retryConstraints(connection, tableModel);
+
+            assertEquals(Set.of("NOTES_LOWER"), checkConstraints(connection));
+        }
+    }
+
+    private static Table modelWithLowerCaseCheck() {
+        Table tableModel = new Table("T_NOTES");
+        new TableColumn("ID", "INTEGER", null, tableModel);
+        new TableColumn("LANGUAGE", "VARCHAR", "2", tableModel);
+        TableConstraints constraints = new TableConstraints(tableModel);
+        tableModel.setConstraints(constraints);
+        new TableConstraintCheck("NOTES_LOWER", null, null, constraints, "\"LANGUAGE\" = LOWER(\"LANGUAGE\")");
+        return tableModel;
+    }
+
+    private static Set<String> checkConstraints(Connection connection) throws SQLException {
+        Set<String> checks = new HashSet<>();
+        try (Statement statement = connection.createStatement();
+                ResultSet rs = statement.executeQuery("SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS"
+                        + " WHERE CONSTRAINT_TYPE = 'CHECK' AND TABLE_NAME = 'T_NOTES'")) {
+            while (rs.next()) {
+                checks.add(rs.getString(1));
+            }
+        }
+        return checks;
     }
 
     private static Table modelWithCompositeKey() {

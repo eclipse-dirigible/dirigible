@@ -167,6 +167,21 @@ public interface ISqlDialect<SELECT extends SelectBuilder, INSERT extends Insert
     Map<String, List<String>> uniqueConstraints(Connection connection, String table) throws SQLException;
 
     /**
+     * The names of a table's CHECK constraints as the database catalog reports them. The table alter
+     * path adds a declared check the table lacks, and it compares by name: a database stores a check's
+     * expression rewritten into its own form, so the text the model declares is never found again.
+     *
+     * @param connection the current connection
+     * @param table the (unquoted) table name
+     * @return the constraint names, empty when the table has none; {@code null} when this database
+     *         exposes no catalog of check constraints at all - the caller then leaves the table's
+     *         checks as they are
+     * @throws SQLException when the catalog read fails
+     */
+    @Override
+    Set<String> checkConstraints(Connection connection, String table) throws SQLException;
+
+    /**
      * The statement that renames a column in place - its data, type and constraints travel with it. The
      * table alter path issues it for a column the model declares as {@code renamedFrom} another.
      *

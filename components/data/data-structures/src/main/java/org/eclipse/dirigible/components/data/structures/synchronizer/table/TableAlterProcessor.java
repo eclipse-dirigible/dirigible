@@ -17,6 +17,8 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import org.eclipse.dirigible.components.data.structures.domain.TableConstraintCheck;
 import org.eclipse.dirigible.components.data.structures.domain.TableConstraintUnique;
 import java.util.HashSet;
 import java.util.Set;
@@ -53,10 +55,10 @@ public class TableAlterProcessor {
     private static final String INCOMPATIBLE_CHANGE_OF_TABLE = "Incompatible change of table [%s] by adding a column [%s] which is [%s]";
 
     /**
-     * The tables, by {@link #tableIdentity}, whose declared unique keys this process saw holding - the
-     * ones {@link #retryUniqueConstraints} has nothing to attempt on (#8317).
+     * The tables, by {@link #tableIdentity}, whose declared unique keys and checks this process saw
+     * holding - the ones {@link #retryConstraints} has nothing to attempt on (#8317, #8794).
      */
-    private static final Set<String> UNIQUE_KEYS_HOLD = ConcurrentHashMap.newKeySet();
+    private static final Set<String> DECLARED_CONSTRAINTS_HOLD = ConcurrentHashMap.newKeySet();
 
     /**
      * PostgreSQL's {@code duplicate_table}: a relation - table or index - of that name already exists.
@@ -196,7 +198,9 @@ public class TableAlterProcessor {
         }
 
         reconcileUndeclaredColumns(connection, tableName, tableModel, modelColumnNames, liveNames, notNullColumns);
-        reconcileUniqueConstraints(connection, tableName, tableModel);
+        boolean declaredConstraintsHold = reconcileUniqueConstraints(connection, tableName, tableModel);
+        declaredConstraintsHold &= reconcileCheckConstraints(connection, tableName, tableModel);
+        rememberWhetherDeclaredConstraintsHold(connection, tableName, declaredConstraintsHold);
     }
 
     /**
@@ -434,41 +438,46 @@ public class TableAlterProcessor {
      *
      * <p>
      * A key that could not be added is not forgotten (#8317): the table is left out of the ones whose
-     * keys are known to hold, so {@link #retryUniqueConstraints} attempts it again on a later pass.
+     * declared constraints are known to hold, so {@link #retryConstraints} attempts it again on a later
+     * pass.
      *
      * @param connection the connection
      * @param quotedTableName the table name as the alter builder wants it (quoted)
      * @param tableModel the model
+     * @return whether every declared key holds
      */
-    static void reconcileUniqueConstraints(Connection connection, String quotedTableName, Table tableModel) {
-        reconcileUniqueConstraints(connection, quotedTableName, tableModel, true);
+    static boolean reconcileUniqueConstraints(Connection connection, String quotedTableName, Table tableModel) {
+        return reconcileUniqueConstraints(connection, quotedTableName, tableModel, true);
     }
 
     /**
-     * Attempts again the declared UNIQUE keys of an existing table that this process has not yet seen
-     * holding (#8317) - one the alter could not add, the duplicate rows that blocked it since resolved
-     * by a migration or by hand, or any table not checked since the process started. Only the missing
-     * keys are added; nothing is dropped, that stays the alter's. A table whose keys hold is remembered
-     * and costs nothing on later calls; one that is still refused is logged and attempted again on the
-     * next call, without failing anything - its artefact stays as it is.
+     * Attempts again the declared UNIQUE keys and CHECK constraints of an existing table that this
+     * process has not yet seen holding (#8317, #8794) - one the alter could not add, the rows that
+     * blocked it since fixed by a migration or by hand, or any table not checked since the process
+     * started. Only the missing constraints are added; nothing is dropped, that stays the alter's. A
+     * table whose constraints hold is remembered and costs nothing on later calls; one that is still
+     * refused is logged and attempted again on the next call, without failing anything - its artefact
+     * stays as it is.
      *
      * @param connection the connection
      * @param tableModel the model
      */
-    public static void retryUniqueConstraints(Connection connection, Table tableModel) {
+    public static void retryConstraints(Connection connection, Table tableModel) {
         String quotedTableName = "\"" + tableModel.getName() + "\"";
         try {
-            if (UNIQUE_KEYS_HOLD.contains(tableIdentity(connection, quotedTableName)) || !SqlFactory.getNative(connection)
-                                                                                                    .existsTable(connection,
-                                                                                                            tableModel.getName())) {
+            if (DECLARED_CONSTRAINTS_HOLD.contains(tableIdentity(connection, quotedTableName)) || !SqlFactory.getNative(connection)
+                                                                                                             .existsTable(connection,
+                                                                                                                     tableModel.getName())) {
                 return;
             }
         } catch (SQLException e) {
-            logger.warn("Unique constraints of table [{}] are not attempted again on this pass - the database could not be read",
+            logger.warn("Constraints of table [{}] are not attempted again on this pass - the database could not be read",
                     tableModel.getName(), e);
             return;
         }
-        reconcileUniqueConstraints(connection, quotedTableName, tableModel, false);
+        boolean declaredConstraintsHold = reconcileUniqueConstraints(connection, quotedTableName, tableModel, false);
+        declaredConstraintsHold &= reconcileCheckConstraints(connection, quotedTableName, tableModel);
+        rememberWhetherDeclaredConstraintsHold(connection, quotedTableName, declaredConstraintsHold);
     }
 
     /**
@@ -483,7 +492,7 @@ public class TableAlterProcessor {
         return connection.getCatalog() + "." + connection.getSchema() + "." + DatabaseNameNormalizer.normalizeTableName(quotedTableName);
     }
 
-    private static void reconcileUniqueConstraints(Connection connection, String quotedTableName, Table tableModel,
+    private static boolean reconcileUniqueConstraints(Connection connection, String quotedTableName, Table tableModel,
             boolean dropUndeclared) {
         String tableName = DatabaseNameNormalizer.normalizeTableName(quotedTableName);
         Map<String, List<String>> existing;
@@ -492,12 +501,11 @@ public class TableAlterProcessor {
                                  .uniqueConstraints(connection, tableName);
         } catch (SQLException e) {
             logger.warn("Unique constraints of table [{}] are not reconciled - the catalog read failed: {}", tableName, e.getMessage());
-            return;
+            return false;
         }
         if (existing == null) {
             logger.info("Unique constraints of table [{}] are not reconciled - this database exposes no catalog of them", tableName);
-            rememberWhetherDeclaredKeysHold(connection, quotedTableName, true);
-            return;
+            return true;
         }
         existing.replaceAll((name, columns) -> columns.stream()
                                                       .map(String::toUpperCase)
@@ -505,9 +513,10 @@ public class TableAlterProcessor {
         Map<Set<String>, DesiredUnique> desired = new LinkedHashMap<>();
         for (TableColumn column : tableModel.getColumns()) {
             if (column.isUnique() && !column.isPrimaryKey()) {
-                String columnName = DatabaseNameNormalizer.normalizeColumnName(column.getName())
-                                                          .toUpperCase();
-                desired.putIfAbsent(Set.of(columnName), new DesiredUnique(tableName + "_" + columnName + "_UNIQUE", List.of(columnName)));
+                String columnName = DatabaseNameNormalizer.normalizeColumnName(column.getName());
+                String canonicalName = columnName.toUpperCase();
+                desired.putIfAbsent(Set.of(canonicalName),
+                        new DesiredUnique(tableName + "_" + canonicalName + "_UNIQUE", List.of(columnName)));
             }
         }
         if (tableModel.getConstraints() != null && tableModel.getConstraints()
@@ -517,15 +526,21 @@ public class TableAlterProcessor {
                 if (unique.getColumns() == null || unique.getColumns().length == 0) {
                     continue;
                 }
+                // compared upper-cased, as the catalog reports them, but added as declared: a column
+                // created under a quoted mixed-case name ("Language") is not found by its upper-cased one
                 List<String> columns = new ArrayList<>(unique.getColumns().length);
+                Set<String> canonicalColumns = new HashSet<>();
                 for (String column : unique.getColumns()) {
-                    columns.add(DatabaseNameNormalizer.normalizeColumnName(column)
-                                                      .toUpperCase());
+                    String columnName = DatabaseNameNormalizer.normalizeColumnName(column);
+                    columns.add(columnName);
+                    canonicalColumns.add(columnName.toUpperCase());
                 }
                 String name = unique.getName() != null && !unique.getName()
                                                                  .isBlank() ? unique.getName()
-                                                                         : tableName + "_" + String.join("_", columns) + "_UNIQUE";
-                desired.putIfAbsent(new HashSet<>(columns), new DesiredUnique(name, columns));
+                                                                         : tableName + "_" + String.join("_", columns)
+                                                                                                   .toUpperCase()
+                                                                                 + "_UNIQUE";
+                desired.putIfAbsent(canonicalColumns, new DesiredUnique(name, columns));
             }
         }
         Set<Set<String>> present = new HashSet<>();
@@ -564,28 +579,133 @@ public class TableAlterProcessor {
                                             .toArray(new String[0]));
             declaredKeysHold &= executeConstraintChange(connection, add, tableName, unique.name());
         }
-        rememberWhetherDeclaredKeysHold(connection, quotedTableName, declaredKeysHold);
+        return declaredKeysHold;
     }
 
     /**
-     * Records whether every declared key of the table holds, so that {@link #retryUniqueConstraints}
+     * Adds every CHECK constraint the model declares that the table lacks (#8794). A check says what a
+     * stored value may be - the language table's lower-case code - so, like a unique key, it has to
+     * hold for every writer, including the ones that never route through the application. Checks are
+     * compared by NAME: a database keeps the expression rewritten into its own form. A check the model
+     * no longer declares is never dropped - PostgreSQL lists its NOT NULL constraints as checks too.
+     *
+     * <p>
+     * Fails soft like the unique keys: rows that already break the check refuse it, which is logged
+     * with their count and leaves the table out of the ones whose declared constraints hold, so
+     * {@link #retryConstraints} adds it on the first pass after the rows are fixed. Nothing fails the
+     * column reconciliation or the publish.
+     *
+     * @param connection the connection
+     * @param quotedTableName the table name as the alter builder wants it (quoted)
+     * @param tableModel the model
+     * @return whether every declared check holds
+     */
+    private static boolean reconcileCheckConstraints(Connection connection, String quotedTableName, Table tableModel) {
+        if (tableModel.getConstraints() == null || tableModel.getConstraints()
+                                                             .getChecks() == null
+                || tableModel.getConstraints()
+                             .getChecks()
+                             .isEmpty()) {
+            return true;
+        }
+        String tableName = DatabaseNameNormalizer.normalizeTableName(quotedTableName);
+        Set<String> existing;
+        try {
+            existing = SqlFactory.getNative(connection)
+                                 .checkConstraints(connection, tableName);
+        } catch (SQLException e) {
+            logger.warn("Check constraints of table [{}] are not reconciled - the catalog read failed", tableName, e);
+            return false;
+        }
+        if (existing == null) {
+            logger.info("Check constraints of table [{}] are not reconciled - this database exposes no catalog of them", tableName);
+            return true;
+        }
+        Set<String> present = new HashSet<>();
+        existing.forEach(name -> present.add(name.toUpperCase(Locale.ROOT)));
+        boolean declaredChecksHold = true;
+        for (TableConstraintCheck check : tableModel.getConstraints()
+                                                    .getChecks()) {
+            if (!present.contains(check.getName()
+                                       .toUpperCase(Locale.ROOT))) {
+                declaredChecksHold &= addCheck(connection, quotedTableName, tableName, check);
+            }
+        }
+        return declaredChecksHold;
+    }
+
+    /**
+     * One ADD CONSTRAINT ... CHECK statement, fail-soft (see {@link #reconcileCheckConstraints}).
+     *
+     * @param connection the connection
+     * @param quotedTableName the table name as the alter builder wants it (quoted)
+     * @param tableName the table, for the log
+     * @param check the declared check
+     * @return whether the database took it
+     */
+    private static boolean addCheck(Connection connection, String quotedTableName, String tableName, TableConstraintCheck check) {
+        AlterTableBuilder add = SqlFactory.getNative(connection)
+                                          .alter()
+                                          .table(quotedTableName);
+        add.add()
+           .check(check.getName(), check.getExpression());
+        String sql = add.build();
+        try {
+            executeStatement(connection, sql);
+            return true;
+        } catch (SQLException e) {
+            long offending = rowsBreaking(connection, quotedTableName, check.getExpression());
+            if (offending > 0) {
+                logger.warn(
+                        "Check constraint [{}] on table [{}] is not added - {} row(s) break it: {}. The table's other changes stand;"
+                                + " fix the rows and it is added on a later pass",
+                        check.getName(), tableName, offending, check.getExpression(), e);
+            } else {
+                logger.error("Check constraint [{}] on table [{}] could not be added - the table's other changes stand, and it is"
+                        + " attempted again on the next pass. Statement: [{}]", check.getName(), tableName, sql, e);
+            }
+            return false;
+        }
+    }
+
+    /**
+     * How many rows of the table break a check's expression.
+     *
+     * @param connection the connection
+     * @param quotedTableName the table name (quoted)
+     * @param expression the check's expression
+     * @return the count, or -1 when the database could not count them
+     */
+    private static long rowsBreaking(Connection connection, String quotedTableName, String expression) {
+        String sql = "SELECT COUNT(*) FROM " + quotedTableName + " WHERE NOT (" + expression + ")";
+        try (PreparedStatement statement = connection.prepareStatement(sql); ResultSet resultSet = statement.executeQuery()) {
+            return resultSet.next() ? resultSet.getLong(1) : 0;
+        } catch (SQLException e) {
+            logger.debug("Rows of table [{}] breaking [{}] could not be counted", quotedTableName, expression, e);
+            return -1;
+        }
+    }
+
+    /**
+     * Records whether every declared constraint of the table holds, so that {@link #retryConstraints}
      * skips it or attempts it again.
      *
      * @param connection the connection
      * @param quotedTableName the table name as the alter builder wants it (quoted)
-     * @param declaredKeysHold whether every declared key holds
+     * @param declaredConstraintsHold whether every declared unique key and check holds
      */
-    private static void rememberWhetherDeclaredKeysHold(Connection connection, String quotedTableName, boolean declaredKeysHold) {
+    private static void rememberWhetherDeclaredConstraintsHold(Connection connection, String quotedTableName,
+            boolean declaredConstraintsHold) {
         try {
             String identity = tableIdentity(connection, quotedTableName);
-            if (declaredKeysHold) {
-                UNIQUE_KEYS_HOLD.add(identity);
+            if (declaredConstraintsHold) {
+                DECLARED_CONSTRAINTS_HOLD.add(identity);
             } else {
-                UNIQUE_KEYS_HOLD.remove(identity);
+                DECLARED_CONSTRAINTS_HOLD.remove(identity);
             }
         } catch (SQLException e) {
-            logger.warn("Table [{}] is not recorded as reconciled - the connection cannot name its catalog, so its unique constraints"
-                    + " are checked again on the next pass", quotedTableName, e);
+            logger.warn("Table [{}] is not recorded as reconciled - the connection cannot name its catalog, so its declared"
+                    + " constraints are checked again on the next pass", quotedTableName, e);
         }
     }
 
