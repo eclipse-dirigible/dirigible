@@ -14,9 +14,11 @@ import java.util.List;
 import java.util.Map;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
+import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
+import org.eclipse.dirigible.components.intent.generator.generates.PromptColumns;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
@@ -86,15 +88,22 @@ public class TransitionsIntentGenerator implements IntentTargetGenerator {
             }
             String translationKey = IntentNaming.customActionTranslationKey(project, context, name);
             String statusProperty = statusProperty(model, t.getForEntity());
+            EntityIntent entity = IntentEntities.byName(model)
+                                                .get(t.getForEntity());
+            // The record's own inputs (#7909): no detail registration types them, so the controls ride
+            // the descriptor.
+            List<Map<String, Object>> promptColumns =
+                    t.hasPrompt() && entity != null ? PromptColumns.ofRecord(t.getPrompt(), entity, model, context) : null;
+            String javaModule = IntentNaming.javaModule(context);
             writeAction(context, project, name + "-transition-action",
-                    buildDescriptorModule(project, IntentNaming.javaModule(context), t, translationKey, statusProperty, false),
+                    buildDescriptorModule(project, javaModule, t, translationKey, statusProperty, false, promptColumns),
                     "Transition [" + name + "] on [" + t.getForEntity() + "]");
             if (t.isPersonal()) {
                 // The owner's run from the personal surface (#8406): a descriptor of its own, because
                 // its endpoint is another controller - one scoped to the caller's own records - and a
                 // page offers only the actions whose endpoint answers it.
                 writeAction(context, project, name + "-transition-my-action",
-                        buildDescriptorModule(project, IntentNaming.javaModule(context), t, translationKey, statusProperty, true),
+                        buildDescriptorModule(project, javaModule, t, translationKey, statusProperty, true, promptColumns),
                         "Transition [" + name + "] on [" + t.getForEntity() + "], personal surface");
             }
         }
@@ -132,7 +141,7 @@ public class TransitionsIntentGenerator implements IntentTargetGenerator {
     }
 
     private static String buildDescriptorModule(String project, String javaModule, TransitionIntent t, String translationKey,
-            String statusProperty, boolean personal) {
+            String statusProperty, boolean personal, List<Map<String, Object>> promptColumns) {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("id", project + "-" + t.getForEntity() + "-" + t.getName() + (personal ? "-my" : ""));
         String label = IntentNaming.customActionLabel(t.getName(), t.getLabel());
@@ -186,6 +195,13 @@ public class TransitionsIntentGenerator implements IntentTargetGenerator {
             // A red run button and a place in the destructive group of the record's menus (#8364) -
             // emitted only when declared, so a descriptor without it is byte-identical to before.
             view.put("destructive", true);
+        }
+        if (promptColumns != null) {
+            // The input form asked before the move (#7909): the customActions store opens its prompt
+            // dialog instead of the plain confirm and posts the answers with the id - the generates
+            // prompt's shape, so the shell needs nothing of its own for it.
+            view.put("prompt", PromptColumns.entries(t.getPrompt()));
+            view.put("promptColumns", promptColumns);
         }
         // A JSON extension module: the view object itself, read by the views aggregation without a script
         // engine.

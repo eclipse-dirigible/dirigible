@@ -19,6 +19,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
@@ -164,6 +166,69 @@ class HarmoniaHierarchyTreeTableIT extends IntegrationTest {
             String dialog = eval(context, "__dialogUrl");
             assertTrue(dialog.endsWith("#/Employee/create?Manager=4&embedded=1&dialog=1"), dialog);
         }
+    }
+
+    /**
+     * Previous / Next on the record sheet (#8869): the user walks the records the table shows, in its
+     * order, without closing the sheet and clicking the next row. In Tree mode that is the visible tree
+     * (a collapsed branch is skipped, and the tree is not paged); in Table mode it is every page of the
+     * sorted list, and a step past the page's edge turns the page so the highlighted row stays in view.
+     * The ends disable the buttons rather than wrapping around.
+     */
+    @Test
+    void the_record_sheet_steps_to_the_previous_and_next_record() throws Exception {
+        generateProject();
+        String page = contentOf("gen/orgtree/js/components/pages/Employee/EmployeeManageListPage.js");
+        String view = contentOf("gen/orgtree/views/Employee/Employee-manage-list.html");
+
+        assertTrue(view.contains("data-record-previous :disabled=\"!hasPreviousRecord\" @click=\"stepRecord(-1)\""),
+                "Previous on the sheet's footer");
+        assertTrue(view.contains("data-record-next :disabled=\"!hasNextRecord\" @click=\"stepRecord(1)\""), "Next on the sheet's footer");
+
+        try (Context context = load(page)) {
+            // Tree mode, depth-first: Ada > (Bob > Dee), Cy.
+            set(context, "[e(1, 'Ada', null), e(2, 'Bob', 1), e(3, 'Cy', 1), e(4, 'Dee', 2)]");
+            eval(context, "page.selectRow(page.items[0]);");
+            assertEquals("1;prev=false;next=true;open=true", sheet(context), "the first record has no previous one");
+            eval(context, "page.stepRecord(1); page.stepRecord(1);");
+            assertEquals("4;prev=true;next=true;open=true", sheet(context), "Next follows the tree, not the load order");
+            eval(context, "page.stepRecord(1);");
+            assertEquals("3;prev=true;next=false;open=true", sheet(context), "the last record has no next one");
+            eval(context, "page.stepRecord(1);");
+            assertEquals("3;prev=true;next=false;open=true", sheet(context), "a step past the end stays put");
+
+            // A collapsed branch is skipped: from Bob, with his subtree folded, Next is Cy.
+            eval(context, "page.toggleNode(page.items[1]); page.selectRow(page.items[1]); page.stepRecord(1);");
+            assertEquals("3;prev=true;next=false;open=true", sheet(context), "Dee is hidden under Bob, so Next skips him");
+
+            // Table mode is paged by 10: Next from the page's last row turns to page 2, Previous back.
+            set(context, "[" + IntStream.rangeClosed(1, 12)
+                                        .mapToObj(i -> "e(" + i + ", 'E" + (char) ('A' + i) + "', null)")
+                                        .collect(Collectors.joining(","))
+                    + "]");
+            eval(context, "page.viewChoice = 'table'; page.selectRow(page.items[9]);");
+            assertEquals("10;prev=true;next=true;open=true", sheet(context));
+            eval(context, "page.stepRecord(1);");
+            assertEquals("11;prev=true;next=true;open=true", sheet(context), "Next crosses the page boundary");
+            assertEquals("2", eval(context, "String(page.currentPage)"), "the list turns to the page holding the record");
+            eval(context, "page.stepRecord(-1);");
+            assertEquals("1", eval(context, "String(page.currentPage)"), "and Previous turns back");
+
+            // The order is the table's: sorted by Name descending, Next from the first row is the
+            // second-highest name, not the next id.
+            eval(context, "page.cycleSort('Name'); page.cycleSort('Name'); page.selectRow(page.sortedItems[0]); page.stepRecord(1);");
+            assertEquals("11;prev=true;next=true;open=true", sheet(context), "Next follows the sort");
+
+            // A closed sheet has nothing to step from.
+            eval(context, "page.closeDetails();");
+            assertEquals("false,false", eval(context, "[page.hasPreviousRecord, page.hasNextRecord].join(',')"));
+        }
+    }
+
+    /** The open record's id, whether Previous / Next are enabled, and whether the sheet is open. */
+    private static String sheet(Context context) {
+        return eval(context,
+                "page.selected.Id + ';prev=' + page.hasPreviousRecord + ';next=' + page.hasNextRecord" + " + ';open=' + page.detailsOpen");
     }
 
     /** The markup the page drives: one table, a tree column, the toggle - and no label tree. */

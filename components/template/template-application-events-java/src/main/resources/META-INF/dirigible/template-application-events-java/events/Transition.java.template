@@ -43,6 +43,11 @@ import org.eclipse.dirigible.sdk.utils.Json;
  * pre-check snapshot and revert concurrent writes) - and the "-transitioned" notice rides that write
  * into the outbox, so the flip and its announcement commit together and posting glue / integrations
  * can never miss a transition whose row is durable.
+#if($promptFields.size() > 0)
+ *
+ * The move asks for input (intent `prompt:`): the answers posted as "values" are written in the same
+ * targeted write as the status, and a required one left out is a 400 that moves nothing.
+#end
  *
  * Generated from the intent transitions block - do not edit; it is re-generated with the application.
  * Entity access goes ONLY through the generated repositories.
@@ -82,6 +87,10 @@ public class ${controllerClass} {
 #end
     public static class Request {
         public Integer id;
+#if($promptFields.size() > 0)
+        // The declared `prompt:` inputs (issue #7909), keyed by the record's PascalCase property names.
+        public java.util.Map<String, Object> values;
+#end
     }
 
     @Post("/run")
@@ -135,6 +144,29 @@ public class ${controllerClass} {
             return "{\"error\": \"${name} requires ${guardText}\"}";
         }
 #end
+#if($promptFields.size() > 0)
+        // The record's own inputs (intent `prompt:`, issue #7909), asked once the move itself is allowed.
+        // A required one left out is the field's 400 and nothing is written - the dialog checks the same
+        // thing, and this is what makes it hold for any other caller. An answer is set on the loaded
+        // record too, so the checks gated on the target status read it before the move is accepted, and
+        // it is written in the same targeted write as the status - which an immutableWhen lock, a rule
+        // about user edits, does not refuse. An optional one left out keeps the stored value.
+        java.util.Map<String, Object> prompted = new java.util.LinkedHashMap<>();
+#foreach($p in $promptFields)
+        {
+            Object raw = req.values == null ? null : req.values.get("${p.prop}");
+            if (!(raw == null || String.valueOf(raw).isBlank())) {
+                source.${p.prop} = ${p.expr};
+                prompted.put("${p.prop}", source.${p.prop});
+#if($p.required)
+            } else {
+                // A field refusal (#8646): answered 400 in the reader's language, naming the input it is about.
+                throw org.eclipse.dirigible.sdk.db.FieldRefusals.required(${refusalCatalogJava}, "${p.prop}", ${p.labelJava}, ${p.labelKeyJava});
+#end
+            }
+        }
+#end
+#end
         // The status write and its "-transitioned" notice commit together: the topic rides the
         // targeted write into the outbox, so a broker outage delays the announcement instead of losing
         // it, and the event payload is the row exactly as the statement left it - never a re-read a
@@ -151,6 +183,9 @@ public class ${controllerClass} {
         org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
             java.util.Map<String, Object> values = new java.util.LinkedHashMap<>();
             values.put("${statusProperty}", ${setStatus});
+#if($promptFields.size() > 0)
+            values.putAll(prompted);
+#end
 #foreach($number in $stampNumbers)
             if (unnumbered(issued.${number.field})) {
 #if($number.per && $number.per != "")
@@ -168,6 +203,11 @@ public class ${controllerClass} {
 #end
             return repository.updateAuthored(req.id, values, "${projectName}-${perspective}-${entity}-transitioned");
         });
+#elseif($promptFields.size() > 0)
+        java.util.Map<String, Object> values = new java.util.LinkedHashMap<>();
+        values.put("${statusProperty}", ${setStatus});
+        values.putAll(prompted);
+        repository.updateAuthored(req.id, values, "${projectName}-${perspective}-${entity}-transitioned");
 #else
         repository.updateAuthored(req.id, java.util.Map.of("${statusProperty}", ${setStatus}),
                 "${projectName}-${perspective}-${entity}-transitioned");
@@ -293,14 +333,11 @@ public class ${controllerClass} {
         document.put("fileName", ${attachFileNameExpression});
         // Bind the render language to the thread so the feeder's multilingual overlay resolves nomenclature
         // values in the SAME language as the template - there is no request here to carry Accept-Language
-        // (dirigible #6947). Cleared in the finally so the pooled worker thread never leaks it.
+        // (dirigible #6947). Bound for the block only: the language bound before it (an event handler's) comes back after.
         byte[] data;
-        org.eclipse.dirigible.sdk.security.User.setLanguage(language);
-        try {
+        try (org.eclipse.dirigible.sdk.security.User.LanguageBinding binding = org.eclipse.dirigible.sdk.security.User.bindLanguage(language)) {
             data = org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", language,
                     new ${attachEntity}PrintFeeder().feed(source.${attachKeyProperty}));
-        } finally {
-            org.eclipse.dirigible.sdk.security.User.clearLanguage();
         }
         document.put("data", data);
         return document;
@@ -365,6 +402,15 @@ public class ${controllerClass} {
             java.util.Map part = new java.util.HashMap();
             part.put("type", "text");
             part.put("contentType", "text/plain");
+#if($usesShareUrl == "true")
+            // {shareUrl} (#8616) - a share link to the issued copy of the record this message is about, minted
+            // HERE: once per message, after the recipient is known, so a record with nobody to mail gets none.
+            // The generated repository applies the entity's share: exactly as the Share action does; a record it
+            // refuses fails this send like an unreachable mailbox - never a mail without its link. The URL is
+            // built on the configured base URL and is never logged.
+            String shareUrl = gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository.createShareUrl(entity,
+                    "system (notify ${name})");
+#end
             part.put("text", ${notifyBodyExpression});
             java.util.List<java.util.Map> parts = new java.util.ArrayList<>();
             parts.add(part);
@@ -390,14 +436,11 @@ public class ${controllerClass} {
             document.put("fileName", ${attachFileNameExpression});
             // Bind the render language to the thread so the feeder's multilingual overlay resolves nomenclature
             // values in the SAME language as the template - there is no request here to carry Accept-Language
-            // (dirigible #6947). Cleared in the finally so the pooled worker thread never leaks it.
+            // (dirigible #6947). Bound for the block only: the language bound before it (an event handler's) comes back after.
             byte[] data;
-            org.eclipse.dirigible.sdk.security.User.setLanguage(language);
-            try {
+            try (org.eclipse.dirigible.sdk.security.User.LanguageBinding binding = org.eclipse.dirigible.sdk.security.User.bindLanguage(language)) {
                 data = org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", language,
                         new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty}));
-            } finally {
-                org.eclipse.dirigible.sdk.security.User.clearLanguage();
             }
             document.put("data", data);
             parts.add(document);
@@ -425,10 +468,9 @@ public class ${controllerClass} {
             document.put("fileName", ${attachFileNameExpression});
             // Bind the render language to the thread so the report query's :language overlay resolves the
             // translatable dimensions in the SAME language as the template - there is no request here to carry
-            // Accept-Language (dirigible #6947). Cleared in the finally so the pooled worker thread never leaks it.
+            // Accept-Language (dirigible #6947). Bound for the block only: the language bound before it (an event handler's) comes back after.
             byte[] data;
-            org.eclipse.dirigible.sdk.security.User.setLanguage(language);
-            try {
+            try (org.eclipse.dirigible.sdk.security.User.LanguageBinding binding = org.eclipse.dirigible.sdk.security.User.bindLanguage(language)) {
                 java.util.Map<String, Object> reportData = new java.util.HashMap<>();
                 // The bound values double as the rendered header, so the PDF states which slice it is - a
                 // table of rows never does.
@@ -437,8 +479,6 @@ public class ${controllerClass} {
                         .findAll(null, null, reportFilter));
                 data = org.eclipse.dirigible.sdk.print.Print.render("${attachReport}", language,
                         org.eclipse.dirigible.sdk.utils.Json.stringify(reportData));
-            } finally {
-                org.eclipse.dirigible.sdk.security.User.clearLanguage();
             }
             document.put("data", data);
             parts.add(document);

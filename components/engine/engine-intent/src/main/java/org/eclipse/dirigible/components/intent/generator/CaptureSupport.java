@@ -23,6 +23,7 @@ import org.eclipse.dirigible.components.intent.model.CaptureFieldIntent;
 import org.eclipse.dirigible.components.intent.model.CaptureIntent;
 import org.eclipse.dirigible.components.intent.model.CaptureItemsIntent;
 import org.eclipse.dirigible.components.intent.model.CaptureQrIntent;
+import org.eclipse.dirigible.components.intent.model.CheckIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
@@ -121,30 +122,34 @@ public final class CaptureSupport {
                 issues.add(subject + " captures into unknown entity [" + declared.getInto() + "]");
                 continue;
             }
-            validateTarget(into, compositionParents, subject, issues);
+            validateTarget(into, subject, issues);
+            // A composition child is captured as one line of an existing master the upload names (#8626).
+            String master = compositionParents.get(into.getName());
             Set<String> qrParts = validateQr(declared.getQr(), subject, issues);
             if (declared.getFields()
                         .isEmpty()) {
                 issues.add(subject + " reads no fields - name at least one field of [" + into.getName() + "] under fields:");
             }
-            validateFields(declared.getFields(), into, null, qrParts, true, model, byName, subject, issues);
-            validateItems(declared.getItems(), into, model, byName, subject, issues);
+            validateFields(declared.getFields(), into, master == null ? null : backReference(into, master), qrParts, true, model, byName,
+                    subject, issues);
+            if (master != null && declared.getItems() != null) {
+                issues.add(subject + " declares items:, but [" + into.getName() + "] is a line of a [" + master
+                        + "] - a capture under a master creates that one line, not a collection of its own");
+            } else {
+                validateItems(declared.getItems(), into, model, byName, subject, issues);
+            }
             validateAttachment(declared.getAttachment(), into, byName, subject, issues);
         }
     }
 
     /**
      * A capture creates one record of its target and, optionally, the rows it owns, so the target must
-     * be a table of this model a row can be inserted into on its own.
+     * be a table of this model a row can be inserted into - on its own, or as a line under the master
+     * the upload names.
      */
-    private static void validateTarget(EntityIntent into, Map<String, String> compositionParents, String subject, List<String> issues) {
+    private static void validateTarget(EntityIntent into, String subject, List<String> issues) {
         if (into.getExtend() != null) {
             issues.add(subject + " captures into [" + into.getName() + "], which extends another model's entity and owns no table");
-            return;
-        }
-        if (compositionParents.containsKey(into.getName())) {
-            issues.add(subject + " captures into [" + into.getName() + "], a composition child - its rows are created under a ["
-                    + compositionParents.get(into.getName()) + "]; capture that, and read this as its items:");
             return;
         }
         if (into.isFileChild()) {
@@ -256,7 +261,7 @@ public final class CaptureSupport {
             Map<String, EntityIntent> byName, String where, List<String> issues) {
         if (relation.getName()
                     .equals(backReference)) {
-            issues.add(where + " is the line's back-reference to the document, which is filled from the saved record");
+            issues.add(where + " is the line's back-reference to the document, which the capture fills itself");
             return;
         }
         if (relation.isEntityStatus()) {
@@ -412,6 +417,10 @@ public final class CaptureSupport {
                                              .isEmpty());
             entry.put("hasCompares", !header.compares()
                                             .isEmpty());
+            // The soft checks a person saving the record is asked (#8631): the capture asks them too.
+            entry.put("hasWarnings", into.getChecks() != null && into.getChecks()
+                                                                     .stream()
+                                                                     .anyMatch(CheckIntent::isWarning));
 
             CaptureItemsIntent items = declared.getItems();
             EntityIntent child = items == null || items.getInto() == null ? null : byName.get(items.getInto());
@@ -440,6 +449,29 @@ public final class CaptureSupport {
                 entry.put("attachmentEntity", attachment.getName());
                 entry.put("attachmentPerspective", IntentEntities.resolvePerspective(attachment.getName(), compositionParents, model));
                 entry.put("attachmentBackRef", IntentNaming.pascalCase(attachmentBackReference));
+            }
+
+            // A line of an existing record (#8626): the upload names its master by the line's key to it,
+            // and the capture checks that master before the document is read.
+            String master = compositionParents.get(entity);
+            EntityIntent masterEntity = master == null ? null : byName.get(master);
+            String masterBackReference = masterEntity == null ? null : backReference(into, master);
+            boolean hasMaster = masterBackReference != null;
+            entry.put("hasMaster", hasMaster);
+            if (hasMaster) {
+                FieldIntent masterKey = IntentEntities.primaryKeyOf(masterEntity);
+                entry.put("masterEntity", master);
+                entry.put("masterPerspective", IntentEntities.resolvePerspective(master, compositionParents, model));
+                entry.put("masterBackRef", IntentNaming.pascalCase(masterBackReference));
+                entry.put("masterKeyJavaClass", CalculatedActionStubGenerator.valueType(masterKey == null ? null : masterKey.getType()));
+            }
+            // ... and from the personal surface when the master has a `personal:` owner who may write its
+            // lines there: the owner captures onto their own record, proven by the line's MyController.
+            boolean hasPersonalMaster = hasMaster && fromPersonalSurface(into, byName, compositionParents);
+            entry.put("hasPersonalMaster", hasPersonalMaster);
+            if (hasPersonalMaster) {
+                FieldIntent key = IntentEntities.primaryKeyOf(into);
+                entry.put("keyJavaClass", CalculatedActionStubGenerator.valueType(key == null ? null : key.getType()));
             }
             captures.add(entry);
         }
@@ -635,12 +667,44 @@ public final class CaptureSupport {
 
     /** The name of the composition relation of {@code child} pointing back at {@code master}. */
     private static String backReference(EntityIntent child, String master) {
+        RelationIntent relation = composition(child, master);
+        return relation == null ? null : relation.getName();
+    }
+
+    /** The composition relation of {@code child} pointing back at {@code master}. */
+    private static RelationIntent composition(EntityIntent child, String master) {
         for (RelationIntent relation : child.getRelations()) {
             if (relation.isComposition() && master.equals(relation.getTo()) && relation.getName() != null) {
-                return relation.getName();
+                return relation;
             }
         }
         return null;
+    }
+
+    /**
+     * Whether a capture into {@code into} is also offered on the personal surface (#8626): {@code into}
+     * is a line of a master with a {@code personal:} owner, and neither the owner relation nor the
+     * line's composition makes that surface see-only - the owner then captures onto their own record
+     * there.
+     *
+     * @param into the captured entity
+     * @param byName all local entities by name
+     * @param compositionParents composition-parent map
+     * @return whether the owner may capture it from the personal surface
+     */
+    public static boolean fromPersonalSurface(EntityIntent into, Map<String, EntityIntent> byName, Map<String, String> compositionParents) {
+        String master = compositionParents.get(into.getName());
+        EntityIntent masterEntity = master == null ? null : byName.get(master);
+        RelationIntent line = masterEntity == null ? null : composition(into, master);
+        if (line == null || line.isPersonalReadOnly()) {
+            return false;
+        }
+        for (RelationIntent relation : masterEntity.getRelations()) {
+            if (relation.isPersonal()) {
+                return !relation.isPersonalReadOnly();
+            }
+        }
+        return false;
     }
 
     private static UsesIntent findUses(IntentModel model, String alias) {

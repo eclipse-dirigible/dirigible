@@ -52,12 +52,12 @@
       options[name] !== undefined && options[name] !== null ? options[name] : match);
   };
 
-  // The generated pages' chrome labels (the template catalog's aria / state / messages / defaults
-  // sections) are minted into every module's own catalog as '<project>:<prefix>.<section>.<path>'.
-  // The platform ships the same sections, in every language it supports, as
-  // 'application-core:generated.<section>.<path>' (i18n/<locale>/generated.json), so a module whose
-  // catalog predates a template key - or was translated before that key existed - still shows it
-  // in the user's language instead of in English. The module's own entry always wins.
+  // The generated pages ask for their chrome labels (the aria / state / messages / defaults
+  // sections) as '<project>:<prefix>.<section>.<path>', but a module's catalog does not carry them
+  // (#8782): the platform ships them once, in every language it supports, as
+  // 'application-core:generated.<section>.<path>' (i18n/<locale>/generated.json), and such a key
+  // resolves there. A module that translates or overrides one in its own catalog keeps its entry -
+  // the module's own entry always wins.
   const GENERATED_KEY = /^([^:]+):[^.:]+\.((?:aria|state|messages|defaults)\..+)$/;
   const generatedKey = (key) => {
     const match = GENERATED_KEY.exec(key);
@@ -87,8 +87,8 @@
         if (this.ready && window.i18next) {
           const strict = Object.assign({ fallbackLng: false }, options);
           if (i18next.exists(key, strict)) return i18next.t(key, options);
-          // A generated page's chrome key the module's own catalog lacks (an older or partial
-          // translation, #7610) resolves against the platform's copy of the template catalog.
+          // A generated page's chrome key the module's own catalog lacks (#7610, #8782) resolves
+          // against the platform's shared chrome catalog.
           const shared = generatedKey(key);
           if (shared && i18next.exists(shared, strict)) return i18next.t(shared, options);
         }

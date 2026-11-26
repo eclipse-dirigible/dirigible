@@ -277,6 +277,54 @@ class IntentPostingAmendIT extends IntegrationTest {
     }
 
     /**
+     * #7825: the posting finds its post by the {@code Doc} back-reference and rewrites a DRAFT one in
+     * place, so a hand-written entry that could carry the back-reference was adopted - its lines
+     * deleted, the derived ones written over them, and no error. The back-reference is now the system's
+     * to write: a user create carrying it is stored without it, a user update cannot set it, the issue
+     * drafts the posting's OWN entry beside the hand-written one, and the amend loop still rewrites
+     * that own entry.
+     */
+    @Test
+    void a_hand_written_entry_naming_the_document_is_never_adopted_by_its_posting() {
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        int doc = create(DOCS, "{\"Date\":\"2026-03-03\",\"Amount\":400}");
+        int manual = create(ENTRIES, "{\"Date\":\"2026-03-03\",\"Status\":1,\"Doc\":" + doc + "}");
+        create(LINES, "{\"Entry\":" + manual + ",\"Debit\":500}");
+        create(LINES, "{\"Entry\":" + manual + ",\"Credit\":500}");
+        assertDocOf(manual, null);
+        update(ENTRIES + "/" + manual, "{\"Id\":" + manual + ",\"Date\":\"2026-03-03\",\"Status\":1,\"Doc\":" + doc + "}");
+        assertDocOf(manual, null);
+
+        transition("IssueDoc", doc);
+        // The posting drafts its own entry - the only one carrying the back-reference, which the
+        // posting's own save() still writes.
+        int posted = onlyEntryOf(doc);
+        awaitLines(posted, 400.0f);
+        // The amend loop still adopts and rewrites the entry the posting created.
+        transition("RejectDoc", doc);
+        update(DOCS + "/" + doc, "{\"Id\":" + doc + ",\"Date\":\"2026-03-03\",\"Amount\":420,\"Status\":1}");
+        transition("IssueDoc", doc);
+        awaitLines(posted, 420.0f);
+        assertEquals(posted, onlyEntryOf(doc), "the amend rewrites the posting's own entry, never a second one");
+
+        // The hand-written entry was never touched: its own lines, no back-reference.
+        awaitLines(manual, 500.0f);
+        assertDocOf(manual, null);
+    }
+
+    private void assertDocOf(int entry, Integer doc) {
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(ENTRIES + "/" + entry)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Doc", equalTo(doc)),
+                TIMEOUT_SECONDS);
+    }
+
+    /**
      * #8243, the two documents the reopen sweep (#7703) used to leave unposted for good: a red storno,
      * because the sweep skipped every source carrying ANY entry - always true of a reversal, whose
      * original is the very entry it reverses - and a document that moved on in its flow while the

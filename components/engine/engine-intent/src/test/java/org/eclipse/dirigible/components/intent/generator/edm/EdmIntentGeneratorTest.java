@@ -1892,6 +1892,48 @@ class EdmIntentGeneratorTest {
                                          .get("sourceExpression"));
         assertEquals("The Year and the Company must have the same Company", agree.get("message"),
                 "the unauthored message names both sides and the property, as it does for two hops");
+        assertNull(entityByName(entities(model), "Company").get("agreeGuards"), "the own side guards nothing on its target (#7989)");
+        assertEquals(1, ((List<?>) entityByName(entities(model), "Year").get("agreeGuards")).size());
+    }
+
+    /**
+     * The record's own to-one side of an {@code agree} (#7631) guards nothing on its target (#7989): it
+     * relies on no property of the target, so a guard keyed on the agreed property there names one the
+     * target does not have - {@code ProjectEntity.Project} for a task agreeing with its parent on its
+     * project, which broke the compile of the whole module. The hopped side keeps its guard - on a
+     * self-reference, the entity's own repository, so a parent cannot move to another project while its
+     * sub-tasks stay behind.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void anOwnSideOfAnAgreeGuardsNothingOnItsTarget() {
+        String yaml = """
+                name: projects
+                entities:
+                  - name: Project
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: ProjectTask
+                    checks:
+                      - { kind: agree, relations: [Parent, Project], onProperty: Project,
+                          message: "The parent task belongs to a different project" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Project, kind: manyToOne, to: Project, composition: true, required: true }
+                      - { name: Parent, kind: manyToOne, to: ProjectTask }
+                """;
+        List<Map<String, Object>> entities = entities(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "projects"));
+
+        Map<String, Object> agree = ((List<Map<String, Object>>) entityByName(entities, "ProjectTask").get("checks")).get(0);
+        assertEquals("(hop0 == null ? null : hop0.Project)", agree.get("leftExpression"));
+        assertEquals("entity.Project", agree.get("rightExpression"));
+        assertNull(entityByName(entities, "Project").get("agreeGuards"), "the own side relies on no property of Project");
+        assertEquals(
+                List.of(Map.of("referencingEntity", "ProjectTask", "fkProperty", "Parent", "property", "Project", "message",
+                        "The parent task belongs to a different project")),
+                entityByName(entities, "ProjectTask").get("agreeGuards"), "the parent side guards the parent task's project");
     }
 
     /**
@@ -1964,6 +2006,64 @@ class EdmIntentGeneratorTest {
         assertEquals("2", claim.get("status"));
         assertEquals("Status", claim.get("statusProperty"));
         assertNull(claim.get("pathLoads"), "both values are the record's own");
+    }
+
+    /**
+     * {@code checks: notExists} (#8002, #8623): the gated check carries the target, its match and the
+     * {@code where:} criteria - a literal list, paths on the record and a null test - and a target in a
+     * model this one does not use is late-bound, addressed by model and entity name only.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void notExistsChecksEmitTheCriteriaAndTheTarget() {
+        String yaml = """
+                name: journal
+                entities:
+                  - name: PeriodStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: FiscalPeriod
+                    checks:
+                      - { kind: notExists, entity: JournalEntry, where: ["Status in [1, 3]", "date >= fromDate", "date <= toDate",
+                          "memo != null", "amount > 0"], status: 2, message: "{count} draft entries" }
+                      - { kind: notExists, entity: Quotation, model: quotations, match: { Period: id }, where: "Status == 4",
+                          status: 3, message: "An ordered quotation" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: fromDate, type: date }
+                      - { name: toDate, type: date }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: PeriodStatus, function: EntityStatus }
+                  - name: JournalEntry
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: date, type: date }
+                      - { name: memo, type: string }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: PeriodStatus }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "journal");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "FiscalPeriod").get("checks");
+
+        Map<String, Object> drafts = checks.get(0);
+        assertEquals(List.of(Map.of("property", "Status", "method", "in", "valueJava", "java.util.List.of(1, 3)"),
+                Map.of("property", "Date", "method", "ge", "expression", "entity.FromDate"),
+                Map.of("property", "Date", "method", "le", "expression", "entity.ToDate"),
+                Map.of("property", "Memo", "method", "isNotNull"),
+                Map.of("property", "Amount", "method", "gt", "valueJava", "new java.math.BigDecimal(\"0\")")), drafts.get("where"));
+        assertEquals(List.of(), drafts.get("match"));
+        assertEquals(Map.of("entity", "JournalEntry", "perspective", "JournalEntry", "crossModel", false, "targetModel", ""),
+                drafts.get("target"));
+        assertEquals("2", drafts.get("status"));
+        assertEquals("Status", drafts.get("statusProperty"));
+
+        Map<String, Object> ordered = checks.get(1);
+        assertEquals(Map.of("entity", "Quotation", "lateBound", true, "targetModel", "quotations"), ordered.get("target"),
+                "a model this one does not use is counted by name at runtime");
+        assertEquals(List.of(Map.of("property", "Period", "expression", "entity.Id")), ordered.get("match"));
+        assertEquals(List.of(Map.of("property", "Status", "method", "eq", "valueJava", "4")), ordered.get("where"));
     }
 
     /**

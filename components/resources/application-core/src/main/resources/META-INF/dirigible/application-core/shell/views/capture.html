@@ -24,6 +24,8 @@
        fk       optional: the attachment's foreign-key property to the record (with `files`)
        mode     `review` opens on the record named by `id` instead of the upload step
        id       the record to review
+       under    optional, upload step: the captured line's foreign-key property to its master (#8626) - the
+                record named by `id` is that master, and the upload names it as `?<under>=<id>`
 
      `capture` and `files` are validated as same-origin /services/java/ paths before anything is sent, so
      the page cannot be used to POST a user's file anywhere else.
@@ -311,6 +313,7 @@
           captureBase: '',
           filesBase: '',
           fk: '',
+          underQuery: '',            // `?<fk>=<id>` naming the master a line is captured under (#8626)
           entityName: 'record',
           camera: false,
           chosen: null,              // the File picked for upload
@@ -333,15 +336,17 @@
             const files = params.get('files');
             const fk = params.get('fk');
             const id = params.get('id');
+            const under = params.get('under');
             this.reviewMode = params.get('mode') === 'review';
             const entity = (params.get('entity') || '').trim();
             if (entity) this.entityName = entity.substring(0, 100);
             if (!safePath(capture) || (files !== null && !safePath(files)) || (fk !== null && !SAFE_NAME.test(fk))
-                || (this.reviewMode && !SAFE_ID.test(id || ''))) {
+                || ((this.reviewMode || under !== null) && !SAFE_ID.test(id || '')) || (under !== null && !SAFE_NAME.test(under))) {
               this.step = 'invalid';
               return;
             }
             this.captureBase = capture;
+            if (under !== null && !this.reviewMode) this.underQuery = '?' + enc(under) + '=' + enc(id);
             if (files && fk) { this.filesBase = files; this.fk = fk; }
             try { this.camera = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); } catch (e) { this.camera = false; }
             if (this.reviewMode) {
@@ -406,22 +411,35 @@
             this.notice = null;
             this.rejectedFlags = [];
             try {
-              const form = new FormData();
-              form.append('file', this.chosen, this.chosen.name);
               let response;
-              try {
-                response = await fetch(this.captureBase + '/upload', {
-                  method: 'POST',
-                  body: form,
-                  credentials: 'same-origin',
-                  headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                });
-              } catch (e) {
-                this.notice = this.failure({ httpStatus: 0, errorType: 'NetworkError' }, null);
-                return;
-              }
               let body = null;
-              try { body = await response.json(); } catch (e) { body = null; }
+              let confirmed = [];
+              for (;;) {
+                const form = new FormData();
+                form.append('file', this.chosen, this.chosen.name);
+                const headers = { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
+                if (confirmed.length) headers['X-Confirm-Warnings'] = confirmed.join(',');
+                try {
+                  response = await fetch(this.captureBase + '/upload' + this.underQuery, { method: 'POST', body: form, credentials: 'same-origin', headers });
+                } catch (e) {
+                  this.notice = this.failure({ httpStatus: 0, errorType: 'NetworkError' }, null);
+                  return;
+                }
+                body = null;
+                try { body = await response.json(); } catch (e) { body = null; }
+                // What the record's soft checks warn about - the same document captured twice (#8631) -
+                // is asked as a save asks it (the shared dialog), and the upload repeated naming the codes
+                // confirmed; a warning that appears only on the repeat is asked again.
+                if (response.status !== 428 || !body || !Array.isArray(body.warnings) || !body.warnings.length) break;
+                this.busy = false; // not reading while the person answers
+                const yes = await App.services.confirmWarnings(body.warnings);
+                this.busy = true;
+                if (!yes) {
+                  this.notice = { variant: 'warning', title: this.t('notConfirmed', 'Not captured - the warnings were not confirmed.'), text: '' };
+                  return;
+                }
+                confirmed = body.warnings.map((w) => w.code);
+              }
               if (response.ok && body && body.status === 'CAPTURED' && body.recordId !== null && body.recordId !== undefined) {
                 this.accept(body);
                 return;
@@ -573,6 +591,7 @@
               MISMATCH: ['MISMATCH', 'Differs from the calculated value'],
               LINE: ['LINE', 'Line read with low confidence'],
               LINE_SKIPPED: ['LINE_SKIPPED', 'Line not created'],
+              WARNING: ['WARNING', 'Warning'],
             };
             const entry = labels[reason];
             return entry ? this.t('reason.' + entry[0], entry[1]) : this.t('reason.OTHER', 'Needs a look');

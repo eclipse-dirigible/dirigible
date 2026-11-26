@@ -109,7 +109,8 @@ final class ModelTranslations {
      * The default-language texts of a delete refusal (dirigible #8569), by their key under the
      * catalog's {@code checks}, in catalog order: the sentence naming every kind of referencing record,
      * the way one kind is written into it, the sentence for references no delete rule counts, and the
-     * sentence refusing a master that still has composition children (dirigible #8635). They are the
+     * sentence refusing a master that still has composition children (dirigible #8635), and the one
+     * refusing a child under a leaf that leafOnly relations reference (dirigible #7826). They are the
      * ones {@code org.eclipse.dirigible.sdk.db.DeleteRefusals} falls back to, written into the en-US
      * catalog for a translator to copy into another language's.
      */
@@ -117,7 +118,8 @@ final class ModelTranslations {
             Map.entry("deleteReferenced", "This {entity} is referenced by {references} and cannot be deleted"), //
             Map.entry("deleteReference", "{count} {label} record(s)"), //
             Map.entry("deleteReferencedByOthers", "This {entity} is referenced by other records and cannot be deleted"), //
-            Map.entry("deleteHasChildren", "This {entity} still has {children} records - delete those first"));
+            Map.entry("deleteHasChildren", "This {entity} still has {children} records - delete those first"), //
+            Map.entry("leafReferenced", "This {entity} is referenced as a leaf by {references} and cannot be given a child"));
 
     /**
      * The default-language texts of the refusals of one property's value (dirigible #8596) - a required
@@ -158,6 +160,15 @@ final class ModelTranslations {
      * {@code format: iban} field, so every other model's catalog stays as it was.
      */
     static final Map.Entry<String, String> IBAN_REFUSAL_MESSAGE = Map.entry("fieldIban", "The value of '{label}' is not a valid IBAN");
+
+    /**
+     * The default-language texts of the refusals of a value that is no month or no ISO week (dirigible
+     * #8328), keyed by the widget of the field they refuse: written only into the catalog of a model
+     * with such a field, so every other model's catalog stays as it was.
+     */
+    static final Map<String, Map.Entry<String, String>> CALENDAR_REFUSAL_MESSAGES =
+            Map.of("MONTH", Map.entry("fieldMonth", "The value of '{label}' is not a month of the form YYYY-MM"), "WEEK",
+                    Map.entry("fieldWeek", "The value of '{label}' is not a week of the form YYYY-Www"));
 
     /**
      * The default-language texts of a create-from's refusals (dirigible #8646) - a source the report it
@@ -433,9 +444,8 @@ final class ModelTranslations {
                 // The singular name feeds the form captions and the "New X" actions, the plural one
                 // the sidebar entries and the list titles. A model that carries its own labels wins;
                 // a hand-authored one gets them derived here.
-                String singular = entityLabel(entity);
-                texts.put(dataName, singular);
-                texts.put(dataName + "_plural", strOr(entity, "menuLabel", NamingHelper.pluralizeLabel(singular)));
+                texts.put(dataName, entityLabel(entity));
+                texts.put(dataName + "_plural", entityPluralLabel(entity));
             }
             collectPropertyLabels(asMaps(entity.get("properties")), texts);
             // A collection column's header (a `list:` collection path, dirigible #8295) translates
@@ -493,9 +503,10 @@ final class ModelTranslations {
     /**
      * Collects the user-facing messages of the entities' checks, business keys, picker rules (issue
      * #7611), fixed relations (#7903), bounded derived totals (#8096), field pattern messages (#7749),
-     * delete refusals (#8569), create-from refusals (#8646) and IBAN refusals (#8302), in the default
-     * language, keyed as the generated code resolves them - so a language catalog translates a refusal,
-     * a warning or a picker hint exactly as it translates a label.
+     * delete refusals (#8569), create-from refusals (#8646), IBAN refusals (#8302) and month / week
+     * refusals (#8328), in the default language, keyed as the generated code resolves them - so a
+     * language catalog translates a refusal, a warning or a picker hint exactly as it translates a
+     * label.
      *
      * @param model the entity model
      * @return key to default-language message, in model order
@@ -545,6 +556,10 @@ final class ModelTranslations {
                 if ("IBAN".equals(str(property, "inputFormat"))) {
                     messages.put(IBAN_REFUSAL_MESSAGE.getKey(), IBAN_REFUSAL_MESSAGE.getValue());
                 }
+                Map.Entry<String, String> calendarRefusal = CALENDAR_REFUSAL_MESSAGES.get(String.valueOf(property.get("widgetType")));
+                if (calendarRefusal != null) {
+                    messages.put(calendarRefusal.getKey(), calendarRefusal.getValue());
+                }
                 String patternKey = patternMessageKey(entity, property);
                 if (patternKey != null) {
                     messages.put(patternKey, property.get("widgetPatternMessage"));
@@ -592,6 +607,17 @@ final class ModelTranslations {
      */
     static String entityLabel(Map<String, Object> entity) {
         return strOr(entity, "entityLabel", NamingHelper.humanizeIdentifier(str(entity, "name")));
+    }
+
+    /**
+     * The default-language plural label the catalog writes an entity under
+     * ({@code <prefix>.t.<dataName>_plural}): its menu label, else the plural of its singular label.
+     *
+     * @param entity the entity, carrying a name
+     * @return the label
+     */
+    static String entityPluralLabel(Map<String, Object> entity) {
+        return strOr(entity, "menuLabel", NamingHelper.pluralizeLabel(entityLabel(entity)));
     }
 
     /**

@@ -169,6 +169,46 @@ class ControllerInvokerBindingTest {
                 response.body());
     }
 
+    /**
+     * #8099: a query or path value that does not parse is refused naming the parameter and the shape it
+     * must have - never with the JDK's {@code NumberFormatException} text ({@code For input string}).
+     */
+    @Test
+    void an_unparsable_query_or_path_value_is_refused_without_the_exception_text() throws Exception {
+        ControllerEntry entry = consumer.build(loaded(Demo.class));
+        Route list = entry.routes()
+                          .stream()
+                          .filter(r -> r.method()
+                                        .getName()
+                                        .equals("list"))
+                          .findFirst()
+                          .orElseThrow();
+        HttpServletRequest request = mockRequest(null);
+        when(request.getParameter("limit")).thenReturn("abc");
+        FakeResponse queryResponse = new FakeResponse();
+        invoker.invoke(new RouteMatch(entry, list, Map.of()), request, queryResponse);
+        assertEquals(HttpStatus.BAD_REQUEST.value(), queryResponse.getStatus(), queryResponse.body());
+        assertEquals("Invalid value for query parameter [limit]: abc (expected a whole number)",
+                new ObjectMapper().readValue(queryResponse.body(), Map.class)
+                                  .get("message"),
+                queryResponse.body());
+
+        Route byId = entry.routes()
+                          .stream()
+                          .filter(r -> r.method()
+                                        .getName()
+                                        .equals("byId"))
+                          .findFirst()
+                          .orElseThrow();
+        FakeResponse pathResponse = new FakeResponse();
+        invoker.invoke(new RouteMatch(entry, byId, Map.of("id", "99999999999999999999")), mockRequest(null), pathResponse);
+        assertEquals(HttpStatus.BAD_REQUEST.value(), pathResponse.getStatus(), pathResponse.body());
+        assertEquals("Invalid value for path parameter [id]: 99999999999999999999 (expected a whole number)",
+                new ObjectMapper().readValue(pathResponse.body(), Map.class)
+                                  .get("message"),
+                pathResponse.body());
+    }
+
     @Test
     void invalid_body_yields_400() {
         ControllerEntry entry = consumer.build(loaded(Demo.class));

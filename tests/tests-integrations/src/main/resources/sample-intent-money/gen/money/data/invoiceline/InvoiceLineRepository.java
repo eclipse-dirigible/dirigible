@@ -210,9 +210,12 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
      * check reading the submitted record saw whatever the caller sent for a calculated field (usually
      * nothing, or the value of a previous save) and a soft or hard check on one never fired for a REST
      * write. The defaults the create applies come first, as in save(), since an expression may read
-     * them. Only the neutral expressions are evaluated: a calculated ACTION may mint or mutate state,
-     * and runs on the write path alone. The submitted record itself is not touched - what is persisted
-     * is still computed by save().
+     * them. The calculated ACTIONS run too, in declaration order with the expressions exactly as in
+     * save() (#8000): a check over an action-derived field - a duplicate warning on a supplier the action
+     * reads off the bill - otherwise judged the caller's value, or nothing, while the stored row carried
+     * the derived one. An action is handed this copy, never the submitted record, and is called again
+     * by save(): it computes a value from the record and writes nothing ({@code CalculatedField}). The
+     * submitted record itself is not touched - what is persisted is still computed by save().
      *
      * @param submitted the record about to be created
      * @return a copy carrying the computed values, or the record itself when nothing is calculated
@@ -220,7 +223,9 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
     public InvoiceLineEntity calculatedForCreate(InvoiceLineEntity submitted) {
         trimText(submitted);
         roundDecimals(submitted);
-        return submitted;
+        InvoiceLineEntity entity = copyOf(submitted);
+        entity.VatAmount = Beans.get(LineVatAction.class).calculate(entity);
+        return entity;
     }
 
     /**
@@ -230,9 +235,10 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
      * update-time expressions - so an expression such as Balance = Total - Paid reads the stored Paid,
      * never the payload's. The same holds for a check that reads a system-owned field directly (#7633):
      * a forbidWhen over a readOnly counter a roll-up maintains judges the stored counter, so a payload
-     * that omits the column, or carries a harmless value for it, cannot walk past the refusal. Only the
-     * neutral expressions are evaluated (an action runs on the write path alone), and the submitted
-     * record itself is not touched.
+     * that omits the column, or carries a harmless value for it, cannot walk past the refusal. The
+     * update-time actions run with the expressions, as in update() (#8000), on this copy - an action
+     * computes a value and writes nothing, see calculatedForCreate - and the submitted record itself is
+     * not touched.
      *
      * @param submitted the record about to be updated, carrying its id
      * @return a copy carrying the stored and computed values, or the record itself when the entity has
@@ -246,6 +252,7 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
         if (stored != null) {
             entity.VatAmount = stored.VatAmount;
         }
+        entity.VatAmount = Beans.get(LineVatAction.class).calculate(entity);
         return entity;
     }
 

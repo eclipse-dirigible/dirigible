@@ -26,6 +26,12 @@ import java.util.Optional;
  * It is an attribution, never an authentication: it is read after the request's own user and grants
  * no role. It is bound only by the platform from a record it wrote itself - an outbox row, or a
  * message property its producer stamped - and never from anything a client sends.
+ *
+ * <p>
+ * The event carries the language of that user's write the same way, and
+ * {@link #bind(String, String)} binds it as the {@link ThreadLanguage} in the same scope, so a
+ * message the handler resolves and a multilingual row it reads are in the language of the user who
+ * raised the event (#8776).
  */
 public final class OriginatingUser {
 
@@ -46,6 +52,7 @@ public final class OriginatingUser {
     /**
      * Binds the given user to the current thread until the returned binding is closed, which restores
      * whatever was bound before - use it in a try-with-resources, so a pooled thread never keeps it.
+     * The thread's {@link ThreadLanguage} is left as it is, and restored when the binding closes.
      *
      * <p>
      * A scope rather than a callback on purpose: a callback would be one more implementation of the
@@ -57,24 +64,47 @@ public final class OriginatingUser {
      * @return the binding to close
      */
     public static Binding bind(String user) {
-        Binding binding = new Binding(CURRENT.get());
+        Binding binding = new Binding(CURRENT.get(), ThreadLanguage.get()
+                                                                   .orElse(null));
         set(user);
         return binding;
     }
 
-    /** A user bound by {@link #bind(String)}; closing it restores the user bound before. */
+    /**
+     * Binds the given user and the language of their write to the current thread until the returned
+     * binding is closed, which restores the user and the {@link ThreadLanguage} bound before. See
+     * {@link #bind(String)} for why it is a scope.
+     *
+     * @param user the originating user; {@code null} or blank binds no user
+     * @param language the originating user's language; {@code null} or blank binds no language
+     * @return the binding to close
+     */
+    public static Binding bind(String user, String language) {
+        Binding binding = bind(user);
+        ThreadLanguage.set(language);
+        return binding;
+    }
+
+    /**
+     * A user bound by {@link #bind(String)} or {@link #bind(String, String)}; closing it restores the
+     * user and the language bound before.
+     */
     public static final class Binding implements AutoCloseable {
 
-        private final String previous;
+        private final String previousUser;
 
-        private Binding(String previous) {
-            this.previous = previous;
+        private final String previousLanguage;
+
+        private Binding(String previousUser, String previousLanguage) {
+            this.previousUser = previousUser;
+            this.previousLanguage = previousLanguage;
         }
 
-        /** Restores the user bound before this binding. */
+        /** Restores the user and the language bound before this binding. */
         @Override
         public void close() {
-            set(previous);
+            set(previousUser);
+            ThreadLanguage.set(previousLanguage);
         }
     }
 

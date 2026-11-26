@@ -1,5 +1,5 @@
 ARG DIRIGIBLE_VERSION=latest
-FROM amazoncorretto:21-alpine
+FROM amazoncorretto:25-alpine
 
 VOLUME /tmp
 
@@ -54,11 +54,14 @@ RUN mkdir -p /modules /root/.dirigible/resolved-modules
 # exhaustion instead of staying Up with a poisoned H2 store answering 401, so an orchestrator restarts
 # it.
 #
+# UseCompactObjectHeaders (JEP 519, a product flag since JDK 25) shrinks every object header from 12
+# to 8 bytes: less live heap and smaller class metadata for the same workload (#8902).
+#
 # A -jar launch: the executable jar's ZIP layout makes PropertiesLauncher the Main-Class (so
 # -Dloader.path keeps working), and -jar is what makes the JVM honor the Launcher-Agent-Class
 # manifest entry - the launcher agent that lets scope-platform dependency jars (JDBC drivers,
 # JNI-bearing libraries) be appended to the system classloader without a restart.
-ENTRYPOINT ["java", "-XX:MaxRAMPercentage=50.0", "-XX:+ExitOnOutOfMemoryError", "--add-opens", "java.base/java.lang=ALL-UNNAMED", "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED", "--add-opens", "java.base/java.nio=ALL-UNNAMED", "-Dloader.path=/modules", "-jar", "/dirigible.jar"]
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=50.0", "-XX:+ExitOnOutOfMemoryError", "-XX:+UseCompactObjectHeaders", "--add-opens", "java.base/java.lang=ALL-UNNAMED", "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED", "--add-opens", "java.base/java.nio=ALL-UNNAMED", "-Dloader.path=/modules", "-jar", "/dirigible.jar"]
 
 # 8080 for the spring boot application,
 # 8081 for graalium debug port

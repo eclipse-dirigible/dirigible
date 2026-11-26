@@ -33,4 +33,25 @@ class UserFacadeOriginatingUserTest {
         assertThat(UserFacade.findName()).isEmpty();
         assertThat(UserFacade.getName()).isEqualTo("guest");
     }
+
+    /** The language of the write that raised the event is the thread's language (#8776). */
+    @Test
+    void the_originating_language_is_the_language_of_a_thread_without_a_request() {
+        try (OriginatingUser.Binding binding = OriginatingUser.bind("alice", "bg")) {
+            assertThat(UserFacade.findLanguage()).contains("bg");
+            assertThat(UserFacade.getLanguage()).isEqualTo("bg");
+        }
+        assertThat(UserFacade.findLanguage()).isEmpty();
+    }
+
+    @Test
+    void a_language_set_by_a_render_is_found_and_cleared() {
+        UserFacade.setLanguage("de");
+        try {
+            assertThat(UserFacade.findLanguage()).contains("de");
+        } finally {
+            UserFacade.clearLanguage();
+        }
+        assertThat(UserFacade.findLanguage()).isEmpty();
+    }
 }

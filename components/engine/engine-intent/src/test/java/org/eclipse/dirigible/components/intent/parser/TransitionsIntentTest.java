@@ -316,6 +316,87 @@ class TransitionsIntentTest {
                 "got: " + ex.getIssues());
     }
 
+    /** A Void that asks for its reason (#7909): the record's own fields and to-one relations. */
+    private static final String PROMPT = """
+            name: billing
+            entities:
+              - name: InvoiceStatus
+                function: Setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Invoice
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string, number: { series: Invoice, stampOn: issue } }
+                  - { name: voidReason, type: string, readOnly: true }
+                  - { name: voidedAt, type: timestamp }
+                  - { name: voidedOn, type: date, stampOn: { status: 8 } }
+                relations:
+                  - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+                  - { name: ReplacedBy, kind: manyToOne, to: Invoice, readOnly: true }
+            transitions:
+              - name: VoidInvoice
+                forEntity: Invoice
+                from: [3, 4]
+                setStatus: 8
+                prompt:
+                  - { field: voidReason, required: true }
+                  - { field: ReplacedBy }
+            seeds:
+              - name: invoice-statuses
+                entity: InvoiceStatus
+                rows:
+                  - { id: 3, name: ISSUED }
+                  - { id: 4, name: SENT }
+                  - { id: 8, name: VOIDED }
+            """;
+
+    @Test
+    void aPromptedTransitionParses() {
+        TransitionIntent t = IntentParser.parse(PROMPT)
+                                         .getTransitions()
+                                         .get(0);
+        assertTrue(t.hasPrompt());
+        assertEquals(List.of("voidReason", "ReplacedBy"), t.getPrompt()
+                                                           .stream()
+                                                           .map(p -> p.getField())
+                                                           .toList());
+        assertTrue(t.getPrompt()
+                    .get(0)
+                    .isRequired());
+        assertFalse(IntentParser.parse(VALID)
+                                .getTransitions()
+                                .get(0)
+                                .hasPrompt());
+    }
+
+    /**
+     * A prompt asks for what a person decides about the record: never a property it does not have, the
+     * status the move writes, a column the platform writes, a timestamp the dialog cannot collect, or a
+     * {@code default:} - the record it would default from is the one it writes.
+     */
+    @Test
+    void aPromptForWhatNoPersonAnswersIsRefused() {
+        assertPromptRefused("{ field: reason }",
+                "transition [VoidInvoice] prompt field [reason] is not a field or to-one relation of [Invoice]");
+        assertPromptRefused("{ field: Status }", "transition [VoidInvoice] prompt field [Status] is the status the transition writes");
+        assertPromptRefused("{ field: number }", "transition [VoidInvoice] prompt field [number] is written by the platform");
+        assertPromptRefused("{ field: voidedOn }", "transition [VoidInvoice] prompt field [voidedOn] is written by the platform");
+        assertPromptRefused("{ field: voidedAt }", "transition [VoidInvoice] prompt field [voidedAt] has type timestamp");
+        assertPromptRefused("{ field: voidReason, default: now }", "transition [VoidInvoice] prompt field [voidReason] declares default:");
+        assertPromptRefused("{ field: ReplacedBy }", "transition [VoidInvoice] prompt names [ReplacedBy] more than once");
+    }
+
+    private static void assertPromptRefused(String entry, String issue) {
+        String yaml = PROMPT.replace("      - { field: ReplacedBy }\n", "      - { field: ReplacedBy }\n      - " + entry + "\n");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains(issue)),
+                "got: " + ex.getIssues());
+    }
+
     @Test
     void rejectsDuplicateNames() {
         String yaml = VALID + """

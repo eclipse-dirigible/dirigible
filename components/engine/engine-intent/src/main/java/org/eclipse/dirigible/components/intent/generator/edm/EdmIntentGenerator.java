@@ -77,6 +77,8 @@ import org.eclipse.dirigible.components.intent.model.LifecycleIntent;
 import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.PeriodIntent;
 import org.eclipse.dirigible.components.intent.model.PeriodLockIntent;
+import org.eclipse.dirigible.components.intent.model.PostIntent;
+import org.eclipse.dirigible.components.intent.model.PostingIntent;
 import org.eclipse.dirigible.components.intent.model.RelatedIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.ShareIntent;
@@ -224,6 +226,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         Set<String> normalisingLedgers = ExportSupport.normalisingLedgers(model);
         Map<String, List<String>> displacedStatuses = displacedStatusProperties(model, byName);
         Map<String, Set<String>> rollupTargets = rollupTargetProperties(model, byName);
+        Map<String, Set<String>> systemBackReferences = systemBackReferences(model, byName);
         Map<String, Map<String, RollupIntent>> measuredBalances = measuredBalanceProperties(model, byName);
         // The status ids a button or a workflow step moves each entity to - what an ungated, status-
         // conditioned requiredWhen takes its gate from (#7595), read through the same rule the BPMN
@@ -533,6 +536,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (captureTargets.contains(name)) {
                 entityMap.put("captureLedger", "true");
             }
+            // captureUnderMaster: the capture creates a line of an existing record (#8626), so the line's
+            // controller lends it the master lock its own create applies (requireCaptureMasterMutable).
+            if (captureTargets.contains(name) && compositionParents.containsKey(name)) {
+                entityMap.put("captureUnderMaster", "true");
+            }
             // dropped (#7635): the columns of former fields and relations a publish removes, data
             // included. A field simply deleted from the intent keeps its column and its values; this
             // list is the explicit contract step. Comma-separated, so it survives the scalar-only .edm.
@@ -643,6 +651,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 if (measured != null) {
                     property.put("balanceCapacity", IntentNaming.pascalCase(measured.getCapacity()));
                     property.put("balanceSum", IntentNaming.pascalCase(measured.getField()));
+                    putIfPresent(property, "balanceCapacityType", integralFieldClass(entity, measured.getCapacity()));
+                    putIfPresent(property, "balanceSumType", integralFieldClass(entity, measured.getField()));
                 }
                 // A scalar field with dependsOn is auto-populated from the trigger's target record
                 // (no filterBy - there is no option list to narrow).
@@ -739,6 +749,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     }
                     CrossModelSupport.TargetInfo info = CrossModelSupport.resolve(context, uses, relation.getTo());
                     Map<String, Object> fkProperty = crossModelRelationProperty(name, relation, info);
+                    putSystemBackReference(fkProperty, relation, systemBackReferences.getOrDefault(name, Set.of()));
                     putDependsOn(fkProperty, entity, relation.getDependsOn(), info.keyField(), info.propertyNames(), byName, usesByAlias,
                             context);
                     putOptionsFilter(fkProperty, relation, info.propertyNames());
@@ -762,6 +773,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 EntityIntent target = byName.get(relation.getTo());
                 String targetPerspective = perspectiveFor(relation.getTo(), compositionParents, settingEntities);
                 Map<String, Object> fkProperty = relationProperty(name, relation, target, composition, targetPerspective);
+                putSystemBackReference(fkProperty, relation, systemBackReferences.getOrDefault(name, Set.of()));
                 putDependsOn(fkProperty, entity, relation.getDependsOn(), target == null ? "Id" : keyFieldName(target), null, byName,
                         usesByAlias, context);
                 putOptionsFilter(fkProperty, relation, null);
@@ -910,8 +922,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 FieldIntent groupingPk = primaryKeyOf(entity);
                 entityMap.put("groupingSourcePk", groupingPk == null ? "Id" : IntentNaming.pascalCase(groupingPk.getName()));
             }
-            List<Map<String, Object>> checkMaps = buildChecks(entity, entities, model.getAggregates(), byName, compositionParents,
-                    crossModelLookup(context, usesByAlias), systemStatusTargets.getOrDefault(entity.getName(), Set.of()));
+            List<Map<String, Object>> checkMaps =
+                    buildChecks(entity, entities, model.getAggregates(), byName, compositionParents, crossModelLookup(context, usesByAlias),
+                            systemStatusTargets.getOrDefault(entity.getName(), Set.of()), usesByAlias.keySet());
             if (!checkMaps.isEmpty()) {
                 // Declarative validations. A List, so it lives only in the .model twin (the scalar-only
                 // .edm XML skips it via the Iterable guard), consumed by the DAO/REST templates.
@@ -924,6 +937,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (!uniqueMaps.isEmpty()) {
                 entityMap.put("uniqueConstraints", uniqueMaps);
             }
+            // Money fields rounded to the minor units of the currency they are stated in (#8307 / #8327).
+            buildRoundTo(entity, entityMap, properties, byName, compositionParents, crossModelLookup(context, usesByAlias));
             entityMap.put("properties", properties);
             entityList.add(entityMap);
             builtByName.put(name, entityMap);
@@ -941,7 +956,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // the rows they test.
         buildBanners(entities, builtByName);
         // share: (#8613) - the declaration that an entity's issued copy may be handed out through a link.
-        buildShare(entities, builtByName, byName, compositionParents, settingEntities);
+        buildShare(entities, builtByName, byName, compositionParents, settingEntities, crossModelLookup(context, usesByAlias));
         // The reverse link of a scoped calendar: the record the calendar filters by gets a way to open
         // it. Same sweep reason as the registers above - the scope target may be declared after the
         // calendar entity that names it.
@@ -949,7 +964,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // The reverse index of checks: agree - each record a junction row links must know which of its
         // properties the junction's rows rely on, so a write to the parent cannot re-point what the
         // check holds the pairing to (#7589). Same sweep reason as the two above.
-        buildAgreeGuards(entities, builtByName);
+        buildAgreeGuards(entities, builtByName, byName, compositionParents, crossModelLookup(context, usesByAlias));
         // Append the synthesized PROJECTION entities (read-only cross-model references). They carry no
         // perspective so they stay out of this app's navigation, and downstream filters skip them for
         // table / DAO / controller / role generation.
@@ -1176,6 +1191,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             String parentEntity;
             String parentPerspective;
             String parentGenFolder = "";
+            String capacityType;
             if (notBlank(via.getModel())) {
                 UsesIntent uses = usesByAlias.get(via.getModel());
                 if (uses == null) {
@@ -1190,6 +1206,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 parentEntity = via.getTo();
                 parentPerspective = target.perspectiveName();
                 parentGenFolder = via.getModel();
+                capacityType = withCapacity && target.propertyTypes() != null ? IntentEntities.integralJavaClass(target.propertyTypes()
+                                                                                                                       .get(IntentNaming.pascalCase(
+                                                                                                                               rollup.getCapacity())))
+                        : "";
             } else {
                 EntityIntent parent = byName.get(via.getTo());
                 if (parent == null) {
@@ -1197,7 +1217,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 }
                 parentEntity = parent.getName();
                 parentPerspective = IntentEntities.resolvePerspective(parent.getName(), compositionParents, model);
+                capacityType = withCapacity ? integralFieldClass(parent, rollup.getCapacity()) : "";
             }
+            // Integral columns are converted to the BigDecimal the guards compute in (#7944); the keys are
+            // put only for one, so a decimal roll-up's guard renders exactly as before.
+            String ofType = integralFieldClass(child, rollup.getOf());
             List<Map<String, Object>> forChild = guards.computeIfAbsent(rollup.getEntity(), ignored -> new ArrayList<>());
             List<Map<String, Object>> filter = ScheduleSupport.conditions(rollup.getWhere());
             if (parentGenFolder.isEmpty()) {
@@ -1208,6 +1232,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 fit.put("fkProperty", IntentNaming.pascalCase(rollup.getVia()));
                 fit.put("fitField", IntentNaming.pascalCase(rollup.getField()));
                 fit.put("ofField", IntentNaming.pascalCase(rollup.getOf()));
+                putIfPresent(fit, "ofFieldType", ofType);
                 fit.put("childIdField", "Id");
                 if (!filter.isEmpty()) {
                     fit.put("filter", filter);
@@ -1230,6 +1255,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             guard.put("fkProperty", IntentNaming.pascalCase(rollup.getVia()));
             guard.put("capacityField", IntentNaming.pascalCase(rollup.getCapacity()));
             guard.put("ofField", IntentNaming.pascalCase(rollup.getOf()));
+            putIfPresent(guard, "ofFieldType", ofType);
+            putIfPresent(guard, "capacityFieldType", capacityType);
             guard.put("childIdField", "Id");
             // WHICH rows count (#7542). The very clauses the asynchronous recompute queries by, so the
             // stored balance and the enforced ceiling are one authored definition - the guard re-sums
@@ -1400,7 +1427,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * the convention roles are neither emitted nor declared ({@code generateDefaultRoles=false}): a
      * covered entity that no grant may WRITE keeps a write gate no declared role satisfies, which is
      * what an allow-list of read-only grants says. An entity no token names keeps the convention
-     * behaviour unchanged.
+     * behaviour unchanged, and one only {@code additive: true} entries name keeps its convention roles
+     * as the gate's first roles, still declared, with the added roles after them (issue #8852).
      *
      * @param name the entity's declared name
      * @param description the entity description
@@ -1450,6 +1478,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // A composition child is managed under its master, so it is gated by the master's grants when
         // it carries none of its own - otherwise granting write on a document would not extend to its
         // line items and the generated app would refuse the very edits the grant describes.
+        // An entity only `additive: true` entries name is not covered: its convention roles stay the
+        // gate's first roles and stay declared, the additive role joining them (#8852).
         String gateName = gates.covers(name) ? name : rolePerspective;
         entity.put("generateDefaultRoles", gates.covers(gateName) ? "false" : "true");
         // The deployment's extra roles (.settings access.extraRoles) are appended AFTER the gate's own
@@ -2206,6 +2236,52 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
         }
         return byParent;
+    }
+
+    /**
+     * The back-references the generated handlers find their own rows by, per LOCAL target entity (by
+     * entity name, then relation name in PascalCase): a posting's {@code backReference} (the post it
+     * rewrites while DRAFT) and a {@code posts:} rule's {@code idempotentBy} (the rows that make it
+     * skip). Each is the system's to write (#7825): a user who could set one on a hand-written row
+     * would hand that row to the handler, which adopts and rewrites it, or skips the post because of
+     * it. A report-rows create-from's {@code backReference} is deliberately not one of them: it is a
+     * dimension of the row (the year an opening balance belongs to) that a hand-entered row carries
+     * too. A target in another model is that model's to emit.
+     */
+    private static Map<String, Set<String>> systemBackReferences(IntentModel model, Map<String, EntityIntent> byName) {
+        Map<String, Set<String>> byTarget = new LinkedHashMap<>();
+        for (PostingIntent posting : model.getPostings()) {
+            addSystemBackReference(byTarget, byName, posting.getCreates(), posting.getBackReference());
+        }
+        for (PostIntent post : model.getPosts()) {
+            addSystemBackReference(byTarget, byName, post.getInto(), post.getIdempotentBy());
+        }
+        return byTarget;
+    }
+
+    private static void addSystemBackReference(Map<String, Set<String>> byTarget, Map<String, EntityIntent> byName, String target,
+            String backReference) {
+        if (notBlank(target) && notBlank(backReference) && byName.containsKey(target)) {
+            byTarget.computeIfAbsent(target, ignored -> new LinkedHashSet<>())
+                    .add(IntentNaming.pascalCase(backReference));
+        }
+    }
+
+    /**
+     * Mark a to-one a generated handler finds its own rows by (see {@link #systemBackReferences}) as
+     * system-owned, the {@code isReadOnlyProperty} flag a {@code readOnly: true} relation carries
+     * (#8662): the controllers drop it from a user create, {@code update()} keeps the stored value, the
+     * forms show it read-only - and the handler's own {@code save()} still writes it, so only a row the
+     * handler created carries it (#7825). Left as written where readOnly would contradict what the
+     * author declared: a {@code required} FK no user create could fill any more (#8751), and the
+     * relations whose value the platform or the user chooses ({@code validateReadOnlyRelation}).
+     */
+    private static void putSystemBackReference(Map<String, Object> p, RelationIntent relation, Set<String> backReferences) {
+        if (backReferences.contains(IntentNaming.pascalCase(relation.getName())) && !relation.isRequired() && !relation.isComposition()
+                && !relation.isEntityStatus() && !relation.isPersonal() && !relation.isPersonalReadOnly() && !relation.isPartner()
+                && !relation.isOwner() && !relation.isCalculated()) {
+            p.put("isReadOnlyProperty", "true");
+        }
     }
 
     /**
@@ -3200,7 +3276,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      */
     private static List<Map<String, Object>> buildChecks(EntityIntent entity, List<EntityIntent> entities, List<AggregateIntent> aggregates,
             Map<String, EntityIntent> byName, Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel,
-            Set<Integer> systemTargets) {
+            Set<Integer> systemTargets, Set<String> usesAliases) {
         List<Map<String, Object>> checkMaps = new ArrayList<>();
         if (entity.getChecks() == null) {
             return checkMaps;
@@ -3460,26 +3536,27 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 // A check with no authored message still has to say something the person who pressed
                 // Save can act on, and only the declaration knows what disagreed.
                 checkMap.put("message", agreeMessage(check));
-                List<Map<String, Object>> crossModelParents = crossModelAgreeParents(entity, check);
+                List<Map<String, Object>> crossModelParents = crossModelAgreeParents(entity, check, sides);
                 if (!crossModelParents.isEmpty()) {
                     checkMap.put("crossModelParents", crossModelParents);
                 }
                 checkMaps.add(checkMap);
                 continue;
             }
-            if ("exists".equals(check.getKind())) {
-                // A row of ANOTHER entity must carry the values the record names (#8338). Each match value
-                // is a path off the record through the shared walker - its own property, or one hop loaded
-                // by FK as requiredWhen's value is - and the condition reads through the same walker. The
-                // target is addressed by its generated repository, resolved like a cross-model hop.
-                if (check.getEntity() == null || check.getMatch() == null || check.getMatch()
-                                                                                  .isEmpty()) {
+            boolean inverse = "notExists".equals(check.getKind());
+            if ("exists".equals(check.getKind()) || inverse) {
+                // A row of ANOTHER entity must carry the values the record names (#8338) - or, inverted, a
+                // move is refused while one does (#8002, #8623). Each match value is a path off the record
+                // through the shared walker - its own property, or one hop loaded by FK as requiredWhen's
+                // value is - and the condition reads through the same walker. The target is addressed by
+                // its generated repository, resolved like a cross-model hop.
+                java.util.Map<String, String> authoredMatch = check.getMatch() == null ? java.util.Map.of() : check.getMatch();
+                if (check.getEntity() == null || (!inverse && authoredMatch.isEmpty()) || (inverse && check.getStatus() == null)) {
                     continue; // the parser already reported it
                 }
                 ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, compositionParents, crossModel);
                 List<Map<String, Object>> match = new ArrayList<>();
-                for (Map.Entry<String, String> pair : check.getMatch()
-                                                           .entrySet()) {
+                for (Map.Entry<String, String> pair : authoredMatch.entrySet()) {
                     ResolvePathSupport.Path path = walker.resolve(pair.getValue());
                     if (path.resolved()) {
                         Map<String, Object> pairMap = new LinkedHashMap<>();
@@ -3490,13 +3567,16 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 }
                 List<Map<String, Object>> when =
                         check.getWhen() == null ? null : CheckSupport.conditionTerms(entity, byName, walker, check.getWhen());
-                if (match.size() != check.getMatch()
-                                         .size()
-                        || (check.getWhen() != null && when == null)) {
+                List<Map<String, Object>> where = inverse ? notExistsWhere(entity, check, byName, walker) : List.of();
+                if (match.size() != authoredMatch.size() || (check.getWhen() != null && when == null) || where == null
+                        || (inverse && match.isEmpty() && where.isEmpty())) {
                     continue; // the parser already reported it
                 }
                 checkMap.put("match", match);
-                checkMap.put("target", existsTarget(entity, check, byName, compositionParents, crossModel));
+                if (!where.isEmpty()) {
+                    checkMap.put("where", where);
+                }
+                checkMap.put("target", existsTarget(entity, check, byName, compositionParents, crossModel, usesAliases));
                 if (when != null) {
                     checkMap.put("when", when);
                 }
@@ -3732,6 +3812,25 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         return "string".equals(type) || "text".equals(type);
     }
 
+    /**
+     * The integral Java class of the entity's named field ({@link IntentEntities#integralJavaClass}),
+     * or "".
+     */
+    private static String integralFieldClass(EntityIntent entity, String name) {
+        FieldIntent field = fieldOf(entity, name);
+        return field == null ? "" : IntentEntities.integralJavaClass(IntentEntities.sqlType(field.getType()));
+    }
+
+    /**
+     * Puts a value only when it is not empty, so a descriptor that does not need the key stays
+     * unchanged.
+     */
+    private static void putIfPresent(Map<String, Object> target, String key, String value) {
+        if (!value.isEmpty()) {
+            target.put(key, value);
+        }
+    }
+
     private static FieldIntent fieldOf(EntityIntent entity, String name) {
         if (name == null || entity.getFields() == null) {
             return null;
@@ -3745,6 +3844,95 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * The {@code where:} terms of a {@code notExists} check (#8002, #8623) as the criteria the
+     * generated count applies to the TARGET's rows: each names the {@code method} of the store's
+     * {@code Criteria} and the target {@code property}, and carries either the Java of a literal
+     * ({@code valueJava}, typed by a local target's declared field - a whole number for a relation's
+     * key) or the {@code expression} of a path on the record, read through the same walker as the match
+     * values. An {@code == null} / {@code != null} carries neither.
+     *
+     * @return the terms, or {@code null} when one does not read (the parser reported it)
+     */
+    private static List<Map<String, Object>> notExistsWhere(EntityIntent entity,
+            org.eclipse.dirigible.components.intent.model.CheckIntent check, Map<String, EntityIntent> byName,
+            ResolvePathSupport.Walker walker) {
+        EntityIntent target = check.getModel() == null || check.getModel()
+                                                               .isBlank() ? byName.get(check.getEntity()) : null;
+        List<Map<String, Object>> terms = new ArrayList<>();
+        for (String authored : CheckSupport.terms(check.getWhere())) {
+            CheckSupport.TargetTerm parsed = CheckSupport.targetTerm(authored);
+            if (parsed == null) {
+                return null;
+            }
+            FieldIntent field = target == null ? null : CheckSupport.field(target, parsed.property());
+            String type = field == null ? null : CheckSupport.guardType(field.getType());
+            Map<String, Object> term = new LinkedHashMap<>();
+            term.put("property", IntentNaming.pascalCase(parsed.property()));
+            String operand = parsed.operands()
+                                   .get(0);
+            if (CheckSupport.IN.equals(parsed.op())) {
+                List<String> values = new ArrayList<>();
+                for (String value : parsed.operands()) {
+                    String java = notExistsLiteral(type, value);
+                    if (java == null) {
+                        return null;
+                    }
+                    values.add(java);
+                }
+                term.put("method", "in");
+                term.put("valueJava", "java.util.List.of(" + String.join(", ", values) + ")");
+            } else if ("null".equals(operand)) {
+                term.put("method", "==".equals(parsed.op()) ? "isNull" : "isNotNull");
+            } else {
+                term.put("method", switch (parsed.op()) {
+                    case "==" -> "eq";
+                    case "!=" -> "ne";
+                    case ">=" -> "ge";
+                    case "<=" -> "le";
+                    case ">" -> "gt";
+                    default -> "lt";
+                });
+                if (CheckSupport.isLiteral(operand)) {
+                    String java = notExistsLiteral(type, operand);
+                    if (java == null) {
+                        return null;
+                    }
+                    term.put("valueJava", java);
+                } else {
+                    ResolvePathSupport.Path path = walker.resolve(operand);
+                    if (!path.resolved()) {
+                        return null;
+                    }
+                    term.put("expression", path.expression());
+                }
+            }
+            terms.add(term);
+        }
+        return terms;
+    }
+
+    /**
+     * The Java of a {@code notExists} literal: typed by the local target field it is compared with,
+     * else read off its own shape - a whole number as an {@code Integer} (a relation's key, a status
+     * seed id), a fraction as a {@code BigDecimal}, a quoted string, a boolean.
+     */
+    private static String notExistsLiteral(String type, String literal) {
+        if (type != null) {
+            return CheckSupport.javaLiteral(type, literal);
+        }
+        if (literal.matches("-?\\d+")) {
+            return literal;
+        }
+        if (literal.matches("-?\\d+\\.\\d+")) {
+            return "new java.math.BigDecimal(\"" + literal + "\")";
+        }
+        if ("true".equals(literal) || "false".equals(literal)) {
+            return literal;
+        }
+        return CheckSupport.javaLiteral("string", literal);
+    }
+
+    /**
      * Where an {@code exists} check's target lives (#8338), in the coordinates a path hop carries, so
      * the template layer resolves its generated repository the way it resolves a hop's: this model's
      * own entity, or the {@code uses:} owner's - whose {@code .model} names the perspective and the
@@ -3752,10 +3940,21 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * the generated query on every write.
      */
     private static Map<String, Object> existsTarget(EntityIntent entity, org.eclipse.dirigible.components.intent.model.CheckIntent check,
-            Map<String, EntityIntent> byName, Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel) {
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel,
+            Set<String> usesAliases) {
         boolean isCrossModel = check.getModel() != null && !check.getModel()
                                                                  .isBlank();
         String perspective;
+        if (isCrossModel && !usesAliases.contains(check.getModel())) {
+            // A notExists target in a model this one does not use (#8623) - typically one that uses THIS
+            // model, so neither its .model nor its classes can be referenced: its rows are counted by
+            // model and entity name at runtime, and a model that is not deployed holds none.
+            Map<String, Object> target = new LinkedHashMap<>();
+            target.put("entity", check.getEntity());
+            target.put("lateBound", true);
+            target.put("targetModel", check.getModel());
+            return target;
+        }
         if (isCrossModel) {
             RelationIntent relation = new RelationIntent();
             relation.setTo(check.getEntity());
@@ -3763,16 +3962,25 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             NotificationSupport.CrossModelTarget owner = crossModel.resolve(relation);
             perspective = owner == null || owner.perspectiveName() == null ? check.getEntity() : owner.perspectiveName();
             if (owner != null && owner.propertyNames() != null) {
-                List<String> missing = check.getMatch()
-                                            .keySet()
-                                            .stream()
+                java.util.Set<String> named = new java.util.LinkedHashSet<>();
+                if (check.getMatch() != null) {
+                    named.addAll(check.getMatch()
+                                      .keySet());
+                }
+                for (String term : CheckSupport.terms(check.getWhere())) {
+                    CheckSupport.TargetTerm parsed = CheckSupport.targetTerm(term);
+                    if (parsed != null) {
+                        named.add(parsed.property());
+                    }
+                }
+                List<String> missing = named.stream()
                                             .map(IntentNaming::pascalCase)
                                             .filter(property -> !owner.propertyNames()
                                                                       .contains(property))
                                             .toList();
                 if (!missing.isEmpty()) {
-                    throw new IntentValidationException(List.of("entity [" + entity.getName() + "] check [exists] matches " + missing
-                            + ", which [" + check.getModel() + ":" + check.getEntity() + "] does not declare"));
+                    throw new IntentValidationException(List.of("entity [" + entity.getName() + "] check [" + check.getKind() + "] reads "
+                            + missing + ", which [" + check.getModel() + ":" + check.getEntity() + "] does not declare"));
                 }
             }
         } else {
@@ -3785,6 +3993,43 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         target.put("crossModel", isCrossModel);
         target.put("targetModel", isCrossModel ? check.getModel() : "");
         return target;
+    }
+
+    /**
+     * The currency a money field is rounded to ({@code roundTo: Invoice.Currency.rounding}, #8307 /
+     * #8327). Each such property carries the authored path ({@code roundTo}) and the null-guarded Java
+     * read of the minor units off the last loaded hop ({@code roundToExpression}); the entity carries
+     * the hops every path needs, resolved by ONE walker, so the lines' Net, Vat and Total reading the
+     * same header's currency load the header and the currency once ({@code roundToLoads}, coordinates
+     * only - the generation pass knows the generated classes). A model without the key emits nothing.
+     */
+    private static void buildRoundTo(EntityIntent entity, Map<String, Object> entityMap, List<Map<String, Object>> properties,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel) {
+        ResolvePathSupport.Walker walker = null;
+        for (FieldIntent field : entity.getFields()) {
+            if (!notBlank(field.getRoundTo())) {
+                continue;
+            }
+            if (walker == null) {
+                walker = ResolvePathSupport.walker(entity, byName, compositionParents, crossModel);
+            }
+            ResolvePathSupport.Path path = walker.resolve(field.getRoundTo()
+                                                               .trim());
+            if (!path.resolved()) {
+                continue; // the parser already reported it
+            }
+            String propertyName = IntentNaming.pascalCase(field.getName());
+            for (Map<String, Object> property : properties) {
+                if (propertyName.equals(property.get("name"))) {
+                    property.put("roundTo", path.label());
+                    property.put("roundToExpression", path.expression());
+                }
+            }
+        }
+        if (walker != null && !walker.hops()
+                                     .isEmpty()) {
+            entityMap.put("roundToLoads", pathLoadsOf(walker));
+        }
     }
 
     /**
@@ -4329,13 +4574,19 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * so it must not refuse the parent's either. A cross-model target carries none either - its
      * repository is generated by the model that owns it, which never reads this one's declarations; the
      * junction's check names it in {@code crossModelParents} instead, and the junction's own repository
-     * contributes the guard (#7701, see {@link #crossModelAgreeParents}). Facts only: the junction's
-     * generated coordinates are resolved by {@code ModelParameterProcessor}.
+     * contributes the guard (#7701, see {@link #crossModelAgreeParents}). Nor does the record's OWN
+     * to-one side (#7631): it relies on no property of its target, so there is nothing there to guard
+     * (#7989, see {@link #isOwnSide}). Facts only: the junction's generated coordinates are resolved by
+     * {@code ModelParameterProcessor}.
      *
      * @param entities the authored entities
      * @param builtByName every built entity map, by name
+     * @param byName the authored entities, by name
+     * @param compositionParents the composition-parent map
+     * @param crossModel the cross-model owner facts, so the sides resolve exactly as the check's own
      */
-    private static void buildAgreeGuards(List<EntityIntent> entities, Map<String, Map<String, Object>> builtByName) {
+    private static void buildAgreeGuards(List<EntityIntent> entities, Map<String, Map<String, Object>> builtByName,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel) {
         for (EntityIntent entity : entities) {
             if (builtByName.get(entity.getName()) == null || entity.getChecks() == null) {
                 continue; // an unnamed / skipped entity, or one with no checks
@@ -4346,9 +4597,16 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                         || check.getOnProperty() == null) {
                     continue; // not a refusing agree check, or one the parser already reported
                 }
-                for (String relationName : check.getRelations()) {
-                    RelationIntent relation = toOneNamed(entity, relationName);
-                    if (relation == null || relation.isCrossModel()) {
+                ResolvePathSupport.Path[] sides = CheckSupport.agreeSides(
+                        ResolvePathSupport.walker(entity, byName, compositionParents, crossModel), entity, check.getRelations()
+                                                                                                                .get(0),
+                        check.getRelations()
+                             .get(1),
+                        check.getOnProperty());
+                for (int i = 0; i < 2; i++) {
+                    RelationIntent relation = toOneNamed(entity, check.getRelations()
+                                                                      .get(i));
+                    if (relation == null || relation.isCrossModel() || isOwnSide(sides[i])) {
                         continue;
                     }
                     Map<String, Object> targetMap = builtByName.get(relation.getTo());
@@ -4374,21 +4632,24 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * {@link #buildAgreeGuards} cannot guard, because their repository is generated by that model. For
      * each, the junction's own repository contributes the guard instead (see
      * {@code TargetAgreementRule}): the foreign key it references the parent through and the parent's
-     * property its rows rely on. A warning carries none, as it carries no same-model guard.
+     * property its rows rely on. A warning carries none, as it carries no same-model guard, and the
+     * record's own to-one side carries none either (#7989, see {@link #isOwnSide}).
      *
      * @param entity the junction
      * @param check its agree check
+     * @param sides the check's two resolved sides, in the authored order
      * @return one entry per cross-model parent; empty when there is none
      */
     private static List<Map<String, Object>> crossModelAgreeParents(EntityIntent entity,
-            org.eclipse.dirigible.components.intent.model.CheckIntent check) {
+            org.eclipse.dirigible.components.intent.model.CheckIntent check, ResolvePathSupport.Path[] sides) {
         List<Map<String, Object>> parents = new ArrayList<>();
         if (check.isWarning()) {
             return parents;
         }
-        for (String relationName : check.getRelations()) {
-            RelationIntent relation = toOneNamed(entity, relationName);
-            if (relation == null || !relation.isCrossModel()) {
+        for (int i = 0; i < 2; i++) {
+            RelationIntent relation = toOneNamed(entity, check.getRelations()
+                                                              .get(i));
+            if (relation == null || !relation.isCrossModel() || isOwnSide(sides[i])) {
                 continue;
             }
             Map<String, Object> parent = new LinkedHashMap<>();
@@ -4397,6 +4658,18 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             parents.add(parent);
         }
         return parents;
+    }
+
+    /**
+     * Whether an {@code agree} side is the record's OWN to-one (#7631) - read off the record itself
+     * rather than off the record its relation points at. Such a side relies on no property of that
+     * target: the value it agrees with is the target's own identity, which no write re-points. A
+     * reverse guard keyed on the agreed property there would name a property the target does not have -
+     * {@code ProjectEntity.Project} for a task agreeing with its parent on its project - and break the
+     * compile of the whole module (#7989).
+     */
+    private static boolean isOwnSide(ResolvePathSupport.Path side) {
+        return CheckSupport.RECORD.equals(side.owner());
     }
 
     /**
@@ -4534,15 +4807,20 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * guards with -, the snapshot child whose stored file a link serves (with the foreign key that
      * finds a record's copies), the declared life and the roles that may create and revoke links.
      * Nothing without the block, so an entity that does not declare it generates no share code at all.
+     * The life by record ({@code expiry}, #8620) rides along as typed terms per entry, its one-hop
+     * reads as {@code pathLoads} - one walker for all entries, so a relation two entries read is loaded
+     * once.
      *
      * @param entities the model's entities
      * @param builtByName the entity maps built so far, by name
      * @param byName the entities by name
      * @param compositionParents each child's composition master
      * @param settingEntities the setting entities (perspective resolution)
+     * @param crossModel the owner facts of a cross-model hop an expiry condition reads
      */
     private static void buildShare(List<EntityIntent> entities, Map<String, Map<String, Object>> builtByName,
-            Map<String, EntityIntent> byName, Map<String, String> compositionParents, Set<String> settingEntities) {
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, Set<String> settingEntities,
+            NotificationSupport.CrossModelLookup crossModel) {
         for (EntityIntent entity : entities) {
             Map<String, Object> entityMap = builtByName.get(entity.getName());
             ShareIntent declared = entity.getShare();
@@ -4558,7 +4836,22 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     masterFk = IntentNaming.pascalCase(relation.getName());
                 }
             }
-            if (terms == null || masterFk == null || declared.getRoles() == null) {
+            ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, compositionParents, crossModel);
+            List<Map<String, Object>> expiry = new ArrayList<>();
+            for (ShareIntent.Expiry rule : declared.getExpiry() == null ? List.<ShareIntent.Expiry>of() : declared.getExpiry()) {
+                List<Map<String, Object>> ruleTerms =
+                        rule == null ? null : CheckSupport.conditionTerms(entity, byName, walker, rule.getWhen());
+                Integer days = rule == null ? null : rule.daysOrNull();
+                if (ruleTerms == null || days == null) {
+                    expiry = null;
+                    break;
+                }
+                Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("whenTerms", ruleTerms);
+                entry.put("days", String.valueOf(days));
+                expiry.add(entry);
+            }
+            if (terms == null || masterFk == null || declared.getRoles() == null || expiry == null) {
                 continue; // reported by the parser - never emitted as a weaker gate
             }
             Map<String, Object> share = new LinkedHashMap<>();
@@ -4569,6 +4862,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             share.put("copyMasterFk", masterFk);
             share.put("expiresAfterDays", String.valueOf(declared.expiresAfterDaysOrNull()));
             share.put("roles", String.join(",", declared.getRoles()));
+            if (!expiry.isEmpty()) {
+                share.put("expiry", expiry);
+            }
+            if (!walker.hops()
+                       .isEmpty()) {
+                share.put("pathLoads", pathLoadsOf(walker));
+            }
             entityMap.put("share", share);
         }
     }
@@ -6033,7 +6333,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     private static final Set<String> STRUCTURED_ATTRIBUTES = Set.of("rollupGuards", "rollupGuard", "checks", "labelParts", "aggregateKeys",
             "groupingKeys", "relatedEntities", "scopedCalendars", "agreeGuards", "lifecycleStatusNameList", "duplicateReset",
             "duplicateDefaults", "lookupColumns", "languages", "widgets", "customActionLabels", "generateRefusals", "processTaskLabels",
-            "singleFlags", "reports", "collectionColumns");
+            "singleFlags", "reports", "collectionColumns", "roundToLoads");
 
     /**
      * Compact, non-HTML-escaping JSON for the structured {@code .edm} attributes. Compact so the value

@@ -45,6 +45,8 @@ class CaptureSupportTest {
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string }
               - name: PurchaseInvoice
+                checks:
+                  - { kind: duplicate, fields: [Supplier, number], message: "An invoice with this number already exists: {match}" }
                 fields:
                   - { name: id,         type: integer, primaryKey: true, generated: true }
                   - { name: number,     type: string,  length: 50 }
@@ -145,6 +147,7 @@ class CaptureSupportTest {
         assertEquals(List.of("Supplier"), names(invoice.get("relations")));
         assertEquals(Boolean.TRUE, invoice.get("hasRelations"));
         assertEquals(Boolean.TRUE, invoice.get("hasCompares"));
+        assertEquals(Boolean.TRUE, invoice.get("hasWarnings"), "the entity's soft duplicate check is asked of the capture (#8631)");
         assertNotNull(invoice.get("roles"));
         assertFalse(((String) invoice.get("roles")).isBlank(), "the upload is gated by the entity's write role");
         assertFalse(((String) invoice.get("readRoles")).isBlank());
@@ -194,6 +197,7 @@ class CaptureSupportTest {
         assertEquals(Boolean.FALSE, plain.get("hasQr"));
         assertEquals(Boolean.FALSE, plain.get("hasRelations"));
         assertEquals(Boolean.FALSE, plain.get("hasCompares"));
+        assertEquals(Boolean.FALSE, plain.get("hasWarnings"));
         assertEquals("null", plain.get("instructionsLiteral"));
     }
 
@@ -245,11 +249,83 @@ class CaptureSupportTest {
     }
 
     @Test
-    void a_composition_child_target_is_refused() {
+    void a_composition_child_target_is_planned_as_a_line_under_the_master_the_upload_names() {
+        IntentModel model = IntentParser.parse(ENTITIES + """
+                captures:
+                  - { name: lineScan, into: PurchaseInvoiceItem, fields: [{ field: description }, { field: price }] }
+                """);
+
+        Map<String, Object> line = build(model, new IntentSettings()).get(0);
+
+        assertEquals(Set.of("PurchaseInvoiceItem"), CaptureSupport.targets(model), "the ledger is the line's");
+        assertEquals("PurchaseInvoiceItem", line.get("entity"));
+        assertEquals(Boolean.TRUE, line.get("hasMaster"));
+        assertEquals("PurchaseInvoice", line.get("masterEntity"));
+        assertEquals("PurchaseInvoice", line.get("masterBackRef"), "the upload names the master by the line's key to it");
+        assertEquals("Integer", line.get("masterKeyJavaClass"));
+        assertEquals(line.get("perspective"), line.get("masterPerspective"), "a line lives in its master's perspective");
+        assertFalse(((String) line.get("roles")).isBlank(), "the upload is gated by the line's write gate");
+        assertEquals(Boolean.FALSE, build(IntentParser.parse(VALID), new IntentSettings()).get(0)
+                                                                                          .get("hasMaster"),
+                "a top-level record has no master");
+    }
+
+    @Test
+    void a_line_of_a_personal_master_is_also_captured_from_the_personal_surface_unless_it_is_see_only_there() {
+        String yaml = """
+                name: expenses
+                entities:
+                  - name: Employee
+                    identity: email
+                    fields:
+                      - { name: id,    type: integer, primaryKey: true, generated: true }
+                      - { name: email, type: string }
+                  - name: Claim
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Employee, kind: manyToOne, to: Employee, personal: true }
+                  - name: ClaimItem
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: Claim, kind: manyToOne, to: Claim, composition: true, required: true%s }
+                captures:
+                  - { name: receipt, into: ClaimItem, fields: [{ field: amount }] }
+                """;
+
+        Map<String, Object> line = build(IntentParser.parse(yaml.formatted("")), new IntentSettings()).get(0);
+        Map<String, Object> seeOnly = build(IntentParser.parse(yaml.formatted(", personalReadOnly: true")), new IntentSettings()).get(0);
+
+        assertEquals(Boolean.TRUE, line.get("hasPersonalMaster"));
+        assertEquals("Integer", line.get("keyJavaClass"), "the personal review reads the line by its own key");
+        assertEquals(Boolean.FALSE, seeOnly.get("hasPersonalMaster"), "a line its owner may not write there is not captured there");
+        assertEquals(Boolean.FALSE, build(IntentParser.parse(ENTITIES + """
+                captures:
+                  - { name: lineScan, into: PurchaseInvoiceItem, fields: [{ field: description }] }
+                """), new IntentSettings()).get(0)
+                                           .get("hasPersonalMaster"),
+                "a master without a personal owner has no personal surface");
+    }
+
+    @Test
+    void items_on_a_composition_child_target_are_refused() {
         assertRefused("""
                 captures:
-                  - { name: scan, into: PurchaseInvoiceItem, fields: [{ field: description }] }
-                """, "a composition child");
+                  - name: scan
+                    into: PurchaseInvoiceItem
+                    fields: [{ field: description }]
+                    items: { into: PurchaseInvoiceNote, fields: [{ field: text }] }
+                """, "is a line of a [PurchaseInvoice] - a capture under a master creates that one line");
+    }
+
+    @Test
+    void the_master_back_reference_of_a_child_target_is_not_read() {
+        assertRefused("""
+                captures:
+                  - { name: scan, into: PurchaseInvoiceItem, fields: [{ field: PurchaseInvoice, match: [number] }] }
+                """, "is the line's back-reference to the document, which the capture fills itself");
     }
 
     @Test

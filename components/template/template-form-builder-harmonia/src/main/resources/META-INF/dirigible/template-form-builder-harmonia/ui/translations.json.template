@@ -1,14 +1,3 @@
 {
-    "defaults": {
-        "chooseDate": "Choose date",
-        "chooseDateTime": "Choose date and time",
-        "chooseMonth": "Choose month",
-        "chooseWeek": "Choose week"
-    },
-    "messages": {
-        "submitted": "Submitted successfully.",
-        "submitFailed": "Submit failed.",
-        "notOpenedFromTask": "This form was not opened from a task."
-    },
     "t": {}
 }

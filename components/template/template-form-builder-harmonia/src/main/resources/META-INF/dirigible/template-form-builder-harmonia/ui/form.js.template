@@ -188,7 +188,7 @@ document.addEventListener('alpine:init', () => {
                   if (entity && typeof entity === 'object') {
                     Object.keys(entity).forEach((k) => { self.model[k] = entity[k]; });
                   }
-                  return Promise.all([self.resolveRelationNames(), self.loadRelationOptions()]);
+                  return Promise.all([self.resolveRelationNames(), self.loadRelationOptions(), self.loadTables()]);
                 })
                 .catch((e) => console.warn('[form] could not load live entity', e));
             }
@@ -254,6 +254,31 @@ document.addEventListener('alpine:init', () => {
           if (current !== null && current !== undefined && current !== '') this.model[select.model] = String(current);
         } catch (e) { console.warn('[form] could not load options for', select.model, e); }
       }));
+    },
+
+    // List the rows of each table that names a locator (a task form's lines, intent forms[].items): the
+    // controller URL the trigger seeded, filtered on the rows' key to the task's record - the read-gated
+    // list the record's own page reads its lines from, so the reviewer sees what they may read and no
+    // more. Best-effort per table, like the header: a missing locator or a refusal leaves it hidden.
+    async loadTables() {
+      const id = this.model.__entityId;
+      await Promise.all((window.__harmoniaTables || []).map(async (table) => {
+        const url = this.model[table.source];
+        if (!url || id === undefined || id === null) return;
+        try {
+          const rows = await harmoniaHttp.get(url + '?' + encodeURIComponent(table.masterProperty) + '=' + encodeURIComponent(id));
+          if (Array.isArray(rows)) this.model[table.model] = rows;
+        } catch (e) { console.warn('[form] could not list the rows of', table.model, e); }
+      }));
+    },
+
+    // A table cell, formatted as the same value is in a read-only field: a number with its pattern, a
+    // date/time in the instance format, anything else as-is, an empty value as a dash.
+    cell(value, controlId, pattern) {
+      if (value === null || value === undefined || value === '') return '—';
+      if (controlId === 'input-number') return this.fmtNumber(value, pattern);
+      if (/^input-(date|datetime-local|time|month|week)$/.test(controlId)) return this.fmtDate(value, controlId);
+      return value;
     },
 
     // The selected option's label, for a relation rendered read-only (a picker the author disabled).

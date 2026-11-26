@@ -50,11 +50,9 @@ import tools.jackson.databind.node.ObjectNode;
  * a whole dialog asked for un-namespaced keys no catalog could ever hold. So this reads every
  * literal key out of the generated-application templates and the shells and requires it in:
  * <ul>
- * <li>the template catalog ({@code translations.json.template}) the generator mints into each
- * module, for a generated page's own key;</li>
- * <li>the platform's copy of that catalog's chrome sections, in every shipped language
- * ({@code application-core/i18n/<locale>/generated.json}) - the translation a module's own catalog
- * falls back to;</li>
+ * <li>the platform's shared chrome catalog, in every shipped language
+ * ({@code application-core/i18n/<locale>/generated.json}), for a generated page's own key - a
+ * module's catalog carries none of it (#8782), so this is the one place the key resolves;</li>
  * <li>the shell catalog in every shipped language, for an {@code application-core:} key.</li>
  * </ul>
  * The language files must also agree with each other key for key and placeholder for placeholder.
@@ -67,20 +65,21 @@ class I18nKeyCoverageIT {
 
     private static final String CORE_I18N = DIRIGIBLE + "application-core/i18n/";
 
-    private static final String TEMPLATE_CATALOG = DIRIGIBLE + "template-application-ui-harmonia-java/ui/translations.json.template";
+    /**
+     * The sections of a generated page's chrome keys - the ones {@code i18n.js} resolves through the
+     * platform's shared {@code generated} catalog.
+     */
+    private static final Set<String> CHROME_SECTIONS = Set.of("aria", "state", "messages", "defaults");
 
-    /** The chrome catalog the form builder mints into each module beside its form's labels. */
-    private static final String FORM_CATALOG = DIRIGIBLE + "template-form-builder-harmonia/ui/translations.json.template";
-
-    /** Where the form builder asks for its chrome keys. */
+    /** Where the form builder asks for its chrome keys (#8785). */
     private static final String FORM_TEMPLATES = "classpath*:" + DIRIGIBLE + "template-form-builder-harmonia/**/*.template";
 
-    /** The template catalog's sections every module carries unchanged - the platform ships these. */
-    private static final Set<String> CHROME_SECTIONS = Set.of("aria", "state", "messages", "defaults");
+    /** The application-core section holding the shared chrome. */
+    private static final String GENERATED_SECTION = "generated.";
 
     /** Where the keys are asked for: the generated-application templates and the shells. */
     private static final List<String> SOURCES = List.of("classpath*:" + DIRIGIBLE + "template-application-ui-harmonia-java/**/*.template",
-            "classpath*:" + DIRIGIBLE + "template-application-ui-harmonia-java/**/*.js",
+            "classpath*:" + DIRIGIBLE + "template-application-ui-harmonia-java/**/*.js", FORM_TEMPLATES,
             "classpath*:" + DIRIGIBLE + "application-core/**/*.js", "classpath*:" + DIRIGIBLE + "application-core/**/*.html",
             "classpath*:" + DIRIGIBLE + "application/**/*.js", "classpath*:" + DIRIGIBLE + "application/**/*.html",
             "classpath*:" + DIRIGIBLE + "admin/**/*.js", "classpath*:" + DIRIGIBLE + "admin/**/*.html",
@@ -170,8 +169,8 @@ class I18nKeyCoverageIT {
     private static final int MIN_LANGUAGES = 2;
 
     @Test
-    void everyGeneratedPageKeyIsInTheTemplateCatalog() {
-        Map<String, String> catalog = flatten(json(TEMPLATE_CATALOG));
+    void everyGeneratedPageKeyIsInTheSharedChrome() {
+        Map<String, String> catalog = generatedChrome("en-US");
         Map<String, Set<String>> used = usedKeys(GENERATED_KEY);
         // A key built at run time ('...t.' + entity - the app's own entity names) is not a key.
         used.keySet()
@@ -179,50 +178,42 @@ class I18nKeyCoverageIT {
         assertTrue(used.size() > 50, "only " + used.size() + " generated-page keys found - a source pattern stopped matching");
         List<String> missing = new ArrayList<>();
         used.forEach((key, files) -> {
-            if (!catalog.containsKey(key)) {
+            if (!isChrome(key) || !catalog.containsKey(key)) {
                 missing.add(key + "  (used in " + files + ")");
             }
         });
-        assertNoneMissing("keys a generated page asks for that " + TEMPLATE_CATALOG + " does not mint", missing);
+        assertNoneMissing(
+                "keys a generated page asks for that the en-US generated.json does not ship in a chrome section " + CHROME_SECTIONS,
+                missing);
     }
 
-    /**
-     * The chrome of both template catalogs - the generated pages' and the form builder's (#8785) -
-     * ships in every language, and a key both mint means one thing.
-     */
     @Test
-    void theTemplateChromeShipsInEveryLanguage() {
-        Map<String, String> chrome = new TreeMap<>();
+    void theSharedChromeShipsInEveryLanguage() {
+        Map<String, String> chrome = generatedChrome("en-US");
         List<String> problems = new ArrayList<>();
-        for (String template : List.of(TEMPLATE_CATALOG, FORM_CATALOG)) {
-            flatten(json(template)).forEach((key, value) -> {
-                if (key.indexOf('.') > 0 && CHROME_SECTIONS.contains(key.substring(0, key.indexOf('.')))) {
-                    String minted = chrome.putIfAbsent("generated." + key, value);
-                    if (minted != null && !minted.equals(value)) {
-                        problems.add(
-                                key + " is \"" + value + "\" in " + template + " but \"" + minted + "\" in the other template catalog");
-                    }
-                }
-            });
-        }
+        chrome.keySet()
+              .stream()
+              .filter(key -> !isChrome(key))
+              .forEach(key -> problems.add("en-US: " + GENERATED_SECTION + key + " is in no chrome section " + CHROME_SECTIONS
+                      + ", so i18n.js never resolves it"));
         for (String locale : languages()) {
-            Map<String, String> catalog = coreCatalog(locale);
+            Map<String, String> catalog = generatedChrome(locale);
             for (Map.Entry<String, String> entry : chrome.entrySet()) {
                 String translated = catalog.get(entry.getKey());
                 if (translated == null || translated.isBlank()) {
-                    problems.add(locale + ": " + entry.getKey() + " missing");
+                    problems.add(locale + ": " + GENERATED_SECTION + entry.getKey() + " missing");
                 } else if (!placeholders(translated).equals(placeholders(entry.getValue()))) {
-                    problems.add(locale + ": " + entry.getKey() + " placeholders " + placeholders(translated) + " != "
+                    problems.add(locale + ": " + GENERATED_SECTION + entry.getKey() + " placeholders " + placeholders(translated) + " != "
                             + placeholders(entry.getValue()));
                 }
             }
             for (String key : catalog.keySet()) {
-                if (key.startsWith("generated.") && !chrome.containsKey(key)) {
-                    problems.add(locale + ": " + key + " is in no template catalog any more");
+                if (!chrome.containsKey(key)) {
+                    problems.add(locale + ": " + GENERATED_SECTION + key + " is not in the en-US generated.json");
                 }
             }
         }
-        assertNoneMissing("generated.json out of step with the template catalog", problems);
+        assertNoneMissing("generated.json out of step with the en-US one", problems);
     }
 
     @Test
@@ -238,7 +229,9 @@ class I18nKeyCoverageIT {
         for (String locale : languages()) {
             Map<String, String> catalog = coreCatalog(locale);
             used.forEach((key, files) -> {
-                if (!catalog.containsKey(key)) {
+                // A key asked for with a count resolves to its plural forms (i18next's `<key>_one` /
+                // `_other`); `_other` is the one every language has.
+                if (!catalog.containsKey(key) && !catalog.containsKey(key + "_other")) {
                     missing.add(locale + ": application-core:" + key + "  (used in " + files + ")");
                 }
             });
@@ -365,7 +358,7 @@ class I18nKeyCoverageIT {
     void everyKeyKeepsTheFallbackItsCatalogSays() {
         List<String> problems = new ArrayList<>();
         problems.addAll(fallbackDrift("generated:", List.of(HARMONIA_TEMPLATES), "\\$projectName:\\$\\{tprefix\\}\\.",
-                flatten(json(TEMPLATE_CATALOG)), MANY_KEYS));
+                generatedChrome("en-US"), MANY_KEYS));
         problems.addAll(
                 fallbackDrift("application-core:", List.of(HARMONIA_TEMPLATES), "application-core:", coreCatalog("en-US"), MANY_KEYS));
         Map<String, String> monitoring = new TreeMap<>();
@@ -375,8 +368,7 @@ class I18nKeyCoverageIT {
         assertFalse(monitoring.isEmpty(), "the monitoring shell's en-US catalog was not found");
         problems.addAll(fallbackDrift("monitoring:", MONITORING_SOURCES, "monitoring:", monitoring, MANY_KEYS));
         // the form builder's chrome (#8785) - a handful of keys, so a smaller floor
-        problems.addAll(
-                fallbackDrift("form:", List.of(FORM_TEMPLATES), "\\$projectName:\\$\\{tprefix\\}\\.", flatten(json(FORM_CATALOG)), 5));
+        problems.addAll(fallbackDrift("form:", List.of(FORM_TEMPLATES), "\\$projectName:\\$\\{tprefix\\}\\.", generatedChrome("en-US"), 5));
         assertNoneMissing("keys whose fallback is not their en-US catalog text", problems);
     }
 
@@ -504,6 +496,23 @@ class I18nKeyCoverageIT {
             assertEquals("Search Goods Receipts...",
                     t(context, "orders:orders-model.messages.inputSearch", "Search {{name}}...", "Goods Receipts"),
                     "the default language keeps the label as written");
+        }
+    }
+
+    /**
+     * The Settings report of untranslated records (#8789) counts them in the user's language: the shell
+     * catalog carries the plural forms and i18next picks the one the count asks for - evaluated over
+     * the real i18next, whose plural rules decide.
+     */
+    @Test
+    void anUntranslatedRecordCountInBulgarianPicksItsPluralForm() {
+        String count = "T('application-core:shell.settings.untranslatedRecords', 'x', { entity: 'Валути', count: %d, total: 160,"
+                + " language: 'български' })";
+        try (Context context = loadI18n("bg", JSON.createObjectNode(), read(resources(I18NEXT).get(0)))) {
+            assertEquals("Валути: 1 от 160 записа няма превод на български.", context.eval("js", count.formatted(1))
+                                                                                     .asString());
+            assertEquals("Валути: 3 от 160 записа нямат превод на български.", context.eval("js", count.formatted(3))
+                                                                                      .asString());
         }
     }
 
@@ -678,6 +687,29 @@ class I18nKeyCoverageIT {
         return catalog;
     }
 
+    /**
+     * The platform's shared chrome of one language - the {@code generated} section of its
+     * application-core namespace - keyed as a generated page asks for it, without the section prefix.
+     */
+    private static Map<String, String> generatedChrome(String locale) {
+        Map<String, String> chrome = new TreeMap<>();
+        coreCatalog(locale).forEach((key, value) -> {
+            if (key.startsWith(GENERATED_SECTION)) {
+                chrome.put(key.substring(GENERATED_SECTION.length()), value);
+            }
+        });
+        return chrome;
+    }
+
+    /**
+     * Whether a generated page's key lies in a section {@code i18n.js} resolves through the shared
+     * chrome.
+     */
+    private static boolean isChrome(String key) {
+        int dot = key.indexOf('.');
+        return dot > 0 && CHROME_SECTIONS.contains(key.substring(0, dot));
+    }
+
     /** Every literal key the pattern finds in the sources, with the files asking for it. */
     private static Map<String, Set<String>> usedKeys(Pattern pattern) {
         Map<String, Set<String>> used = new TreeMap<>();
@@ -747,12 +779,6 @@ class I18nKeyCoverageIT {
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
         }
-    }
-
-    private static JsonNode json(String resource) {
-        // Jackson 3 exceptions are unchecked, so readTree no longer declares IOException - the
-        // JacksonException it raises instead already carries the resource in its message.
-        return JSON.readTree(read(resource));
     }
 
     private static JsonNode json(Resource resource) {

@@ -69,6 +69,9 @@ final class ModelParameterProcessor {
     /** The grouped integer part of a float display pattern; the scale's decimals follow it. */
     private static final String FLOAT_PATTERN_INTEGER_PART = "### ### ### ##0";
 
+    /** The decimals a scaled float always shows; the rest of its scale shows only when present. */
+    private static final int MANDATORY_FLOAT_DECIMALS = 2;
+
     /**
      * Not instantiable.
      */
@@ -103,7 +106,7 @@ final class ModelParameterProcessor {
             resolveLabelParts(entities);
             resolveRelatedRegisters(entities, parameters);
             resolveBanners(entities, parameters);
-            resolveShare(entities);
+            resolveShare(entities, parameters);
             resolveCollectionColumns(entities, parameters);
             resolveRollupGuards(entities);
             resolveAgreeGuards(entities, parameters);
@@ -157,6 +160,7 @@ final class ModelParameterProcessor {
         resolveLifecycleStatusNames(entity);
         resolveDataOrder(entity);
         resolveOrderBy(entity);
+        resolveRoundTo(entity, parameters);
 
         for (Map<String, Object> property : asMaps(entity.get("properties"))) {
             processProperty(property, entity, entities, parameters);
@@ -452,6 +456,12 @@ final class ModelParameterProcessor {
         entity.put("rowChecks", rowChecks);
         entity.put("guardChecks", guardChecks);
         entity.put("documentChecks", documentChecks);
+        // A notExists check refuses a status move while a row of another entity matches (#8002, #8623):
+        // the repository runs every write that can carry that move in ONE unit, so the row lock its count
+        // takes holds until the move commits.
+        entity.put("hasNotExistsChecks", documentChecks.stream()
+                                                       .anyMatch(check -> check instanceof Map<?, ?> map
+                                                               && "notExists".equals(map.get("kind"))));
         entity.put("forbidWhenGuards", forbidWhenGuards);
         entity.put("deleteChecks", deleteChecks);
         entity.put("warningChecks", warningChecks);
@@ -918,9 +928,14 @@ final class ModelParameterProcessor {
      * @param parameters the generation parameters
      */
     private static void resolveCheckPathLoads(Map<String, Object> check, Map<String, Object> parameters) {
-        // An exists check's target (#8338) carries a hop's coordinates, so it resolves the same way.
+        // An exists check's target (#8338) carries a hop's coordinates, so it resolves the same way -
+        // unless
+        // it is a notExists target counted by name at runtime (#8623), which has no class to resolve.
         Map<String, Object> target = asMap(check.get("target"));
-        if (target != null) {
+        if (target != null && truthy(target, "lateBound")) {
+            check.put("targetGenFolder", NamingHelper.sanitizeJavaIdentifier(str(target, "targetModel")));
+            check.put("targetEntity", str(target, "entity"));
+        } else if (target != null) {
             check.put("targetRepositoryClass", generatedClass(target, parameters) + "Repository");
         }
         List<Map<String, Object>> hops = asMaps(check.get("pathLoads"));
@@ -938,6 +953,47 @@ final class ModelParameterProcessor {
             loads.add(load);
         }
         check.put("pathLoads", loads);
+    }
+
+    /**
+     * Resolves the money fields rounded to their currency's minor units (intent {@code roundTo:}, issue
+     * #8307 / #8327) into what the repository renders: the hops to load, as generated classes (a
+     * cross-model one in its owner's generation folder), and one minor-units read per property, in
+     * property order, each property carrying its index into that list ({@code roundToIndex}). An entity
+     * without the key is left untouched.
+     *
+     * @param entity the entity
+     * @param parameters the generation parameters
+     */
+    private static void resolveRoundTo(Map<String, Object> entity, Map<String, Object> parameters) {
+        List<Object> digits = new ArrayList<>();
+        for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+            String expression = str(property, "roundToExpression");
+            if (expression == null || expression.isBlank()) {
+                continue;
+            }
+            property.put("roundToIndex", String.valueOf(digits.size()));
+            Map<String, Object> read = new LinkedHashMap<>();
+            read.put("property", str(property, "name"));
+            read.put("expression", expression);
+            digits.add(read);
+        }
+        if (digits.isEmpty()) {
+            return;
+        }
+        List<Object> loads = new ArrayList<>();
+        for (Map<String, Object> hop : asMaps(entity.get("roundToLoads"))) {
+            String qualified = generatedClass(hop, parameters);
+            Map<String, Object> load = new LinkedHashMap<>();
+            load.put("local", hop.get("local"));
+            load.put("sourceExpression", hop.get("sourceExpression"));
+            load.put("entityClass", qualified + "Entity");
+            load.put("repositoryClass", qualified + "Repository");
+            loads.add(load);
+        }
+        entity.put("roundToLoads", loads);
+        entity.put("roundToDigits", digits);
+        entity.put("haveRoundTo", "true");
     }
 
     /**
@@ -1630,18 +1686,23 @@ final class ModelParameterProcessor {
             Map<String, Object> declared = findProperty(entity, property);
             String javaClass = declared == null ? null : str(declared, "dataTypeJavaClass");
             String read = "entity." + property;
-            String equal;
-            if ("Boolean".equals(javaClass) || "String".equals(javaClass)) {
-                equal = "java.util.Objects.equals(" + read + ", " + value + ")";
+            boolean ne = "ne".equals(operator);
+            String test;
+            if ("null".equals(value)) {
+                // A presence test (#7984), whatever the property's shape - the query renders it as
+                // `is null` / `is not null`, and the by-value form below has no null literal.
+                test = "(" + read + (ne ? " != null)" : " == null)");
+            } else if ("Boolean".equals(javaClass) || "String".equals(javaClass)) {
+                test = (ne ? "!" : "") + "java.util.Objects.equals(" + read + ", " + value + ")";
             } else {
                 // A number is compared BY VALUE: the literal's own width says nothing about the
                 // column's, and a boxed equality across two of them is silently never true.
-                equal = "(" + read + " != null && " + read + ".longValue() == " + value + "L)";
+                test = (ne ? "!" : "") + "(" + read + " != null && " + read + ".longValue() == " + value + "L)";
             }
             if (match.length() > 0) {
                 match.append(" && ");
             }
-            match.append("ne".equals(operator) ? "!" + equal : equal);
+            match.append(test);
         }
         return match.toString();
     }
@@ -1660,7 +1721,10 @@ final class ModelParameterProcessor {
         figures.put("{capacity}", capacity);
         figures.put("{sum}", "guardConsumed");
         figures.put("{requested}", "guardIncoming");
-        figures.put("{remaining}", capacity + ".subtract(guardConsumed)");
+        // An integral capacity (#7944) is converted before the decimal arithmetic, as the guard itself
+        // does.
+        String capacityDecimal = truthy(guard, "capacityFieldType") ? "java.math.BigDecimal.valueOf(" + capacity + ")" : capacity;
+        figures.put("{remaining}", capacityDecimal + ".subtract(guardConsumed)");
         StringBuilder expression = new StringBuilder();
         StringBuilder literal = new StringBuilder();
         int index = 0;
@@ -2290,11 +2354,14 @@ final class ModelParameterProcessor {
      *
      * <p>
      * A declaration whose condition does not render is refused rather than generated without it: the
-     * guard is what keeps a draft from being handed to an anonymous reader.
+     * guard is what keeps a draft from being handed to an anonymous reader. The same holds for each
+     * {@code expiry} entry (#8620), whose condition decides how long a link lives; the relations its
+     * conditions read are loaded like a check's.
      *
      * @param entities every entity in the model
+     * @param parameters the generation parameters
      */
-    private static void resolveShare(List<Map<String, Object>> entities) {
+    private static void resolveShare(List<Map<String, Object>> entities, Map<String, Object> parameters) {
         for (Map<String, Object> entity : entities) {
             Map<String, Object> share = asMap(entity.get("share"));
             if (share == null) {
@@ -2309,6 +2376,15 @@ final class ModelParameterProcessor {
             share.put("whenTermsJs", termsOrEmpty(str(share, "when")));
             share.put("rolesJavaLiteral", JavaLiterals.escape(strOr(share, "roles", "")));
             share.put("javaCopyPerspective", NamingHelper.sanitizeJavaIdentifier(str(share, "copyPerspective")));
+            for (Map<String, Object> rule : asMaps(share.get("expiry"))) {
+                String condition = JavaLiterals.conditionExpression(asMaps(rule.get("whenTerms")));
+                if (condition == null) {
+                    throw new IllegalStateException("The share: expiry of entity [" + str(entity, "name")
+                            + "] carries a condition that does not render - regenerate the model");
+                }
+                rule.put("whenJavaExpression", condition);
+            }
+            resolveCheckPathLoads(share, parameters);
         }
     }
 
@@ -2994,7 +3070,8 @@ final class ModelParameterProcessor {
     /**
      * The display pattern of a float property: its own {@code widgetPattern}, else one with as many
      * decimals as its {@code dataScale} (#8701 - a scale-6 rate read 1.955834 as 1.96), else the
-     * two-decimal default.
+     * two-decimal default. Above two, the decimals are optional ({@code #}): a scale-6 quantity of 10
+     * reads 10.00, not 10.000000, while 1.955834 keeps all six (#8878).
      *
      * @param property the property
      * @return the pattern
@@ -3010,7 +3087,11 @@ final class ModelParameterProcessor {
         if (Double.isNaN(scale) || scale < 0) {
             return DEFAULT_FLOAT_PATTERN;
         }
-        return scale == 0 ? FLOAT_PATTERN_INTEGER_PART : FLOAT_PATTERN_INTEGER_PART + "." + "0".repeat((int) scale);
+        if (scale == 0) {
+            return FLOAT_PATTERN_INTEGER_PART;
+        }
+        int mandatory = (int) Math.min(scale, MANDATORY_FLOAT_DECIMALS);
+        return FLOAT_PATTERN_INTEGER_PART + "." + "0".repeat(mandatory) + "#".repeat((int) scale - mandatory);
     }
 
     /**

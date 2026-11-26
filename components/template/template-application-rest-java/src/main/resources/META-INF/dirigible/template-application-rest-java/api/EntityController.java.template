@@ -65,6 +65,9 @@ import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 #end
 import org.eclipse.dirigible.sdk.platform.Documentation;
+#if($multilingual == "true")
+import org.eclipse.dirigible.sdk.db.TranslationCoverage;
+#end
 import org.eclipse.dirigible.sdk.http.Body;
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.http.Controller;
@@ -309,6 +312,17 @@ public class ${name}Controller {
         return Map.of("read", true, "write", true);
 #end
     }
+#if($multilingual == "true")
+
+    @Get("/translations")
+    @Documentation("How completely ${name} is translated: its number of records and, per application language other than the default one, how many have no translation - what the shells' Settings report (#8789)")
+    public TranslationCoverage translations() {
+#if($needsRoles)
+        checkPermissions("read");
+#end
+        return repository.translationCoverage();
+    }
+#end
 #if($systemWritten)
 
     /**
@@ -361,20 +375,14 @@ public class ${name}Controller {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Sharing documents through a link is switched off");
         }
         // The newest stored copy, and only a stored one: a link never renders the live record.
-        gen.${javaGenFolderName}.data.${share.javaCopyPerspective}.${share.copyEntity}Entity issued = null;
-        for (gen.${javaGenFolderName}.data.${share.javaCopyPerspective}.${share.copyEntity}Entity copy : new gen.${javaGenFolderName}.data.${share.javaCopyPerspective}.${share.copyEntity}Repository().findAll(
-                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${share.copyMasterFk}", id))) {
-            if (copy.StoragePath != null && (issued == null || (copy.Version != null && (issued.Version == null || copy.Version > issued.Version)))) {
-                issued = copy;
-            }
-        }
+        var issued = ${name}Repository.issuedCopy(id);
         if (issued == null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "This ${name} has no issued copy yet - a link serves the stored copy, which is minted when the document is issued");
         }
         org.eclipse.dirigible.sdk.http.Response.setStatus(201);
         return org.eclipse.dirigible.sdk.share.ShareLinks.create(${name}Repository.SHARE_SUBJECT, id, issued.StoragePath, issued.FileName,
-                issued.ContentType, ${share.expiresAfterDays}).toMap();
+                issued.ContentType, ${name}Repository.shareExpiresAfterDays(entity)).toMap();
     }
 
     @Delete("/{id}/share-links/{linkId}")
@@ -1488,6 +1496,21 @@ public class ${name}Controller {
 #end
 
 #end
+#if($captureUnderMaster)
+    /**
+     * The lock create() applies to the ${masterEntity} a new ${name} is filed under, for the document
+     * capture that creates one there (#8626): it asks before the document is read, so a scan under a
+     * locked ${masterEntity} is refused with this controller's own answer and costs no reading.
+     *
+     * @param masterId the ${masterEntity} the capture names
+     */
+    public void requireCaptureMasterMutable(${masterEntityIdJavaClass} masterId) {
+#if($masterLock)
+        requireMasterMutable(masterId);
+#end
+    }
+
+#end
 #if($masterLock)
     // Inherited immutability: this ${name} is a line of a ${masterLock.entity}, and its writes
     // recompute that document's totals - so while the document is locked its lines are locked with it,
@@ -1870,6 +1893,14 @@ public class ${name}Controller {
 ## The null guard only where the required check above did not already refuse a null (#7696).
         if (#if(!$requiredChecked)entity.${property.name} != null && #{end}entity.${property.name}.length() > ${property.dataLength}) {
             throw org.eclipse.dirigible.sdk.db.FieldRefusals.tooLong(${refusalCatalog}, ${refusalField}, ${property.dataLength});
+        }
+#end
+#if($property.dataTypeJavaClass == "String" && ($property.widgetType == "MONTH" || $property.widgetType == "WEEK"))
+## A month / week field is a string column (#8328): only YYYY-MM with a month 01-12, or an ISO YYYY-Www
+## that exists in its year, is a value - "2026-5" next to "2026-05" would open one month twice under a
+## unique key, and "2026-13" breaks every reader that parses it. Blank is "no value" as for a pattern.
+        if (entity.${property.name} != null#if($property.isRequiredProperty != "true") && !entity.${property.name}.isBlank()#end && !org.eclipse.dirigible.sdk.db.FieldFormats.#if($property.widgetType == "MONTH")isMonth#{else}isWeek#end(entity.${property.name})) {
+            throw org.eclipse.dirigible.sdk.db.FieldRefusals.#if($property.widgetType == "MONTH")month#{else}week#end(${refusalCatalog}, ${refusalField});
         }
 #end
 #if($property.inputFormat == "IBAN")

@@ -70,6 +70,25 @@ public interface TargetDeleteRule {
     }
 
     /**
+     * How many of this contribution's records reference the given record through a relation that
+     * accepts only a LEAF of its tree (intent {@code leafOnly: true}, dirigible #7826). A tree record's
+     * repository asks it before the record gains a child - a create or a re-parent under it - because a
+     * child would turn a referenced leaf into a group, with the references still on it.
+     *
+     * <p>
+     * The default answers {@code 0}, so a contribution generated before this method existed restricts
+     * nothing.
+     *
+     * @param targetEntity the fully qualified class name of the tree entity
+     * @param targetId the primary key of the record about to gain a child
+     * @return the number of leaf-only references; {@code 0} when there are none, or when this
+     *         contribution does not reference {@code targetEntity} through a leaf-only relation
+     */
+    default int countLeafReferences(String targetEntity, Object targetId) {
+        return 0;
+    }
+
+    /**
      * How a refusal names the referencing records, as a person reading the page knows them.
      *
      * @return the referencing entity's label, e.g. {@code Expense Claim}

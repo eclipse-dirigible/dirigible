@@ -31,7 +31,9 @@ public final class CaptureFlag {
         /** A line item was read without high confidence. */
         LINE,
         /** A line item was left out: it lacks a value its row cannot be inserted without. */
-        LINE_SKIPPED
+        LINE_SKIPPED,
+        /** A soft check of the record warns - a possible duplicate, named in the message. */
+        WARNING
     }
 
     private final String field;

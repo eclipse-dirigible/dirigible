@@ -6,6 +6,9 @@ package gen.events.${javaGenFolderName};
 ## An event-driven create-from with a completion hook flips its source only while the source still
 ## stands where the triggering event left it (#8510) - so the event path tells create() what that was.
 #set($flipFollowsEvent = $hasEvent && $sourceStatusValue != "")
+## The item rows are selected up front when a rule narrows them or when a consumed row is marked and
+## must not be selected again (#7956).
+#set($selectsItems = $hasItems && ($itemWhere != "" || $itemBackLink != ""))
 ## A report row's cell (#8329): one column, or a closing balance derived from two - converted exactly.
 #macro(reportCell $c)#if($c.derive != "")derivedCell(row, "${c.aliasJavaLiteral}", "${c.minusAliasJavaLiteral}", "${c.derive}", ${c.scale}, ${c.sourceScale})#{else}${c.kind}Cell(row, "${c.aliasJavaLiteral}", ${c.scale}, ${c.sourceScale})#end#end
 ## The report run with the source's own values; one holding none is refused - the report would read its
@@ -68,6 +71,14 @@ import org.eclipse.dirigible.sdk.http.Response;
 #end
  * Either refusal is decided before the ${toEntity} header is saved, so a refused run spends no document
  * number and leaves no history entry (issue #7224).
+#end
+#if($itemBackLink != "")
+ *
+ * Consumed rows (intent `items: backLink:` - issue #7956): every ${fromItemEntity} that becomes a line has
+ * its ${itemBackLink} set to the ${toEntity} in the same unit, and a row already carrying one is never
+ * selected again - each row is generated from exactly once. A ${fromEntity} left with no unmarked row is
+ * refused like any run no row qualifies for, and the ${fromEntity} is locked for the unit, so two
+ * concurrent runs cannot both take the same rows.
 #end
  *
  * Generated from the intent generates block - do not edit; it is re-generated with the application.
@@ -411,11 +422,12 @@ public class ${className}Generate {
         // database rolled back to break a deadlock is run again instead of answering 409 (#8341, #8507).
         gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity result =
                 org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
-    #if($hasRefusals || $hasReportItems)
+    #if($hasRefusals || $hasReportItems || $itemBackLink != "")
             // The refusals below read the original, and the back-link this unit writes is what the
             // first of them reads - so the original is locked BEFORE it is read, for the length of the
             // unit. Without the lock two concurrent clicks both read it unreversed and both mint a twin.
-            // A report-sourced run (#8329) holds the lock for the same reason over its second-run guard.
+            // A report-sourced run (#8329) holds the lock for the same reason over its second-run guard,
+            // and a run marking its consumed rows (#7956) over the unmarked rows it selects.
             if (!new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().lockForUpdate(sourceId)) {
                 return null;
             }
@@ -453,7 +465,7 @@ public class ${className}Generate {
             }
     #end
     #end
-    #if($hasItems && $itemWhere != "")
+    #if($selectsItems)
             // Source-row rule (intent `items: where:` - issue #7091): only the source rows the rule
             // qualifies become lines. Pushed into the very query that selects them by their master
             // foreign key, so an unqualified row is never loaded. Without a rule every row was cloned,
@@ -469,10 +481,14 @@ public class ${className}Generate {
             // three invoice numbers for three presses on a month with one rejected timesheet
             // (dirigible #7224). Refused here, a rejected click writes nothing at all, which is what
             // run() promises for a missing required `prompt:` input too.
+#if($itemBackLink != "")
+            // A row already marked through ${itemBackLink} was consumed by an earlier run (#7956): it is
+            // left out of every query below, so it is neither generated from again nor unqualified.
+#end
             java.util.List<gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Entity> qualifying =
                     new gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Repository()
                             .findAll(Criteria.create()
-                                             .eq("${srcFkProperty}", sourceId)${itemWhere});
+                                             .eq("${srcFkProperty}", sourceId)${itemUnconsumed}${itemWhere});
     #if($itemRefuse != "")
             // `refuse:` - an unqualified row stops the whole create-from instead of being left out.
             // Dropping a rejected line silently and billing it silently are both wrong, for different
@@ -487,7 +503,7 @@ public class ${className}Generate {
             for (gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Entity row :
                     new gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Repository()
                             .findAll(Criteria.create()
-                                             .eq("${srcFkProperty}", sourceId))) {
+                                             .eq("${srcFkProperty}", sourceId)${itemUnconsumed})) {
                 if (!qualifyingKeys.contains(row.${fromItemPk})) {
                     unqualified.add(row.${fromItemPk});
                 }
@@ -663,7 +679,7 @@ public class ${className}Generate {
             gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity saved =
                     new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository().save(target);
     #if($hasItems)
-    #if($itemWhere != "")
+    #if($selectsItems)
             for (gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Entity srcItem : qualifying) {
     #else
             for (gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Entity srcItem :
@@ -687,6 +703,14 @@ public class ${className}Generate {
                     throw org.eclipse.dirigible.sdk.db.GenerateRefusals.fromItem(REFUSAL_CATALOG, ex, ${fromItemEntityLabelJava},
                             srcItem.${fromItemPk});
                 }
+    #if($itemBackLink != "")
+                // The source row is spent (intent `items: backLink:` - issue #7956): it names the ${toEntity} it
+                // became a line of, in this unit, so a refusal of anything after takes the mark back with the
+                // line. A targeted write of the one column, as a reversal's back-link is - `immutableWhen`
+                // guards user writes, and a concurrent write to any other column is not reverted.
+                new gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Repository().updateProperties(srcItem.${fromItemPk},
+                        java.util.Map.of("${itemBackLink}", saved.${toPk}));
+    #end
             }
     #end
     #if($hasReportItems)

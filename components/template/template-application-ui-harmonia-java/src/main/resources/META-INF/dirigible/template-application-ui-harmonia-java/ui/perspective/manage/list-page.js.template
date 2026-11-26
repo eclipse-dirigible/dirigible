@@ -541,6 +541,35 @@ document.addEventListener('alpine:init', () => {
     // Dismiss the detail panel: drop the selection so the list returns to full width and the row
     // highlight clears, and take the record id back out of the URL (issue #7463).
     closeDetails()   { this.selected = null; this.detailsOpen = false; this.refreshIcons(); this.syncSelectionUrl(null); },
+    // The records the sheet's Previous / Next walk (#8869): the ones the table shows, in its order -
+    // the visible tree in Tree mode (a collapsed branch is skipped), else every page of the searched,
+    // filtered and sorted list, so a step past the page's last row turns the page.
+    get navigableRows() {
+#if($hierarchyProperty)
+      if (this.treeVisible) return this.treeRows.map(node => node.row);
+#end
+      return this.sortedItems;
+    },
+    get selectedIndex() { return this.selected ? this.navigableRows.findIndex(row => this.isSelected(row)) : -1; },
+    get hasPreviousRecord() { return this.selectedIndex > 0; },
+    get hasNextRecord() {
+      const index = this.selectedIndex;
+      return index >= 0 && index < this.navigableRows.length - 1;
+    },
+    // Open the record `offset` rows away in the sheet, as a click on its row would, turning the page
+    // when it lies on another one so its highlighted row stays in view behind the sheet. The tree is
+    // not paged.
+    stepRecord(offset) {
+      const index = this.selectedIndex;
+      const row = index < 0 ? undefined : this.navigableRows[index + offset];
+      if (!row) return;
+#if($hierarchyProperty)
+      if (!this.treeVisible) this.currentPage = Math.floor((index + offset) / this.pageSize) + 1;
+#else
+      this.currentPage = Math.floor((index + offset) / this.pageSize) + 1;
+#end
+      this.selectRow(row);
+    },
     // What the delete confirmation calls the record (#8134): its Name, else its Number (a draft's
     // placeholder read as the draft marker, #7722), else its id.
     recordLabel(row) {

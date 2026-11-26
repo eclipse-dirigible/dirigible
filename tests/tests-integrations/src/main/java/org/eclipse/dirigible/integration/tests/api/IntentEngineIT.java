@@ -3082,6 +3082,19 @@ class IntentEngineIT extends IntegrationTest {
         // side, or it settles a VOIDED invoice (#7668).
         assertTrue(onInvoice.contains("Integer s = invoice.Status;") && onInvoice.contains("s == 3 || s == 4 || s == 6"),
                 "the onInvoice delegate should only settle an invoice still in a payable status");
+        assertTrue(onInvoice.contains("invoices.lockForUpdate(invoiceId)") && onInvoice.contains("UnitOfWork.callRetryingDeadlock"),
+                "the pull should run as one unit under a lock on the invoice, so two settlements never spend one open amount twice");
+
+        // A total that grows after the invoice became payable is settled from the money on account
+        // (#8489): a derived write of the TOTAL re-runs the same pull. The paid roll-up's own write - a
+        // hand-deleted allocation - moves the paid column only and must not put the allocation back.
+        String onInvoiceUpdated = codeOf("gen/events/settle/AutoSettleOnInvoiceUpdated.java");
+        assertTrue(onInvoiceUpdated.contains("return \"" + PROJECT + "-Invoice-Invoice-updated\";"),
+                "the growth listener should bind the invoice's update topic");
+        assertTrue(onInvoiceUpdated.contains("if (written == null || !written.contains(\"Total\")) {"),
+                "only a derived write of the total should re-settle the invoice");
+        assertTrue(onInvoiceUpdated.contains("AutoSettleOnInvoice.settle(invoice.Id)"),
+                "the growth listener should run the very pull the on-invoice delegate runs");
 
         // What an invoice can still take is re-summed from its allocation ROWS - the rows the capacity
         // guard counts - never read off the paid roll-up column, which lags them (#7559). Sized from the
@@ -4694,12 +4707,24 @@ class IntentEngineIT extends IntegrationTest {
                 "the multilingual repository should overlay translations on findById");
         assertTrue(repository.contains("public java.util.Optional<CountryEntity> findOne(Object id)"),
                 "the multilingual repository must also override findOne - the generated controller reads single records through it");
+        // The Settings report of untranslated records reads the language table, through the controller
+        // (#8789).
+        assertTrue(repository.contains("return Translator.coverage(\"ORDERS_COUNTRY\", \""),
+                "the multilingual repository should count its untranslated rows");
+        assertTrue(codeOf("gen/orders/api/settings/CountryController.java").contains("@Get(\"/translations\")"),
+                "the multilingual controller should answer its translation coverage");
         String customerRepository = codeOf("gen/orders/data/customer/CustomerRepository.java");
         assertFalse(customerRepository.contains("Translator."), "a non-multilingual repository must stay untouched");
+        assertFalse(codeOf("gen/orders/api/customer/CustomerController.java").contains("/translations"),
+                "a non-multilingual controller has no translation coverage");
 
-        // Shell config: the offered data languages feed the Region & Language setting.
+        // Shell config: the offered data languages feed the Region & Language setting, and the
+        // multilingual entities the report of their untranslated records.
         String config = contentOf("gen/orders/js/config.js");
         assertTrue(config.contains("languages: [\"en\",\"bg\"]"), "config.js should carry the app's data languages");
+        assertTrue(config.contains("translatableEntities: [{\"key\":\"" + PROJECT + ":orders-model.t.ORDERS_COUNTRY_plural\",\"label\":\"")
+                && config.contains("\"url\":\"/services/java/" + PROJECT + "/gen/orders/api/settings/CountryController/translations\"}]"),
+                "config.js should list the multilingual entity, and only it: " + config);
     }
 
     @Test

@@ -57,6 +57,10 @@ import org.eclipse.dirigible.sdk.capture.Captures;
 import org.eclipse.dirigible.sdk.cms.Attachments;
 #end
 import org.eclipse.dirigible.sdk.component.Component;
+#if($hasWarnings)
+import org.eclipse.dirigible.sdk.db.ConfirmationRequiredException;
+import org.eclipse.dirigible.sdk.db.Warning;
+#end
 import org.eclipse.dirigible.sdk.db.ValidationException;
 import org.eclipse.dirigible.sdk.http.Controller;
 import org.eclipse.dirigible.sdk.http.Get;
@@ -64,6 +68,9 @@ import org.eclipse.dirigible.sdk.http.PathParam;
 import org.eclipse.dirigible.sdk.http.Post;
 import org.eclipse.dirigible.sdk.http.QueryParam;
 import org.eclipse.dirigible.sdk.http.Response;
+#if($hasWarnings)
+import org.eclipse.dirigible.sdk.http.Warnings;
+#end
 import org.eclipse.dirigible.sdk.imports.ImportText;
 import org.eclipse.dirigible.sdk.imports.ImportValues;
 import org.eclipse.dirigible.sdk.imports.UploadedFile;
@@ -77,7 +84,8 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
 
 /**
  * Document capture ${className}: a vision model reads an uploaded scan, photo or PDF into a new
- * ${entity}, which a person then reviews.
+ * ${entity}#if($hasMaster) - a line of the existing ${masterEntity} the upload names (?${masterBackRef}=<id>), which must exist and
+ * accept new lines before the document is read#end, which a person then reviews.
  *
  * Generated from the intent captures block - do not edit; it is re-generated with the application.
  * The upload is served under /services/java/<project>/gen/events/${javaGenFolderName}/${className}Capture/upload
@@ -87,8 +95,11 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  * A capture reads print, so a miss is not a failure: a value the model was not sure of or did not
  * find, a relation no single row matched#if($hasCompares), a printed total that differs from the calculated one#end#if($hasQr), a
  * value that differs from the document's QR code#end - each is a flag on the created record, never a
- * refusal. The record is saved in its initial status through the entity's own validation, so nothing
- * a capture creates skips a rule a person creating it would meet. A reading that lacks a value the
+ * refusal. The record is saved in its initial status through the entity's own validation, and each
+ * line through its own entity's, so nothing a capture creates skips a rule a person creating it would
+ * meet; a line that validation refuses is left out and flagged#if($hasWarnings). What the entity's soft checks warn
+ * about (a duplicate of an existing record) is a flag, and an upload is held - answered 428 listing
+ * the warnings, nothing saved - until the request confirms their codes in X-Confirm-Warnings#end. A reading that lacks a value the
  * record cannot be inserted without, or one that validation refuses, creates nothing and is answered
  * as the refusal it is (400), with what was read; a provider that fails answers 412, 502 or 422. Every attempt is recorded in the ${table}_CAPTURES ledger with the provider,
  * the model, the tokens and the flags, and .../review/{id} answers the flags of a record's capture.
@@ -131,14 +142,31 @@ public class ${className}Capture {
     ;
 
     private final List<Hook> hooks;
+#if($hasMaster)
 
-    public ${className}Capture(List<Hook> hooks) {
+    /** The line's own controller: the lock its create applies to the ${masterEntity} is the capture's too. */
+    private final gen.${javaGenFolderName}.api.${javaPerspective}.${entity}Controller lines;
+#end
+#if($hasPersonalMaster)
+
+    /** The line's personal controller: who owns a ${masterEntity} is its answer, never the capture's. */
+    private final gen.${javaGenFolderName}.api.${javaPerspective}.${entity}MyController myLines;
+#end
+
+    public ${className}Capture(List<Hook> hooks#if($hasMaster), gen.${javaGenFolderName}.api.${javaPerspective}.${entity}Controller lines#end#if($hasPersonalMaster),
+            gen.${javaGenFolderName}.api.${javaPerspective}.${entity}MyController myLines#end) {
         this.hooks = List.copyOf(hooks);
+#if($hasMaster)
+        this.lines = lines;
+#end
+#if($hasPersonalMaster)
+        this.myLines = myLines;
+#end
     }
 
     @Post("/upload")
     @Roles({${roles}})
-    public String upload(@QueryParam("fileName") String fileName) {
+    public String upload(@QueryParam("fileName") String fileName#if($hasMaster), @QueryParam("${masterBackRef}") ${masterKeyJavaClass} master#end) {
         // Every answer below is JSON, so the endpoint says so - a caller must not have to guess.
         Response.setContentType("application/json");
         UploadedFile file;
@@ -153,7 +181,7 @@ public class ${className}Capture {
             Response.setStatus(400);
             return Json.stringify(Map.of("error", "the upload holds no file"));
         }
-        Outcome outcome = run(file.getName(), file.getContent());
+        Outcome outcome = run(#if($hasMaster)master, #{end}file.getName(), file.getContent());
         Response.setStatus(outcome.status());
         return Json.stringify(outcome.result());
     }
@@ -166,23 +194,52 @@ public class ${className}Capture {
         String latest = CaptureLedger.latest(TABLE, id);
         return latest == null ? "{\"flags\":[]}" : latest;
     }
+#if($hasPersonalMaster)
+
+    /**
+     * The owner's upload from the personal surface (#8626): no role gate - the ${masterEntity} must be the
+     * caller's own, proven by ${entity}MyController as for any line written there (404 otherwise), and the
+     * upload above then makes the same checks and the same capture.
+     */
+    @Post("/my/upload")
+    public String uploadMine(@QueryParam("fileName") String fileName, @QueryParam("${masterBackRef}") ${masterKeyJavaClass} master) {
+        if (master != null) {
+            myLines.requireCaptureMasterMine(master);
+        }
+        return upload(fileName, master);
+    }
+
+    /** What the capture of one of the caller's own ${entity} records flagged, on the personal surface. */
+    @Get("/my/review/{id}")
+    public String reviewMine(@PathParam("id") ${keyJavaClass} id) {
+        myLines.requireCaptureLineMine(id);
+        return review(String.valueOf(id));
+    }
+#end
 
     /**
      * Capture a document - the same capture the upload performs, for a job that fetched the file itself.
      *
+#if($hasMaster)
+     * @param master the ${masterEntity} the ${entity} is created under; a missing or locked one is refused
+     *        (ResponseStatusException 400, 404 or 409) before the document is read
+#end
      * @param fileName the file's name; its extension tells an image from a PDF
      * @param content the file's bytes
      * @return the outcome; a record exists only when it is CAPTURED
      */
-    public CaptureResult capture(String fileName, byte[] content) {
-        return run(fileName, content).result();
+    public CaptureResult capture(#if($hasMaster)${masterKeyJavaClass} master, #{end}String fileName, byte[] content) {
+        return run(#if($hasMaster)master, #{end}fileName, content).result();
     }
 
     /** A capture's outcome and the HTTP status the upload answers it with. */
     private record Outcome(CaptureResult result, int status) {
     }
 
-    private Outcome run(String fileName, byte[] content) {
+    private Outcome run(#if($hasMaster)${masterKeyJavaClass} master, #{end}String fileName, byte[] content) {
+#if($hasMaster)
+        requireMaster(master);
+#end
         String checksum = ImportText.checksum(content);
         String contentType = fileName == null ? null : java.net.URLConnection.guessContentTypeFromName(fileName);
 #if($hasQr)
@@ -206,6 +263,9 @@ public class ${className}Capture {
         List<CaptureFlag> flags = new ArrayList<>();
         CaptureValues read = reading.fields();
         ${entity}Entity entity = new ${entity}Entity();
+#if($hasMaster)
+        entity.${masterBackRef} = master;
+#end
 #foreach($field in $fields)
 #if($field.hasQr)
         entity.${field.property} = exact(value(read, ${field.nameLiteral}, ${field.nameLiteral}, VALUES::${field.conversion}, true, flags), ${field.nameLiteral},
@@ -243,6 +303,7 @@ public class ${className}Capture {
 #end
 #if($hasItems)
         List<gen.${javaGenFolderName}.data.${javaItemPerspective}.${itemEntity}Entity> lines = new ArrayList<>();
+        List<String> lineLabels = new ArrayList<>();
         int skipped = 0;
         for (CaptureValues line : reading.items()) {
             String at = "items[" + (lines.size() + skipped + 1) + "]";
@@ -271,6 +332,7 @@ public class ${className}Capture {
                         + " confidence"));
             }
             lines.add(child);
+            lineLabels.add(at);
         }
 #end
 #if($hasAttachment)
@@ -283,12 +345,38 @@ public class ${className}Capture {
                 ${entity}Repository repository = new ${entity}Repository();
                 // The rules a person creating the record would meet, on the record as its defaults and
                 // calculations complete it.
-                gen.${javaGenFolderName}.api.${javaPerspective}.${entity}Controller.validate(repository.calculatedForCreate(entity));
+                ${entity}Entity checked = repository.calculatedForCreate(entity);
+                gen.${javaGenFolderName}.api.${javaPerspective}.${entity}Controller.validate(checked);
+#if($hasWarnings)
+                // What the entity's soft checks warn about - the same paper scanned twice above all
+                // (#8631). Each is a flag for the review; a person uploading is asked first, as a person
+                // saving the form is, and a job has nobody to ask.
+                List<Warning> warnings = repository.warnings(checked);
+                for (Warning warning : warnings) {
+                    flags.add(CaptureFlag.of("${entity}", CaptureFlag.Reason.WARNING, null, warning.message()));
+                }
+                Warnings.requireConfirmed(warnings);
+#end
                 ${entity}Entity parent = repository.save(entity);
 #if($hasItems)
-                for (gen.${javaGenFolderName}.data.${javaItemPerspective}.${itemEntity}Entity child : lines) {
+                for (int index = 0; index < lines.size(); index++) {
+                    gen.${javaGenFolderName}.data.${javaItemPerspective}.${itemEntity}Entity child = lines.get(index);
                     child.${itemBackRef} = parent.${keyProperty};
-                    new gen.${javaGenFolderName}.data.${javaItemPerspective}.${itemEntity}Repository().save(child);
+                    gen.${javaGenFolderName}.data.${javaItemPerspective}.${itemEntity}Repository lineRepository =
+                            new gen.${javaGenFolderName}.data.${javaItemPerspective}.${itemEntity}Repository();
+                    // The rules a person adding the line would meet (#8630) - its checks, pattern, length
+                    // and required rules - read once it belongs to the saved header, as its calculations
+                    // complete it. A line they refuse is left out and flagged with the authored sentence:
+                    // one line the entity refuses must not cost the whole document. Nothing of it was
+                    // written yet, so the unit carries on with the next line.
+                    try {
+                        gen.${javaGenFolderName}.api.${javaItemPerspective}.${itemEntity}Controller.validate(lineRepository.calculatedForCreate(child));
+                    } catch (ValidationException refusal) {
+                        flags.add(CaptureFlag.of(lineLabels.get(index), CaptureFlag.Reason.LINE_SKIPPED, null,
+                                "the line was not created: " + refusal.getMessage()));
+                        continue;
+                    }
+                    lineRepository.save(child);
                 }
 #end
 #if($hasAttachment)
@@ -309,6 +397,13 @@ public class ${className}Capture {
                 // aggregates, which the instance save() returned does not carry.
                 return repository.findById(parent.${keyProperty});
             });
+#if($hasWarnings)
+        } catch (ConfirmationRequiredException held) {
+            // Asked, not refused: nothing was saved, and the 428 lists the warnings for the repeat to
+            // confirm. The attempt is in the ledger, as every reading is.
+            refused(CaptureResult.rejected(NAME, fileName, checksum, reading, held.getMessage(), flags));
+            throw held;
+#end
         } catch (RuntimeException e) {
 #if($hasAttachment)
             if (stored[0] != null) {
@@ -362,6 +457,26 @@ public class ${className}Capture {
         CaptureLedger.record(TABLE, result);
         return result;
     }
+#if($hasMaster)
+
+    /**
+     * The ${masterEntity} the ${entity} is filed under (#8626), asked before the document is read, so
+     * nothing is sent to the reading service - or written - for a line that could not be saved: it is
+     * named, it exists, and it accepts new lines by the lock ${entity}Controller's create applies.
+     */
+    private void requireMaster(${masterKeyJavaClass} master) {
+        if (master == null) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "Name the ${masterEntity} the ${entity} is captured under (?${masterBackRef}=<id>)");
+        }
+        if (new gen.${javaGenFolderName}.data.${javaMasterPerspective}.${masterEntity}Repository().findOne(master)
+                                                                                         .isEmpty()) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND,
+                    "${masterEntity} not found");
+        }
+        lines.requireCaptureMasterMutable(master);
+    }
+#end
 
     /**
      * One value the model read, converted to its field's type. A value not on the document, or one

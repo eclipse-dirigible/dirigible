@@ -981,6 +981,29 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
                             break;
                         case PARSED: // not new nor modified
                             parsed = synchronizer.retrieve(definition.getLocation());
+                            if (parsed.isEmpty()) {
+                                // PARSED, yet no artefact row: lost to a write that failed after the
+                                // definition's own (two instances synchronizing one SystemDB, a crash in
+                                // between). Trusting the table here left the artefact gone until the
+                                // file's bytes changed, so it is parsed again exactly as a NEW one. A
+                                // definition that legitimately yields nothing stays PARSED, unlogged
+                                // and unwritten - only its parse is repeated once per pass.
+                                try {
+                                    parsed = synchronizer.parse(definition.getLocation(), definition.getContent());
+                                    parsed.forEach(a -> {
+                                        a.setPhase(ArtefactPhase.CREATE);
+                                        synchronizer.setStatus((a), ArtefactLifecycle.NEW, "");
+                                    });
+                                    addArtefacts(parsed);
+                                    if (!parsed.isEmpty()) {
+                                        logger.info("Definition [{}] was PARSED without artefacts and is processed again",
+                                                definition.getLocation());
+                                    }
+                                } catch (ParseException e) {
+                                    registerBrokenState(definition, e.getMessage());
+                                }
+                                break;
+                            }
 
                             Iterator<? extends Artefact> iterator = parsed.iterator();
                             while (iterator.hasNext()) {
