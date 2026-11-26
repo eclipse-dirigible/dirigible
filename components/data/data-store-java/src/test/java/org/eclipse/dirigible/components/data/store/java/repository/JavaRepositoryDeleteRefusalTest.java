@@ -134,7 +134,7 @@ class JavaRepositoryDeleteRefusalTest {
         org.eclipse.dirigible.sdk.db.ValidationException refusal =
                 assertThrows(org.eclipse.dirigible.sdk.db.ValidationException.class, () -> repository.requireMayGainChild(2));
 
-        assertEquals("This Product is referenced as a leaf by 3 Product Cost record(s) and cannot be given a child", refusal.getMessage());
+        assertEquals("This Product is referenced as a leaf by 3 Product Cost records and cannot be given a child", refusal.getMessage());
         assertEquals("products:products-model.checks.leafReferenced", refusal.getMessageKey());
         verify(store).lockForUpdate(Product.class, 2);
     }

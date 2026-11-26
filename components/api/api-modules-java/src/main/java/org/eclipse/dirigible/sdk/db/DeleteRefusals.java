@@ -250,8 +250,8 @@ public final class DeleteRefusals {
     }
 
     /**
-     * The referencing kinds, each written in the plural form its count takes ({@link #REFERENCE_ONE_TEXT}
-     * / {@link #REFERENCE_TEXT}), joined for the sentence.
+     * The referencing kinds, each written in the plural form its count takes
+     * ({@link #REFERENCE_ONE_TEXT} / {@link #REFERENCE_TEXT}), joined for the sentence.
      */
     private static String listReferences(String language, CheckMessages.CatalogReader catalogs, String catalog,
             List<Reference> references) {

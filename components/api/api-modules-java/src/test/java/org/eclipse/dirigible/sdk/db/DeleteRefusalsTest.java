@@ -89,11 +89,10 @@ class DeleteRefusalsTest {
     void aChildUnderAReferencedLeafIsRefusedNamingTheReferences() {
         ValidationException refusal = DeleteRefusals.leafReferenced(null, CATALOGS, CATALOG, "Product", PRODUCT_LABEL_KEY, REFERENCES);
 
-        assertEquals(
-                "This Product is referenced as a leaf by 1 Product Cost record(s), 2 Stock Movement record(s) and cannot be given a child",
+        assertEquals("This Product is referenced as a leaf by 1 Product Cost record, 2 Stock Movement records and cannot be given a child",
                 refusal.getMessage());
         assertEquals(CATALOG + ".checks.leafReferenced", refusal.getMessageKey());
-        assertEquals(Map.of("entity", "Product", "references", "1 Product Cost record(s), 2 Stock Movement record(s)"),
+        assertEquals(Map.of("entity", "Product", "references", "1 Product Cost record, 2 Stock Movement records"),
                 refusal.getMessageParams());
     }
 
