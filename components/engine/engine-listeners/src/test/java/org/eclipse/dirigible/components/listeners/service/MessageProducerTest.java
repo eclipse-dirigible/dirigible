@@ -18,6 +18,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -153,6 +154,29 @@ class MessageProducerTest {
         }
 
         verify(txtMessage).setStringProperty(OriginatingUserProperty.PROPERTY_NAME, "alice");
+        verify(txtMessage, never()).setStringProperty(eq(OriginatingUserProperty.LANGUAGE_PROPERTY_NAME), anyString());
+        verify(jsmProducer).send(txtMessage);
+    }
+
+    /**
+     * A tenant-scoped message carries the language of the write that raised it, so its handler resolves
+     * messages and reads multilingual rows in it (#8776).
+     *
+     * @throws JMSException the JMS exception
+     */
+    @Test
+    void aTenantMessageCarriesTheOriginatingLanguage() throws JMSException {
+        when(destinationNameManager.toTenantName(TOPIC)).thenReturn(TENANT_TOPIC);
+        when(session.createTopic(TENANT_TOPIC)).thenReturn(topic);
+        when(session.createProducer(topic)).thenReturn(jsmProducer);
+        when(session.createTextMessage(MESSAGE)).thenReturn(txtMessage);
+
+        try (OriginatingUser.Binding binding = OriginatingUser.bind("alice", "bg")) {
+            producer.sendMessageToTopic(TOPIC, MESSAGE);
+        }
+
+        verify(txtMessage).setStringProperty(OriginatingUserProperty.PROPERTY_NAME, "alice");
+        verify(txtMessage).setStringProperty(OriginatingUserProperty.LANGUAGE_PROPERTY_NAME, "bg");
         verify(jsmProducer).send(txtMessage);
     }
 
@@ -186,7 +210,7 @@ class MessageProducerTest {
         when(session.createProducer(queue)).thenReturn(jsmProducer);
         when(session.createTextMessage(MESSAGE)).thenReturn(txtMessage);
 
-        try (OriginatingUser.Binding binding = OriginatingUser.bind("alice")) {
+        try (OriginatingUser.Binding binding = OriginatingUser.bind("alice", "bg")) {
             producer.sendMessageToQueue(GLOBAL_QUEUE, MESSAGE);
         }
 

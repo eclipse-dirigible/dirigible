@@ -1686,18 +1686,23 @@ final class ModelParameterProcessor {
             Map<String, Object> declared = findProperty(entity, property);
             String javaClass = declared == null ? null : str(declared, "dataTypeJavaClass");
             String read = "entity." + property;
-            String equal;
-            if ("Boolean".equals(javaClass) || "String".equals(javaClass)) {
-                equal = "java.util.Objects.equals(" + read + ", " + value + ")";
+            boolean ne = "ne".equals(operator);
+            String test;
+            if ("null".equals(value)) {
+                // A presence test (#7984), whatever the property's shape - the query renders it as
+                // `is null` / `is not null`, and the by-value form below has no null literal.
+                test = "(" + read + (ne ? " != null)" : " == null)");
+            } else if ("Boolean".equals(javaClass) || "String".equals(javaClass)) {
+                test = (ne ? "!" : "") + "java.util.Objects.equals(" + read + ", " + value + ")";
             } else {
                 // A number is compared BY VALUE: the literal's own width says nothing about the
                 // column's, and a boxed equality across two of them is silently never true.
-                equal = "(" + read + " != null && " + read + ".longValue() == " + value + "L)";
+                test = (ne ? "!" : "") + "(" + read + " != null && " + read + ".longValue() == " + value + "L)";
             }
             if (match.length() > 0) {
                 match.append(" && ");
             }
-            match.append("ne".equals(operator) ? "!" + equal : equal);
+            match.append(test);
         }
         return match.toString();
     }

@@ -59,13 +59,10 @@ document.addEventListener('alpine:init', () => {
     // Region & Language: the platform-wide language flag (the shared locale store), offered here
     // because the shell's Settings is where users look for it. The offered codes are the PLATFORM's
     // supported set (DIRIGIBLE_APPLICATION_LANGUAGES via the locale store) - modules never define
-    // what the stack supports. Each app's generated js/config.js declares which languages it
-    // PROVIDES translations for; apps missing a platform language are listed as warnings so
-    // developers know where translations are still needed (data falls back to the default language).
+    // what the stack supports. What the embedded apps leave untranslated is listed below it as
+    // warnings (the shared languageCoverage store), so developers know where translations are still
+    // needed (data falls back to the default language).
     language: 'en',
-    appLanguages: [],
-    // The perspectives the coverage scan reads, kept until Settings first opens; null once scanned.
-    coveragePerspectives: null,
     // Tenant Configuration: a built-in settings entry showing the predefined, per-tenant-overridable
     // properties (the branding properties for now). Backed by the platform endpoint
     // /services/core/configurations/tenant; requires the tenant's Owner or ADMINISTRATOR/OPERATOR (a
@@ -329,96 +326,6 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    // Language coverage of the embedded apps, per platform language, in two parts (#8137):
-    // - their SCREENS: whether the app ships a label catalog in that language (its i18n/<locale>
-    //   files), asked of the locales service the i18n layer itself reads - one request for every app;
-    // - their DATA: the data languages its js/config.js declares (the intent's `languages:`; the config
-    //   is a JS file, so it is read with a targeted match rather than executed). Those only matter for
-    //   an app that HAS translatable data (`translatableData`: a multilingual entity); an app generated
-    //   before the flag existed is taken to have some.
-    // Checking only the declaration reported every fully translated module without translatable data as
-    // "missing translations". One entry per project.
-    // Scan the embedded apps' language coverage once, the first time Settings is shown.
-    scanLanguageCoverage() {
-      const perspectives = this.coveragePerspectives;
-      if (!perspectives) return;
-      this.coveragePerspectives = null;
-      this.loadLanguageCoverage(perspectives);
-    },
-
-    async loadLanguageCoverage(perspectives) {
-      const bases = new Map();
-      const collect = (item) => {
-        const path = item && item.path;
-        const match = typeof path === 'string' && path.match(/^\/services\/web\/([^\/]+)\/([^#?]*\/)?index\.html/);
-        if (match && !bases.has(match[1])) bases.set(match[1], '/services/web/' + match[1] + '/' + (match[2] || ''));
-      };
-      (perspectives || []).forEach(g => Array.isArray(g.items) ? g.items.forEach(collect) : collect(g));
-      const configs = (await Promise.all([...bases].map(async ([app, base]) => {
-        // Only generated apps carry a js/config.js. A missing or unreadable config means this
-        // perspective is a platform surface (Inbox, Documents, ...) translated through the shared
-        // platform catalogs - it must not be reported as an untranslated app. A readable config
-        // WITHOUT a languages declaration is a generated app providing only the default language.
-        try {
-          const res = await fetch(base + 'js/config.js', { credentials: 'same-origin' });
-          if (!res.ok) return null;
-          const text = await res.text();
-          const match = text.match(/languages:\s*(\[[^\]]*\])/);
-          let provided = ['en'];
-          if (match) {
-            const codes = JSON.parse(match[1].replace(/'/g, '"'));
-            if (Array.isArray(codes) && codes.length) provided = codes;
-          }
-          const flag = text.match(/translatableData:\s*(true|false)/);
-          return { app, provided, translatableData: flag ? flag[1] === 'true' : true };
-        } catch (e) {
-          return null;
-        }
-      }))).filter(Boolean);
-      const labelled = await this.loadLabelLanguages(configs.map(c => c.app));
-      this.appLanguages = configs.map(c => Object.assign(c, { labelled: labelled ? labelled(c.app) : null }));
-    },
-
-    // The platform languages each app ships screen labels for, from one request to the locales
-    // service; null when it cannot be read - the screens are then not judged at all, only the data.
-    async loadLabelLanguages(apps) {
-      if (!apps.length) return null;
-      try {
-        const query = 'extensionPoints=platform-locales&extensionPoints=application-locales'
-            + apps.map(app => '&namespaces=' + encodeURIComponent(app)).join('');
-        const res = await fetch('/services/platform/extensions/locales?' + query,
-                { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
-        if (!res.ok) return null;
-        const data = await res.json();
-        const locales = (Array.isArray(data.locales) ? data.locales : []).map(l => l.id || '');
-        const translations = data.translations || {};
-        return (app) => Alpine.store('locale').languages().filter(code => {
-          const locale = locales.find(id => id === code) || locales.find(id => id.indexOf(code + '-') === 0);
-          const catalog = locale && translations[locale] && translations[locale][app];
-          return !!catalog && Object.keys(catalog).length > 0;
-        });
-      } catch (e) {
-        console.error('Failed to read the label catalogs of the applications', e);
-        return null;
-      }
-    },
-
-    // What each app does not translate into the platform languages - the developers' to-do list:
-    // `screens` lists the languages it has no label catalog for (its pages fall back to the baked
-    // English labels, which is why English itself never counts), `data` the languages it has labels
-    // for but declares no data in (its lists and documents show the default-language values). An app
-    // with nothing in either is not listed. Reactive on both the coverage scan and the platform set.
-    languageWarnings() {
-      const platform = Alpine.store('locale').languages();
-      return this.appLanguages
-                 .map(({ app, provided, translatableData, labelled }) => {
-                   const screens = labelled ? platform.filter(code => code !== 'en' && !labelled.includes(code)) : [];
-                   const data = translatableData ? platform.filter(code => !provided.includes(code) && !screens.includes(code)) : [];
-                   return { app, screens, data };
-                 })
-                 .filter(({ screens, data }) => screens.length > 0 || data.length > 0);
-    },
-
     // The platform's language codes with display names for the Settings picker.
     languageOptions() {
       const locale = Alpine.store('locale');
@@ -556,9 +463,9 @@ document.addEventListener('alpine:init', () => {
           // generate / create-from buttons exist in each app's standalone shell but not here.
           const customActions = Alpine.store('customActions');
           if (customActions && customActions.addProjects) customActions.addProjects(hostedProjects);
-          // Which languages each embedded app provides translations for drives only the
-          // missing-translations warnings in Settings, so the scan waits for Settings to open (#8346).
-          this.coveragePerspectives = all;
+          // What each embedded app leaves untranslated drives only the missing-translations
+          // warnings in Settings, so the scan waits for Settings to open (#8346).
+          Alpine.store('languageCoverage').remember(all);
         }
       } catch (e) {
         console.error('Failed to load application perspectives', e);
@@ -607,7 +514,7 @@ document.addEventListener('alpine:init', () => {
           // Settings master-detail: /settings (list only) or /settings/<perspective-id>[/<inner-route>] (one
           // selected; the inner route is the embedded app's own, like /app/<id>/<inner-route>).
           this.settingsMode = true;
-          this.scanLanguageCoverage();
+          Alpine.store('languageCoverage').scan();
           this.hostedId = '';
           this.hostedUrl = '';
           const settings = p.match(/^\/settings(?:\/([^/]+)(?:\/(.*))?)?$/);

@@ -21,6 +21,8 @@ package org.eclipse.dirigible.components.data.store.java.outbox;
  * @param user the user whose action raised the event, or {@code null} when none was known (a job, a
  *        boot-time seed): the handlers' writes are attributed to it, see
  *        {@link org.eclipse.dirigible.components.base.context.OriginatingUser}
+ * @param language the language of the write that raised the event, or {@code null} when none was
+ *        known: the handlers resolve their messages and read multilingual rows in it (#8776)
  */
-record PendingEvent(String id, String topic, String payload, int attempts, String user) {
+record PendingEvent(String id, String topic, String payload, int attempts, String user, String language) {
 }

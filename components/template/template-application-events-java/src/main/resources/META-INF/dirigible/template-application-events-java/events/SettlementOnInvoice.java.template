@@ -3,6 +3,7 @@ package gen.events.${javaGenFolderName};
 import java.math.BigDecimal;
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+import org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork;
 import org.flowable.engine.delegate.DelegateExecution;
 import org.flowable.engine.delegate.JavaDelegate;
 
@@ -22,7 +23,10 @@ import gen.${paymentGenFolder}.data.${paymentJavaPerspective}.${paymentEntity}Re
  * same-day payments are drawn in creation order. Only an invoice still in a payable status is settled,
  * so an invoice retired before this step runs keeps its balance. The step does not know about
  * allocations removed by hand after the invoice became payable: if one is deleted before it runs, it
- * re-spends the payment's unallocated balance onto the same invoice.
+ * re-spends the payment's unallocated balance onto the same invoice. The same pull runs again when the
+ * invoice's total grows after it became payable ({@code ${name}OnInvoiceUpdated}, #8489); both hold the
+ * ${invoiceEntity} row locked while they size and write, so two of them never spend the same open
+ * amount twice.
  *
  * Generated from the intent settlements block - do not edit; it is re-generated with the application.
  * Entity access goes ONLY through the generated repositories (validations / events / i18n).
@@ -35,8 +39,31 @@ public class ${name}OnInvoice implements JavaDelegate {
         if (!(key instanceof Number)) {
             return;
         }
+        settle(((Number) key).intValue());
+    }
+
+    /**
+     * Pulls the payer's unallocated ${paymentEntity} balance onto the ${invoiceEntity} - the whole pull as
+     * one unit of work, under a lock on the ${invoiceEntity} row taken before its open amount is read. A
+     * second settlement of the same ${invoiceEntity} (this step and a total that grew, #8489) waits for
+     * the lock and then sizes from the rows the first one committed, so the open amount is never spent
+     * twice. Safe to repeat: it allocates only what is still open and still unallocated.
+     *
+     * @param invoiceId the ${invoiceEntity} key
+     */
+    static void settle(Integer invoiceId) {
+        UnitOfWork.callRetryingDeadlock(() -> {
+            settleLocked(invoiceId);
+            return null;
+        });
+    }
+
+    private static void settleLocked(Integer invoiceId) {
         ${invoiceEntity}Repository invoices = new ${invoiceEntity}Repository();
-        ${invoiceEntity}Entity invoice = invoices.findById(((Number) key).intValue());
+        if (!invoices.lockForUpdate(invoiceId)) {
+            return;
+        }
+        ${invoiceEntity}Entity invoice = invoices.findById(invoiceId);
         if (invoice == null) {
             return;
         }

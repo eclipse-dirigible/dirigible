@@ -56,6 +56,15 @@ class EventOutboxStore {
     static final String COLUMN_NEXT_ATTEMPT_AT = "EVENT_NEXT_ATTEMPT_AT";
     static final String COLUMN_ERROR = "EVENT_ERROR";
     static final String COLUMN_USER = "EVENT_USER";
+    static final String COLUMN_LANGUAGE = "EVENT_LANGUAGE";
+
+    /**
+     * The width of {@link #COLUMN_LANGUAGE}: a BCP 47 tag as an {@code Accept-Language} range names it.
+     * A longer one is not recorded, see {@code EventOutbox}.
+     */
+    static final int LANGUAGE_MAX_LENGTH = 35;
+
+    private static final String LANGUAGE_LENGTH = "(" + LANGUAGE_MAX_LENGTH + ")";
 
     /** Quoted identifiers — used for DDL so the identifiers stay case-exact across dialects. */
     private static final String QUOTED_TABLE = quoted(TABLE_NAME);
@@ -88,7 +97,7 @@ class EventOutboxStore {
         }
         try (Connection connection = connection()) {
             createTableIfAbsent(connection);
-            addUserColumnIfAbsent(connection);
+            addColumnsIfAbsent(connection);
         }
         preparedTenants.add(tenant);
     }
@@ -114,6 +123,7 @@ class EventOutboxStore {
                                .column(COLUMN_ATTEMPTS)
                                .column(COLUMN_NEXT_ATTEMPT_AT)
                                .column(COLUMN_USER)
+                               .column(COLUMN_LANGUAGE)
                                .build();
         Timestamp now = Timestamp.from(Instant.now());
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -124,6 +134,7 @@ class EventOutboxStore {
             statement.setInt(5, event.attempts());
             statement.setTimestamp(6, Timestamp.from(nextAttemptAt));
             statement.setString(7, event.user());
+            statement.setString(8, event.language());
             statement.executeUpdate();
         }
     }
@@ -179,7 +190,7 @@ class EventOutboxStore {
                 return false;
             }
             // The relay may be the first on this node to touch a table an earlier version created.
-            addUserColumnIfAbsent(connection);
+            addColumnsIfAbsent(connection);
         }
         preparedTenants.add(tenant);
         return true;
@@ -209,7 +220,8 @@ class EventOutboxStore {
                 try (ResultSet resultSet = statement.executeQuery()) {
                     while (resultSet.next()) {
                         due.add(new PendingEvent(resultSet.getString(COLUMN_ID), resultSet.getString(COLUMN_TOPIC),
-                                resultSet.getString(COLUMN_PAYLOAD), resultSet.getInt(COLUMN_ATTEMPTS), resultSet.getString(COLUMN_USER)));
+                                resultSet.getString(COLUMN_PAYLOAD), resultSet.getInt(COLUMN_ATTEMPTS), resultSet.getString(COLUMN_USER),
+                                resultSet.getString(COLUMN_LANGUAGE)));
                     }
                 }
             }
@@ -317,6 +329,7 @@ class EventOutboxStore {
                                .column(quoted(COLUMN_NEXT_ATTEMPT_AT), DataType.TIMESTAMP, false, false, false)
                                .column(quoted(COLUMN_ERROR), DataType.VARCHAR, false, true, false, "(2000)")
                                .column(quoted(COLUMN_USER), DataType.VARCHAR, false, true, false, "(255)")
+                               .column(quoted(COLUMN_LANGUAGE), DataType.VARCHAR, false, true, false, LANGUAGE_LENGTH)
                                .build();
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.executeUpdate();
@@ -333,26 +346,32 @@ class EventOutboxStore {
     }
 
     /**
-     * Adds the {@link #COLUMN_USER} column to an outbox table created before it existed (#8228). Its
-     * entries carry no user and are delivered without one, exactly as they were before.
+     * Adds the columns a later version introduced to an outbox table created before them: the
+     * {@link #COLUMN_USER} (#8228) and the {@link #COLUMN_LANGUAGE} (#8776). The entries already there
+     * carry neither and are delivered without them, exactly as they were before.
      */
-    private void addUserColumnIfAbsent(Connection connection) throws SQLException {
-        if (hasUserColumn(connection)) {
+    private static void addColumnsIfAbsent(Connection connection) throws SQLException {
+        addColumnIfAbsent(connection, COLUMN_USER, "(255)");
+        addColumnIfAbsent(connection, COLUMN_LANGUAGE, LANGUAGE_LENGTH);
+    }
+
+    private static void addColumnIfAbsent(Connection connection, String column, String length) throws SQLException {
+        if (hasColumn(connection, column)) {
             return;
         }
         String sql = SqlFactory.getNative(connection)
                                .alter()
                                .table(QUOTED_TABLE)
                                .add()
-                               .column(quoted(COLUMN_USER), DataType.VARCHAR, false, true, false, "(255)")
+                               .column(quoted(column), DataType.VARCHAR, false, true, false, length)
                                .build();
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.executeUpdate();
-            LOGGER.info("Added the originating-user column to the event outbox table using sql [{}]", sql);
+            LOGGER.info("Added the [{}] column to the event outbox table using sql [{}]", column, sql);
         } catch (SQLException ex) {
             // Another node may have added it in the meantime; tolerate it.
-            if (hasUserColumn(connection)) {
-                LOGGER.debug("Event outbox user column already exists after a concurrent alteration.", ex);
+            if (hasColumn(connection, column)) {
+                LOGGER.debug("Event outbox column [{}] already exists after a concurrent alteration.", column, ex);
                 return;
             }
             throw ex;
@@ -364,14 +383,14 @@ class EventOutboxStore {
      * of the other tenants' schemas: an unqualified name resolves exactly as every other statement here
      * resolves it.
      */
-    private static boolean hasUserColumn(Connection connection) {
-        String sql = "SELECT " + quoted(COLUMN_USER) + " FROM " + QUOTED_TABLE + " WHERE 1 = 0";
+    private static boolean hasColumn(Connection connection, String column) {
+        String sql = "SELECT " + quoted(column) + " FROM " + QUOTED_TABLE + " WHERE 1 = 0";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.executeQuery()
                      .close();
             return true;
         } catch (SQLException missing) {
-            LOGGER.debug("The event outbox table has no [{}] column yet.", COLUMN_USER, missing);
+            LOGGER.debug("The event outbox table has no [{}] column yet.", column, missing);
             return false;
         }
     }

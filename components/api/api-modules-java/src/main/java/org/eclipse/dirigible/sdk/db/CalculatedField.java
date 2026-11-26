@@ -11,15 +11,23 @@ package org.eclipse.dirigible.sdk.db;
 
 /**
  * Server-side contract for computing a calculated field with hand-written Java, used when the value
- * is harder to model than to code (e.g. conditional number generation, lookups against other
- * tables). It is the call-out alternative to the neutral arithmetic expression that the generated
- * repository otherwise evaluates via {@code org.eclipse.dirigible.sdk.utils.Calc}.
+ * is harder to model than to code (e.g. a conditional rule, a lookup against other tables). It is
+ * the call-out alternative to the neutral arithmetic expression that the generated repository
+ * otherwise evaluates via {@code org.eclipse.dirigible.sdk.utils.Calc}.
  *
  * <p>
  * Unlike a neutral expression - which the generated UI mirrors and previews on the client - an
  * action runs only on the server: the repository invokes it on create and/or update (per the
  * model's calculated-field configuration) just before persisting, and the UI shows the result only
  * after the round-trip.
+ *
+ * <p>
+ * The repository also invokes it, on a copy of the record, when it computes the record a write
+ * would store - the row the create-time and update-time checks and duplicate warnings judge before
+ * the write. So an action may be called more than once per write, and for a write that is then
+ * refused: it computes a value from the record and changes nothing else - no write, no message, no
+ * number drawn from a series (a document number is the model's {@code number:}, stamped once on the
+ * write).
  *
  * <p>
  * The implementation is a {@link org.eclipse.dirigible.sdk.component.Component @Component} resolved
@@ -32,7 +40,7 @@ package org.eclipse.dirigible.sdk.db;
  *
  * <pre>
  * {@literal @}Component
- * public class OrderNumberAction implements CalculatedField&lt;OrderEntity, String&gt; {
+ * public class OrderRegionAction implements CalculatedField&lt;OrderEntity, String&gt; {
  *     public String calculate(OrderEntity entity) { ... }
  * }
  * </pre>

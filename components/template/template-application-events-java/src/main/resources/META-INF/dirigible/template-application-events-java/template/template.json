@@ -221,6 +221,13 @@
             "collection": "settlements"
         },
         {
+            "location": "/template-application-events-java/events/SettlementOnInvoiceUpdated.java.template",
+            "action": "generate",
+            "rename": "gen/events/{{javaGenFolderName}}/{{name}}OnInvoiceUpdated.java",
+            "engine": "velocity",
+            "collection": "settlements"
+        },
+        {
             "location": "/template-application-events-java/events/Generate.java.template",
             "action": "generate",
             "rename": "gen/events/{{javaGenFolderName}}/{{className}}Generate.java",

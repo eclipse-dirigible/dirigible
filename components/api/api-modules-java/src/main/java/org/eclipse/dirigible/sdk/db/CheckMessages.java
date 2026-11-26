@@ -19,7 +19,6 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.eclipse.dirigible.components.api.http.HttpRequestFacade;
 import org.eclipse.dirigible.components.api.platform.RegistryFacade;
 import org.eclipse.dirigible.components.api.platform.RepositoryFacade;
 import org.eclipse.dirigible.components.api.security.UserFacade;
@@ -33,9 +32,9 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 /**
- * Resolves a generated {@code checks:} message for the language of the request (issue #7611) - the
- * refusal a generated controller or repository throws, and the warning it asks the person saving to
- * confirm.
+ * Resolves a generated {@code checks:} message for the language of the request (issue #7611), or of
+ * the user whose write raised the event being handled (#8776) - the refusal a generated controller
+ * or repository throws, and the warning it asks the person saving to confirm.
  *
  * <p>
  * A check message takes part in the module's i18n exactly like a label: the generator writes its
@@ -211,15 +210,17 @@ public final class CheckMessages {
     }
 
     /**
-     * The request language - the thread-bound override, else the request's {@code Accept-Language};
-     * {@code null} outside a request.
+     * The language to resolve in - the thread-bound one (a render's override, or the language of the
+     * user whose write raised the event being handled, #8776), else the request's
+     * {@code Accept-Language}; {@code null} when neither is known (a job, a seed), without logging the
+     * facade's no-request error on every refusal.
      */
     static String language() {
         try {
-            // Outside a request (a process step, a job) nobody reads the message in a language of
-            // their own; asking would only log the facade's no-request error on every refusal.
-            return HttpRequestFacade.isValid() ? UserFacade.getLanguage() : null;
+            return UserFacade.findLanguage()
+                             .orElse(null);
         } catch (RuntimeException e) {
+            LOGGER.debug("Could not determine the language of a check message; using the default text.", e);
             return null;
         }
     }

@@ -3240,11 +3240,12 @@ public final class IntentParser {
      * it keeps the numeric-id form the same way every other cross-model status site does, and a name
      * written there is refused where the owner's {@code .model} is in hand: at generation time, by
      * {@code GlueIntentGenerator} (issue #7288), rather than left to render as a string compared
-     * against the integer status FK.
+     * against the integer status FK. A {@code null} value is the presence test (#7984) - "no status
+     * yet" - not a status to resolve.
      */
     private static void validateWhereStatusValue(ScheduleConditionIntent condition, EntityIntent source, String subject,
             List<String> issues) {
-        if (source == null || source.getRelations() == null || condition.getField() == null) {
+        if (source == null || source.getRelations() == null || condition.getField() == null || condition.getValue() == null) {
             return;
         }
         for (RelationIntent relation : source.getRelations()) {
@@ -7604,6 +7605,11 @@ public final class IntentParser {
      * guard, where the row being written has to be tested IN JAVA before its amount is added to the sum
      * - and an exact equality is the only comparison whose two renderings cannot disagree. It is also
      * all the motivating case needs (exclude the statuses that no longer count).
+     *
+     * <p>
+     * A {@code null} value is the presence test (#7984), as in every other {@code where:}: {@code eq}
+     * keeps the rows whose property is empty, {@code ne} the rows where it is set - "not a reversal",
+     * "not reversed yet". Under three-valued logic no other comparison can say it.
      */
     private static void validateRollupMembershipAndTiming(RollupIntent rollup, String name, Map<String, EntityIntent> byName,
             List<String> issues) {
@@ -7633,9 +7639,6 @@ public final class IntentParser {
                     issues.add("rollup [" + name + "] where-condition uses operator [" + op
                             + "] (supported: eq/ne) - the filter is applied both as a query and, for the row being written, as a Java"
                             + " comparison, and an exact equality is the only one whose two renderings cannot disagree");
-                }
-                if (condition.getValue() == null) {
-                    issues.add("rollup [" + name + "] where-condition on [" + condition.getField() + "] has no value");
                 }
                 if (child != null && !hasPropertyIgnoreCase(child, condition.getField())
                         && rollupChildField(child, condition.getField()) == null) {

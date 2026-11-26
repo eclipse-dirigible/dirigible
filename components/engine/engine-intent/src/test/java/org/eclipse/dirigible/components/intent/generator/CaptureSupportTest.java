@@ -45,6 +45,8 @@ class CaptureSupportTest {
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string }
               - name: PurchaseInvoice
+                checks:
+                  - { kind: duplicate, fields: [Supplier, number], message: "An invoice with this number already exists: {match}" }
                 fields:
                   - { name: id,         type: integer, primaryKey: true, generated: true }
                   - { name: number,     type: string,  length: 50 }
@@ -145,6 +147,7 @@ class CaptureSupportTest {
         assertEquals(List.of("Supplier"), names(invoice.get("relations")));
         assertEquals(Boolean.TRUE, invoice.get("hasRelations"));
         assertEquals(Boolean.TRUE, invoice.get("hasCompares"));
+        assertEquals(Boolean.TRUE, invoice.get("hasWarnings"), "the entity's soft duplicate check is asked of the capture (#8631)");
         assertNotNull(invoice.get("roles"));
         assertFalse(((String) invoice.get("roles")).isBlank(), "the upload is gated by the entity's write role");
         assertFalse(((String) invoice.get("readRoles")).isBlank());
@@ -194,6 +197,7 @@ class CaptureSupportTest {
         assertEquals(Boolean.FALSE, plain.get("hasQr"));
         assertEquals(Boolean.FALSE, plain.get("hasRelations"));
         assertEquals(Boolean.FALSE, plain.get("hasCompares"));
+        assertEquals(Boolean.FALSE, plain.get("hasWarnings"));
         assertEquals("null", plain.get("instructionsLiteral"));
     }
 

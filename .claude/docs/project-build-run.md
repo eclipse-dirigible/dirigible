@@ -4,7 +4,7 @@ Eclipse Dirigible — a high-productivity application platform (hpaPaaS). The ru
 
 ## Prerequisites
 
-- Java JDK 21 (project compiles to Java 21; CI builds/tests run on Corretto 24, bytecode target stays 21)
+- Java JDK 21 (project compiles to Java 21; CI builds/tests run on Corretto 25, the JDK the Docker images ship; bytecode target stays 21)
 - Maven 3.9.x (3.9 is the minimum: `exec-maven-plugin` 3.7.0 refuses 3.8; the release workflow pins 3.9.16 because 3.10 breaks the Central publishing, #7813)
 - Node.js 22.x with global installs of `typescript` and `esbuild` (frontend WebJars are transpiled/bundled at build time)
 - `ttyd` (only required at runtime for the in-IDE terminal on port 9000, and for integration tests)

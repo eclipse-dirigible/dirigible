@@ -23,6 +23,7 @@ import org.eclipse.dirigible.components.intent.model.CaptureFieldIntent;
 import org.eclipse.dirigible.components.intent.model.CaptureIntent;
 import org.eclipse.dirigible.components.intent.model.CaptureItemsIntent;
 import org.eclipse.dirigible.components.intent.model.CaptureQrIntent;
+import org.eclipse.dirigible.components.intent.model.CheckIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
@@ -416,6 +417,10 @@ public final class CaptureSupport {
                                              .isEmpty());
             entry.put("hasCompares", !header.compares()
                                             .isEmpty());
+            // The soft checks a person saving the record is asked (#8631): the capture asks them too.
+            entry.put("hasWarnings", into.getChecks() != null && into.getChecks()
+                                                                     .stream()
+                                                                     .anyMatch(CheckIntent::isWarning));
 
             CaptureItemsIntent items = declared.getItems();
             EntityIntent child = items == null || items.getInto() == null ? null : byName.get(items.getInto());
