@@ -16,7 +16,6 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,7 +24,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Predicate;
 
-import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.commons.config.ApplicationLanguages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -203,16 +202,13 @@ public final class Translator {
      * code but the first (the default), normalized and without repetitions.
      */
     private static List<String> translatedLanguages() {
-        String configured = DirigibleConfig.APPLICATION_LANGUAGES.getStringValue();
-        if (configured == null) {
-            return List.of();
-        }
-        return Arrays.stream(configured.split(","))
-                     .map(Translator::normalize)
-                     .filter(Objects::nonNull)
-                     .distinct()
-                     .skip(1)
-                     .toList();
+        return ApplicationLanguages.get()
+                                   .stream()
+                                   .map(Translator::normalize)
+                                   .filter(Objects::nonNull)
+                                   .distinct()
+                                   .skip(1)
+                                   .toList();
     }
 
     /**
