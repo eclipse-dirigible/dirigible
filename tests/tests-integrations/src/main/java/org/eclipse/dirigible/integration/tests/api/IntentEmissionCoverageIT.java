@@ -4599,7 +4599,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // recomputes that former tuple - otherwise it keeps the moved row's contribution forever.
         String ledgerRepository = contentOf("gen/emission/data/ledger/LedgerRepository.java");
         assertTrue(
-                ledgerRepository.contains("groupingPrevious = findById(entity.Id)")
+                ledgerRepository.contains("groupingPrevious = super.findById(entity.Id)")
                         && ledgerRepository.contains("java.util.Objects.equals(groupingPrevious.Person, entity.Person)")
                         && ledgerRepository.contains("java.util.Objects.equals(groupingPrevious.Unit, entity.Unit)"),
                 "an aggregate source must compare EVERY grouping key against the previous row on update");

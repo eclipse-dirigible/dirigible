@@ -84,7 +84,9 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
         // user-update edition: read the stored row once and take the system-owned values from THERE,
         // never from the payload. System writers stay on the targeted primitives (updateProperty /
         // updateProperties / updateDerived), so this preservation cannot fight a workflow write.
-        InvoiceLineEntity existingRow = entity.Id == null ? null : findById(entity.Id);
+        // Read through the BASE find: on a multilingual entity the overridden read overlays the caller's
+        // language, and a translation carried over from it would be written into the base row (#8735).
+        InvoiceLineEntity existingRow = entity.Id == null ? null : super.findById(entity.Id);
         if (existingRow != null) {
             // ...but a caller that computed a DIFFERENT value for one of them is not sending a partial
             // payload - it is a system writer on the wrong path, and its work is being thrown away.
