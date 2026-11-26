@@ -49,7 +49,8 @@ import org.springframework.stereotype.Component;
  * <p>
  * Each entry also records the user whose action raised it, and both deliveries - the in-process one
  * and the relay's - publish it with that user as the message's originating user, so whatever a
- * listener writes in reaction is attributed to that user (#8228).
+ * listener writes in reaction is attributed to that user (#8228) - and with that user's language,
+ * which the handler resolves its messages and reads multilingual rows in (#8776).
  */
 @Component
 public class EventOutbox implements org.eclipse.dirigible.components.api.messaging.DurableMessagePublisher {
@@ -99,11 +100,12 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
             return Batch.EMPTY;
         }
         String user = originatingUser();
+        String language = originatingLanguage();
         List<PendingEvent> pending = new ArrayList<>(events.size());
         for (DomainEvent event : events) {
             pending.add(new PendingEvent(UUID.randomUUID()
                                              .toString(),
-                    event.topic(), event.payload(), 0, user));
+                    event.topic(), event.payload(), 0, user, language));
         }
         // The relay leaves the entry alone until the grace period is out: the dispatch that follows this
         // transaction's commit is the fast path and owns the first attempt.
@@ -153,7 +155,7 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
     public void publishToTopic(String topic, String payload) {
         PendingEvent event = new PendingEvent(UUID.randomUUID()
                                                   .toString(),
-                topic, payload, 0, originatingUser());
+                topic, payload, 0, originatingUser(), originatingLanguage());
         try {
             prepare();
             store.insert(event, nextAttemptAt(), connection -> recordWithParticipants(connection, List.of(event)));
@@ -224,8 +226,8 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
     private boolean deliver(PendingEvent event) {
         try {
             // Bound from the entry, not from the delivering thread: the relay runs on a job thread with
-            // no user, and the producer stamps whatever is bound here onto the message.
-            try (OriginatingUser.Binding binding = OriginatingUser.bind(event.user())) {
+            // no user and no language, and the producer stamps whatever is bound here onto the message.
+            try (OriginatingUser.Binding binding = OriginatingUser.bind(event.user(), event.language())) {
                 MessagingFacade.sendToTopic(event.topic(), event.payload());
             }
         } catch (RuntimeException ex) {
@@ -259,6 +261,20 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
      */
     private static String originatingUser() {
         return UserFacade.findName()
+                         .orElse(null);
+    }
+
+    /**
+     * The language an event recorded now is resolved in by its handlers: the language bound to the
+     * thread - for a write a handler makes in reaction to an event, the language of the user who raised
+     * that one - else the request's. {@code null} when none is known (a job, a boot-time seed), and for
+     * a tag longer than any real one: the header is the client's, and must never fail the write.
+     *
+     * @return the language, or {@code null}
+     */
+    private static String originatingLanguage() {
+        return UserFacade.findLanguage()
+                         .filter(language -> language.length() <= EventOutboxStore.LANGUAGE_MAX_LENGTH)
                          .orElse(null);
     }
 

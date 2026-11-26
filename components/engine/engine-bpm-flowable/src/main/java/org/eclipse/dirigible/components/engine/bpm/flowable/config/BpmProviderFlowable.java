@@ -112,6 +112,13 @@ public class BpmProviderFlowable implements BpmProvider {
     public static final String LAST_COMPLETED_BY = "__lastCompletedBy";
 
     /**
+     * The process variable a completion through {@code BpmService} records its user's language in,
+     * beside {@link #LAST_COMPLETED_BY}: the language the steps that follow resolve their messages and
+     * read multilingual rows in (issue #8776).
+     */
+    public static final String LAST_COMPLETED_LANGUAGE = "__lastCompletedLanguage";
+
+    /**
      * The reserved {@code taskSeparateFrom} name for the record's owner, kept out of a task even when
      * no task before it was theirs (issue #8560).
      */

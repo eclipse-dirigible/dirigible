@@ -1,0 +1,64 @@
+package gen.events.${javaGenFolderName};
+
+import java.util.Set;
+
+import org.eclipse.dirigible.components.data.store.java.repository.DerivedWrite;
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+import org.eclipse.dirigible.sdk.messaging.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+import gen.${javaGenFolderName}.data.${invoiceJavaPerspective}.${invoiceEntity}Entity;
+
+/**
+ * Auto-settlement (on a ${invoiceEntity} total that grew): when a derived write - a roll-up, a keyed
+ * aggregate - moves the ${invoiceEntity}'s ${invoiceTotal} after it became payable, the payer's
+ * unallocated ${paymentEntity} balance is pulled onto it by the same rule as {@code ${name}OnInvoice}:
+ * oldest payment first, matching ${match}, up to the open amount, only while the invoice is in a
+ * payable status. Without it a debit note or a charge rolled up onto an issued document left it open
+ * while the money to settle it sat on account (#8489).
+ *
+ * Only a write of ${invoiceTotal} is a reason to settle. The paid roll-up's own write - an allocation
+ * this settlement made, or one a person deleted by hand - moves the paid column, never the total, so
+ * a hand-deleted allocation is not put straight back; and an authored write of the invoice says
+ * nothing about its total having grown.
+ *
+ * Generated from the intent settlements block - do not edit; it is re-generated with the application.
+ * Entity access goes ONLY through the generated repositories (validations / events / i18n).
+ */
+@Component("${javaGenFolderName}_${name}OnInvoiceUpdated")
+public class ${name}OnInvoiceUpdated implements MessageHandler {
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${name}OnInvoiceUpdated");
+
+    @Override
+    public String destination() {
+        return "${invoiceTopic}-updated";
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.TOPIC;
+    }
+
+    @Override
+    public void onMessage(String message) {
+        Set<String> written = DerivedWrite.columns(message);
+        if (written == null || !written.contains("${invoiceTotal}")) {
+            return;
+        }
+        ${invoiceEntity}Entity invoice = Json.parse(message, ${invoiceEntity}Entity.class);
+        if (invoice == null || invoice.${invoicePk} == null) {
+            return;
+        }
+        // The payload is used only for the key: the settlement re-reads the invoice under its lock.
+        ${name}OnInvoice.settle(invoice.${invoicePk});
+    }
+
+    @Override
+    public void onError(String error) {
+        LOG.error("Settlement ${name}: the listener on [{}] failed - [{}]", destination(), error);
+    }
+}

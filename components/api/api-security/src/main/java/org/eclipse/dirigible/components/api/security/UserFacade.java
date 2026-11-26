@@ -21,6 +21,7 @@ import org.eclipse.dirigible.components.api.http.HttpRequestFacade;
 import org.eclipse.dirigible.components.api.http.HttpSessionFacade;
 import org.eclipse.dirigible.components.base.context.ContextException;
 import org.eclipse.dirigible.components.base.context.OriginatingUser;
+import org.eclipse.dirigible.components.base.context.ThreadLanguage;
 import org.eclipse.dirigible.components.base.context.ThreadContextFacade;
 import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.components.base.util.AuthoritiesUtil;
@@ -63,15 +64,6 @@ public class UserFacade {
 
     /** The Constant ANY_LANGUAGE. */
     private static final String ANY_LANGUAGE = "*";
-
-    /**
-     * A thread-bound language override, preferred over the request's Accept-Language header. It exists
-     * for in-process renders that run outside any HTTP request (a BPM service task minting a document
-     * snapshot, a mail listener attaching a rendered PDF): they know the language the artefact must be
-     * produced in and set it here so the multilingual overlay resolves data in that same language.
-     * Always cleared in a finally by the caller, so pooled worker threads never leak it.
-     */
-    private static final ThreadLocal<String> LANGUAGE_OVERRIDE = new ThreadLocal<>();
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(UserFacade.class);
@@ -406,9 +398,9 @@ public class UserFacade {
      * @return the language
      */
     public static String getLanguage() {
-        String override = LANGUAGE_OVERRIDE.get();
-        if (override != null && !override.isBlank()) {
-            return override;
+        Optional<String> override = ThreadLanguage.get();
+        if (override.isPresent()) {
+            return override.get();
         }
         if (HttpRequestFacade.isValid()) {
             String language = HttpRequestFacade.getHeader(LANGUAGE_HEADER);
@@ -438,25 +430,52 @@ public class UserFacade {
     }
 
     /**
+     * The language of the current thread when one is known, without logging anything when none is: the
+     * thread-bound language ({@link ThreadLanguage} - a render's override, or the language of the user
+     * whose write raised the event being handled), else the request's {@code Accept-Language}. A
+     * request that names no language ({@code *}) or a malformed one answers empty.
+     *
+     * @return the language, or empty outside a request and without a bound language
+     */
+    public static Optional<String> findLanguage() {
+        Optional<String> override = ThreadLanguage.get();
+        if (override.isPresent() || !HttpRequestFacade.isValid()) {
+            return override;
+        }
+        String language = getLanguage();
+        return language == null || language.isBlank() || ANY_LANGUAGE.equals(language) ? Optional.empty() : Optional.of(language);
+    }
+
+    /**
      * Binds a language to the current thread, preferred by {@link #getLanguage()} over the request's
-     * Accept-Language header. Intended for in-process renders that run outside an HTTP request; the
-     * caller MUST clear it in a finally via {@link #clearLanguage()}.
+     * Accept-Language header. It exists for in-process renders that run outside an HTTP request (a BPM
+     * service task minting a document snapshot, a mail listener attaching a rendered PDF): they know
+     * the language the artefact must be produced in and set it here so the multilingual overlay
+     * resolves data in that same language. The caller MUST clear it in a finally via
+     * {@link #clearLanguage()}, so pooled worker threads never leak it.
      *
      * @param language the language to bind (a null or blank value leaves the override unset)
      */
     public static void setLanguage(String language) {
-        if (language == null || language.isBlank()) {
-            LANGUAGE_OVERRIDE.remove();
-        } else {
-            LANGUAGE_OVERRIDE.set(language);
-        }
+        ThreadLanguage.set(language);
     }
 
     /**
      * Clears the thread-bound language override set by {@link #setLanguage(String)}.
      */
     public static void clearLanguage() {
-        LANGUAGE_OVERRIDE.remove();
+        ThreadLanguage.clear();
+    }
+
+    /**
+     * Binds a language for the scope of a try-with-resources block and restores the one bound before it
+     * when the block ends (#8776) - see {@link ThreadLanguage#bind(String)}.
+     *
+     * @param language the language to bind (a null or blank value binds none for the scope)
+     * @return the scope, whose {@code close} restores the previous language
+     */
+    public static ThreadLanguage.Scope bindLanguage(String language) {
+        return ThreadLanguage.bind(language);
     }
 
     public static Collection<String> getUserRoles() {

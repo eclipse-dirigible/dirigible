@@ -910,7 +910,7 @@ class GlueGenerator {
         copy(context, item, "name", "nameLiteral", "className", "entity", "perspective", "keyProperty", "roles", "readRoles",
                 "instructionsLiteral", "hasQr", "qrSeparatorLiteral", "qrPartsLiteral", "schemaFields", "schemaItems", "fields", "compares",
                 "hasRelations", "hasCompares", "hasItems", "itemFields", "itemEntity", "itemBackRef", "hasAttachment", "attachmentEntity",
-                "attachmentBackRef");
+                "attachmentBackRef", "hasWarnings");
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("javaItemPerspective", truthy(item, "hasItems") ? sanitize(item, "itemPerspective") : "");
         context.put("javaAttachmentPerspective", truthy(item, "hasAttachment") ? sanitize(item, "attachmentPerspective") : "");
@@ -1108,7 +1108,7 @@ class GlueGenerator {
     static void bindSettlement(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "match", "invoiceOrder", "paymentOrder", "invoiceEntity", "invoicePk", "invoiceTotal", "invoiceStatus",
                 "payableCondition", "junctionEntity", "junctionPk", "junctionFkInvoice", "junctionFkPayment", "junctionAmount",
-                "paymentEntity", "paymentPk", "paymentPot", "paymentTopic");
+                "paymentEntity", "paymentPk", "paymentPot", "paymentTopic", "invoiceTopic");
         // The rows that consume an invoice, as the paid roll-up and its capacity guard count them (#7559):
         // the settlement sizes an allocation by re-summing them, never from the lagging paid column. A
         // descriptor carrying no clauses - or one written before the key existed - sums every row.

@@ -612,6 +612,8 @@ public class BpmService {
             writable = writable == null ? new HashMap<>() : writable;
             writable.put(BpmProviderFlowable.COMPLETED_BY_PREFIX + key, user);
             writable.put(BpmProviderFlowable.LAST_COMPLETED_BY, user);
+            writable.put(BpmProviderFlowable.LAST_COMPLETED_LANGUAGE, UserFacade.findLanguage()
+                                                                                .orElse(null));
         }
         bpmProviderFlowable.getTaskService()
                            .completeTask(taskId, writable);

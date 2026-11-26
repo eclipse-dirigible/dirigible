@@ -52,14 +52,48 @@ class OriginatingUserTest {
         }
     }
 
+    /** The language of the user's write is bound in the same scope (#8776). */
+    @Test
+    void the_language_is_bound_for_the_scope_only_and_the_outer_one_restored() {
+        ThreadLanguage.set("en");
+        try {
+            try (OriginatingUser.Binding binding = OriginatingUser.bind("alice", "bg")) {
+                assertThat(OriginatingUser.get()).contains("alice");
+                assertThat(ThreadLanguage.get()).contains("bg");
+                try (OriginatingUser.Binding none = OriginatingUser.bind("bob", null)) {
+                    assertThat(ThreadLanguage.get()).isEmpty();
+                }
+                assertThat(ThreadLanguage.get()).contains("bg");
+            }
+            assertThat(OriginatingUser.get()).isEmpty();
+            assertThat(ThreadLanguage.get()).contains("en");
+        } finally {
+            ThreadLanguage.clear();
+        }
+    }
+
+    /** A user bound alone leaves the language as it is - and a language set inside does not leak. */
+    @Test
+    void a_user_bound_alone_keeps_the_language_and_restores_it() {
+        try (OriginatingUser.Binding outer = OriginatingUser.bind("alice", "bg")) {
+            try (OriginatingUser.Binding inner = OriginatingUser.bind("bob")) {
+                assertThat(ThreadLanguage.get()).contains("bg");
+                ThreadLanguage.set("de");
+            }
+            assertThat(ThreadLanguage.get()).contains("bg");
+        }
+        assertThat(ThreadLanguage.get()).isEmpty();
+    }
+
     @Test
     void a_throwing_scope_does_not_leave_the_user_behind() {
         assertThatThrownBy(() -> {
-            try (OriginatingUser.Binding binding = OriginatingUser.bind("alice")) {
+            try (OriginatingUser.Binding binding = OriginatingUser.bind("alice", "bg")) {
                 throw new IllegalStateException("boom");
             }
         }).isInstanceOf(IllegalStateException.class);
 
         assertThat(OriginatingUser.get()).isEmpty();
+        assertThat(ThreadLanguage.get()).isEmpty();
     }
 }

@@ -65,6 +65,9 @@ import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 #end
 import org.eclipse.dirigible.sdk.platform.Documentation;
+#if($multilingual == "true")
+import org.eclipse.dirigible.sdk.db.TranslationCoverage;
+#end
 import org.eclipse.dirigible.sdk.http.Body;
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.http.Controller;
@@ -309,6 +312,17 @@ public class ${name}Controller {
         return Map.of("read", true, "write", true);
 #end
     }
+#if($multilingual == "true")
+
+    @Get("/translations")
+    @Documentation("How completely ${name} is translated: its number of records and, per application language other than the default one, how many have no translation - what the shells' Settings report (#8789)")
+    public TranslationCoverage translations() {
+#if($needsRoles)
+        checkPermissions("read");
+#end
+        return repository.translationCoverage();
+    }
+#end
 #if($systemWritten)
 
     /**

@@ -444,9 +444,8 @@ final class ModelTranslations {
                 // The singular name feeds the form captions and the "New X" actions, the plural one
                 // the sidebar entries and the list titles. A model that carries its own labels wins;
                 // a hand-authored one gets them derived here.
-                String singular = entityLabel(entity);
-                texts.put(dataName, singular);
-                texts.put(dataName + "_plural", strOr(entity, "menuLabel", NamingHelper.pluralizeLabel(singular)));
+                texts.put(dataName, entityLabel(entity));
+                texts.put(dataName + "_plural", entityPluralLabel(entity));
             }
             collectPropertyLabels(asMaps(entity.get("properties")), texts);
             // A collection column's header (a `list:` collection path, dirigible #8295) translates
@@ -608,6 +607,17 @@ final class ModelTranslations {
      */
     static String entityLabel(Map<String, Object> entity) {
         return strOr(entity, "entityLabel", NamingHelper.humanizeIdentifier(str(entity, "name")));
+    }
+
+    /**
+     * The default-language plural label the catalog writes an entity under
+     * ({@code <prefix>.t.<dataName>_plural}): its menu label, else the plural of its singular label.
+     *
+     * @param entity the entity, carrying a name
+     * @return the label
+     */
+    static String entityPluralLabel(Map<String, Object> entity) {
+        return strOr(entity, "menuLabel", NamingHelper.pluralizeLabel(entityLabel(entity)));
     }
 
     /**
