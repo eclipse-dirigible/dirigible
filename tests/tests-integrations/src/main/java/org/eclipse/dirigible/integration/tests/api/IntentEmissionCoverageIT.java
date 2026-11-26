@@ -5774,7 +5774,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(myLeaveCalendar.contains("set viewChoice(value) { if (value === 'table') this.goList(); },"),
                 "picking the table in the personal calendar's view group must open the personal list");
         for (String myBrowse : List.of(myLeaveList, myLeaveView)) {
-            assertTrue(myBrowse.contains("<h1 ") && myBrowse.contains("'My ' + T('"),
+            assertTrue(myBrowse.contains("<h1 ") && myBrowse.contains(".defaults.myEntity', 'My {{name}}'"),
                     "a personal browse page leads its action row with its own title");
             assertTrue(myBrowse.contains("x-h-info-page") && myBrowse.contains("defaults.retry"),
                     "a personal browse page reports a failed load as the info page with Retry");
