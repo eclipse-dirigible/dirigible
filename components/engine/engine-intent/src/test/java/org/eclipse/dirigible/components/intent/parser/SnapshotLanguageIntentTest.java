@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.intent.parser;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -18,10 +19,11 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Coverage for the print render-language knob: {@code language:} / {@code languageFrom:} on a
- * {@code function: Snapshot} child (resolved on its document master) and on a notify block with
- * {@code attach: print} (resolved on the entity the message is about). The two are mutually
- * exclusive, the path is a one-hop {@code relation.field} to a string field, and the knob is
- * meaningless anywhere else - each misuse must fail at parse time, not mint wrong-language copies.
+ * {@code function: Snapshot} child (resolved on its document master) and on a notify block
+ * (resolved on the entity the message is about: the attachment's render language, and without an
+ * attachment the message's own, #8787). The two are mutually exclusive, the path is a one-hop
+ * {@code relation.field} to a string field, and the knob is meaningless anywhere else - each misuse
+ * must fail at parse time, not mint wrong-language copies.
  */
 class SnapshotLanguageIntentTest {
 
@@ -139,12 +141,18 @@ class SnapshotLanguageIntentTest {
                 ex.getMessage());
     }
 
+    /**
+     * Without an attachment the language is the message's own (#8787): its subject and body are
+     * resolved in it, so it is accepted - and a languageFrom is held to the same path rules.
+     */
     @Test
-    void notifyLanguageWithoutAttachIsRejected() {
+    void notifyLanguageWithoutAttachSelectsTheMessageLanguage() {
+        assertDoesNotThrow(() -> IntentParser.parse(yaml("", "    language: bg")));
+        assertDoesNotThrow(() -> IntentParser.parse(yaml("", "    languageFrom: partner.locale")));
         IntentValidationException ex =
-                assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml("", "    language: bg")));
+                assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml("", "    languageFrom: supplier.locale")));
         assertTrue(ex.getMessage()
-                     .contains("without attach: print"),
+                     .contains("is not a to-one relation of [Invoice]"),
                 ex.getMessage());
     }
 

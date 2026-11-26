@@ -4291,7 +4291,7 @@ due date.
       subject: "Invoice {number}"        # {field} / {relation.field} interpolation
       body: "Dear {Customer.name}, please find invoice {number} attached."
       attach: print                      # render this record's .print template to PDF and attach it
-      language: bg                       # optional FIXED print-template language
+      language: bg                       # optional FIXED language - of the PDF and of the subject/body
       # or: languageFrom: Customer.locale  # per-record - a one-hop relation.field holding the code
 ```
 
@@ -4375,6 +4375,17 @@ its data. Attaching the print of a plain entity is a validation error, not a sil
 plain-text mail. The render language: `language:` names a FIXED print-template language,
 `languageFrom: <relation.field>` reads it per record off a one-hop to-one path (mutually exclusive);
 absent both, the first entry of the tenant's application language set is used at send time.
+
+**The mail is translated in that same language.** `subject:`, `body:` and `html:` are the
+default-language texts: Generate writes them into the model's en-US catalog under
+`mail.notifications.<name>` / `mail.transitions.<name>` / `mail.schedules.<name>` /
+`mail.steps.<process>.<step>`, a translator adds the other languages to the module's catalogs, and
+the generated sender resolves them in the language the mail is delivered in - the attachment's, so a
+Bulgarian customer gets a Bulgarian subject with the Bulgarian PDF. A language without the key sends
+the authored text. `{field}` placeholders are named parameters, so a translation may reorder them.
+A notice WITHOUT an attachment takes `language:` / `languageFrom:` too, for its texts alone
+(`languageFrom: Customer.locale` on a plain "your invoice was voided" notice); without either it goes
+out in the application language, never in the language of the user whose click sent it.
 
 **Behavior worth knowing:**
 - **The attachment is the same PDF the Print button produces** - the generated `<Entity>PrintFeeder`

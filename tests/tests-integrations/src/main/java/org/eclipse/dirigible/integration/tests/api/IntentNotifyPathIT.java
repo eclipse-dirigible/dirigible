@@ -183,11 +183,11 @@ class IntentNotifyPathIT extends IntegrationTest {
         assertThat(awaitMessage("Confirmed for Acme").getAllRecipients()[0].toString()).isEqualTo(CUSTOMER);
         assertThat(awaitMessage("Reminder for Acme").getAllRecipients()[0].toString()).isEqualTo(CUSTOMER);
 
-        // A null hop anywhere renders null, exactly as a null one-hop relation does - the send still goes
-        // out.
+        // A null hop anywhere renders empty, exactly as a null one-hop relation does - never the text
+        // "null", the texts being catalog messages (#8787) - and the send still goes out.
         int planless = create("subscription/SubscriptionController", "{\"Customer\":" + customer + "}");
         create("renewal/RenewalController", "{\"RequestedBy\":\"" + REQUESTER + "\",\"Subscription\":" + planless + "}");
-        assertThat(body(awaitMessage("Your null renewal for Acme"))).contains("Open it at null");
+        assertThat(body(awaitMessage("Your  renewal for Acme"))).doesNotContain("null");
     }
 
     private MimeMessage awaitMessage(String subject) {

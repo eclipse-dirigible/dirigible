@@ -91,6 +91,20 @@ class CheckMessagesTest {
                 () -> "the facade logged " + logged.list);
     }
 
+    /**
+     * A notification names the language it is delivered in (#8787): that one wins over the language
+     * bound to the thread, and a language without the key falls back to the default text.
+     */
+    @Test
+    void a_named_language_resolves_the_catalog_text_whatever_is_bound() {
+        User.setLanguage("en");
+        try (MockedStatic<RepositoryFacade> registry = registryWithBgCatalog()) {
+            assertEquals("Нулеви редове: 2", CheckMessages.messageIn("bg", KEY, TEXT, "count", 2));
+            assertEquals("2 line(s) at price zero", CheckMessages.messageIn("de", KEY, TEXT, "count", 2));
+            assertEquals("2 line(s) at price zero", CheckMessages.messageIn(null, KEY, TEXT, "count", 2));
+        }
+    }
+
     /** The registry of the {@code billing} project: its bg-BG catalog translates {@link #KEY}. */
     private static MockedStatic<RepositoryFacade> registryWithBgCatalog() {
         IResource catalog = mock(IResource.class);

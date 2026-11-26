@@ -137,6 +137,20 @@ public final class CheckMessages {
     }
 
     /**
+     * A message resolved for a language the caller names: the language a notification is delivered in
+     * (#8787), which is its recipient's, not the language of the user or event whose work sends it.
+     *
+     * @param language the language to resolve in; {@code null} or blank resolves to the default text
+     * @param catalogKey the message's fully qualified catalog key
+     * @param text the default-language text
+     * @param params the placeholder values, as alternating name and value
+     * @return the resolved, interpolated text
+     */
+    public static String messageIn(String language, String catalogKey, String text, Object... params) {
+        return resolve(language, CheckMessages::readCatalog, catalogKey, text, params(params));
+    }
+
+    /**
      * Resolves a message: the language's catalog, else the default text - and interpolates the
      * placeholders into the winner.
      *

@@ -203,6 +203,90 @@ class EdmIntentGeneratorTest {
         assertEquals("Manager Review", labels.get("managerReview"));
     }
 
+    /**
+     * Every notify block's texts reach the catalog's mail section (#8787), nested by call site, with
+     * the authored placeholders kept as the parameters a translation may move.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void notifyBlocksEmitTheirMailTextsByCallSite() {
+        String yaml = """
+                name: orders
+                entities:
+                  - name: OrderStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, length: 20 }
+                  - name: Order
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, length: 20 }
+                      - { name: email, type: string, length: 100 }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: OrderStatus, function: EntityStatus, init: 1 }
+                notifications:
+                  - name: orderPlaced
+                    event: { onCreate: Order }
+                    to: email
+                    subject: "Order {number}"
+                    body: "Your order {number} is placed."
+                    html: "<p>Order <b>{number}</b></p>"
+                transitions:
+                  - name: CloseOrder
+                    forEntity: Order
+                    from: [1]
+                    setStatus: 2
+                    notify: { to: email, subject: "Order {number} closed", body: "Closed." }
+                schedules:
+                  - name: orderReminder
+                    cron: "0 0 8 * * ?"
+                    entity: Order
+                    notify: { to: email, subject: "Order {number} reminder", body: "Still open." }
+                processes:
+                  - name: Fulfil
+                    trigger: { onCreate: Order }
+                    steps:
+                      - name: mailOrder
+                        kind: serviceTask
+                        args:
+                          notify: { to: email, subject: "Order {number} shipped", body: "Shipped." }
+                          next: done
+                      - { name: done, kind: end }
+                seeds:
+                  - name: statuses
+                    entity: OrderStatus
+                    rows:
+                      - { id: 1, name: Open }
+                      - { id: 2, name: Closed }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "orders");
+        Map<String, Object> mail = (Map<String, Object>) ((Map<String, Object>) model.get("model")).get("mailTexts");
+        assertNotNull(mail, "a model with notify blocks must put mailTexts on the .model root");
+        assertEquals(Map.of("subject", "Order {number}", "body", "Your order {number} is placed.", "html", "<p>Order <b>{number}</b></p>"),
+                ((Map<String, Object>) mail.get("notifications")).get("orderPlaced"));
+        assertEquals(Map.of("subject", "Order {number} closed", "body", "Closed."),
+                ((Map<String, Object>) mail.get("transitions")).get("CloseOrder"));
+        assertEquals(Map.of("subject", "Order {number} reminder", "body", "Still open."),
+                ((Map<String, Object>) mail.get("schedules")).get("orderReminder"));
+        Map<String, Object> steps = (Map<String, Object>) mail.get("steps");
+        assertEquals(Map.of("subject", "Order {number} shipped", "body", "Shipped."),
+                ((Map<String, Object>) steps.get("Fulfil")).get("mailOrder"));
+    }
+
+    @Test
+    void aModelWithoutNotifyBlocksCarriesNoMailTexts() {
+        String yaml = """
+                name: orders
+                entities:
+                  - name: Order
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "orders");
+        assertNull(((Map<?, ?>) model.get("model")).get("mailTexts"));
+    }
+
     @Test
     void crossModelProjectionCellIsMarkedProjectionInTheEdmDiagram() {
         IntentModel parsed = IntentParser.parse(readResource("/billing/customers.intent"));

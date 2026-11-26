@@ -159,6 +159,20 @@ public final class NotificationSupport {
      */
     private static final String HTML_ESCAPE_EXPRESSION = "org.eclipse.dirigible.sdk.mail.Html.escape(";
 
+    /**
+     * The call a translated text is rendered as (#8787), less its arguments: the catalog text of the
+     * delivery language, else the authored one, with the placeholders interpolated after translation so
+     * a translation may move them.
+     */
+    private static final String MESSAGE_EXPRESSION = "org.eclipse.dirigible.sdk.db.CheckMessages.messageIn(";
+
+    /**
+     * The local a translated text reads its delivery language from - declared by the events template,
+     * like the deep links: the language of {@code language:} / {@code languageFrom:} when declared (the
+     * one an attachment renders in), else the application language.
+     */
+    static final String LANGUAGE_LOCAL = "language";
+
     private NotificationSupport() {}
 
     /**
@@ -333,9 +347,30 @@ public final class NotificationSupport {
      */
     public static Plan plan(NotificationIntent notification, EntityIntent eventEntity, EntityIntent escalation,
             Map<String, EntityIntent> byName, Map<String, String> compositionParents, CrossModelLookup crossModel) {
+        return plan(notification, eventEntity, escalation, byName, compositionParents, crossModel, null);
+    }
+
+    /**
+     * The same translation with the texts resolved through the model catalog (#8787): the subject, body
+     * and marked-up alternative become catalog messages under {@code messageKey} ({@code .subject} /
+     * {@code .body} / {@code .html}), resolved in the delivery language the generated code holds in
+     * {@link #LANGUAGE_LOCAL}, the authored text being the default.
+     *
+     * @param notification the notification
+     * @param eventEntity the entity whose event fires it
+     * @param escalation the escalation ladder entity, or {@code null}
+     * @param byName all LOCAL entities by name (to resolve same-model relation targets)
+     * @param compositionParents composition-parent map (to resolve a target's perspective)
+     * @param crossModel resolver for a cross-model relation's owner facts, or {@code null}
+     * @param messageKey the fully qualified catalog key of the block's texts, or {@code null} to
+     *        concatenate them as authored
+     * @return the plan, or {@code null} if the {@code to} recipient cannot be resolved
+     */
+    public static Plan plan(NotificationIntent notification, EntityIntent eventEntity, EntityIntent escalation,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, CrossModelLookup crossModel, String messageKey) {
         Object when = notification.getEvent()
                                   .get("when");
-        Resolver resolver = new Resolver(eventEntity, null, escalation, byName, compositionParents, crossModel, true);
+        Resolver resolver = new Resolver(eventEntity, null, escalation, byName, compositionParents, crossModel, true, messageKey);
         String recipient = resolver.value(notification.getTo());
         String ccExpression = isBlank(notification.getCc()) ? null : resolver.value(notification.getCc());
         String bccExpression = isBlank(notification.getBcc()) ? null : resolver.value(notification.getBcc());
@@ -345,8 +380,8 @@ public final class NotificationSupport {
         }
         // Rendered BEFORE the loads are read: a placeholder is what registers most relation loads, and an
         // argument list evaluated left to right would snapshot the loads before the text added any.
-        String subjectExpression = resolver.text(notification.getSubject());
-        String bodyExpression = resolver.text(notification.getBody());
+        String subjectExpression = resolver.message(notification.getSubject(), "subject");
+        String bodyExpression = resolver.message(notification.getBody(), "body");
         String htmlExpression = resolver.html(notification.getHtml());
         return new Plan(resolver.loads(), guardTerms(when, eventEntity, byName), recipient, ccExpression, bccExpression, subjectExpression,
                 bodyExpression, htmlExpression, resolver.usesRecordUrl(), resolver.usesInboxUrl(), resolver.usesVariables(),
@@ -443,15 +478,43 @@ public final class NotificationSupport {
      */
     public static Plan plan(String to, String cc, String bcc, String subject, String body, String html, Object when, EntityIntent entity,
             EntityIntent anchor, Map<String, EntityIntent> byName, Map<String, String> compositionParents, CrossModelLookup crossModel) {
-        Resolver resolver = new Resolver(entity, anchor, null, byName, compositionParents, crossModel, true);
+        return plan(to, cc, bcc, subject, body, html, when, entity, anchor, byName, compositionParents, crossModel, null);
+    }
+
+    /**
+     * The fan-out translation plan of a notify block with its texts resolved through the model catalog
+     * (#8787) under {@code messageKey}, as
+     * {@link #plan(NotificationIntent, EntityIntent, EntityIntent, Map, Map, CrossModelLookup, String)}
+     * does for a notification.
+     *
+     * @param to the recipient, may be blank when a copy recipient is authored
+     * @param cc the copy recipient, or {@code null}
+     * @param bcc the blind-copy recipient, or {@code null}
+     * @param subject the subject
+     * @param body the plain-text body
+     * @param html the marked-up alternative, or {@code null} for a plain-text message
+     * @param when an optional guard - a comparison, a list of them, or {@code null} for none
+     * @param entity the entity the message is about (a fan-out's row)
+     * @param anchor the fan-out's anchor record, or {@code null} outside a fan-out
+     * @param byName all LOCAL entities by name (to resolve same-model relation targets)
+     * @param compositionParents composition-parent map (to resolve a target's perspective)
+     * @param crossModel resolver for a cross-model relation's owner facts, or {@code null}
+     * @param messageKey the fully qualified catalog key of the block's texts, or {@code null} to
+     *        concatenate them as authored
+     * @return the plan, or {@code null} if a recipient cannot be resolved
+     */
+    public static Plan plan(String to, String cc, String bcc, String subject, String body, String html, Object when, EntityIntent entity,
+            EntityIntent anchor, Map<String, EntityIntent> byName, Map<String, String> compositionParents, CrossModelLookup crossModel,
+            String messageKey) {
+        Resolver resolver = new Resolver(entity, anchor, null, byName, compositionParents, crossModel, true, messageKey);
         String recipient = resolver.value(to);
         String ccExpression = isBlank(cc) ? null : resolver.value(cc);
         String bccExpression = isBlank(bcc) ? null : resolver.value(bcc);
         if (recipient == null || !isBlank(cc) && ccExpression == null || !isBlank(bcc) && bccExpression == null) {
             return null; // an unresolvable recipient relation.field - skip rather than email garbage
         }
-        String subjectExpression = resolver.text(subject);
-        String bodyExpression = resolver.text(body);
+        String subjectExpression = resolver.message(subject, "subject");
+        String bodyExpression = resolver.message(body, "body");
         String htmlExpression = resolver.html(html);
         return new Plan(resolver.loads(), guardTerms(when, entity, byName), recipient, ccExpression, bccExpression, subjectExpression,
                 bodyExpression, htmlExpression, resolver.usesRecordUrl(), resolver.usesInboxUrl(), resolver.usesVariables(),
@@ -551,7 +614,7 @@ public final class NotificationSupport {
      */
     static Resolver resolver(EntityIntent entity, Map<String, EntityIntent> byName, Map<String, String> compositionParents,
             CrossModelLookup crossModel) {
-        return new Resolver(entity, null, null, byName, compositionParents, crossModel, false);
+        return new Resolver(entity, null, null, byName, compositionParents, crossModel, false, null);
     }
 
     /** Resolves values/text against the event entity, accumulating the relation loads they require. */
@@ -565,6 +628,8 @@ public final class NotificationSupport {
         private final Set<String> settingEntities;
         private final CrossModelLookup crossModel;
         private final boolean walksChains;
+        /** The catalog key a block's texts are resolved under, or {@code null} to concatenate them. */
+        private final String messageKey;
         private final Map<String, RelationLoad> loads = new LinkedHashMap<>();
         /** The relation prefix each registered local loads, to refuse a second prefix landing on it. */
         private final Map<String, String> prefixByLocal = new LinkedHashMap<>();
@@ -574,7 +639,7 @@ public final class NotificationSupport {
         private boolean usesShareUrl;
 
         Resolver(EntityIntent entity, EntityIntent anchor, EntityIntent escalation, Map<String, EntityIntent> byName,
-                Map<String, String> compositionParents, CrossModelLookup crossModel, boolean walksChains) {
+                Map<String, String> compositionParents, CrossModelLookup crossModel, boolean walksChains, String messageKey) {
             this.entity = entity;
             this.anchor = anchor;
             this.escalation = escalation;
@@ -583,6 +648,7 @@ public final class NotificationSupport {
             this.settingEntities = IntentEntities.settingEntities(byName.values());
             this.crossModel = crossModel;
             this.walksChains = walksChains;
+            this.messageKey = messageKey;
         }
 
         List<RelationLoad> loads() {
@@ -642,13 +708,6 @@ public final class NotificationSupport {
         }
 
         /**
-         * Text with {@code {field}} / {@code {relation.field}} placeholders into a Java String expression.
-         */
-        String text(String raw) {
-            return text(raw, false);
-        }
-
-        /**
          * The marked-up alternative into a Java String expression: the authored segments stay literal and
          * every resolved value - the deep links included - is HTML-escaped at send time.
          *
@@ -656,7 +715,58 @@ public final class NotificationSupport {
          * @return the expression, or {@code null} when no markup was authored
          */
         String html(String raw) {
-            return raw == null ? null : text(raw, true);
+            if (raw == null) {
+                return null;
+            }
+            return messageKey == null ? text(raw, true) : translated(raw, messageKey + ".html", true);
+        }
+
+        /**
+         * One plain-text part of a notify block - its subject or body - into a Java String expression: a
+         * catalog message under {@code <messageKey>.<part>} when the plan carries a key (#8787), else the
+         * text concatenated as authored.
+         *
+         * @param raw the authored text, may be {@code null}
+         * @param part the part's name under the block's key ({@code subject} / {@code body})
+         * @return the expression
+         */
+        String message(String raw, String part) {
+            return messageKey == null ? text(raw, false) : translated(raw, messageKey + "." + part, false);
+        }
+
+        /**
+         * A text resolved through the catalog in the delivery language: the authored text is the default,
+         * and every resolvable placeholder becomes a named parameter - once, however often it appears -
+         * interpolated after translation, so a translation may reorder them. An unresolvable placeholder is
+         * passed no parameter and stays the literal text it always degraded to.
+         */
+        private String translated(String raw, String key, boolean html) {
+            if (raw == null || raw.isEmpty()) {
+                return "\"\"";
+            }
+            Map<String, String> params = new LinkedHashMap<>();
+            Matcher matcher = PLACEHOLDER.matcher(raw);
+            while (matcher.find()) {
+                String name = matcher.group(1);
+                if (params.containsKey(name)) {
+                    continue;
+                }
+                String access = access(name, true);
+                if (access != null) {
+                    params.put(name, html ? HTML_ESCAPE_EXPRESSION + access + ")" : access);
+                }
+            }
+            StringBuilder call = new StringBuilder(MESSAGE_EXPRESSION).append(LANGUAGE_LOCAL)
+                                                                      .append(", ")
+                                                                      .append(quote(key))
+                                                                      .append(", ")
+                                                                      .append(quote(raw));
+            params.forEach((name, value) -> call.append(", ")
+                                                .append(quote(name))
+                                                .append(", ")
+                                                .append(value));
+            return call.append(")")
+                       .toString();
         }
 
         private String text(String raw, boolean html) {

@@ -692,7 +692,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                         LoggedValue.of(notification.getName()));
                 continue;
             }
-            NotificationSupport.Plan plan = NotificationSupport.plan(notification, byName.get(entity), byName, compositionParents, lookup);
+            NotificationSupport.Plan plan = NotificationSupport.plan(notification, byName.get(entity), null, byName, compositionParents,
+                    lookup, mailTextsKey(model, context, NotifySupport.MAIL_NOTIFICATIONS, notification.getName()));
             if (plan == null) {
                 reportDroppedGlue(context,
                         "Notification [" + notification.getName() + "] recipient [" + notification.getTo() + "]"
@@ -709,6 +710,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     compositionParents, context, "Notification [" + notification.getName() + "]");
             if (reportAttachment == null && NotifySupport.attachesReport(notification)) {
                 continue; // asked for the report but it cannot be scoped - reported above
+            }
+            NotifySupport.Language messageLanguage = messageLanguage(notification, byName.get(entity), model, byName, compositionParents,
+                    context, "Notification [" + notification.getName() + "]");
+            if (messageLanguage == null) {
+                continue; // a languageFrom that does not resolve - reported above
             }
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("name", notification.getName());
@@ -727,7 +733,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("subjectExpression", plan.subjectExpression());
             entry.put("bodyExpression", plan.bodyExpression());
             putHtmlExpression(entry, "htmlExpression", plan);
-            entry.putAll(NotifySupport.attachmentFields(attachment, reportAttachment));
+            entry.putAll(NotifySupport.attachmentFields(attachment, reportAttachment, messageLanguage));
             entry.putAll(NotifySupport.deepLinkFields(plan, byName.get(entity)));
             entry.putAll(NotifySupport.outcomeFields(notification, byName.get(entity), compositionParents,
                     IntentEntities.settingEntities(byName.values())));
@@ -1611,6 +1617,33 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * The fully qualified catalog key of one notify block's texts (#8787) -
+     * {@code <project>:<model>-model.mail.<site>.<names>} - which the generated code resolves its
+     * subject, body and marked-up alternative under, in the language the mail is delivered in.
+     */
+    private static String mailTextsKey(IntentModel model, IntentGenerationContext context, String site, String... names) {
+        String contextProject = context == null ? null : context.getProjectName();
+        String projectName = contextProject != null && !contextProject.isBlank() ? contextProject : model.getName();
+        return refusalCatalog(model, context, projectName) + "." + NotifySupport.mailTextsPath(site, names);
+    }
+
+    /**
+     * The language a notify block is delivered in (#8787), or {@code null} - the drop reported - when
+     * the {@code languageFrom:} of a block without an attachment does not resolve: a mail must not go
+     * out in a language its author did not choose. A block with an attachment is delivered in the
+     * attachment's language, which the attachment resolves and reports itself.
+     */
+    private static NotifySupport.Language messageLanguage(NotificationIntent notify, EntityIntent entity, IntentModel model,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, IntentGenerationContext context, String subject) {
+        try {
+            return NotifySupport.messageLanguage(notify, entity, byName, compositionParents, crossModelLookup(model, context));
+        } catch (IllegalArgumentException ex) {
+            reportDroppedGlue(context, subject + " " + ex.getMessage() + " - the mail was NOT generated");
+            return null;
+        }
+    }
+
+    /**
      * The model's base name: {@link IntentNaming#baseName} where a context carries the model, else its
      * own name.
      */
@@ -2310,7 +2343,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // resolved against the transitioned record - the same notify block a schedule or a
             // process step authors. Fail-soft in the generated controller: the flip is the contract.
             e.putAll(notifyFields(t.getNotify(), entity, model, byName, compositionParents, context,
-                    "Transition [" + t.getName() + "] notify"));
+                    "Transition [" + t.getName() + "] notify", mailTextsKey(model, context, NotifySupport.MAIL_TRANSITIONS, t.getName())));
             if (t.hasPrompt()) {
                 // The record's own inputs (#7909), written with the status: converted and refused exactly as
                 // a create-from's prompt is, in the model catalog's language.
@@ -2349,7 +2382,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * dropped rather than mailing garbage).
      */
     private static Map<String, Object> notifyFields(NotificationIntent notify, EntityIntent entity, IntentModel model,
-            Map<String, EntityIntent> byName, Map<String, String> compositionParents, IntentGenerationContext context, String subject) {
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, IntentGenerationContext context, String subject,
+            String messageKey) {
         Map<String, Object> fields = new LinkedHashMap<>();
         // A fan-out sends one message PER ROW of a related entity, so every path - recipient,
         // placeholders, attached document - resolves against the ROW rather than the record the block
@@ -2369,7 +2403,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         boolean dropped = fanOutRequested && fanOut == null;
         NotificationSupport.Plan plan = notify == null || dropped ? null
                 : NotificationSupport.plan(notify.getTo(), notify.getCc(), notify.getBcc(), notify.getSubject(), notify.getBody(),
-                        notify.getHtml(), null, about, anchor, byName, compositionParents, crossModelLookup(model, context));
+                        notify.getHtml(), null, about, anchor, byName, compositionParents, crossModelLookup(model, context), messageKey);
         if (notify != null && plan == null && !dropped) {
             reportDroppedGlue(context,
                     subject + " recipient [" + notify.getTo() + "]" + copyRecipients(notify)
@@ -2386,7 +2420,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         // counterpart the way `recordPrint` is one for a document.
         NotifySupport.ReportAttachment reportAttachment =
                 plan == null ? null : reportAttachment(notify, about, model, byName, compositionParents, context, subject);
-        boolean send = plan != null && (attachment != null || !NotifySupport.attachesPrint(notify))
+        NotifySupport.Language messageLanguage =
+                plan == null ? null : messageLanguage(notify, about, model, byName, compositionParents, context, subject);
+        boolean send = plan != null && messageLanguage != null && (attachment != null || !NotifySupport.attachesPrint(notify))
                 && (reportAttachment != null || !NotifySupport.attachesReport(notify));
         fields.put("notify", String.valueOf(send));
         fields.put("notifyRelationLoads", send ? relationLoads(plan, attachment, reportAttachment) : new ArrayList<>());
@@ -2406,7 +2442,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         // loaded record to their send method, and only then (an argument nothing reads is noise).
         fields.put("notifyRecordScoped", String.valueOf(send && fanOut != null && NotifySupport.usesRecordScope(notify)));
         fields.putAll(NotifySupport.fanOutFields(send ? fanOut : null));
-        fields.putAll(NotifySupport.attachmentFields(send ? attachment : null, send ? reportAttachment : null));
+        fields.putAll(
+                NotifySupport.attachmentFields(send ? attachment : null, send ? reportAttachment : null, send ? messageLanguage : null));
         // The key the print feeder is fed with: the ROW's for `attach: print` (the loop variable is
         // named `entity` in the templates for exactly this reason, so one expression set serves both
         // shapes), the ANCHOR record's for `attach: recordPrint`.
@@ -2586,7 +2623,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             }
             EntityIntent entity = byName.get(sender.entity());
             Map<String, Object> fields = notifyFields(sender.block(), entity, model, byName, compositionParents, context,
-                    "Process [" + sender.process() + "] step [" + sender.step() + "] notify");
+                    "Process [" + sender.process() + "] step [" + sender.step() + "] notify",
+                    mailTextsKey(model, context, NotifySupport.MAIL_STEPS, sender.process(), sender.step()));
             if (!"true".equals(fields.get("notify"))) {
                 continue; // unresolvable recipient / unrenderable attachment - reported by notifyFields
             }
@@ -5682,7 +5720,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 // wording ("a friendly reminder" vs "final notice") a flat schedule cannot express.
                 EntityIntent ladderEntity = escalate == null ? null : byName.get(escalate.getLadder());
                 NotificationSupport.Plan plan = NotificationSupport.plan(schedule.getNotify(), rowEntity, ladderEntity, byName,
-                        compositionParents, crossModelLookup(model, context));
+                        compositionParents, crossModelLookup(model, context),
+                        mailTextsKey(model, context, NotifySupport.MAIL_SCHEDULES, schedule.getName()));
                 if (plan == null) {
                     reportDroppedGlue(context, "Schedule [" + schedule.getName() + "] notify recipient [" + schedule.getNotify()
                                                                                                                     .getTo()
@@ -5724,13 +5763,18 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 if (reportAttachment == null && NotifySupport.attachesReport(schedule.getNotify())) {
                     continue; // asked for the report but it cannot be scoped - reported above
                 }
+                NotifySupport.Language messageLanguage = messageLanguage(schedule.getNotify(), rowEntity, model, byName, compositionParents,
+                        context, "Schedule [" + schedule.getName() + "] notify");
+                if (messageLanguage == null) {
+                    continue; // a languageFrom that does not resolve - reported above
+                }
                 allLoads.addAll(mergedLoads(plan, attachment, reportAttachment));
                 entry.put("toExpression", plan.toExpression());
                 putCopyExpressions(entry, "ccExpression", "bccExpression", plan);
                 entry.put("subjectExpression", plan.subjectExpression());
                 entry.put("bodyExpression", plan.bodyExpression());
                 putHtmlExpression(entry, "htmlExpression", plan);
-                entry.putAll(NotifySupport.attachmentFields(attachment, reportAttachment));
+                entry.putAll(NotifySupport.attachmentFields(attachment, reportAttachment, messageLanguage));
                 entry.putAll(NotifySupport.deepLinkFields(plan, rowEntity));
                 // A schedule already runs once per matched row, so the row IS the record the message is
                 // about and the stamp lands on it - which is what makes a dunning run auditable per

@@ -117,32 +117,41 @@ class GlueNotifyHtmlTest {
         Map<String, Object> t = transition("VoidInvoice");
         String html = (String) t.get("notifyHtmlExpression");
         assertEquals(
-                "\"<a href=\\\"\" + " + ESCAPE + "recordUrl) + \"\\\">Invoice \" + " + ESCAPE + "entity.Number) + \"</a> was voided.\"",
+                GlueRendering.message("billing:billing-model.mail.transitions.VoidInvoice.html",
+                        "<a href=\"{recordUrl}\">Invoice {number}</a> was voided.", "recordUrl", ESCAPE + "recordUrl)", "number",
+                        ESCAPE + "entity.Number)"),
                 html, "the markup stays literal, the deep link and the field are both values and both escaped");
-        assertEquals("\"Invoice \" + entity.Number + \" was voided: \" + recordUrl", t.get("notifyBodyExpression"),
-                "the plain part is exactly what it was");
+        assertEquals(
+                GlueRendering.message("billing:billing-model.mail.transitions.VoidInvoice.body", "Invoice {number} was voided: {recordUrl}",
+                        "number", "entity.Number", "recordUrl", "recordUrl"),
+                t.get("notifyBodyExpression"), "the plain part reads the values unescaped");
     }
 
     @Test
     void aNotificationCarriesTheAlternativeBesideTheBody() {
         Map<String, Object> n = GlueIntentGenerator.buildNotificationsForTest(IntentParser.parse(YAML))
                                                    .get(0);
-        assertEquals("\"<p>Invoice <b>\" + " + ESCAPE + "entity.Number) + \"</b> created.</p>\"", n.get("htmlExpression"));
+        assertEquals(GlueRendering.message("billing:billing-model.mail.notifications.invoiceCreated.html",
+                "<p>Invoice <b>{number}</b> created.</p>", "number", ESCAPE + "entity.Number)"), n.get("htmlExpression"));
     }
 
     @Test
     void aSendingStepReadsTheSameRelationLoadAsTheBody() {
         Map<String, Object> s = GlueIntentGenerator.buildSendsForTest(IntentParser.parse(YAML))
                                                    .get(0);
-        assertEquals("\"<p>Dear <b>\" + " + ESCAPE + "(Customer == null ? null : Customer.Name)) + \"</b>, invoice \" + " + ESCAPE
-                + "entity.Number) + \".</p>\"", s.get("notifyHtmlExpression"));
+        assertEquals(
+                GlueRendering.message("billing:billing-model.mail.steps.InvoiceIssue.mailIt.html",
+                        "<p>Dear <b>{Customer.name}</b>, invoice {number}.</p>", "Customer.name",
+                        ESCAPE + "(Customer == null ? null : Customer.Name))", "number", ESCAPE + "entity.Number)"),
+                s.get("notifyHtmlExpression"));
     }
 
     @Test
     void aScheduleCarriesTheAlternativeToo() {
         Map<String, Object> s = GlueIntentGenerator.buildSchedulesForTest(IntentParser.parse(YAML))
                                                    .get(0);
-        assertEquals("\"<p>Please settle invoice <b>\" + " + ESCAPE + "entity.Number) + \"</b>.</p>\"", s.get("htmlExpression"));
+        assertEquals(GlueRendering.message("billing:billing-model.mail.schedules.dunning.html",
+                "<p>Please settle invoice <b>{number}</b>.</p>", "number", ESCAPE + "entity.Number)"), s.get("htmlExpression"));
     }
 
     /**
@@ -152,7 +161,10 @@ class GlueNotifyHtmlTest {
     void aFanOutPassesTheAnchorWhenOnlyTheMarkupQuotesIt() {
         Map<String, Object> t = transition("RemindAll");
         assertEquals("true", t.get("notifyRecordScoped"));
-        assertEquals("\"<p>Invoice <b>\" + " + ESCAPE + "source.Number) + \"</b> is open.</p>\"", t.get("notifyHtmlExpression"));
+        assertEquals(
+                GlueRendering.message("billing:billing-model.mail.transitions.RemindAll.html",
+                        "<p>Invoice <b>{record.number}</b> is open.</p>", "record.number", ESCAPE + "source.Number)"),
+                t.get("notifyHtmlExpression"));
     }
 
     @Test

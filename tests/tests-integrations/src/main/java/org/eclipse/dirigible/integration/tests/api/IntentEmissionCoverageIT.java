@@ -5233,7 +5233,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String stepNotification = contentOf("gen/events/emission/RfqReviewPendingNotification.java");
         assertTrue(
                 stepNotification.contains("htmlPart.put(\"contentType\", \"text/html\");")
-                        && stepNotification.contains("\"<p>RFQ <b>\" + org.eclipse.dirigible.sdk.mail.Html.escape(entity.Title)"),
+                        && stepNotification.contains("\"<p>RFQ <b>{title}</b> awaits a reviewer.</p>\", \"title\","
+                                + " org.eclipse.dirigible.sdk.mail.Html.escape(entity.Title)"),
                 "a notification's html alternative must be emitted as an escaped text/html part (#7488): " + stepNotification);
         assertTrue(stepNotification.contains("-step-RfqFlow-review-reached"),
                 "a step-bound notification must bind to the topic its emitter publishes to");
@@ -5970,8 +5971,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // #7488: the html alternative is a second text part, every interpolated value escaped - the
         // deep link included - while the authored markup stays literal.
         assertTrue(
-                sendBill.contains("htmlPart.put(\"contentType\", \"text/html\");") && sendBill.contains(
-                        "\"<p>Please find the bill attached. <a href=\\\"\" + org.eclipse.dirigible.sdk.mail.Html.escape(recordUrl)"),
+                sendBill.contains("htmlPart.put(\"contentType\", \"text/html\");")
+                        && sendBill.contains("\"recordUrl\", org.eclipse.dirigible.sdk.mail.Html.escape(recordUrl)"),
                 "a transition's html alternative must be emitted as an escaped text/html part: " + sendBill);
         assertTrue(sendBill.contains("\"type\", \"attachment\"") && sendBill.contains("application/pdf"),
                 "attach: print must emit a PDF attachment part");
@@ -6104,10 +6105,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String shareBill = contentOf("gen/events/emission/BillFlowShareBillSend.java");
         assertTrue(shareBill.contains("org.eclipse.dirigible.sdk.mail.Html.escape(source.Note)"),
                 "a fan-out's html alternative must read the anchor through the record scope, escaped (#7488): " + shareBill);
-        assertTrue(shareBill.contains("Map document = rows.isEmpty() ? null : renderDocument(source);"),
+        assertTrue(shareBill.contains("Map document = rows.isEmpty() ? null : renderDocument(source, language);"),
                 "a recordPrint fan-out must render the document once, before the loop - and not at all with no recipients");
         assertTrue(
-                shareBill.contains("private Map renderDocument(BillEntity source)")
+                shareBill.contains("private Map renderDocument(BillEntity source, String language)")
                         && shareBill.contains("new BillPrintFeeder().feed(source.Id)"),
                 "the rendered document must be the ANCHOR record's, fed with the anchor's key: " + shareBill);
         assertEquals(1, shareBill.split("Print\\.render\\(", -1).length - 1,
@@ -6116,11 +6117,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // resolves nomenclature values in the render language (no request here to carry Accept-Language).
         assertTrue(shareBill.contains("User.bindLanguage(language)"),
                 "the fan-out's single render must bind the render language to the thread for the overlay: " + shareBill);
-        assertTrue(shareBill.contains("private boolean send(BillEntity source, BillRecipientEntity entity, Map document)"),
-                "the per-row send must take the anchor (a placeholder quotes it) and the rendered document");
+        assertTrue(shareBill.contains("private boolean send(BillEntity source, BillRecipientEntity entity, Map document, String language)"),
+                "the per-row send must take the anchor (a placeholder quotes it), the rendered document and its language (#8787)");
         assertTrue(shareBill.contains("(Person == null ? null : Person.Email)"),
                 "the recipient must still resolve against the ROW - the rows ARE the recipient list");
-        assertTrue(shareBill.contains("\"Bill \" + source.Note"),
+        // #8787: every row's subject is the catalog's, resolved in the document's language, with the
+        // anchor's field passed as the parameter its {record.<field>} placeholder names.
+        assertTrue(
+                shareBill.contains(
+                        "CheckMessages.messageIn(language, \"emission-test:emission-model.mail.steps.BillFlow.shareBill.subject\","
+                                + " \"Bill {record.note}\", \"record.note\", source.Note)"),
                 "a {record.<field>} placeholder must read the anchor record, not the row: " + shareBill);
         // The deep link follows the SAME scoping rule as every other bare path: it links the ROW the
         // message is about, not the anchor whose document rides along.

@@ -2686,6 +2686,26 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * The notify blocks' texts the intent writes onto the model land in the catalog's {@code mail}
+     * section as they are nested (#8787), so a language catalog translates a mail under the key its
+     * generated sender resolves; a model without them gets no section.
+     */
+    @Test
+    void theMailTextsSeedTheCatalogsMailSection() {
+        Map<String, Object> mailTexts = Map.of("transitions", Map.of("VoidInvoice", Map.of("subject", "Invoice {number} was voided")));
+        Map<String, Object> model = model(entity("Invoice", "Invoices", property("Id", "INTEGER")));
+        model.put("mailTexts", mailTexts);
+        Map<String, Object> catalog = new LinkedHashMap<>();
+
+        ModelTranslations.fillEntityCatalog(model, catalog);
+
+        assertEquals(mailTexts, catalog.get("mail"));
+        Map<String, Object> plain = new LinkedHashMap<>();
+        ModelTranslations.fillEntityCatalog(model(entity("Invoice", "Invoices", property("Id", "INTEGER"))), plain);
+        assertFalse(plain.containsKey("mail"));
+    }
+
+    /**
      * A {@code related:} register column over a field declaring {@code emptyText} carries the text, raw
      * and JS-escaped, so the register's cell prints it instead of the em dash (dirigible #8605).
      */

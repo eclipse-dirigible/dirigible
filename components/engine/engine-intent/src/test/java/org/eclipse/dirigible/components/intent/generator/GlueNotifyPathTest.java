@@ -114,6 +114,9 @@ class GlueNotifyPathTest {
                   body: "Reminder."
             """;
 
+    /** The catalog key the notification's texts are resolved under (#8787), less the part. */
+    private static final String NOTIFICATION = "renewals:renewals-model.mail.notifications.renewalRequested.";
+
     private static final String CUSTOMER_NAME = "(subscription_customer == null ? null : subscription_customer.Name)";
     private static final String CUSTOMER_EMAIL = "(subscription_customer == null ? null : subscription_customer.Email)";
     private static final List<String> CUSTOMER_CHAIN =
@@ -122,10 +125,12 @@ class GlueNotifyPathTest {
     @Test
     void theIssueModelReadsThroughTheSubscription() {
         Map<String, Object> notification = notification(YAML);
-        assertEquals("\"Your \" + (subscription_plan == null ? null : subscription_plan.Name) + \" renewal for \" + " + CUSTOMER_NAME,
+        assertEquals(GlueRendering.message(NOTIFICATION + "subject",
+                "Your {subscription.plan.name} renewal for {subscription.customer.name}", "subscription.plan.name",
+                "(subscription_plan == null ? null : subscription_plan.Name)", "subscription.customer.name", CUSTOMER_NAME),
                 notification.get("subjectExpression"));
-        assertEquals("\"Open it at \" + (subscription_plan == null ? null : subscription_plan.PortalUrl)",
-                notification.get("bodyExpression"));
+        assertEquals(GlueRendering.message(NOTIFICATION + "body", "Open it at {subscription.plan.portalUrl}", "subscription.plan.portalUrl",
+                "(subscription_plan == null ? null : subscription_plan.PortalUrl)"), notification.get("bodyExpression"));
         assertEquals(List.of("subscription <- entity.Subscription", "subscription_plan <- subscription.Plan",
                 "subscription_customer <- subscription.Customer"), loads(notification.get("relationLoads")));
     }
@@ -133,7 +138,8 @@ class GlueNotifyPathTest {
     @Test
     void aTwoHopPlaceholderLoadsTheChain() {
         Map<String, Object> notification = notification(subject("{subscription.customer.name}"));
-        assertEquals("\"\" + " + CUSTOMER_NAME, notification.get("subjectExpression"));
+        assertEquals(GlueRendering.message(NOTIFICATION + "subject", "{subscription.customer.name}", "subscription.customer.name",
+                CUSTOMER_NAME), notification.get("subjectExpression"));
         assertEquals(CUSTOMER_CHAIN, loads(notification.get("relationLoads")));
     }
 
@@ -147,7 +153,10 @@ class GlueNotifyPathTest {
     @Test
     void aThreeHopPathResolves() {
         Map<String, Object> notification = notification(subject("{subscription.customer.country.name}"));
-        assertEquals("\"\" + (subscription_customer_country == null ? null : subscription_customer_country.Name)",
+        assertEquals(
+                GlueRendering.message(NOTIFICATION + "subject", "{subscription.customer.country.name}",
+                        "subscription.customer.country.name",
+                        "(subscription_customer_country == null ? null : subscription_customer_country.Name)"),
                 notification.get("subjectExpression"));
         assertEquals(List.of("subscription <- entity.Subscription", "subscription_customer <- subscription.Customer",
                 "subscription_customer_country <- subscription_customer.Country"), loads(notification.get("relationLoads")));
@@ -166,19 +175,28 @@ class GlueNotifyPathTest {
         Map<String, Object> send = GlueIntentGenerator.buildSendsForTest(model)
                                                       .get(0);
         assertEquals(CUSTOMER_EMAIL, send.get("notifyToExpression"));
-        assertEquals("\"Renewing for \" + " + CUSTOMER_NAME, send.get("notifySubjectExpression"));
+        assertEquals(
+                GlueRendering.message("renewals:renewals-model.mail.steps.Renewing.notify.subject",
+                        "Renewing for {subscription.customer.name}", "subscription.customer.name", CUSTOMER_NAME),
+                send.get("notifySubjectExpression"));
         assertEquals(CUSTOMER_CHAIN, loads(send.get("notifyRelationLoads")));
 
         Map<String, Object> transition = GlueIntentGenerator.buildTransitionsForTest(model)
                                                             .get(0);
         assertEquals(CUSTOMER_EMAIL, transition.get("notifyToExpression"));
-        assertEquals("\"Confirmed for \" + " + CUSTOMER_NAME, transition.get("notifySubjectExpression"));
+        assertEquals(
+                GlueRendering.message("renewals:renewals-model.mail.transitions.Confirm.subject",
+                        "Confirmed for {subscription.customer.name}", "subscription.customer.name", CUSTOMER_NAME),
+                transition.get("notifySubjectExpression"));
         assertEquals(CUSTOMER_CHAIN, loads(transition.get("notifyRelationLoads")));
 
         Map<String, Object> schedule = GlueIntentGenerator.buildSchedulesForTest(model)
                                                           .get(0);
         assertEquals(CUSTOMER_EMAIL, schedule.get("toExpression"));
-        assertEquals("\"Reminder for \" + " + CUSTOMER_NAME, schedule.get("subjectExpression"));
+        assertEquals(
+                GlueRendering.message("renewals:renewals-model.mail.schedules.renewalReminder.subject",
+                        "Reminder for {subscription.customer.name}", "subscription.customer.name", CUSTOMER_NAME),
+                schedule.get("subjectExpression"));
         assertEquals(CUSTOMER_CHAIN, loads(schedule.get("relationLoads")));
     }
 
@@ -193,8 +211,9 @@ class GlueNotifyPathTest {
                                                             .get(0);
         assertEquals("RenewalContact", transition.get("forEach"));
         assertEquals("entity.Email", transition.get("notifyToExpression"));
-        assertEquals("\"Confirmed for \" + " + CUSTOMER_NAME + " + \" (\" + source.RequestedBy + \")\"",
-                transition.get("notifySubjectExpression"));
+        assertEquals(GlueRendering.message("renewals:renewals-model.mail.transitions.Confirm.subject",
+                "Confirmed for {subscription.customer.name} ({record.requestedBy})", "subscription.customer.name", CUSTOMER_NAME,
+                "record.requestedBy", "source.RequestedBy"), transition.get("notifySubjectExpression"));
         assertEquals(CUSTOMER_CHAIN, loads(transition.get("notifyRelationLoads")));
     }
 
@@ -204,7 +223,8 @@ class GlueNotifyPathTest {
     @Test
     void oneHopOutputIsUnchanged() {
         Map<String, Object> notification = notification(subject("Renewal {subscription.id}"));
-        assertEquals("\"Renewal \" + (subscription == null ? null : subscription.Id)", notification.get("subjectExpression"));
+        assertEquals(GlueRendering.message(NOTIFICATION + "subject", "Renewal {subscription.id}", "subscription.id",
+                "(subscription == null ? null : subscription.Id)"), notification.get("subjectExpression"));
         List<?> loads = (List<?>) notification.get("relationLoads");
         assertEquals(1, loads.size(), loads.toString());
         Map<?, ?> load = (Map<?, ?>) loads.get(0);

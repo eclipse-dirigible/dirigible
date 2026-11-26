@@ -74,6 +74,9 @@ final class ModelTranslations {
     /** The entity-model catalog's sub-object the record-page banner texts live under (#8371). */
     static final String BANNERS_CATALOG = "banners";
 
+    /** The entity-model catalog's sub-object the notify blocks' mail texts live under (#8787). */
+    static final String MAIL_CATALOG = "mail";
+
     /**
      * The fully qualified i18next key of an entry of this model's catalog -
      * {@code <project>:<catalog prefix>.<path>}, the form the generated views pass to {@code T()} and
@@ -425,8 +428,8 @@ final class ModelTranslations {
 
     /**
      * Fills the entity-model catalog: the entities' singular and plural display names, their property
-     * labels, the perspective and navigation labels, the dashboard widget labels, and the custom action
-     * and process task labels.
+     * labels, the perspective and navigation labels, the dashboard widget labels, the custom action and
+     * process task labels, and the notify blocks' mail texts.
      *
      * @param model the entity model
      * @param catalog the parsed catalog to fill, as loaded from the template
@@ -497,6 +500,12 @@ final class ModelTranslations {
         Map<String, Object> processTaskLabels = asMap(model.get("processTaskLabels"));
         if (processTaskLabels != null) {
             catalog.put("processes", new LinkedHashMap<>(processTaskLabels));
+        }
+        // The notify blocks' subjects and bodies (#8787), nested by call site exactly as the generated
+        // senders resolve them, so a mail is translated in its recipient's language.
+        Map<String, Object> mailTexts = asMap(model.get("mailTexts"));
+        if (mailTexts != null) {
+            catalog.put(MAIL_CATALOG, new LinkedHashMap<>(mailTexts));
         }
     }
 
