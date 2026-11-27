@@ -107,7 +107,7 @@ document.addEventListener('alpine:init', () => {
           // What the server holds is what every exit compares the buffer against (issue #7359).
           this.markPristine();
         } catch (e) {
-          this.error = App.services.apiErrors.refusalMessageFor(e, 'Could not load the record.');
+          this.error = App.services.apiErrors.refusalMessageFor(e, T('$projectName:${tprefix}.messages.error.loadRecord', 'Could not load the record.'));
           this.state = 'error';
         }
 #if($partnerChildren && $partnerChildren.size() > 0)
@@ -280,7 +280,7 @@ document.addEventListener('alpine:init', () => {
         this.clearPristine();
         this.goBack();
       } catch (e) {
-        this.applyApiError(e, 'Could not save.');
+        this.applyApiError(e, T('$projectName:${tprefix}.messages.error.saving', 'Could not save'));
       } finally {
         this.saving = false;
       }
@@ -294,7 +294,7 @@ document.addEventListener('alpine:init', () => {
         this.clearPristine();
         this.goBack();
       } catch (e) {
-        this.error = App.services.apiErrors.refusalMessageFor(e, 'Could not delete.');
+        this.error = App.services.apiErrors.refusalMessageFor(e, T('$projectName:${tprefix}.messages.error.deleteRecord', 'Could not delete the record.'));
         this.deleteOpen = false;
       } finally {
         this.deleteBusy = false;

@@ -76,7 +76,7 @@ document.addEventListener('alpine:init', () => {
         this.calCfg = { events: this.buildEvents() };
         this.state = 'default';
       } catch (e) {
-        this.error = App.services.apiErrors.refusalMessageFor(e, 'Could not load your ${menuLabel}.');
+        this.error = App.services.apiErrors.refusalMessageFor(e, T('$projectName:${tprefix}.messages.error.loadList', 'Could not load the list.'));
         this.state = 'error';
       }
       this.refreshIcons();

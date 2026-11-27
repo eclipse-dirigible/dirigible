@@ -58,12 +58,25 @@ class HarmoniaRefusalMessageIT {
         }
     }
 
+    /**
+     * #8781: a fault shows the caller's own sentence naming what failed - never the 500's raw exception
+     * text.
+     */
     @Test
-    void aFaultKeepsTheCatalogLine() {
+    void aFaultShowsTheCallersSentenceNotTheExceptionText() {
         try (Context context = load()) {
             apply(context, 500, "InternalServerError", "could not execute statement; SQL [insert into DELIVERY_NOTE ...]");
-            assertEquals("Something went wrong on our end. Please try again.", saveFailureMessage(context),
-                    "a 500's raw exception text must never reach the screen");
+            assertEquals("Could not save.", saveFailureMessage(context), "a 500's raw exception text must never reach the screen");
+        }
+    }
+
+    /** #8781: without a sentence of the caller's, a fault keeps the catalog line. */
+    @Test
+    void aFaultWithoutTheCallersSentenceKeepsTheCatalogLine() {
+        try (Context context = load()) {
+            context.eval("js", "page.applyApiError({ isApiError: true, httpStatus: 500, errorType: 'InternalServerError', "
+                    + "errorMessage: 'could not execute statement' });");
+            assertEquals("Something went wrong on our end. Please try again.", saveFailureMessage(context));
         }
     }
 
@@ -195,7 +208,9 @@ class HarmoniaRefusalMessageIT {
         String documentPage = read(UI + "perspective/document/document-page.js.template");
         assertTrue(documentPage.contains("this.draftError = App.services.apiErrors.refusalMessageFor(e, fallback);"),
                 "the line dialog's save must show the refusal");
-        assertTrue(documentPage.contains("this.itemsError = App.services.apiErrors.refusalMessageFor(e, 'Could not delete the line.');"),
+        assertTrue(
+                documentPage.contains("this.itemsError = App.services.apiErrors.refusalMessageFor(e, "
+                        + "T('$projectName:${tprefix}.messages.error.deleteLineItem', 'Could not delete the line item.'));"),
                 "a refused line delete must show the refusal");
         for (String page : List.of("my/my-document-page.js.template", "partner/partner-document-page.js.template")) {
             assertTrue(read(UI + page).contains("this.itemError = App.services.apiErrors.refusalMessageFor(e, fallback);"),
@@ -208,7 +223,8 @@ class HarmoniaRefusalMessageIT {
             assertFalse(content.contains("this.deleteError = App.services.apiErrors.messageFor("),
                     page + ": a delete still drops the refusal");
         }
-        assertTrue(read(SHELL + "components/detailPanel.js").contains("App.services.apiErrors.refusalMessageFor(e, \"Could not delete.\")"),
+        assertTrue(read(SHELL + "components/detailPanel.js").contains(
+                "App.services.apiErrors.refusalMessageFor(e, T('application-core:shell.related.error.delete', 'Could not delete the record.'))"),
                 "a refused detail-panel delete must show the refusal");
     }
 

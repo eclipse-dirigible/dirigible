@@ -4795,7 +4795,9 @@ class IntentEngineIT extends IntegrationTest {
                 "the report should carry the Refresh with its Updated stamp");
         assertTrue(page.contains("conditions.length ? 'no-results' : 'empty'"),
                 "rows excluded by the column filters should read as no match, not as an empty report");
-        assertTrue(page.contains("this.actionError = App.services.apiErrors.refusalMessageFor(e, 'Export failed.')"),
+        assertTrue(
+                page.contains("this.actionError = App.services.apiErrors.refusalMessageFor(e, T(")
+                        && page.contains(".messages.error.exportFailed', 'Could not export the data.'))"),
                 "a failed export should be shown beside the rows rather than lost in the error state");
         assertTrue(page.contains("align: 'right'"), "decimal measures should be right-aligned");
         assertTrue(page.contains("pattern: '### ### ### ##0.00'"), "the page metadata should carry the money pattern for decimal columns");

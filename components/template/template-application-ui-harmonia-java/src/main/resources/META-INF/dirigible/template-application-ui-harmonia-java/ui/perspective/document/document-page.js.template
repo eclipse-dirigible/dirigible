@@ -350,7 +350,7 @@ document.addEventListener('alpine:init', () => {
           this.pollCheck();
 #end
         } catch (e) {
-          this.applyLoadError(e, { fallbackMessage: 'Could not load the ${name} document.' });
+          this.applyLoadError(e, { fallbackMessage: T('$projectName:${tprefix}.messages.error.loadDocument', 'Could not load the document.') });
         }
       } else {
         await optionsLoaded;
@@ -803,7 +803,7 @@ document.addEventListener('alpine:init', () => {
         }
         this.state = 'ready';
       } catch (e) {
-        this.applyApiError(e, { fallbackMessage: this.isEdit ? 'Could not update the document.' : 'Could not create the document.' });
+        this.applyApiError(e, { fallbackMessage: this.isEdit ? T('$projectName:${tprefix}.messages.error.updateDocument', 'Could not update the document.') : T('$projectName:${tprefix}.messages.error.createDocument', 'Could not create the document.') });
       }
     },
 
@@ -988,7 +988,7 @@ document.addEventListener('alpine:init', () => {
 #end
         window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(newId) + '/edit');
       } catch (e) {
-        this.applyApiError(e, { fallbackMessage: 'Could not duplicate the document.' });
+        this.applyApiError(e, { fallbackMessage: T('$projectName:${tprefix}.messages.error.duplicateDocument', 'Could not duplicate the document.') });
       } finally {
         this.state = 'ready';
       }
@@ -1030,7 +1030,7 @@ document.addEventListener('alpine:init', () => {
         this.refreshItemsCalendar();
 #end
       } catch (e) {
-        this.itemsError = App.services.apiErrors.messageFor(e, 'Could not load items.');
+        this.itemsError = App.services.apiErrors.messageFor(e, T('$projectName:${tprefix}.messages.error.loadLineItems', 'Could not load the line items.'));
         this.itemsState = 'error';
       }
       this.refreshIcons();
@@ -1121,7 +1121,7 @@ document.addEventListener('alpine:init', () => {
         this.chatInternal = false;
         await this.loadItems();
       } catch (e) {
-        this.itemsError = App.services.apiErrors.messageFor(e, 'Could not send the message.');
+        this.itemsError = App.services.apiErrors.messageFor(e, T('$projectName:${tprefix}.messages.error.sendMessage', 'Could not send the message.'));
       } finally {
         this.chatSending = false;
       }
@@ -1566,7 +1566,7 @@ document.addEventListener('alpine:init', () => {
         await this.loadItems();   // refresh the rows (server defaults / calculated item fields)
         await this.loadHeader();  // refresh the header + totals (server-side calculated aggregates)
       } catch (e) {
-        this.applyDraftError(e, 'Could not save the line.');
+        this.applyDraftError(e, T('$projectName:${tprefix}.messages.error.saveLineItem', 'Could not save the line item.'));
       } finally {
         this.draftSaving = false;
       }
@@ -1615,7 +1615,7 @@ document.addEventListener('alpine:init', () => {
         }
         this.rowDialogOpen = false; this.draft = {}; this.draftInlineCreated = [];
       } catch (e) {
-        this.applyDraftError(e, 'Could not fill the month.');
+        this.applyDraftError(e, T('$projectName:${tprefix}.messages.error.fillMonth', 'Could not fill the month.'));
       } finally {
         this.draftSaving = false;
         await this.loadItems();   // reflect what was created even on a mid-loop failure
@@ -1661,7 +1661,7 @@ document.addEventListener('alpine:init', () => {
         await this.loadItems();
         await this.loadHeader();
       } catch (e) {
-        this.itemsError = App.services.apiErrors.refusalMessageFor(e, 'Could not delete the line.');
+        this.itemsError = App.services.apiErrors.refusalMessageFor(e, T('$projectName:${tprefix}.messages.error.deleteLineItem', 'Could not delete the line item.'));
       }
     },
 

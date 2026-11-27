@@ -170,7 +170,7 @@ document.addEventListener('alpine:init', () => {
           // What the server holds is what every exit compares the buffer against (issue #7359).
           this.markPristine();
         } catch (e) {
-          this.error = App.services.apiErrors.refusalMessageFor(e, 'Could not load the document.');
+          this.error = App.services.apiErrors.refusalMessageFor(e, T('$projectName:${tprefix}.messages.error.loadDocument', 'Could not load the document.'));
           this.state = 'error';
         }
       } else {
@@ -353,7 +353,7 @@ document.addEventListener('alpine:init', () => {
           }
         }
       } catch (e) {
-        this.applyApiError(e, 'Could not save.');
+        this.applyApiError(e, T('$projectName:${tprefix}.messages.error.saving', 'Could not save'));
       } finally {
         this.saving = false;
       }
@@ -374,7 +374,7 @@ document.addEventListener('alpine:init', () => {
         const rows = await App.services.api.getAll(this.itemsApiPath + q);
         this.items = rows || [];
       } catch (e) {
-        this.itemsError = App.services.apiErrors.refusalMessageFor(e, 'Could not load the line items.');
+        this.itemsError = App.services.apiErrors.refusalMessageFor(e, T('$projectName:${tprefix}.messages.error.loadLineItems', 'Could not load the line items.'));
         this.items = [];
       }
 #if($documentItemsLayout == "calendar")
@@ -566,7 +566,7 @@ document.addEventListener('alpine:init', () => {
         await this.loadItems();
         await this.reloadHeaderTotals();
       } catch (e) {
-        this.applyItemError(e, 'Could not save the line item.');
+        this.applyItemError(e, T('$projectName:${tprefix}.messages.error.saveLineItem', 'Could not save the line item.'));
       }
     },
 
@@ -613,7 +613,7 @@ document.addEventListener('alpine:init', () => {
         await this.loadItems();
         await this.reloadHeaderTotals();
       } catch (e) {
-        this.applyItemError(e, 'Could not fill the month.');
+        this.applyItemError(e, T('$projectName:${tprefix}.messages.error.fillMonth', 'Could not fill the month.'));
         await this.loadItems();
         await this.reloadHeaderTotals();
       }
@@ -658,7 +658,7 @@ document.addEventListener('alpine:init', () => {
         await this.loadItems();
         await this.reloadHeaderTotals();
       } catch (e) {
-        this.itemsError = App.services.apiErrors.refusalMessageFor(e, 'Could not delete the line item.');
+        this.itemsError = App.services.apiErrors.refusalMessageFor(e, T('$projectName:${tprefix}.messages.error.deleteLineItem', 'Could not delete the line item.'));
       }
     },
 #if($documentItemsLayout == "chat")
@@ -684,7 +684,7 @@ document.addEventListener('alpine:init', () => {
 #end
         await this.loadItems();
       } catch (e) {
-        this.itemsError = App.services.apiErrors.refusalMessageFor(e, 'Could not send the message.');
+        this.itemsError = App.services.apiErrors.refusalMessageFor(e, T('$projectName:${tprefix}.messages.error.sendMessage', 'Could not send the message.'));
       } finally {
         this.chatSending = false;
       }
@@ -736,7 +736,7 @@ document.addEventListener('alpine:init', () => {
         this.clearPristine();
         this.goBack();
       } catch (e) {
-        this.error = App.services.apiErrors.refusalMessageFor(e, 'Could not delete.');
+        this.error = App.services.apiErrors.refusalMessageFor(e, T('$projectName:${tprefix}.messages.error.deleteDocument', 'Could not delete the document.'));
         this.deleteOpen = false;
       } finally {
         this.deleteBusy = false;

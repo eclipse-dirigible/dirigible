@@ -100,7 +100,7 @@ document.addEventListener('alpine:init', () => {
         this.setCurrentFolder(await this.getFolder(path));
         this.state = 'default';
       } catch (e) {
-        this.error = App.services.apiErrors.messageFor(e, 'Could not open the folder.');
+        this.error = App.services.apiErrors.messageFor(e, T('application-core:shell.documents.error.openFolder', 'Could not open the folder.'));
         this.state = 'error';
       }
       this.refreshIcons();
@@ -127,7 +127,7 @@ document.addEventListener('alpine:init', () => {
         if (keep && !this.folder.children.some(c => c.name === keep)) this.setSelectedFile(null);
         this.state = 'default';
       } catch (e) {
-        this.error = App.services.apiErrors.messageFor(e, 'Could not refresh the folder.');
+        this.error = App.services.apiErrors.messageFor(e, T('application-core:shell.documents.error.refreshFolder', 'Could not refresh the folder.'));
         this.state = 'error';
       }
       this.refreshIcons();
@@ -240,7 +240,7 @@ document.addEventListener('alpine:init', () => {
         await App.services.api.post(this.base + '/folder', { parentFolder: this.folder.path, name: this.newFolderName.trim() }, { baseUrl: '' });
         this.newFolderOpen = false; this.newFolderName = '';
         await this.refresh();
-      } catch (e) { this.newFolderError = App.services.apiErrors.messageFor(e, 'Could not create the folder.'); }
+      } catch (e) { this.newFolderError = App.services.apiErrors.messageFor(e, T('application-core:shell.documents.error.createFolder', 'Could not create the folder.')); }
       finally { this.busy = false; }
     },
 
@@ -253,7 +253,7 @@ document.addEventListener('alpine:init', () => {
         await App.services.api.request('PUT', this.base, { path: this.fullPath(this.renameTarget.name), name: this.renameName.trim() }, { baseUrl: '' });
         this.renameOpen = false; this.renameTarget = null;
         await this.refresh();
-      } catch (e) { this.renameError = App.services.apiErrors.messageFor(e, 'Rename failed.'); }
+      } catch (e) { this.renameError = App.services.apiErrors.messageFor(e, T('application-core:shell.documents.error.rename', 'Could not rename.')); }
       finally { this.busy = false; }
     },
 
@@ -268,7 +268,7 @@ document.addEventListener('alpine:init', () => {
         await App.services.api.request('DELETE', this.base, paths, { baseUrl: '' });
         this.deleteOpen = false; this.deleteTargets = [];
         await this.refresh();
-      } catch (e) { this.error = App.services.apiErrors.messageFor(e, 'Could not delete.'); this.deleteOpen = false; }
+      } catch (e) { this.error = App.services.apiErrors.messageFor(e, T('application-core:shell.documents.error.delete', 'Could not delete.')); this.deleteOpen = false; }
       finally { this.busy = false; }
     },
 
@@ -289,7 +289,7 @@ document.addEventListener('alpine:init', () => {
       try {
         const res = await App.services.api.get(this.accessBase + '?path=' + encodeURIComponent(this.accessPath()), { baseUrl: '' });
         this.access = { path: res.path, own: res.own || [], inherited: res.inherited || [] };
-      } catch (e) { this.accessError = App.services.apiErrors.messageFor(e, 'Could not load the access rules.'); }
+      } catch (e) { this.accessError = App.services.apiErrors.messageFor(e, T('application-core:shell.documents.error.loadAccess', 'Could not load the access rules.')); }
       finally { this.busy = false; }
     },
     async addGrant() {
@@ -302,7 +302,7 @@ document.addEventListener('alpine:init', () => {
         this.accessDraft.role = '';
         await this.loadAccess();
         await this.refresh();
-      } catch (e) { this.accessError = App.services.apiErrors.messageFor(e, 'Could not add the rule.'); }
+      } catch (e) { this.accessError = App.services.apiErrors.messageFor(e, T('application-core:shell.documents.error.addRule', 'Could not add the rule.')); }
       finally { this.busy = false; }
     },
     async removeGrant(grant) {
@@ -311,7 +311,7 @@ document.addEventListener('alpine:init', () => {
         await App.services.api.request('DELETE', this.accessBase, grant, { baseUrl: '' });
         await this.loadAccess();
         await this.refresh();
-      } catch (e) { this.accessError = App.services.apiErrors.messageFor(e, 'Could not remove the rule.'); }
+      } catch (e) { this.accessError = App.services.apiErrors.messageFor(e, T('application-core:shell.documents.error.removeRule', 'Could not remove the rule.')); }
       finally { this.busy = false; }
     },
 
@@ -332,7 +332,7 @@ document.addEventListener('alpine:init', () => {
           if (!r.ok) throw new Error('upload failed: ' + r.status);
         }
         await this.refresh();
-      } catch (e) { this.error = 'Upload failed.'; console.error(e); }
+      } catch (e) { this.error = T('application-core:shell.documents.error.upload', 'Could not upload the files.'); console.error(e); }
       finally { this.busy = false; this.unpackZips = false; }
     },
     onDragOver(e) { e.preventDefault(); this.showDropZone = true; },

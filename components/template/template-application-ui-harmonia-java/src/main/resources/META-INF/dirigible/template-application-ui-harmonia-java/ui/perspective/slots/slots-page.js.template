@@ -86,7 +86,7 @@ document.addEventListener('alpine:init', () => {
         this.state = 'default';
       } catch (e) {
         if (range !== this.range) return;
-        this.error = App.services.apiErrors.messageFor(e, 'Could not load ${menuLabel}.');
+        this.error = App.services.apiErrors.messageFor(e, T('$projectName:${tprefix}.messages.error.loadList', 'Could not load the list.'));
         this.state = 'error';
       }
       this.refreshIcons();

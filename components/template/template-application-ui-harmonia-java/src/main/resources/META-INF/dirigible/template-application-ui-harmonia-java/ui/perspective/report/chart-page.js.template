@@ -38,7 +38,7 @@ document.addEventListener('alpine:init', () => {
         if (rows.length) this.chartConfig = this.buildConfig(rows);
         this.lastUpdated = new Date();
       } catch (e) {
-        this.error = App.services.apiErrors.messageFor(e, 'Could not run the ${name} report.');
+        this.error = App.services.apiErrors.messageFor(e, T('$projectName:${tprefix}.messages.error.runReport', 'Could not run the report.'));
         this.state = 'error';
       } finally {
         this.reloading = false;

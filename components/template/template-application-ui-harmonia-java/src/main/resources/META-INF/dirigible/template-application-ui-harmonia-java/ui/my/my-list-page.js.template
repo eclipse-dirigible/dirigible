@@ -94,7 +94,7 @@ document.addEventListener('alpine:init', () => {
         this.state = this.items.length ? 'default' : 'empty';
         this.lastUpdated = new Date();
       } catch (e) {
-        this.error = App.services.apiErrors.refusalMessageFor(e, 'Could not load your ${menuLabel}.');
+        this.error = App.services.apiErrors.refusalMessageFor(e, T('$projectName:${tprefix}.messages.error.loadList', 'Could not load the list.'));
         this.state = 'error';
       }
     },

@@ -283,7 +283,7 @@ document.addEventListener('alpine:init', () => {
         // A failed poll keeps the rows on screen; pollWhile logs it and stops until the next Refresh.
         if (polled) throw e;
 #end
-        this.error = App.services.apiErrors.messageFor(e, 'Could not load ${name}.');
+        this.error = App.services.apiErrors.messageFor(e, T('$projectName:${tprefix}.messages.error.loadList', 'Could not load the list.'));
         this.state = 'error';
       }
       this.refreshIcons();
@@ -761,7 +761,7 @@ document.addEventListener('alpine:init', () => {
 #end
       } catch (e) {
         if (seq !== this.filterSeq) return;
-        this.error = App.services.apiErrors.messageFor(e, 'Could not filter ${name}.');
+        this.error = App.services.apiErrors.messageFor(e, T('$projectName:${tprefix}.messages.error.filterList', 'Could not filter the list.'));
         this.state = 'error';
       } finally {
         if (seq === this.filterSeq) this.filtering = false;
@@ -1125,7 +1125,7 @@ document.addEventListener('alpine:init', () => {
         this.deleteTarget = null;
         await this.load();
       } catch (e) {
-        this.deleteError = App.services.apiErrors.refusalMessageFor(e, 'Could not delete the ${name} record.');
+        this.deleteError = App.services.apiErrors.refusalMessageFor(e, T('$projectName:${tprefix}.messages.error.deleteRecord', 'Could not delete the record.'));
       } finally {
         this.deleteBusy = false;
       }
