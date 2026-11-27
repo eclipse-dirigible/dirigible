@@ -24,6 +24,7 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.data.store.java.repository.DomainEvent;
 import org.hibernate.Session;
 import org.hibernate.jdbc.Work;
@@ -45,7 +46,8 @@ class EventOutboxParticipantsTest {
     private final Session session = mock(Session.class);
 
     private final EventOutbox outbox = new EventOutbox(store,
-            new StaticListableBeanFactory(Map.of("participant", participant)).getBeanProvider(OutboxRecordingParticipant.class));
+            new StaticListableBeanFactory(Map.of("participant", participant)).getBeanProvider(OutboxRecordingParticipant.class),
+            mock(TenantContext.class));
 
     EventOutboxParticipantsTest() {
         doAnswer(invocation -> {

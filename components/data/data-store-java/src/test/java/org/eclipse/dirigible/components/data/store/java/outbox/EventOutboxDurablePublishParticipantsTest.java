@@ -76,7 +76,8 @@ class EventOutboxDurablePublishParticipantsTest {
         when(tenantContext.isNotInitialized()).thenReturn(true);
         EventOutboxStore store = new EventOutboxStore(dataSourcesManager, tenantContext);
         outbox = new EventOutbox(store,
-                new StaticListableBeanFactory(Map.of("participant", participant)).getBeanProvider(OutboxRecordingParticipant.class));
+                new StaticListableBeanFactory(Map.of("participant", participant)).getBeanProvider(OutboxRecordingParticipant.class),
+                tenantContext);
         try (Connection connection = h2Connection(); Statement statement = connection.createStatement()) {
             statement.execute("CREATE TABLE SIDE_ROWS (EVENT_ID VARCHAR(64), EVENT_TOPIC VARCHAR(255))");
         }

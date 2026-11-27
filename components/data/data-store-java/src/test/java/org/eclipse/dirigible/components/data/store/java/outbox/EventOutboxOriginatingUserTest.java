@@ -82,7 +82,7 @@ class EventOutboxOriginatingUserTest {
         TenantContext tenantContext = mock(TenantContext.class);
         when(tenantContext.isNotInitialized()).thenReturn(true);
         store = new EventOutboxStore(dataSourcesManager, tenantContext);
-        outbox = new EventOutbox(store, new StaticListableBeanFactory().getBeanProvider(OutboxRecordingParticipant.class));
+        outbox = new EventOutbox(store, new StaticListableBeanFactory().getBeanProvider(OutboxRecordingParticipant.class), tenantContext);
 
         session = mock(Session.class);
         doAnswer(invocation -> {
