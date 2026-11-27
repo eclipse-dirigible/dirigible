@@ -557,6 +557,16 @@ public enum DirigibleConfig {
     EVENT_OUTBOX_RELAY_GRACE_SECONDS("DIRIGIBLE_EVENT_OUTBOX_RELAY_GRACE_SECONDS", "60"),
 
     /**
+     * Where an entity event is handed to the broker once the write that raised it has committed.
+     * {@code caller}: on the writing thread, so the write returns only when the broker has answered for
+     * each of its events - a broker that stalls, stalls every write. {@code background}: on a thread of
+     * the outbox, so the write returns after its commit and a slow broker delays the event, not the
+     * caller; a listener then sees the event after the write has returned, not before. Either way what
+     * is not delivered stays in the outbox and the relay publishes it.
+     */
+    EVENT_OUTBOX_DISPATCH("DIRIGIBLE_EVENT_OUTBOX_DISPATCH", "caller", meta().type(ConfigType.ENUM)),
+
+    /**
      * The key that encrypts the signing secrets of the tenants' webhook subscriptions at rest: 32
      * bytes, Base64-encoded (AES-256-GCM). Without it the webhook registry accepts no subscription.
      */

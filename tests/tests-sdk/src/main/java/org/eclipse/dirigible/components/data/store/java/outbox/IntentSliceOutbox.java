@@ -30,6 +30,6 @@ public final class IntentSliceOutbox {
      */
     public static EventOutbox create(DataSourcesManager dataSourcesManager, TenantContext tenantContext) {
         return new EventOutbox(new EventOutboxStore(dataSourcesManager, tenantContext),
-                new StaticListableBeanFactory().getBeanProvider(OutboxRecordingParticipant.class));
+                new StaticListableBeanFactory().getBeanProvider(OutboxRecordingParticipant.class), tenantContext);
     }
 }

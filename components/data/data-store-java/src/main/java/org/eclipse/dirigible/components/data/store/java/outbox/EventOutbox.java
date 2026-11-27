@@ -22,12 +22,14 @@ import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.api.messaging.MessagingFacade;
 import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.base.context.OriginatingUser;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.data.store.java.repository.DomainEvent;
 import org.hibernate.Session;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
+import jakarta.annotation.PreDestroy;
 
 /**
  * The transactional outbox for the events a generated repository publishes about its writes.
@@ -47,6 +49,15 @@ import org.springframework.stereotype.Component;
  * "sent" is only known once the row is gone.
  *
  * <p>
+ * Where the hand-off runs is the deployment's choice (#8923,
+ * {@link DirigibleConfig#EVENT_OUTBOX_DISPATCH}). On the writing thread ({@code caller}, the
+ * default) the write returns only once the broker has answered for each of its events, so a broker
+ * that stalls for some seconds stalls every write for those seconds - although nothing the caller
+ * is told depends on the answer. On a thread of the outbox ({@code background}) the write returns
+ * after its commit and the {@code BackgroundDispatcher} sends; what it does not send is the
+ * relay's, as above.
+ *
+ * <p>
  * Each entry also records the user whose action raised it, and both deliveries - the in-process one
  * and the relay's - publish it with that user as the message's originating user, so whatever a
  * listener writes in reaction is attributed to that user (#8228) - and with that user's language,
@@ -63,6 +74,18 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
     /** Attempts after which an undelivered entry is reported as an error rather than a warning. */
     private static final int ATTEMPTS_BEFORE_ESCALATION = 10;
 
+    /**
+     * A hand-off to the broker that takes this long is reported: whoever waited for it, waited that
+     * long.
+     */
+    static final long SLOW_SEND_MILLIS = 1000;
+
+    private static final long NANOS_PER_MILLI = 1_000_000L;
+
+    private static final String DISPATCH_CALLER = "caller";
+
+    private static final String DISPATCH_BACKGROUND = "background";
+
     private final EventOutboxStore store;
 
     /** What records more rows with the events, in the same transaction - e.g. webhook deliveries. */
@@ -71,9 +94,48 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
     /** The participants, resolved on first use: none of them is needed to construct the outbox. */
     private volatile List<OutboxRecordingParticipant> participants;
 
-    EventOutbox(EventOutboxStore store, ObjectProvider<OutboxRecordingParticipant> participantProvider) {
+    /** What sends off the writing thread, or {@code null} where the writing thread sends itself. */
+    private final BackgroundDispatcher backgroundDispatcher;
+
+    EventOutbox(EventOutboxStore store, ObjectProvider<OutboxRecordingParticipant> participantProvider, TenantContext tenantContext) {
         this.store = store;
         this.participantProvider = participantProvider;
+        boolean background = backgroundDispatch();
+        this.backgroundDispatcher = background ? new BackgroundDispatcher(tenantContext, this::deliver) : null;
+        LOGGER.info("Event outbox dispatch is [{}] ({})", background ? DISPATCH_BACKGROUND : DISPATCH_CALLER,
+                DirigibleConfig.EVENT_OUTBOX_DISPATCH.getKey());
+    }
+
+    /**
+     * Whether the hand-off to the broker runs off the writing thread. A value that is neither of the
+     * two is refused, which stops the start: a typo must not silently leave every write waiting for the
+     * broker, nor silently stop it from doing so.
+     *
+     * @return true for {@code background}, false for {@code caller}
+     * @throws IllegalArgumentException for any other value
+     */
+    static boolean backgroundDispatch() {
+        String configured = DirigibleConfig.EVENT_OUTBOX_DISPATCH.getStringValue();
+        String mode = configured == null ? "" : configured.trim();
+        if (DISPATCH_CALLER.equalsIgnoreCase(mode)) {
+            return false;
+        }
+        if (DISPATCH_BACKGROUND.equalsIgnoreCase(mode)) {
+            return true;
+        }
+        throw new IllegalArgumentException(DirigibleConfig.EVENT_OUTBOX_DISPATCH.getKey() + " is [" + configured + "] but must be one of "
+                + DISPATCH_CALLER + " or " + DISPATCH_BACKGROUND);
+    }
+
+    /**
+     * Stops the background dispatch, where there is one. What it had not sent yet is in the outbox
+     * table, and the relay publishes it.
+     */
+    @PreDestroy
+    void stop() {
+        if (backgroundDispatcher != null) {
+            backgroundDispatcher.stop();
+        }
     }
 
     private List<OutboxRecordingParticipant> participants() {
@@ -116,7 +178,7 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
             }
             recordWithParticipants(connection, pending);
         });
-        return new Batch(this, pending);
+        return new Batch(this, pending, relayTakesOverAt);
     }
 
     /**
@@ -143,10 +205,11 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
      * immediately; whatever the broker refuses stays for the relay, exactly as a write-attached event
      * would. The {@link OutboxRecordingParticipant}s record in that same transaction, as they do for
      * {@link #record}: a workflow step's {@code -transitioned} announcement takes this path, and its
-     * webhook deliveries must not be missing (#8689). If even the recording fails (the outbox table
-     * unreachable), the message is handed to the broker directly — the caller's work has already
-     * committed and an at-most-once attempt beats failing a caller whose announcement machinery is
-     * down.
+     * webhook deliveries must not be missing (#8689). "Immediately" is on the calling thread or on the
+     * outbox's own, as for a write ({@link DirigibleConfig#EVENT_OUTBOX_DISPATCH}). If even the
+     * recording fails (the outbox table unreachable), the message is handed to the broker directly —
+     * the caller's work has already committed and an at-most-once attempt beats failing a caller whose
+     * announcement machinery is down.
      *
      * @param topic the topic to publish on
      * @param payload the message body
@@ -156,15 +219,37 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
         PendingEvent event = new PendingEvent(UUID.randomUUID()
                                                   .toString(),
                 topic, payload, 0, originatingUser(), originatingLanguage());
+        Instant relayTakesOverAt = nextAttemptAt();
         try {
             prepare();
-            store.insert(event, nextAttemptAt(), connection -> recordWithParticipants(connection, List.of(event)));
+            store.insert(event, relayTakesOverAt, connection -> recordWithParticipants(connection, List.of(event)));
         } catch (RuntimeException | SQLException ex) {
             LOGGER.error("Failed to record a durable publish on topic [{}]; attempting the direct publish instead.", topic, ex);
             MessagingFacade.sendToTopic(topic, payload);
             return;
         }
-        deliver(event);
+        handOff(List.of(event), relayTakesOverAt);
+    }
+
+    /**
+     * Hands committed entries to the broker, in the order they were recorded: on this thread, or
+     * through the background dispatch. Never raises: everything that is not delivered stays in the
+     * outbox for the relay, because the write these belong to has already succeeded and must not be
+     * reported as failed.
+     *
+     * @param events the entries one committed transaction recorded
+     * @param relayTakesOverAt when the relay starts sending these entries itself
+     */
+    private void handOff(List<PendingEvent> events, Instant relayTakesOverAt) {
+        if (backgroundDispatcher != null) {
+            backgroundDispatcher.handOff(events, relayTakesOverAt);
+            return;
+        }
+        for (PendingEvent event : events) {
+            if (!deliver(event)) {
+                return;
+            }
+        }
     }
 
     /**
@@ -227,8 +312,15 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
         try {
             // Bound from the entry, not from the delivering thread: the relay runs on a job thread with
             // no user and no language, and the producer stamps whatever is bound here onto the message.
+            long started = System.nanoTime();
             try (OriginatingUser.Binding binding = OriginatingUser.bind(event.user(), event.language())) {
                 MessagingFacade.sendToTopic(event.topic(), event.payload());
+            }
+            long tookMillis = (System.nanoTime() - started) / NANOS_PER_MILLI;
+            if (tookMillis >= SLOW_SEND_MILLIS) {
+                // Nothing else says so: the send succeeded, and on the writing thread a write just took
+                // this long for no reason its caller can see.
+                LOGGER.warn("The broker took [{}] ms to accept outbox entry [{}] on topic [{}].", tookMillis, event.id(), event.topic());
             }
         } catch (RuntimeException ex) {
             String message = "Failed to publish outbox entry [{}] on topic [{}] ([{}] failed attempts so far); "
@@ -299,28 +391,32 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
      */
     public static final class Batch {
 
-        private static final Batch EMPTY = new Batch(null, Collections.emptyList());
+        private static final Batch EMPTY = new Batch(null, Collections.emptyList(), null);
 
         private final EventOutbox outbox;
 
         private final List<PendingEvent> events;
 
-        private Batch(EventOutbox outbox, List<PendingEvent> events) {
+        /** When the relay starts sending these entries itself. */
+        private final Instant relayTakesOverAt;
+
+        private Batch(EventOutbox outbox, List<PendingEvent> events, Instant relayTakesOverAt) {
             this.outbox = outbox;
             this.events = events;
+            this.relayTakesOverAt = relayTakesOverAt;
         }
 
         /**
-         * Publishes the recorded events, in the order they were recorded. Never raises: everything it
-         * cannot deliver stays in the outbox for the relay, because the write this batch belongs to has
-         * already succeeded and must not be reported as failed.
+         * Publishes the recorded events, in the order they were recorded - on this thread, or through the
+         * background dispatch ({@link DirigibleConfig#EVENT_OUTBOX_DISPATCH}). Never raises: everything
+         * that is not delivered stays in the outbox for the relay, because the write this batch belongs to
+         * has already succeeded and must not be reported as failed.
          */
         public void dispatch() {
-            for (PendingEvent event : events) {
-                if (!outbox.deliver(event)) {
-                    return;
-                }
+            if (events.isEmpty()) {
+                return;
             }
+            outbox.handOff(events, relayTakesOverAt);
         }
     }
 

@@ -52,6 +52,8 @@ public class ConfigGroupsTest {
         assertEquals(ConfigGroups.SUBGROUP_PROCESS, ConfigGroups.subgroup("DIRIGIBLE_FLOWABLE_ASYNC_JOB_LOCK_TIME_SECONDS"));
         assertEquals(ConfigGroup.BPM, ConfigGroups.resolve("DIRIGIBLE_FLOWABLE_TIMER_JOB_LOCK_TIME_SECONDS"));
         assertEquals(ConfigGroups.SUBGROUP_PROCESS, ConfigGroups.subgroup("DIRIGIBLE_FLOWABLE_TIMER_JOB_LOCK_TIME_SECONDS"));
+        // Where the outbox hands an event to the broker sits with the relay's keys, in messaging (#8923).
+        assertEquals(ConfigGroup.MESSAGING, ConfigGroups.resolve("DIRIGIBLE_EVENT_OUTBOX_DISPATCH"));
         assertEquals(ConfigGroup.DEVTOOLS, ConfigGroups.resolve("DIRIGIBLE_JAVASCRIPT_GRAALVM_DEBUGGER_PORT"));
         assertEquals(ConfigGroup.RUNTIMES, ConfigGroups.resolve("DIRIGIBLE_JAVASCRIPT_HANDLER_CLASS_NAME"));
         assertEquals(ConfigGroup.WEB, ConfigGroups.resolve("DIRIGIBLE_SECURITY_FRAME_OPTIONS"));
