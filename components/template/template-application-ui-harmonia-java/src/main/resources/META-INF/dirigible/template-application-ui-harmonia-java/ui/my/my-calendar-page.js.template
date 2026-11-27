@@ -130,7 +130,7 @@ document.addEventListener('alpine:init', () => {
 #end
     onEventClick(e) {
       const id = window.HarmoniaCalendar.clickedEventId(e);
-      if (id !== null) window.PineconeRouter.navigate('/my/${name}/' + encodeURIComponent(id) + '/edit');
+      if (id !== null) window.PineconeRouter.navigate('/my/${name}/' + encodeURIComponent(id) + '/preview');
     },
 
     // Switch to the personal list; the calendar took over /my/${name}.

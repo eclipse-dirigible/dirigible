@@ -620,9 +620,11 @@
 #end
 #if($entity.personalProperty && $entity.layoutType == "MANAGE_DOCUMENT")
     <template x-route="/my/${entity.name}/create" x-template.target.app="./views/my/${entity.name}-document.html"></template>
+    <template x-route="/my/${entity.name}/:id/preview" x-template.target.app="./views/my/${entity.name}-document.html"></template>
     <template x-route="/my/${entity.name}/:id/edit" x-template.target.app="./views/my/${entity.name}-document.html"></template>
 #elseif($entity.personalProperty || $entity.personalParent)
     <template x-route="/my/${entity.name}/create" x-template.target.app="./views/my/${entity.name}-form.html"></template>
+    <template x-route="/my/${entity.name}/:id/preview" x-template.target.app="./views/my/${entity.name}-form.html"></template>
     <template x-route="/my/${entity.name}/:id/edit" x-template.target.app="./views/my/${entity.name}-form.html"></template>
 #end
 #end

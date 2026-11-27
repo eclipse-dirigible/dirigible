@@ -5043,7 +5043,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(!payslipMyDoc.contains("openItem(null)") && !payslipMyDoc.contains("deleteItem(row)"),
                 "personalReadOnly my document must not render the item Add or the per-row Delete");
         assertTrue(!payslipMyDoc.contains("saveItem()"), "personalReadOnly my document must not render the item dialog's Save");
-        assertTrue(!payslipMyDoc.contains("save()") && !payslipMyDoc.contains("deleteOpen = true"),
+        assertTrue(!payslipMyDoc.contains("saveAndPreview()") && !payslipMyDoc.contains("deleteOpen = true"),
                 "personalReadOnly my document must not render the Save or Delete footer buttons");
         // The line opens through the page's itemRowClicked, which skips the row's own controls (#8259).
         assertTrue(payslipMyDoc.contains("itemRowClicked($event, row)"),
@@ -5062,7 +5062,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(!lineMyController.contains("repository.save(entity)"),
                 "a see-only child must NOT emit a persisting create/update on its personal controller");
         String timesheetMyDoc = contentOf("gen/emission/views/my/Timesheet-document.html");
-        assertTrue(timesheetMyDoc.contains("save()") && timesheetMyDoc.contains("deleteOpen = true"),
+        assertTrue(timesheetMyDoc.contains("saveAndPreview()") && timesheetMyDoc.contains("deleteOpen = true"),
                 "the master's own personal surface stays writable - the header keeps Save and Delete");
         assertTrue(
                 !timesheetMyDoc.contains("openItem(null)") && !timesheetMyDoc.contains("deleteItem(row)")
@@ -5445,6 +5445,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String myForm = contentOf("gen/emission/views/my/Claim-form.html");
         assertTrue(!myForm.contains("form.Rate"), "the personal form must not render the sensitive field at all");
         assertTrue(!myForm.contains("form.Person"), "the personal form must not render the owner FK control");
+        // #7390: the personal record pages follow the manage form - a row opens the record in Preview
+        // (values, not disabled inputs), whose one filled button is Edit; the editable modes save.
+        assertTrue(
+                contentOf("gen/emission/index.html").contains(
+                        "x-route=\"/my/Claim/:id/preview\" x-template.target.app=\"./views/my/Claim-form.html\""),
+                "a personal record must be routed in preview");
+        assertTrue(myList.contains("'/preview'); },"), "a personal list row must open its record in preview");
+        assertTrue(myForm.contains("<template x-if=\"isPreview\">") && myForm.contains("<template x-if=\"!isPreview\">"),
+                "the personal form must print values in preview and offer controls while editing");
+        assertTrue(myForm.contains("primaryAction === 'edit'") && myForm.contains("@click=\"save()\""),
+                "a writable personal form must lead preview with Edit and the editable modes with Save");
+        assertTrue(myForm.contains("headerTitle()") && myForm.contains("hasOverflowMenu"),
+                "the personal form must carry the record header and the overflow menu");
+        String myFormScript = contentOf("gen/emission/js/components/pages/my/ClaimMyFormPage.js");
+        assertTrue(myFormScript.contains("routePath.endsWith('/preview') ? 'preview' : 'edit'"),
+                "the personal form must take its mode from the route");
+        // An edit of a stored record ends in its preview, saved or discarded - not on the list.
+        assertTrue(myFormScript.contains("this.mode === 'edit' ? this.navigate(this.previewRoute()) : this.leavePage()"),
+                "the personal form must return an edit to the record's preview");
+        assertTrue(contentOf("gen/emission/js/components/pages/my/TicketMyDocumentPage.js").contains("async saveAndPreview()"),
+                "the personal document's Save must return an edit to the document's preview");
         // #7496: a pickable: rule reaches every picker that builds its own options - the power form,
         // the personal and partner forms, and the line dialog's column metadata - and each view lists
         // through visibleOptions with Harmonia's disabled/description contract on the option.
