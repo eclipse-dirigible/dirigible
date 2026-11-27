@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-11-23T15:04:07.445880554Z",
+  "recordedAt": "2026-11-27T14:32:30.880061329Z",
   "environment": {
     "hikariMaximumPoolSize": {
       "DefaultDB": 20,
@@ -9,39 +9,39 @@
     "tomcatMaxThreads": 200,
     "jvmMaxHeapMb": 6144,
     "availableProcessors": 4,
-    "javaVersion": "24.0.2+12-FR",
+    "javaVersion": "25.0.5.1+2-LTS",
     "concurrentUsers": 10,
     "iterations": 50
   },
   "steps": {
     "listPage": {
-      "p50Millis": 254.0,
-      "p95Millis": 362.9,
+      "p50Millis": 276.9,
+      "p95Millis": 376.9,
       "statements": 8
     },
     "search": {
-      "p50Millis": 230.8,
-      "p95Millis": 348.3,
+      "p50Millis": 269.0,
+      "p95Millis": 377.6,
       "statements": 8
     },
     "create": {
-      "p50Millis": 268.1,
-      "p95Millis": 361.5,
+      "p50Millis": 332.7,
+      "p95Millis": 522.9,
       "statements": 14
     },
     "transition": {
-      "p50Millis": 210.1,
-      "p95Millis": 338.3,
+      "p50Millis": 319.2,
+      "p95Millis": 437.8,
       "statements": 14
     },
     "print": {
-      "p50Millis": 437.2,
-      "p95Millis": 564.4,
+      "p50Millis": 667.0,
+      "p95Millis": 752.1,
       "statements": 7
     },
     "inbox": {
-      "p50Millis": 598.6,
-      "p95Millis": 789.5,
+      "p50Millis": 1021.1,
+      "p95Millis": 1322.7,
       "statements": 10
     }
   }
